@@ -61,21 +61,111 @@ def _seed_funnel(user_id: str, jobs: int, statuses: list[str], days_ago: int = 0
 
 
 # ---------------------------------------------------------------------------
-# Market vs. You / Adzuna live-benchmark test helpers (I1 slice — market-perf
-# swarm, 2026-08-13, PLAN.md rulings R1-R11). ``salary_intelligence_agent``
-# does not yet implement any of ``fetch_market_benchmark`` / ``MarketBenchmark``
-# / ``_BENCH_CACHE`` at the time these tests are written — every helper below
-# degrades gracefully (``getattr``/``raising=False``) so collection and the
-# pre-existing tests in this file never break while the feature is absent.
+# Market vs. You / Adzuna live-benchmark test helpers (market-perf swarm,
+# 2026-08-13, PLAN.md rulings R1-R11). I1 (postings row) and I2 (FE) are
+# already LIVE in this worktree. The additions below are for I3 (BE
+# completion, REVISION 2): the third "Advertised salary (mean)" comparison
+# row, ``salaryTrend12m``/``salaryHistogram`` summary enrichment, and removal
+# of the transitional global ``marketVsYou.marketDataConnected`` boolean (R5)
+# — none of which ``salary_intelligence_agent``/``analytics.py`` implement
+# yet at the time these tests are written. Every helper below still degrades
+# gracefully (``getattr``/``raising=False``) so collection and every
+# pre-existing test in this file keep working while I3 is absent.
 # ---------------------------------------------------------------------------
 
 _HONEST_NO_MARKET_SUMMARY = "No market data source connected — showing your own figures only."
 _INTERVIEW_RATE_FOOTNOTE = "No external interview-conversion benchmark provider currently exists."
 
+#: I3 fixture — a realistic 12-month Adzuna ``/history`` month-map (AUD mean
+#: advertised salary per month). Tests derive their expected substrings FROM
+#: this map (min/max), never hardcoding a disconnected number (R11).
+_HISTORY_FIXTURE = {
+    "month": {
+        "2026-07": 105811.99,
+        "2026-06": 108200.10,
+        "2026-05": 102344.50,
+        "2026-04": 99850.00,
+        "2026-03": 101200.25,
+        "2026-02": 97400.00,
+        "2026-01": 103900.75,
+        "2025-12": 106500.00,
+        "2025-11": 104750.60,
+        "2025-10": 100320.40,
+        "2025-09": 98230.15,
+        "2025-08": 105675.42,
+    }
+}
+
+#: I3 fixture — a realistic Adzuna ``/histogram`` band-count map. The
+#: "140000" band (count 51) is deliberately the argmax so the top-band
+#: sentence test can derive its expectation from the fixture itself.
+_HISTOGRAM_FIXTURE = {
+    "histogram": {
+        "60000": 4,
+        "80000": 16,
+        "100000": 18,
+        "120000": 10,
+        "140000": 51,
+    }
+}
+
 
 def _market_comparisons_by_label(pulse: dict) -> dict[str, dict]:
     """Index ``marketVsYou.comparisons`` by label for readable assertions."""
     return {c["label"]: c for c in pulse["marketVsYou"]["comparisons"]}
+
+
+def _route_by_endpoint(*, search=None, history=None, histogram=None):
+    """Build a ``fetch_json`` stub that dispatches by which real Adzuna
+    endpoint ``fetch_market_benchmark`` calls (R11 / BRIEF-A: ``/search``,
+    ``/history``, ``/histogram``). Each of ``search``/``history``/
+    ``histogram`` is either a dict payload to return or an ``Exception``
+    instance to raise for that endpoint — lets a single test independently
+    control the three calls one benchmark fetch makes.
+    """
+
+    def _fetch(url, timeout=10):
+        if "/histogram" in url:
+            target = histogram
+        elif "/history" in url:
+            target = history
+        else:
+            target = search
+        if isinstance(target, Exception):
+            raise target
+        return target
+
+    return _fetch
+
+
+def _seed_salary_job(
+    user_id: str,
+    *,
+    salary_min: int | None = None,
+    salary_max: int | None = None,
+    currency: str | None = "AUD",
+    title: str = "Business Analyst",
+) -> str:
+    """Insert one ``Job`` row carrying (or honestly omitting) a disclosed
+    salary range, for :func:`user_disclosed_salary_median` (R3) tests —
+    extends ``_seed_funnel``'s single-job-insert pattern with the salary
+    columns it does not touch.
+    """
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            jid = new_id()
+            cur.execute(
+                '''
+                INSERT INTO "Job" ("id", "userId", "title", "company",
+                    "description", "source", "sourceUrl", "salaryMin", "salaryMax",
+                    "currency", "createdAt", "updatedAt")
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
+                ''',
+                (jid, user_id, title, "Acme", "desc", "seek",
+                 f"https://example.com/{jid}", salary_min, salary_max, currency),
+            )
+        conn.commit()
+    return jid
 
 
 def _enable_live_adzuna(monkeypatch, fetch_fn, *, ttl_seconds: int | None = None):
@@ -278,6 +368,11 @@ class TestAnalytics:
         dataAsOf=None) and the exact prior summary string — and must make
         ZERO fetch attempts, proven by a fetch stub that fails the test
         outright if it is ever invoked.
+
+        R5 (I3): the global ``marketVsYou.marketDataConnected`` boolean is
+        REMOVED from the payload entirely — the key must be ABSENT, not
+        merely ``False``, so a client can never mistake "flag not sent" for
+        "flag says disconnected".
         """
         seed_search_target(
             client, auth_headers, target_role="Business Analyst", location="Melbourne"
@@ -296,7 +391,7 @@ class TestAnalytics:
         pulse = client.get("/analytics/market-pulse", headers=auth_headers).json()
 
         mvy = pulse["marketVsYou"]
-        assert mvy["marketDataConnected"] is False
+        assert "marketDataConnected" not in mvy, mvy
         for c in mvy["comparisons"]:
             assert c["market"] is None, c
             assert c["connected"] is False, c
@@ -308,10 +403,13 @@ class TestAnalytics:
     ):
         """I1: a real Adzuna ``/search`` response must flow through honestly
         — row 1's market side becomes the live 30-day posting count, its
-        ``connected``/``dataAsOf``/``marketNote`` are populated, the
-        interview row NEVER gets a market number (R4, permanent), and the
-        transitional global ``marketDataConnected`` (removed for good in I3)
-        reflects that at least one row is really connected.
+        ``connected``/``dataAsOf``/``marketNote`` are populated, and the
+        interview row NEVER gets a market number (R4, permanent).
+
+        R5 (I3): there is no global ``marketVsYou.marketDataConnected``
+        boolean any more — every consumer derives connectedness from the
+        rows themselves, so the key must be ABSENT from the payload even
+        while real data is flowing.
         """
         seed_search_target(
             client, auth_headers, target_role="Business Analyst", location="Melbourne"
@@ -340,13 +438,91 @@ class TestAnalytics:
         assert interview_row["connected"] is False
         assert interview_row["footnote"] == _INTERVIEW_RATE_FOOTNOTE
 
-        # Transitional (I1 only — removed in I3 per R5): global flag reduces
-        # to "any row connected" so the old deployed FE's amber banner
-        # honestly disappears once real data shows.
-        assert mvy["marketDataConnected"] is True
+        # R5: the transitional global flag is GONE for good in I3 — absent,
+        # not False, regardless of how many rows are really connected.
+        assert "marketDataConnected" not in mvy, mvy
 
         assert "Adzuna" in mvy["summary"]
         assert "107" in mvy["summary"]
+
+    def test_market_vs_you_probability_market_evidence_flag_stays_decoupled(
+        self, client, auth_headers, monkeypatch
+    ):
+        """R5: ``probability.marketDataConnected`` reports whether the
+        PROBABILITY model has market evidence to reason from — a flat
+        ``False`` — independently of whether Market vs. You's own Adzuna
+        benchmark is really connected. I3 renames the backing server
+        constant (``_MARKET_DATA_SOURCE_CONNECTED`` ->
+        ``_PROBABILITY_USES_MARKET_EVIDENCE``); this test locks the
+        BEHAVIOUR, not the identifier, so the rename cannot silently flip it.
+        """
+        seed_search_target(
+            client, auth_headers, target_role="Business Analyst", location="Melbourne"
+        )
+        payload = {"count": 107, "mean": 147924.58, "results": []}
+        _enable_live_adzuna(monkeypatch, lambda url, timeout=10: payload)
+
+        pulse = client.get("/analytics/market-pulse", headers=auth_headers).json()
+        postings_row = _market_comparisons_by_label(pulse)["Applications / month"]
+        assert postings_row["connected"] is True, "benchmark must be genuinely live for this test"
+        assert pulse["probability"]["marketDataConnected"] is False
+
+    def test_market_vs_you_salary_row_reports_mean_market_and_disclosed_you_median(
+        self, client, auth_headers, user_id, monkeypatch
+    ):
+        """R3 (I3): the new "Advertised salary (mean)" row's market side is
+        the live Adzuna ``/search`` ``mean`` (rounded to the nearest dollar,
+        unit "A$"), and its ``you`` side is the MEDIAN of the caller's OWN
+        disclosed salary bounds — preferring each job's disclosed max, and
+        falling back to its min only when that job disclosed no max at all.
+        Never imputed, never borrowed from the market side.
+        """
+        seed_search_target(
+            client, auth_headers, target_role="Business Analyst", location="Melbourne"
+        )
+        _seed_salary_job(user_id, salary_min=100000, salary_max=120000)  # -> 120000
+        _seed_salary_job(user_id, salary_min=130000, salary_max=150000)  # -> 150000
+        _seed_salary_job(user_id, salary_min=90000, salary_max=None)     # no max -> 90000
+
+        payload = {"count": 107, "mean": 147924.58, "results": []}
+        _enable_live_adzuna(monkeypatch, lambda url, timeout=10: payload)
+
+        pulse = client.get("/analytics/market-pulse", headers=auth_headers).json()
+        salary_row = _market_comparisons_by_label(pulse)["Advertised salary (mean)"]
+
+        assert salary_row["market"] == round(147924.58) == 147925
+        assert salary_row["unit"] == "A$"
+        assert salary_row["connected"] is True
+        _assert_fresh_aware_iso8601(salary_row["dataAsOf"])
+
+        # Per-row bound preference over [120000, 150000, 90000] -> median 120000.
+        assert salary_row["you"] == 120000, salary_row
+
+    def test_market_vs_you_salary_row_you_is_none_without_disclosed_salaries(
+        self, client, auth_headers, user_id, monkeypatch
+    ):
+        """R3 (I3): a caller with zero disclosed salary bounds gets an
+        honest ``you: None`` on the salary row — never a fabricated or
+        imputed figure — plus a footnote explaining why, even while the
+        market side stays genuinely connected.
+        """
+        seed_search_target(
+            client, auth_headers, target_role="Business Analyst", location="Melbourne"
+        )
+        # A saved job exists but discloses no salary at all — must not read as 0.
+        _seed_salary_job(user_id, salary_min=None, salary_max=None)
+
+        payload = {"count": 107, "mean": 147924.58, "results": []}
+        _enable_live_adzuna(monkeypatch, lambda url, timeout=10: payload)
+
+        pulse = client.get("/analytics/market-pulse", headers=auth_headers).json()
+        salary_row = _market_comparisons_by_label(pulse)["Advertised salary (mean)"]
+
+        assert salary_row["connected"] is True, "market side is still real even with no disclosures"
+        assert salary_row["you"] is None, salary_row
+        footnote = (salary_row.get("footnote") or "").lower()
+        assert "disclosed salary" in footnote, salary_row
+        assert "yet" in footnote, salary_row
 
     def test_market_vs_you_live_failure_falls_back_to_honest_unavailable(
         self, client, auth_headers, monkeypatch, caplog
@@ -369,8 +545,9 @@ class TestAnalytics:
         pulse = client.get("/analytics/market-pulse", headers=auth_headers).json()
 
         mvy = pulse["marketVsYou"]
+        assert "marketDataConnected" not in mvy, mvy
         comparisons = _market_comparisons_by_label(pulse)
-        for label in ("Applications / month", "Interview rate"):
+        for label in ("Applications / month", "Interview rate", "Advertised salary (mean)"):
             row = comparisons[label]
             assert row["market"] is None, label
             assert row["connected"] is False, label
@@ -420,8 +597,19 @@ class TestAnalytics:
         calls = {"n": 0}
 
         def _ok_fetch(url, timeout=10):
-            calls["n"] += 1
-            return {"count": 50 + calls["n"], "mean": 100000.0, "results": []}
+            # I3 adds a ``/history`` and ``/histogram`` call to every genuine
+            # benchmark refresh alongside ``/search`` (R11, BRIEF-A) — count
+            # only the ``/search`` hit so "calls['n']" keeps meaning "number
+            # of real fetch CYCLES", the thing this test's TTL assertions are
+            # actually about, regardless of how many endpoints one cycle hits.
+            if "/search/" in url:
+                calls["n"] += 1
+                return {"count": 50 + calls["n"], "mean": 100000.0, "results": []}
+            if "/history" in url:
+                return {"month": {}}
+            if "/histogram" in url:
+                return {"histogram": {}}
+            return {}
 
         sia = _enable_live_adzuna(monkeypatch, _ok_fetch, ttl_seconds=300)
 
@@ -461,6 +649,80 @@ class TestAnalytics:
         assert calls["n"] == 3
         assert row4["market"] is None, "a failed refetch must not re-serve stale numbers (R7)"
         assert row4["connected"] is False
+
+    def test_market_vs_you_summary_enriches_with_real_12mo_trend_and_top_histogram_band(
+        self, client, auth_headers, monkeypatch
+    ):
+        """I3 / R11: when the Adzuna ``/history`` and ``/histogram`` calls
+        both succeed, the summary gains a 12-month salary-range sentence and
+        a top-band sentence — both DERIVED from the real fixture data below,
+        never a fabricated or hardcoded-disconnected number. Expected
+        substrings are computed FROM the fixture (min/max, argmax band), so
+        this test fails honestly if the real values ever stop appearing.
+        """
+        seed_search_target(
+            client, auth_headers, target_role="Business Analyst", location="Melbourne"
+        )
+        search_payload = {"count": 107, "mean": 147924.58, "results": []}
+        fetch = _route_by_endpoint(
+            search=search_payload, history=_HISTORY_FIXTURE, histogram=_HISTOGRAM_FIXTURE
+        )
+        _enable_live_adzuna(monkeypatch, fetch)
+
+        pulse = client.get("/analytics/market-pulse", headers=auth_headers).json()
+        summary = pulse["marketVsYou"]["summary"]
+
+        month_values = _HISTORY_FIXTURE["month"].values()
+        expected_min = round(min(month_values))
+        expected_max = round(max(month_values))
+        bands = _HISTOGRAM_FIXTURE["histogram"]
+        top_band_key = max(bands, key=lambda k: bands[k])
+        top_band_count = bands[top_band_key]
+
+        # Tolerate thousands-separator formatting ("97,400") without caring
+        # which style the sentence uses — only the REAL digits are pinned.
+        normalized = summary.replace(",", "")
+        assert "all advertised roles" in summary, summary
+        assert str(expected_min) in normalized, (expected_min, summary)
+        assert str(expected_max) in normalized, (expected_max, summary)
+        assert top_band_key in normalized, (top_band_key, summary)
+        assert str(top_band_count) in normalized, (top_band_count, summary)
+
+    def test_market_vs_you_history_and_histogram_failures_stay_partial_not_total(
+        self, client, auth_headers, monkeypatch, caplog
+    ):
+        """R11 partial-failure honesty: a failing ``/history`` AND a failing
+        ``/histogram`` call must NOT take down what the successful
+        ``/search`` call already earned — the postings and salary rows stay
+        genuinely connected, only the trend/band sentences drop out of the
+        summary, and BOTH real errors are logged (never swallowed).
+        """
+        seed_search_target(
+            client, auth_headers, target_role="Business Analyst", location="Melbourne"
+        )
+        search_payload = {"count": 107, "mean": 147924.58, "results": []}
+        history_error = RuntimeError("ADZUNA_TEST_INJECTED_HISTORY_FAILURE: HTTP 503")
+        histogram_error = RuntimeError("ADZUNA_TEST_INJECTED_HISTOGRAM_FAILURE: HTTP 503")
+        fetch = _route_by_endpoint(
+            search=search_payload, history=history_error, histogram=histogram_error
+        )
+        _enable_live_adzuna(monkeypatch, fetch)
+
+        caplog.set_level(logging.WARNING)
+        pulse = client.get("/analytics/market-pulse", headers=auth_headers).json()
+        comparisons = _market_comparisons_by_label(pulse)
+
+        assert comparisons["Applications / month"]["connected"] is True
+        assert comparisons["Advertised salary (mean)"]["connected"] is True
+
+        summary = pulse["marketVsYou"]["summary"]
+        assert "Adzuna" in summary, summary
+        assert "107" in summary, summary
+        assert "all advertised roles" not in summary, "trend sentence must drop out, not fabricate"
+
+        logged = "\n".join(r.getMessage() for r in caplog.records)
+        assert "ADZUNA_TEST_INJECTED_HISTORY_FAILURE" in logged, logged
+        assert "ADZUNA_TEST_INJECTED_HISTOGRAM_FAILURE" in logged, logged
 
     def test_applications_total_consistent_across_dashboard_funnel_market_pulse(
         self, client, auth_headers, user_id
