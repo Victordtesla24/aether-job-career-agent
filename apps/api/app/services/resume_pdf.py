@@ -101,6 +101,26 @@ def resolve_original_pdf(format_hash: str | None) -> Path | None:
     return None
 
 
+def bundled_format_hashes() -> set[str]:
+    """Every bundled résumé asset's digest, in BOTH spellings
+    :func:`resolve_original_pdf` accepts (full SHA-256 and its 16-char prefix).
+
+    MON-011: lets a LIST response answer "would the download for this résumé
+    reproduce the original document?" for many résumés with ONE pass over the
+    bundled assets, instead of re-hashing them per résumé. Derived from the
+    same files, by the same rule, as ``resolve_original_pdf`` — the download
+    endpoint's own decision — so the honest ``formatPreserved`` flag can never
+    drift from what the download actually does.
+    """
+    assets_dir = get_base_resume_path().parent
+    digests: set[str] = set()
+    for pdf in sorted(assets_dir.glob("*.pdf")):
+        digest = hashlib.sha256(pdf.read_bytes()).hexdigest()
+        digests.add(digest)
+        digests.add(digest[:16])
+    return digests
+
+
 def _normalize(text: str) -> str:
     """Collapse whitespace and fold punctuation for tolerant text matching."""
     return " ".join(text.translate(_PUNCT_FOLD).split())
