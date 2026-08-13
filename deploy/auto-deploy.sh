@@ -27,6 +27,12 @@ ENV_FILE="$REPO_DIR/.env"
 LOG_FILE="/var/log/aether/deploy.log"
 LOCK_FILE="/tmp/aether-deploy.lock"
 NGINX_HOST="5cb5f0620.vm.internal"
+# deploy/5cb5f0620.conf sets `proxy_set_header Host $http_x_original_host;` on
+# BOTH the / and /api/ locations — nginx does not restore the original public
+# Host itself, it relies on this header. Without it, Next.js (location /)
+# receives an empty Host and answers 400; the nginx-fronted health checks
+# below must send it to reach the app the same way real traffic does.
+NGINX_ORIGINAL_HOST="5cb5f0620.abacusai.cloud"
 
 # Untracked files a live concurrent agent may legitimately leave in this
 # shared production checkout without it being a hazard to pull over (see
@@ -162,11 +168,15 @@ for svc in aether-api aether-web aether-worker; do
 done
 
 # --- Step 11: the 3 exact health checks (runbook §5 Phase 5, items 3/3b/4) -
-curl -sf -H "Host: $NGINX_HOST" http://localhost/api/health >/dev/null \
+# The two nginx-fronted checks must send X-Original-Host: nginx proxies the
+# real upstream Host from that header, not from the Host this curl sends
+# (see NGINX_ORIGINAL_HOST comment above) — omitting it makes Next.js see an
+# empty Host and return 400 on every real deploy (round-3 review blocker).
+curl -sf -H "Host: $NGINX_HOST" -H "X-Original-Host: $NGINX_ORIGINAL_HOST" http://localhost/api/health >/dev/null \
     || fail "health check 1/3 failed: GET /api/health via nginx"
 curl -sf --max-time 10 http://127.0.0.1:3000/api/health >/dev/null \
     || fail "health check 2/3 failed: GET 127.0.0.1:3000/api/health (next /api rewrite, §0.4)"
-curl -sf -H "Host: $NGINX_HOST" http://localhost/ >/dev/null \
+curl -sf -H "Host: $NGINX_HOST" -H "X-Original-Host: $NGINX_ORIGINAL_HOST" http://localhost/ >/dev/null \
     || fail "health check 3/3 failed: GET / via nginx"
 
 log "deploy successful: $NEW_HEAD"

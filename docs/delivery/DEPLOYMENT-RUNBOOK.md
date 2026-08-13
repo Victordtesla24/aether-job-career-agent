@@ -1027,9 +1027,13 @@ recipe this section already documents, invoked on a schedule.
 
 Both unit files are tracked in-repo under `deploy/` per this repo's
 existing in-repo-unit-plus-symlink convention (see `deploy/aether-api.service`
-et al. in §1) and symlinked into `/etc/systemd/system/`, so `git log` on
-`deploy/` is the audit trail for the automation itself, and a VM image
-rebuild cannot silently lose it.
+et al. in §1), so `git log` on `deploy/` is the audit trail for the
+automation itself and a VM image rebuild cannot silently lose it. **Current
+status: shipped, NOT yet installed.** Being tracked in-repo does not mean
+the symlinks into `/etc/systemd/system/` exist yet — `systemctl list-timers`
+on this VM will not show `aether-autodeploy.timer` until an operator runs
+the `### Install` steps below. Until then, deploys still require the manual
+§5 recipe.
 
 ### Failure behavior — read before relying on this
 
