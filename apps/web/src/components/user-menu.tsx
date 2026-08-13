@@ -16,10 +16,15 @@ export function UserMenu({
   initials,
   name,
   role,
+  loading = false,
 }: {
   initials: string;
   name: string;
   role: string;
+  /** M6: while the session/profile is still loading, render calm skeleton
+   * placeholders instead of the fallback "AE"/"Welcome" chip, so the identity
+   * does not visibly flip once the real name arrives. */
+  loading?: boolean;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -59,9 +64,17 @@ export function UserMenu({
         aria-label="Account menu"
         className="flex items-center gap-2.5 rounded-xl px-1 py-1 hover:bg-white/5 transition"
       >
-        <span className="w-9 h-9 rounded-full bg-gradient-to-br from-aether-indigo to-aether-violet flex items-center justify-center text-sm font-semibold">
-          {initials}
-        </span>
+        {loading ? (
+          <span
+            aria-hidden="true"
+            data-testid="user-chip-skeleton"
+            className="w-9 h-9 rounded-full bg-white/10 animate-pulse"
+          />
+        ) : (
+          <span className="w-9 h-9 rounded-full bg-gradient-to-br from-aether-indigo to-aether-violet flex items-center justify-center text-sm font-semibold">
+            {initials}
+          </span>
+        )}
         {/*
           MV-mobile-dashboard-004: this name/role text has no responsive hide
           class, so at a 390px viewport it renders in full, crowding the
@@ -75,8 +88,19 @@ export function UserMenu({
           out is never lost on mobile.
         */}
         <span className="leading-tight text-left max-lg:hidden">
-          <span className="block text-[13px] font-medium">{name}</span>
-          {role ? <span className="block text-[11px] text-aether-muted-dim">{role}</span> : null}
+          {loading ? (
+            <span
+              aria-hidden="true"
+              className="block h-3 w-20 rounded bg-white/10 animate-pulse"
+            />
+          ) : (
+            <>
+              <span className="block text-[13px] font-medium">{name}</span>
+              {role ? (
+                <span className="block text-[11px] text-aether-muted-dim">{role}</span>
+              ) : null}
+            </>
+          )}
         </span>
         <i className="fa-solid fa-chevron-down text-[10px] text-aether-muted-dim" aria-hidden="true" />
       </button>

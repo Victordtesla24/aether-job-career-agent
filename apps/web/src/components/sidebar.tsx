@@ -119,7 +119,12 @@ export function Sidebar({ activeHref }: { activeHref?: string }) {
         */}
         <div className="glass-raised rounded-2xl border border-white/10 p-3" data-testid="sidebar-plan-quota">
           {subscription === undefined ? (
-            <p className="text-[11px] text-aether-muted-dim">Checking plan…</p>
+            // M6: render calm skeleton bars while the plan loads instead of the
+            // "Checking plan…" text, so the panel doesn't visibly flip copy.
+            <div aria-hidden="true" data-testid="sidebar-plan-skeleton" className="space-y-2">
+              <span className="block h-3 w-24 rounded bg-white/10 animate-pulse" />
+              <span className="block h-2.5 w-32 rounded bg-white/10 animate-pulse" />
+            </div>
           ) : subscription === null ? (
             <p className="text-[11px] text-aether-muted-dim">Plan unavailable</p>
           ) : (

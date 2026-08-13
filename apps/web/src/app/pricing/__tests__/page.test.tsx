@@ -234,12 +234,12 @@ describe("PricingPage", () => {
     expect(screen.getByTestId("subscribe-free").textContent).toMatch(/dashboard/i);
   });
 
-  it("MV-pricing-005: an unauthenticated visitor's Free CTA still links to /signup", async () => {
+  it("MV-pricing-005: an unauthenticated visitor's Free CTA links to /signup?plan=free", async () => {
     fetchPlansMock.mockResolvedValue(PLANS);
     render(<PricingPage />);
     await waitFor(() => screen.getByTestId("subscribe-free"));
 
-    expect(screen.getByTestId("subscribe-free").getAttribute("href")).toBe("/signup");
+    expect(screen.getByTestId("subscribe-free").getAttribute("href")).toBe("/signup?plan=free");
   });
 });
 

@@ -1159,7 +1159,7 @@ export default function SettingsClient({
                         <span className="text-aether-muted">Spend this period</span>
                         <span className="mono font-semibold" data-testid="billing-quota-spend">
                           ${subscription.quota.spendUsedUsd.toFixed(2)} / $
-                          {subscription.quota.spendCapUsd.toFixed(2)} USD
+                          {subscription.quota.spendCapUsd.toFixed(2)} AUD
                         </span>
                       </div>
                       {/* QA-2026-08-13 C-11: this figure is scoped to the

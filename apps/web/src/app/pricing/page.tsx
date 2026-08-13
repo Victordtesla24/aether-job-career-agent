@@ -444,7 +444,7 @@ export default function PricingPage() {
 
                   {isFree ? (
                     <Link
-                      href={isAuthed ? "/dashboard" : "/signup"}
+                      href={isAuthed ? "/dashboard" : "/signup?plan=free"}
                       data-testid={`subscribe-${plan.id}`}
                       className="mt-6 rounded-xl border border-white/15 py-2.5 text-center text-sm font-semibold transition hover:bg-white/5"
                     >

@@ -37,6 +37,7 @@ import {
 } from "../../../lib/agent-run-health";
 import { useNow } from "../../../hooks/useNow";
 import { apiRequest } from "../../../lib/api/client";
+import { humanizeActivityMessage } from "../../../lib/humanize";
 import {
   jobAlertHeadline,
   jobAlertTone,
@@ -907,7 +908,9 @@ export default function AgentsPage() {
                         ? new Date(parseServerTime(run.startedAt) as number).toLocaleString("en-AU")
                         : "—"}
                     </td>
-                    <td className="px-4 py-2.5 text-xs text-aether-muted-dim">{run.error ?? "—"}</td>
+                    <td className="px-4 py-2.5 text-xs text-aether-muted-dim">
+                      {humanizeActivityMessage(run.error) || "—"}
+                    </td>
                   </tr>
                 ))}
               </tbody>
