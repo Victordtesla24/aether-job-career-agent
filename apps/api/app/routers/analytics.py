@@ -10,7 +10,9 @@ from fastapi import APIRouter, HTTPException, status
 from app.agents.salary_intelligence_agent import (
     MarketBenchmark,
     benchmark_query_terms,
+    benchmark_region_label,
     fetch_market_benchmark,
+    user_disclosed_salary_median,
 )
 from app.db import ensure_user_profile_columns, get_connection, rows_to_dicts
 from app.middleware.auth import CurrentUser
@@ -252,17 +254,20 @@ _SOURCE_COLORS = {
 }
 _PALETTE = ["#4F46E5", "#FF6B35", "#34D399", "#7C3AED", "#FBBF24", "#F59E0B"]
 
-#: Whether the PROBABILITY model has any market evidence to reason from — it
-#: has none, and no factor may claim otherwise (see the factor gate below).
-#: This is deliberately DECOUPLED from Market vs. You: that panel now carries
-#: a real external benchmark (Adzuna AU) per row, but a posting count is not
-#: evidence about THIS user's chances, so it feeds no factor and this stays
-#: ``False``. Market vs. You must still never present a hardcoded guess as
-#: sourced market data (GAP-P4-060): each of its rows reports its OWN
-#: ``connected`` state and shows the user's real figures either way.
-#: (Renamed to ``_PROBABILITY_USES_MARKET_EVIDENCE`` in the I3 slice, once the
-#: transitional global flag below is gone.)
-_MARKET_DATA_SOURCE_CONNECTED = False
+#: Whether the PROBABILITY model has any market evidence to reason from. It has
+#: none — no factor below is computed from anything outside this user's own
+#: rows — and no factor may claim otherwise (see the factor gate). The name says
+#: what it really governs: it was ``_MARKET_DATA_SOURCE_CONNECTED`` back when
+#: the product had no external provider at all and one boolean could honestly
+#: answer both "is a market source connected?" and "does the score use market
+#: evidence?". Those questions now have DIFFERENT answers — Market vs. You
+#: carries a live Adzuna AU benchmark whose rows each report their own
+#: ``connected`` state, while a posting count remains no evidence about THIS
+#: user's chances — so the two must not be reunited under one flag. Market vs.
+#: You must still never present a hardcoded guess as sourced market data
+#: (GAP-P4-060); it shows the user's real figures whether or not the provider
+#: answered.
+_PROBABILITY_USES_MARKET_EVIDENCE = False
 
 #: There is no interview-conversion benchmark provider ANYWHERE — not at
 #: Adzuna, not at any licensed source this product can reach. That row is
@@ -636,7 +641,7 @@ def market_pulse(current_user: CurrentUser) -> dict[str, Any]:
     # scout agent had run once (the UAT account held 1637). It was labelled
     # "Market demand" and averaged into a headline that claimed to be the
     # likelihood of an offer, on the same response that reports
-    # ``_MARKET_DATA_SOURCE_CONNECTED = False``. The input has no information,
+    # ``_PROBABILITY_USES_MARKET_EVIDENCE = False``. The input has no information,
     # so no weight is correct except zero: it is deleted, not renamed and not
     # down-weighted, and the composite stays the plain unweighted mean of
     # whatever remains measured.
@@ -676,7 +681,7 @@ def market_pulse(current_user: CurrentUser) -> dict[str, Any]:
     factors: list[dict[str, Any]] = [
         {"label": label, "value": value if measured else None, "measured": measured}
         for label, value, measured, requires_market_data in factor_specs
-        if _MARKET_DATA_SOURCE_CONNECTED or not requires_market_data
+        if _PROBABILITY_USES_MARKET_EVIDENCE or not requires_market_data
     ]
 
     measured_values = [f["value"] for f in factors if f["measured"]]
@@ -773,16 +778,61 @@ def market_pulse(current_user: CurrentUser) -> dict[str, Any]:
         "footnote": _INTERVIEW_RATE_FOOTNOTE,
     }
 
-    comparisons: list[dict[str, Any]] = [postings_row, interview_row]
+    # Advertised salary — the one row where BOTH sides are salaries, so they
+    # are genuinely comparable. Market is the provider's mean over the ads it
+    # matched; "you" is the median of what the caller's OWN saved postings
+    # disclosed, and is ``None`` (never 0, never the market's figure) when they
+    # disclosed nothing. The two sides are independent: the market side stays
+    # real when the caller has no disclosures, and the caller's own median
+    # stays on screen when the provider is unreachable.
+    mean_salary = benchmark.meanAdvertisedSalary if benchmark is not None else None
+    salary_as_of = (
+        benchmark.dataAsOf
+        if benchmark is not None and mean_salary is not None
+        else None
+    )
+    you_salary_median = user_disclosed_salary_median(user_id)
+    salary_row: dict[str, Any] = {
+        "label": "Advertised salary (mean)",
+        "market": round(mean_salary) if mean_salary is not None else None,
+        "you": you_salary_median,
+        "unit": "A$",
+        "connected": mean_salary is not None,
+        "dataAsOf": salary_as_of,
+    }
+    if benchmark is not None and mean_salary is not None:
+        # Says whose mean it is and which search produced it, and claims
+        # nothing about how the provider computed it — Adzuna publishes the
+        # figure, not its denominator, so "across the N ads" would assert more
+        # than the response supports.
+        salary_row["marketNote"] = (
+            "Market = the mean advertised salary Adzuna Australia reports (AUD) "
+            + (
+                f"for the same search that counted the {benchmark.postingsLast30d} "
+                "ads above."
+                if benchmark.postingsLast30d is not None
+                else "for your target role in that location."
+            )
+        )
+    salary_row["footnote"] = (
+        "No disclosed salary data in your saved jobs yet — most ads publish no "
+        "range, and none is estimated in their place."
+        if you_salary_median is None
+        # The caller's side is about ADS, not about them: it is what the jobs
+        # they saved advertised, and saying so stops a bar that sits beside a
+        # market mean from reading as their current or expected pay.
+        else "You = the median salary advertised by your own saved jobs that "
+        "published a figure — what those ads offered, not what you earn."
+    )
+
+    comparisons: list[dict[str, Any]] = [postings_row, interview_row, salary_row]
+    # NO global connected flag (R5): it could only ever be an OR across rows
+    # whose provenance genuinely differs — the interview row has no provider
+    # at all and never will — so a single boolean would have to misdescribe at
+    # least one of them. Every consumer reads the rows.
     market_vs_you = {
-        # TRANSITIONAL (this slice only — removed in I3 per R5): the deployed
-        # frontend still reads one global flag to decide whether to show its
-        # "no market data" banner. Reducing it to "is any row really
-        # connected" keeps that banner honest in both directions until the UI
-        # derives everything from the rows themselves.
-        "marketDataConnected": any(bool(c["connected"]) for c in comparisons),
         "comparisons": comparisons,
-        "summary": _market_summary(benchmark if postings_market is not None else None),
+        "summary": _market_summary(benchmark),
     }
 
     # ---- Trend indicators (all series from real weekly rollups) ----------
@@ -828,13 +878,14 @@ def market_pulse(current_user: CurrentUser) -> dict[str, Any]:
             "note": _PROGRESS_NOTE,
             "methodology": _PROGRESS_METHODOLOGY,
             "unmeasuredReason": None if prob_score is not None else _PROGRESS_UNMEASURED_REASON,
-            # DELIBERATELY DECOUPLED from marketVsYou.marketDataConnected (R5;
-            # see the constant's own comment). This flag reports whether the
+            # DELIBERATELY DECOUPLED from Market vs. You (R5; see the
+            # constant's own comment). This flag reports whether the
             # PROBABILITY model has market evidence to reason from — a flat
-            # ``False`` — while Market vs. You reports the live per-row state
-            # of the Adzuna benchmark. Once that benchmark returns data the two
-            # values DISAGREE by design: do not "fix" them back into sync.
-            "marketDataConnected": _MARKET_DATA_SOURCE_CONNECTED,
+            # ``False`` — while Market vs. You reports the live state of the
+            # Adzuna benchmark PER ROW and carries no global flag of its own.
+            # The two readings DISAGREE whenever that benchmark returns data:
+            # that is by design, so do not "fix" them back into sync.
+            "marketDataConnected": _PROBABILITY_USES_MARKET_EVIDENCE,
             "factors": factors,
         },
         "employerActivity": employer_activity,
@@ -958,10 +1009,52 @@ def _market_summary(benchmark: MarketBenchmark | None) -> str:
     were real market data — see GAP-P4-060. Now it either cites Adzuna
     Australia with the figures actually returned, or reports the gap. No
     adjectives, no interpretation, nothing the response did not contain.
+
+    Each sentence after the first is emitted ONLY when its own field really
+    arrived, and states that field's OWN scope — which is not the same for all
+    three. The posting count is for the caller's role family in their location;
+    the 12-month salary range is for ALL ADVERTISED ROLES in the region the
+    provider was actually asked about (``/history`` accepts no role at all);
+    the band sentence is for the target role. Saying "the market" flatly across
+    the three would be wrong about two of them.
     """
     if benchmark is None or benchmark.postingsLast30d is None:
         return _NO_MARKET_DATA_SUMMARY
-    return (
+    sentences = [
         f"Market data: Adzuna Australia — {benchmark.postingsLast30d} live "
         f"postings (last 30 days) for your target role in {benchmark.location}."
-    )
+    ]
+    if benchmark.meanAdvertisedSalary is not None:
+        sentences.append(
+            "Adzuna reports a mean advertised salary of "
+            f"A${round(benchmark.meanAdvertisedSalary):,} for that same search."
+        )
+    trend = benchmark.salaryTrend12m
+    if trend:
+        sentences.append(
+            f"Over the last {len(trend)} months the average advertised salary "
+            f"across all advertised roles in {benchmark_region_label(benchmark.location)} "
+            f"— every role, not just yours — ranged A${round(min(trend.values())):,} "
+            f"to A${round(max(trend.values())):,}."
+        )
+    bands = benchmark.salaryHistogram
+    if bands:
+        top_band = max(bands, key=lambda band: bands[band])
+        sentences.append(
+            f"Most live ads for your target role ({bands[top_band]}) advertise "
+            f"the {_salary_band_label(top_band)} band."
+        )
+    return " ".join(sentences)
+
+
+def _salary_band_label(band: str) -> str:
+    """The provider's own histogram band key, thousands-separated for reading.
+
+    The DIGITS are Adzuna's verbatim; only separators and a currency prefix are
+    added. A non-numeric key is passed through untouched rather than coerced
+    into a number that was never returned.
+    """
+    try:
+        return f"A${int(band):,}"
+    except ValueError:
+        return band
