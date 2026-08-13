@@ -242,3 +242,84 @@ def test_next_target_still_finds_the_correct_job_across_a_realistic_board(
         f"expected the non-saturated highest-fitScore job {winner!r} to win, "
         f"got {target!r}"
     )
+
+
+def _set_fit(conn, job_id: str, fit: float) -> None:
+    with conn.cursor() as cur:
+        cur.execute('UPDATE "Job" SET "fitScore" = %s WHERE "id" = %s',
+                    (fit, job_id))
+    conn.commit()
+
+
+def test_candidate_walk_pages_and_resumes_on_the_keyset_without_gaps_or_dupes(
+    db_session, user_id, sweep_sql, monkeypatch
+):
+    """MULTI-PAGE keyset resumption — the property ``_CANDIDATE_PAGE_SIZE``
+    exists for, and the one a single-page seed can never observe.
+
+    The other tests in this file seed well under the real 500-row page size,
+    so they only ever exercise the FIRST page: a walk that dropped its cursor,
+    re-read page 1 forever, or stopped after one page would pass them all.
+    Shrinking the constant (rather than seeding 500+ rows, which would put a
+    multi-minute insert into every run of this suite) forces the loop to
+    round-trip four times over ten eligible jobs and pins the three things the
+    ``id > last_id`` cursor has to deliver: every eligible job appears EXACTLY
+    once, in ascending id order, and each statement still carries the bound.
+    """
+    monkeypatch.setattr(board_sweep, "_CANDIDATE_PAGE_SIZE", 3)
+    job_ids = [
+        _seed_job(db_session, user_id, status="screening", fit=50.0 + index)
+        for index in range(10)
+    ]
+
+    sweep_sql.clear()
+    pages = list(board_sweep._iter_candidate_pages(user_id, set()))
+
+    assert [len(page) for page in pages] == [3, 3, 3, 1], (
+        "ten eligible jobs at a page size of 3 must be walked as 4 bounded "
+        f"pages, got page sizes {[len(page) for page in pages]}"
+    )
+    walked = [row["id"] for page in pages for row in page]
+    assert walked == sorted(job_ids), (
+        "the keyset walk must yield every eligible job exactly once in "
+        f"ascending id order; got {len(walked)} rows "
+        f"({len(set(walked))} distinct) for {len(job_ids)} eligible jobs"
+    )
+
+    selects = _job_selects(sweep_sql)
+    assert len(selects) == len(pages) + 1, (
+        "each page is one bounded statement, plus the terminating empty read; "
+        f"got {len(selects)} Job SELECTs for {len(pages)} pages"
+    )
+    assert all("LIMIT 3" in stmt for stmt in selects), (
+        "every page statement must carry the per-statement row bound; "
+        f"got {selects}"
+    )
+
+
+def test_next_target_selects_a_winner_that_lives_beyond_the_first_page(
+    db_session, user_id, sweep_sql, monkeypatch
+):
+    """Bounded must not mean truncated ACROSS pages either: the best-fit job
+    is forced onto the LAST page (highest id ⇒ last in the keyset order), so a
+    walk that only ever consumed page 1 would return a worse job and fail.
+    """
+    monkeypatch.setattr(board_sweep, "_CANDIDATE_PAGE_SIZE", 3)
+    job_ids = [
+        _seed_job(db_session, user_id, status="screening", fit=50.0 + index)
+        for index in range(10)
+    ]
+    winner = max(job_ids)
+    _set_fit(db_session, winner, 99.0)
+
+    sweep_sql.clear()
+    target = board_sweep._next_target(user_id, set())
+
+    assert target is not None, "ten eligible, non-saturated jobs exist"
+    assert target["job_id"] == winner, (
+        f"expected the highest-fitScore job {winner!r} — deliberately the "
+        f"LAST id, i.e. on the final page — to win, got {target!r}"
+    )
+    assert len([s for s in _job_selects(sweep_sql) if "LIMIT 3" in s]) > 1, (
+        "the target must have been chosen over a genuinely multi-page walk"
+    )
