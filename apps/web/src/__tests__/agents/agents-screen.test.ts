@@ -19,7 +19,9 @@ import {
 import {
   agentRunDisabledReason,
   agentStatusLabel,
+  creditsBannerState,
   formatTokens,
+  LOW_CREDIT_USD_THRESHOLD,
   providerAction,
   providerModelDisabledReason,
   providerSourceBadge,
@@ -87,6 +89,55 @@ describe("providerModelDisabledReason", () => {
 
   it("returns null once the provider has models to choose from", () => {
     expect(providerModelDisabledReason({ ...base, models: ["claude-sonnet-5"] })).toBeNull();
+  });
+
+  // ML-U1X-b honesty fix: a CONNECTED provider is never told to "configure
+  // its credentials" — its `models` seed being empty is not evidence of a
+  // locked select once a real credential exists (the live catalog may be
+  // fetched from elsewhere, e.g. Anthropic's static catalog).
+  it("returns null for a connected provider even with an empty models seed", () => {
+    expect(
+      providerModelDisabledReason({ ...base, status: "connected", models: [] }),
+    ).toBeNull();
+  });
+
+  it("still explains the lock for a NOT-connected provider with an empty models seed", () => {
+    const reason = providerModelDisabledReason({ ...base, status: "warning", models: [] });
+    expect(reason).toMatch(/no selectable models/i);
+  });
+});
+
+// ML-U1X-b: the low-credit banner's pure display logic — never fabricates a
+// number, and distinguishes "no reading yet" from "the reading failed" from
+// "a real reading came back low."
+describe("creditsBannerState", () => {
+  it("stays hidden before the first reading resolves", () => {
+    expect(creditsBannerState(null)).toEqual({ kind: "hidden" });
+  });
+
+  it("stays hidden for a healthy real reading", () => {
+    expect(
+      creditsBannerState({ available: true, remaining: 500, total: 1000 }),
+    ).toEqual({ kind: "hidden" });
+  });
+
+  it("warns with the REAL figures once remaining drops under the threshold", () => {
+    const remaining = LOW_CREDIT_USD_THRESHOLD - 1;
+    expect(
+      creditsBannerState({ available: true, remaining, total: 1000 }),
+    ).toEqual({ kind: "low", remaining, total: 1000 });
+  });
+
+  it("renders an honest 'unavailable' state on available:false — never hides (which would look healthy)", () => {
+    expect(
+      creditsBannerState({ available: false, remaining: null, total: null }),
+    ).toEqual({ kind: "unavailable" });
+  });
+
+  it("renders 'unavailable' for an available:true reading with a null remaining (malformed, never trusted)", () => {
+    expect(
+      creditsBannerState({ available: true, remaining: null, total: 1000 }),
+    ).toEqual({ kind: "unavailable" });
   });
 });
 

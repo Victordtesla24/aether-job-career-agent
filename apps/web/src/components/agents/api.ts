@@ -285,6 +285,32 @@ export async function fetchAgentStats(o: RequestOptions = {}): Promise<AgentStat
   return StatsSchema.parse(await apiRequest<unknown>("/agents/stats", o));
 }
 
+/**
+ * The DEPLOYMENT'S real remaining OpenRouter credit (ML-U1X-b), proxied
+ * through GET /agents/providers/openrouter/credits — operator-only (F-01),
+ * same admin gate as {@link fetchProviders}. The backend itself never
+ * fabricates a balance: on an honest failure to read it (no credential,
+ * upstream unreachable) it answers an explicit `{available:false, detail}`
+ * envelope rather than a 500 or a made-up number, which this schema parses
+ * identically to a healthy reading — callers branch on `available`.
+ */
+export const OpenRouterCreditsSchema = z.object({
+  available: z.boolean(),
+  remaining: z.number().nullable(),
+  total: z.number().nullable(),
+  asOf: z.string().nullable(),
+  detail: z.string().nullish(),
+});
+export type OpenRouterCredits = z.infer<typeof OpenRouterCreditsSchema>;
+
+export async function fetchOpenRouterCredits(
+  o: RequestOptions = {},
+): Promise<OpenRouterCredits> {
+  return OpenRouterCreditsSchema.parse(
+    await apiRequest<unknown>("/agents/providers/openrouter/credits", o),
+  );
+}
+
 /** Extended thinking effort levels a model may honour (GAP-D3). */
 export type ThinkingEffort = "none" | "low" | "medium" | "high";
 

@@ -16,8 +16,13 @@
  * (GET /agents/user/providers/catalog). This component never fetches — it can
  * only show what the page was allowed to load.
  */
-import type { Provider } from "./api";
-import { providerAction, providerModelDisabledReason, providerSourceBadge, type ProviderSourceBadge } from "./logic";
+import type { Provider, ProviderModel } from "./api";
+import {
+  providerAction,
+  providerModelDisabledReason,
+  providerSourceBadge,
+  type ProviderSourceBadge,
+} from "./logic";
 
 const DOT: Record<Provider["status"], string> = {
   connected: "bg-aether-green",
@@ -51,6 +56,7 @@ export default function ProviderConnections({
   onModel,
   title = "AI Provider Connections",
   blurb,
+  anthropicModels = null,
 }: {
   providers: Provider[];
   loading: boolean;
@@ -61,6 +67,17 @@ export default function ProviderConnections({
   title?: string;
   /** Optional one-line explanation of whose keys these are. */
   blurb?: string;
+  /**
+   * Anthropic's LIVE curated catalog (GET /agents/providers/anthropic/models,
+   * `fetchProviderModels("anthropic")`) — ML-U1X-b. Fetched independently of
+   * `providers[].models` so a genuinely connected+verified credential renders
+   * real, priced options even when that seed array is still empty/stale
+   * (the RCA: a working 3-model catalog existed but nothing ever fetched it
+   * for this card). `null` while loading; falls back to `providers[].models`
+   * (bare ids, no pricing) so the select never regresses to "no models" while
+   * the live fetch is in flight or has failed.
+   */
+  anthropicModels?: ProviderModel[] | null;
 }) {
   return (
     <section data-testid="provider-connections">
@@ -92,6 +109,19 @@ export default function ProviderConnections({
             const busy = busyId === p.id;
             const modelLockReason = providerModelDisabledReason(p);
             const badge = providerSourceBadge(p);
+            // ML-U1X-b: for anthropic, prefer the live-fetched catalog and
+            // fall back to the seed's bare id list only while that fetch
+            // hasn't resolved yet (or failed) — never a blanket "no models"
+            // for a card that has real options available either way. Labels
+            // stay bare ids here (pricing is the Orchestrator role picker's
+            // job, AgentModelPicker below) so this card matches every other
+            // provider's plain-id select.
+            const anthropicOptions =
+              p.id === "anthropic"
+                ? anthropicModels && anthropicModels.length > 0
+                  ? anthropicModels.map((m) => ({ id: m.id, label: m.id }))
+                  : p.models.map((id) => ({ id, label: id }))
+                : [];
             return (
               <div
                 key={p.id}
@@ -166,6 +196,37 @@ export default function ProviderConnections({
                       aria-hidden="true"
                     />
                   </a>
+                ) : p.id === "anthropic" ? (
+                  // Anthropic has no open catalog to browse live (ADR-ML-4 —
+                  // static curated list), but IS a real fetched catalog
+                  // (`fetchProviderModels("anthropic")`), not a hardcoded
+                  // seed array — so it gets a real (non-openrouter-style)
+                  // select with actual per-model pricing, rather than the
+                  // generic branch below whose options are just the bare
+                  // `providers[].models` seed.
+                  <label className="mb-3 block">
+                    <span className="sr-only">{p.name} model</span>
+                    <select
+                      data-testid={`provider-model-${p.id}`}
+                      aria-label={`${p.name} model`}
+                      aria-disabled={modelLockReason !== null || undefined}
+                      title={modelLockReason ?? undefined}
+                      value={p.model}
+                      disabled={anthropicOptions.length === 0 || busy}
+                      onChange={(e) => onModel(p.id, e.target.value)}
+                      className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-[11px] text-aether-muted outline-none focus:border-aether-coral/50 disabled:cursor-not-allowed disabled:opacity-60 disabled:grayscale [&>option]:bg-aether-bg"
+                    >
+                      {anthropicOptions.length === 0 ? (
+                        <option value="">No preset models — configure below</option>
+                      ) : (
+                        anthropicOptions.map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.label}
+                          </option>
+                        ))
+                      )}
+                    </select>
+                  </label>
                 ) : (
                   <label className="mb-3 block">
                     <span className="sr-only">{p.name} model</span>

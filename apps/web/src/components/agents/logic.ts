@@ -68,9 +68,20 @@ export function agentStatusLabel(
  * configured legitimately disables its select — but a disabled control still
  * needs to explain itself, so this backs a `title` tooltip rather than
  * leaving the lock silent.
+ *
+ * ML-U1X-b honesty fix: this used to key PURELY on `provider.models.length
+ * === 0`, so a genuinely CONNECTED + verified provider (e.g. Anthropic before
+ * this same slice wired its catalog into the FE fetch) was told "configure
+ * its credentials" — nonsensical advice for someone who already has. A
+ * `status === "connected"` provider's catalog may legitimately be fetched
+ * from elsewhere (the live `fetchProviderModels` call, not this static seed
+ * array), so an empty `models` array here is no longer evidence of a locked
+ * select for a connected provider — only for one that is NOT connected
+ * (unconfigured, or needing re-auth) does an empty list mean "nothing to
+ * pick from."
  */
 export function providerModelDisabledReason(provider: Provider): string | null {
-  if (provider.models.length === 0) {
+  if (provider.status !== "connected" && provider.models.length === 0) {
     return `${provider.name} has no selectable models yet — configure its credentials to enable model selection.`;
   }
   return null;
@@ -185,6 +196,49 @@ export function deriveBudgetPresetModel(
   const known = pool.find((m) => PREMIUM_ID_HINT.test(m.id));
   if (known) return known.id;
   return pool.reduce((a, b) => (b.promptPerM > a.promptPerM ? b : a)).id;
+}
+
+// ---------------------------------------------------------------------------
+// Low-credit banner (ML-U1X-b) — pure display logic for the operator-only
+// remaining-OpenRouter-credit reading (GET /agents/providers/openrouter/credits,
+// see components/agents/api.ts `fetchOpenRouterCredits`).
+// ---------------------------------------------------------------------------
+
+/** $ threshold below which the deployment's remaining OpenRouter credit is
+ *  surfaced as a LOW-CREDIT warning. A heuristic (not a backend-specified
+ *  number): low enough that it fires well before the wall is hit, leaving
+ *  runway to act, but not so high it nags at a healthy balance. */
+export const LOW_CREDIT_USD_THRESHOLD = 20;
+
+/** The subset of `OpenRouterCredits` the banner logic needs — kept structural
+ *  (not imported from api.ts) so this stays a plain, dependency-free type. */
+export interface CreditsReading {
+  available: boolean;
+  remaining: number | null;
+  total: number | null;
+}
+
+export type CreditsBannerState =
+  | { kind: "hidden" }
+  | { kind: "low"; remaining: number; total: number | null }
+  | { kind: "unavailable" };
+
+/**
+ * What the low-credit banner should show, from the real credits envelope (or
+ * `null` before the first fetch has resolved). Never fabricates a number:
+ * "low" fires ONLY when a real `remaining` figure came back under the
+ * threshold. A failed/`available:false` read renders an honest "unavailable"
+ * state rather than silently hiding — hiding would be visually identical to
+ * "credit is healthy," which is not a claim this can honestly make when the
+ * reading itself failed.
+ */
+export function creditsBannerState(credits: CreditsReading | null): CreditsBannerState {
+  if (credits === null) return { kind: "hidden" };
+  if (!credits.available || credits.remaining === null) return { kind: "unavailable" };
+  if (credits.remaining < LOW_CREDIT_USD_THRESHOLD) {
+    return { kind: "low", remaining: credits.remaining, total: credits.total };
+  }
+  return { kind: "hidden" };
 }
 
 /** Unicode whitespace/invisible characters plain `.trim()` does not fully

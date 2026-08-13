@@ -46,6 +46,7 @@ export default function AgentModelPicker({
   error,
   saving,
   overridable = true,
+  catalogProvider = "openrouter",
   onSelect,
 }: {
   agentKey: string;
@@ -58,6 +59,14 @@ export default function AgentModelPicker({
   // time for this agent. When false the picker renders an honest locked
   // indicator instead of a functional search+select surface that no-ops.
   overridable?: boolean;
+  // ML-U1X-b: which live catalog `models` was fetched from — drives the
+  // billing disclosure copy below. Every card but the Orchestrator ROLE
+  // (`orchestration`/`supervisor`) is fed the shared OpenRouter catalog; the
+  // Orchestrator's default/downshift options are Anthropic's own static
+  // catalog, so the old hardcoded "these come from OpenRouter" text would be
+  // dishonestly wrong for that one card (ADR-ML-3 — never mislead about which
+  // credential a choice bills against).
+  catalogProvider?: "openrouter" | "anthropic";
   onSelect: (model: string) => void;
 }) {
   const [query, setQuery] = useState("");
@@ -125,21 +134,28 @@ export default function AgentModelPicker({
         {saving ? <span className="ml-1 break-normal text-aether-amber">· saving…</span> : null}
       </p>
 
-      {/* ML-catalog-007 (§3.1.3): the billing/provider implication must be
-          USER-VISIBLE, not just a code comment. Every model offered here comes
-          from the OpenRouter catalog, so choosing one routes THIS agent through
-          OpenRouter (resolve_provider keys off the id; credentials never cross
-          providers). */}
+      {/* ML-catalog-007 (§3.1.3) / ML-U1X-b: the billing/provider implication
+          must be USER-VISIBLE, not just a code comment — and must name the
+          catalog `models` ACTUALLY came from for this card. */}
       <p className="mb-1.5 flex items-start gap-1.5 rounded-md border border-aether-indigo/20 bg-aether-indigo/5 px-1.5 py-1 text-[9px] leading-relaxed text-aether-muted-dim">
         <i
           className="fa-solid fa-scale-balanced mt-0.5 shrink-0 text-[9px] text-aether-indigo"
           aria-hidden="true"
         />
-        <span>
-          These models come from the OpenRouter catalog — choosing one routes
-          this agent&apos;s runs through OpenRouter and bills to your OpenRouter
-          account. Anthropic models never route through OpenRouter.
-        </span>
+        {catalogProvider === "anthropic" ? (
+          <span>
+            These are Anthropic&apos;s own curated models — assigning one runs
+            this role directly against the connected Anthropic credential. It
+            never routes through OpenRouter and never bills a different
+            account.
+          </span>
+        ) : (
+          <span>
+            These models come from the OpenRouter catalog — choosing one routes
+            this agent&apos;s runs through OpenRouter and bills to your OpenRouter
+            account. Anthropic models never route through OpenRouter.
+          </span>
+        )}
       </p>
 
       {loading && models === null ? (

@@ -63,6 +63,12 @@ const STATUS_LABEL: Record<CatalogAgent["status"], string> = {
   planned: "Planned",
 };
 
+/** ML-U1X-b: the ONE catalog key whose model is a user-assignable ROLE
+ *  (`_ROLE_MODEL_BACKENDS`, backend "supervisor") rather than a metered
+ *  per-call tier — its default/downshift options are Anthropic's own static
+ *  catalog, never the shared OpenRouter list every other card uses. */
+const ORCHESTRATOR_ROLE_KEY = "orchestration";
+
 function AgentCard({
   agent,
   busy,
@@ -71,6 +77,9 @@ function AgentCard({
   catalogModels,
   catalogLoading,
   catalogError,
+  orchestratorModels,
+  orchestratorModelsLoading,
+  orchestratorModelsError,
   savingModel,
   onSelectModel,
 }: {
@@ -81,9 +90,19 @@ function AgentCard({
   catalogModels: ProviderModel[] | null;
   catalogLoading: boolean;
   catalogError: string | null;
+  // ML-U1X-b: Anthropic's live catalog, fed ONLY to the Orchestrator role
+  // card (see `ORCHESTRATOR_ROLE_KEY`) — a distinct fetch from `catalogModels`
+  // (OpenRouter) with its own loading/error state.
+  orchestratorModels: ProviderModel[] | null;
+  orchestratorModelsLoading: boolean;
+  orchestratorModelsError: string | null;
   savingModel: boolean;
   onSelectModel: (key: string, model: string) => void;
 }) {
+  const isOrchestratorRole = agent.key === ORCHESTRATOR_ROLE_KEY;
+  const pickerModels = isOrchestratorRole ? orchestratorModels : catalogModels;
+  const pickerLoading = isOrchestratorRole ? orchestratorModelsLoading : catalogLoading;
+  const pickerError = isOrchestratorRole ? orchestratorModelsError : catalogError;
   const tipId = useId();
   const runLockReason = agentRunDisabledReason(agent);
   const [showSettings, setShowSettings] = useState(false);
@@ -192,9 +211,9 @@ function AgentCard({
         <AgentModelPicker
           agentKey={agent.key}
           currentModel={agent.model}
-          models={catalogModels}
-          loading={catalogLoading}
-          error={catalogError}
+          models={pickerModels}
+          loading={pickerLoading}
+          error={pickerError}
           saving={savingModel}
           // ML-agents-001: lock the picker whenever a picked model is NOT
           // honoured at run time — the authoritative server-computed
@@ -205,6 +224,7 @@ function AgentCard({
           // missed them. Fall back to that sentinel for a response predating
           // the flag so deterministic agents still lock.
           overridable={agent.modelOverridable ?? agent.recommended !== "deterministic"}
+          catalogProvider={isOrchestratorRole ? "anthropic" : "openrouter"}
           onSelect={(model) => onSelectModel(agent.key, model)}
         />
       ) : null}
@@ -226,6 +246,9 @@ export default function AgentConfigGrid({
   catalogModels,
   catalogLoading,
   catalogError,
+  orchestratorModels,
+  orchestratorModelsLoading,
+  orchestratorModelsError,
   catalogRefreshedAt,
   catalogStale,
   catalogRefreshing,
@@ -248,6 +271,11 @@ export default function AgentConfigGrid({
   catalogModels: ProviderModel[] | null;
   catalogLoading: boolean;
   catalogError: string | null;
+  // ML-U1X-b: Anthropic's live catalog for the Orchestrator role card only —
+  // see `ORCHESTRATOR_ROLE_KEY` / `AgentCard` above.
+  orchestratorModels: ProviderModel[] | null;
+  orchestratorModelsLoading: boolean;
+  orchestratorModelsError: string | null;
   catalogRefreshedAt: string | null;
   catalogStale: boolean;
   catalogRefreshing: boolean;
@@ -329,6 +357,9 @@ export default function AgentConfigGrid({
               catalogModels={catalogModels}
               catalogLoading={catalogLoading}
               catalogError={catalogError}
+              orchestratorModels={orchestratorModels}
+              orchestratorModelsLoading={orchestratorModelsLoading}
+              orchestratorModelsError={orchestratorModelsError}
               savingModel={savingModelKey === a.key}
               onSelectModel={onSelectModel}
             />

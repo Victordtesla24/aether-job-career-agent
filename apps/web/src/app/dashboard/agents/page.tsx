@@ -51,10 +51,12 @@ import ModelPicker from "../../../components/agents/ModelPicker";
 import ProviderConfigModal from "../../../components/agents/ProviderConfigModal";
 import AgentConfigGrid from "../../../components/agents/AgentConfigGrid";
 import AgentStatsRow from "../../../components/agents/AgentStats";
+import LowCreditBanner from "../../../components/agents/LowCreditBanner";
 import TestRunModal from "../../../components/agents/TestRunModal";
 import {
   fetchAgentStats,
   fetchCatalog,
+  fetchOpenRouterCredits,
   fetchProviderCatalog,
   fetchProviderModels,
   fetchProviders,
@@ -64,6 +66,7 @@ import {
   updateProvider,
   type AgentStats,
   type Catalog,
+  type OpenRouterCredits,
   type Provider,
   type ProviderModel,
 } from "../../../components/agents/api";
@@ -117,6 +120,13 @@ const POLL_MS = 3000;
 //: the backend keys off the id, unchanged).
 const CATALOG_PROVIDER = "openrouter";
 
+//: ML-U1X-b — the provider whose static curated catalog backs both (a) the
+//: Anthropic provider card's own model select and (b) the Orchestrator role's
+//: default/downshift options. Credential-independent (GET .../models answers
+//: unconditionally), so this is fetched unconditionally on mount, same as
+//: `CATALOG_PROVIDER` above.
+const ANTHROPIC_PROVIDER = "anthropic";
+
 /** Surface the backend's honest `detail` from an ApiError (already lifted by
  *  fetchProviderCatalog), else a safe generic message. */
 function catalogErrorText(e: unknown): string {
@@ -155,6 +165,16 @@ export default function AgentsPage() {
   const [catalogStale, setCatalogStale] = useState(false);
   const [catalogRefreshing, setCatalogRefreshing] = useState(false);
   const [savingModelKey, setSavingModelKey] = useState<string | null>(null);
+  // ML-U1X-b: Anthropic's live curated catalog — feeds the anthropic provider
+  // card's model select AND the Orchestrator role's picker (both need real
+  // ids + pricing, neither the shared OpenRouter `catalogModels` above).
+  const [anthropicModels, setAnthropicModels] = useState<ProviderModel[] | null>(null);
+  const [anthropicModelsLoading, setAnthropicModelsLoading] = useState(true);
+  const [anthropicModelsError, setAnthropicModelsError] = useState<string | null>(null);
+  // ML-U1X-b: the deployment's real remaining OpenRouter credit (operator-only
+  // proxy) — `null` before the first read resolves, so the banner stays
+  // hidden rather than flashing "unavailable" during initial load.
+  const [credits, setCredits] = useState<OpenRouterCredits | null>(null);
   const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const runStartedAt = useRef<number>(0);
 
@@ -261,6 +281,50 @@ export default function AgentsPage() {
   useEffect(() => {
     void loadCatalog();
   }, [loadCatalog]);
+
+  // ML-U1X-b: Anthropic's static curated catalog (RCA: a working 3-model
+  // catalog already existed at GET /agents/providers/anthropic/models, but
+  // nothing in the FE ever called it — only OpenRouter's live catalog above
+  // was fetched). Credential-independent, so this is unconditional on mount,
+  // mirroring `loadCatalog`. Feeds the anthropic provider card AND the
+  // Orchestrator role picker (see AgentConfigGrid `orchestratorModels`).
+  const loadAnthropicModels = useCallback(async () => {
+    setAnthropicModelsLoading(true);
+    setAnthropicModelsError(null);
+    try {
+      setAnthropicModels(await fetchProviderModels(ANTHROPIC_PROVIDER));
+    } catch (e) {
+      setAnthropicModelsError(catalogErrorText(e));
+    } finally {
+      setAnthropicModelsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadAnthropicModels();
+  }, [loadAnthropicModels]);
+
+  // ML-U1X-b (retired-U1 spec (d)): the deployment's real remaining OpenRouter
+  // credit — operator-only (the proxy endpoint is admin-gated, same as
+  // `fetchProviders`), so this never even attempts the call for a non-admin
+  // customer. A failed read still resolves to an honest `{available:false}`
+  // reading rather than leaving `credits` at `null` forever (which the banner
+  // would otherwise render identically to "still loading").
+  useEffect(() => {
+    if (isAdmin !== true) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const c = await fetchOpenRouterCredits();
+        if (!cancelled) setCredits(c);
+      } catch {
+        if (!cancelled) setCredits({ available: false, remaining: null, total: null, asOf: null });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isAdmin]);
 
   // Force a fresh upstream refresh of the catalog (ML-catalog-003). Never blocks
   // the UI: the button shows its own spinner; the cache keeps serving meanwhile.
@@ -795,12 +859,15 @@ export default function AgentsPage() {
         </p>
       ) : null}
 
+      <LowCreditBanner credits={credits} />
+
       <ProviderConnections
         providers={providers ?? []}
         loading={providers === null || isAdmin === null}
         busyId={providerBusy}
         onConfigure={openConfig}
         onModel={(id, model) => void onProviderModel(id, model)}
+        anthropicModels={anthropicModels}
         title={
           isAdmin === null
             ? "AI Providers"
@@ -833,6 +900,9 @@ export default function AgentsPage() {
         catalogModels={catalogModels}
         catalogLoading={catalogLoading}
         catalogError={catalogError}
+        orchestratorModels={anthropicModels}
+        orchestratorModelsLoading={anthropicModelsLoading}
+        orchestratorModelsError={anthropicModelsError}
         catalogRefreshedAt={catalogRefreshedAt}
         catalogStale={catalogStale}
         catalogRefreshing={catalogRefreshing}
