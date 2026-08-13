@@ -16,7 +16,7 @@
  *
  * This is append-only — it does not touch apps/web/src/app/login/__tests__/
  * page.test.tsx (the pre-existing, still-relevant regression suite for the
- * "Email or username" relabel / create-account link / redirect behaviour).
+ * "Email" label (QA L-01) / create-account link / redirect behaviour).
  *
  * Fail-before: no such link exists, so `getByRole("link", { name: /admin/i })`
  * throws. Not implementation-prescriptive about the destination page name —

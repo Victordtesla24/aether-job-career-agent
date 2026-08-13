@@ -1162,6 +1162,15 @@ export default function SettingsClient({
                           {subscription.quota.spendCapUsd.toFixed(2)} USD
                         </span>
                       </div>
+                      {/* QA-2026-08-13 C-11: this figure is scoped to the
+                          current billing period and resets on the quota reset
+                          date, while Analytics → Agent ROI shows lifetime
+                          spend — say so explicitly so the two numbers (e.g.
+                          $0.88 vs $6.62) don't read as a data bug. */}
+                      <p className="text-[11px] text-aether-muted-dim" data-testid="billing-quota-spend-note">
+                        Current billing period only — lifetime agent spend is shown on the
+                        Analytics page.
+                      </p>
                       {subscription.quota.periodEnd ? (
                         <p className="text-[11px] text-aether-muted-dim">
                           {/* Distinct from "Next billing date" above (PAY-R3-06)

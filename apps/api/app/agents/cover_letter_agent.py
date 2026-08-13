@@ -13,6 +13,7 @@ Composition:
 from __future__ import annotations
 
 import datetime
+import os
 import re
 from dataclasses import dataclass, field
 from typing import Any
@@ -1337,14 +1338,35 @@ class CoverLetterAgent:
         """Draft a letter; return
         (letter, body, guard_flags, claim_flags, structural_issues,
         compliance_hits)."""
-        raw = self._llm.complete_json(
-            "cover_letter",
-            SYSTEM_PROMPT,
-            prompt,
-            model=get_model("REASONING"),
-            temperature=0.0,
-            fixture_key=fixture_key,
-        )
+        # QA C-03: the drafting tier is env-selectable (default REASONING), and
+        # a live failure of the primary tier's model degrades ONCE to the FAST
+        # tier's model before the honest coverLetterUnavailable path takes
+        # over. The cover agent was the pipeline's chronic failure because it
+        # pinned everything on a single (rate-limited) model id; the FAST tier
+        # is configured in production and is the working model the retry uses.
+        primary_tier = os.environ.get("AETHER_COVER_LETTER_TIER", "REASONING")
+        primary_model = get_model(primary_tier)
+        fallback_model = get_model("FAST")
+        try:
+            raw = self._llm.complete_json(
+                "cover_letter",
+                SYSTEM_PROMPT,
+                prompt,
+                model=primary_model,
+                temperature=0.0,
+                fixture_key=fixture_key,
+            )
+        except LLMUnavailableError:
+            if fallback_model == primary_model:
+                raise
+            raw = self._llm.complete_json(
+                "cover_letter",
+                SYSTEM_PROMPT,
+                prompt,
+                model=fallback_model,
+                temperature=0.0,
+                fixture_key=fixture_key,
+            )
         hook_reason = str(raw.get("hook_reason") or "")
         model_body = (raw.get("body") or "").strip()
         # MV-cover-letter-studio-008: detect self-referential injection-compliance

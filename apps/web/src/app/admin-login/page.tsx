@@ -22,7 +22,7 @@
  *
  * Not a separate backend "admin login" endpoint or credential class either —
  * it posts to the exact same POST /auth/login as the general /login form
- * (identifier + password, either email or username, per the existing
+ * (identifier + password — email, per the existing
  * `login()` client in lib/api/auth.ts) and stores the token under the same
  * `aether_token` key. The only difference from /login is the post-login
  * destination: /admin instead of /dashboard.
@@ -95,12 +95,12 @@ export default function AdminLoginPage() {
           </div>
 
           <div className="flex flex-col gap-1.5 text-[13px] font-medium">
-            <label htmlFor="admin-login-identifier">Email or username</label>
+            <label htmlFor="admin-login-identifier">Email</label>
             <input
               id="admin-login-identifier"
               type="text"
               name="email"
-              autoComplete="username"
+              autoComplete="email"
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}

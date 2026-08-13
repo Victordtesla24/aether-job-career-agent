@@ -101,7 +101,12 @@ export default function AnalyticsPage() {
     // (GET /analytics/dashboard?period=..., MV-analytics-004) — the copy
     // must say so instead of claiming "all time periods" while the number
     // visibly changes when the selector is used.
-    Applications: "Every application record created in the selected period — draft through offer or rejection.",
+    // QA-2026-08-13 C-10: the visible label now says "(all stages)" so the
+    // difference vs the funnel's narrower "Applied" (submitted-only) count is
+    // self-explanatory without hovering — 460 here vs 134 in the funnel is
+    // intentional, not a bug, and the copy must make that obvious.
+    "Applications (all stages)":
+      "Every application record created in the selected period — draft through offer or rejection. The funnel's \"Applied\" stage below counts only submitted applications, so it is expected to be smaller.",
     Interviews: "Applications that have progressed to at least one interview stage.",
     Offers: "Applications where an employer has extended a formal offer.",
     "Jobs Found": "Roles discovered by the Scout agent and matched against your profile.",
@@ -185,7 +190,7 @@ export default function AnalyticsPage() {
           <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {(
             [
-              ["Applications", dashboard.totalApplications, "text-aether-coral"],
+              ["Applications (all stages)", dashboard.totalApplications, "text-aether-coral"],
               ["Interviews", dashboard.interviews, "text-aether-violet"],
               ["Offers", dashboard.offers, "text-aether-green"],
               ["Jobs Found", dashboard.jobsFound, "text-aether-amber"],

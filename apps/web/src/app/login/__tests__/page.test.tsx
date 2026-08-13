@@ -44,9 +44,9 @@ afterEach(() => {
 });
 
 describe("LoginPage", () => {
-  it('labels the identifier field "Email or username" and accepts a bare username', () => {
+  it('labels the identifier field "Email" (QA L-01) and still accepts a bare username value', () => {
     render(<LoginPage />);
-    const field = screen.getByLabelText(/email or username/i) as HTMLInputElement;
+    const field = screen.getByLabelText(/^email$/i) as HTMLInputElement;
     expect(field).toBeTruthy();
     // A plain <input type="email"> would reject a bare username under HTML5
     // constraint validation — the field must NOT be type="email".
@@ -62,7 +62,7 @@ describe("LoginPage", () => {
   it("still renders the Sign in heading and empty fields", () => {
     render(<LoginPage />);
     expect(screen.getByRole("heading", { name: "Sign in", level: 1 }).textContent).toBe("Sign in");
-    expect((screen.getByLabelText(/email or username/i) as HTMLInputElement).value).toBe("");
+    expect((screen.getByLabelText(/^email$/i) as HTMLInputElement).value).toBe("");
     expect((screen.getByLabelText(/^password$/i) as HTMLInputElement).value).toBe("");
   });
 
@@ -70,7 +70,7 @@ describe("LoginPage", () => {
     loginMock.mockResolvedValue({ accessToken: "jwt-admin", userId: "u0", email: "admin@aether.local" });
 
     render(<LoginPage />);
-    fireEvent.change(screen.getByLabelText(/email or username/i), { target: { value: "admin" } });
+    fireEvent.change(screen.getByLabelText(/^email$/i), { target: { value: "admin" } });
     fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: "n0t-a-real-password" } });
     fireEvent.click(screen.getByRole("button", { name: /sign in/i }));
 
@@ -85,7 +85,7 @@ describe("LoginPage", () => {
     );
 
     render(<LoginPage />);
-    fireEvent.change(screen.getByLabelText(/email or username/i), { target: { value: "a@example.com" } });
+    fireEvent.change(screen.getByLabelText(/^email$/i), { target: { value: "a@example.com" } });
     fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: "wrong" } });
     fireEvent.click(screen.getByRole("button", { name: /sign in/i }));
 
@@ -126,7 +126,7 @@ describe("LoginPage", () => {
     loginMock.mockResolvedValue({ accessToken: "jwt-x", userId: "u1", email: "a@example.com" });
     window.history.replaceState(null, "", "/login?next=" + encodeURIComponent("/dashboard/jobs"));
     render(<LoginPage />);
-    fireEvent.change(screen.getByLabelText(/email or username/i), { target: { value: "a@example.com" } });
+    fireEvent.change(screen.getByLabelText(/^email$/i), { target: { value: "a@example.com" } });
     fireEvent.change(screen.getByLabelText(/^password$/i), { target: { value: "pw1234567" } });
     fireEvent.click(screen.getByRole("button", { name: /sign in/i }));
     await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/dashboard/jobs"));

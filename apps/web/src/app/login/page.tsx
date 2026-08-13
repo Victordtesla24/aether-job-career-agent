@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * /login — identifier (email or username) + password sign-in against
+ * /login — identifier (email; a legacy username value is still accepted by the API) + password sign-in against
  * POST /api/auth/login (the backend accepts either credential — GAP
  * FEATURE CONTRACT). A successful login stores the JWT under the same
  * `aether_token` localStorage key the shared API client uses before
@@ -102,12 +102,12 @@ export default function LoginPage() {
           ) : null}
 
           <div className="flex flex-col gap-1.5 text-[13px] font-medium">
-            <label htmlFor="login-identifier">Email or username</label>
+            <label htmlFor="login-identifier">Email</label>
             <input
               id="login-identifier"
               type="text"
               name="email"
-              autoComplete="username"
+              autoComplete="email"
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -174,7 +174,7 @@ export default function LoginPage() {
           top-level navigation guarantees the general /login form is fully
           torn down before the admin form can receive input — a Link's
           client-side transition briefly leaves BOTH forms' identically
-          labelled fields ("Email or username" / "Password") resolvable at
+          labelled fields ("Email" / "Password") resolvable at
           once, so a fast fill+submit (automation, or just a quick typist)
           can race the transition and submit the wrong form entirely.
         */}

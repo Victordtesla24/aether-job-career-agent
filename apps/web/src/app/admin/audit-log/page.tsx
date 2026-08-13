@@ -69,7 +69,13 @@ export default function AdminAuditLogPage() {
             {entries.map((e) => (
               <tr key={e.id} className="hover:bg-white/5 align-top">
                 <td className="px-4 py-3 text-aether-muted whitespace-nowrap">{formatDateTime(e.createdAt)}</td>
-                <td className="px-4 py-3 font-mono text-xs text-aether-muted">{e.actorUserId}</td>
+                <td className="px-4 py-3 text-xs text-aether-muted">
+                  {/* QA M-05: show the actor's name/email, not a raw CUID. */}
+                  <span className="text-aether-text">{e.actorName ?? e.actorEmail ?? e.actorUserId}</span>
+                  {e.actorName && e.actorEmail ? (
+                    <span className="block text-aether-muted-dim">{e.actorEmail}</span>
+                  ) : null}
+                </td>
                 <td className="px-4 py-3 text-aether-text">{e.action}</td>
                 <td className="px-4 py-3 text-aether-muted">
                   {e.targetType ? `${e.targetType}:${e.targetId ?? ""}` : "—"}

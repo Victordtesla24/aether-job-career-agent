@@ -140,7 +140,10 @@ describe("Analytics period selector (MV-analytics-004)", () => {
 
     // The "Applications" stat card's tooltip must not claim "all time
     // periods" now that the value genuinely changes with the selector.
-    const appsLabel = within(summary).getByText("Applications");
+    // QA-2026-08-13 C-10: label now reads "Applications (all stages)" so the
+    // 460-vs-134 gap against the funnel's submitted-only "Applied" count is
+    // self-explanatory.
+    const appsLabel = within(summary).getByText("Applications (all stages)");
     const card = appsLabel.closest("div");
     expect(card).not.toBeNull();
     const tooltip = card!.querySelector('[data-testid="metric-tooltip-popover"]');
