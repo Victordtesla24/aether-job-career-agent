@@ -204,6 +204,7 @@ export function Topbar({ subtitle }: { title?: string; subtitle?: string }) {
   const [mounted, setMounted] = useState(false);
   const bellRef = useRef<HTMLDivElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
+  const bellButtonRef = useRef<HTMLButtonElement | null>(null);
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const searchIndex = useRef<SearchHit[] | null>(null);
@@ -333,6 +334,33 @@ export function Topbar({ subtitle }: { title?: string; subtitle?: string }) {
     };
   }, [bellOpen]);
 
+  // REV-U-UI-05: the panel is portaled to the end of document.body, so
+  // without this, Tab from the bell no longer reaches its menuitems — a
+  // keyboard user would have to traverse the rest of the header, sidebar and
+  // page first. Move focus into the panel's first focusable item the instant
+  // it opens; on close, hand focus back to the bell — but only when nothing
+  // else already claimed it (Escape and most outside-clicks leave
+  // `document.activeElement` on `<body>` once the focused menu item
+  // unmounts, whereas a click that lands on some other real control on the
+  // page already owns focus by the time this cleanup runs, and forcing focus
+  // back to the bell in that case would yank it away from what the user
+  // just clicked).
+  useEffect(() => {
+    if (!bellOpen) return;
+    const panel = panelRef.current;
+    if (!panel) return;
+    const bellButton = bellButtonRef.current;
+    const focusable = panel.querySelector<HTMLElement>(
+      '[role="menuitem"], a[href], button, [tabindex]:not([tabindex="-1"])',
+    );
+    (focusable ?? panel).focus();
+    return () => {
+      if (document.activeElement === document.body) {
+        bellButton?.focus();
+      }
+    };
+  }, [bellOpen]);
+
   const today = new Date().toLocaleDateString("en-AU", {
     weekday: "short",
     month: "short",
@@ -435,6 +463,7 @@ export function Topbar({ subtitle }: { title?: string; subtitle?: string }) {
         <RealtimeStatusBadge compact hideWhenIdle className="max-w-[8.5rem] shrink-0 sm:max-w-none" />
         <div className="relative" ref={bellRef}>
           <button
+            ref={bellButtonRef}
             type="button"
             onClick={() => setBellOpen((v) => !v)}
             aria-haspopup="menu"
@@ -465,12 +494,21 @@ export function Topbar({ subtitle }: { title?: string; subtitle?: string }) {
           to go stale on resize/scroll): `inset-x-4` keeps it fully on-screen
           with equal margins on narrow viewports where a fixed 320px box
           anchored to the button would run off the left edge (measured
-          x=-107 on a 390px viewport pre-fix); `sm:inset-x-auto sm:right-4
-          sm:w-80` restores the original flush-right anchor once there's
-          room. It may still legitimately sit on top of page content (e.g.
-          kanban column headers) — that's an intentional overlay now backed
-          by a solid surface, a dismissible backdrop and a real z-index, not
-          a rendering defect.
+          x=-107 on a 390px viewport pre-fix); `sm:inset-x-auto sm:right-8
+          sm:w-80` anchors it flush with the header's own right content edge
+          once there's room. It may still legitimately sit on top of page
+          content (e.g. kanban column headers) — that's an intentional
+          overlay now backed by a solid surface, a dismissible backdrop and
+          a real z-index, not a rendering defect.
+
+          REV-U-UI-03: the bell is not the header's rightmost control (Admin
+          link + <UserMenu/> sit to its right) and the header's own gutter is
+          `sm:px-8` (32px) — `sm:right-4` (16px) neither points at the bell
+          nor lines up with the header's content edge, and overhangs that
+          gutter by 16px. `sm:right-8` matches the header's own right inset
+          exactly, so the panel lands flush with the same edge the sibling
+          UserMenu dropdown (`absolute right-0` off the rightmost, edge-
+          aligned avatar button) already uses.
         */}
         {mounted && bellOpen
           ? createPortal(
@@ -484,8 +522,14 @@ export function Topbar({ subtitle }: { title?: string; subtitle?: string }) {
                 <div
                   ref={panelRef}
                   role="menu"
+                  // REV-U-UI-05: focusable as a last-resort landing spot (the
+                  // panel always has a real focusable descendant today — see
+                  // the effect above — but a `tabindex` of -1 here means
+                  // focus still lands somewhere sane inside the panel rather
+                  // than silently no-opping if that ever stops being true).
+                  tabIndex={-1}
                   data-testid="notification-panel"
-                  className="animate-fade-in fixed top-16 z-50 inset-x-4 sm:inset-x-auto sm:right-4 sm:w-80 rounded-xl border border-white/10 bg-aether-bg-elevated shadow-xl shadow-black/40"
+                  className="animate-fade-in fixed top-16 z-50 inset-x-4 sm:inset-x-auto sm:right-8 sm:w-80 rounded-xl border border-white/10 bg-aether-bg-elevated shadow-xl shadow-black/40"
                 >
                   <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
                     <span className="text-sm font-semibold text-aether-text">Notifications</span>

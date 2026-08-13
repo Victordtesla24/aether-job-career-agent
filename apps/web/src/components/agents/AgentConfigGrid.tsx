@@ -9,7 +9,7 @@
  * Status + config are real: derived from GET /agents/catalog and mutated via
  * PUT /agents/config/{key} (see components/agents/api.ts).
  */
-import { useId, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import AgentModelPicker from "./AgentModelPicker";
@@ -93,14 +93,32 @@ function AgentTip({ agentKey, name, tip }: { agentKey: string; name: string; tip
 
   useLayoutEffect(() => setMounted(true), []);
 
-  // Measured once on mount (the trigger's position within the page doesn't
-  // change afterward) rather than re-measured per hover, since the
-  // description is now always in the DOM.
-  useLayoutEffect(() => {
+  const measure = useCallback(() => {
     if (!triggerRef.current) return;
     const rect = triggerRef.current.getBoundingClientRect();
     setPos({ top: rect.bottom + 8, right: Math.max(8, window.innerWidth - rect.right) });
   }, []);
+
+  // REV-U-UI-01: the grid has no inner scroll container — the whole
+  // dashboard page (dashboard/layout.tsx) scrolls with the window, so a
+  // `position: fixed` popover's viewport coordinates are only valid for the
+  // exact scroll offset they were captured at. Measuring once on mount (the
+  // old behaviour) permanently pinned every below-the-fold card's popover to
+  // its page-load position, which was off-screen for any card past the
+  // initial ~900px fold. Re-measure the instant the popover opens (never
+  // trust a stale mount-time rect) and keep tracking the trigger's viewport
+  // position for as long as it stays open, so a scroll or resize mid-hover
+  // can't leave it pinned to a now-wrong spot either.
+  useLayoutEffect(() => {
+    if (!open) return;
+    measure();
+    window.addEventListener("scroll", measure, { passive: true, capture: true });
+    window.addEventListener("resize", measure, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", measure, true);
+      window.removeEventListener("resize", measure);
+    };
+  }, [open, measure]);
 
   const close = () => setOpen(false);
 
@@ -317,14 +335,9 @@ export default function AgentConfigGrid({
   catalogModels,
   catalogLoading,
   catalogError,
-  // U-UI: optional (default to the deterministic/no-catalog state) — the
-  // only card that ever reads these is the single Orchestrator role card
-  // (ORCHESTRATOR_ROLE_KEY); callers whose agent list never includes it
-  // (e.g. a scoped test fixture of ordinary agents) shouldn't have to wire
-  // up a second catalog fetch just to render the grid.
-  orchestratorModels = null,
-  orchestratorModelsLoading = false,
-  orchestratorModelsError = null,
+  orchestratorModels,
+  orchestratorModelsLoading,
+  orchestratorModelsError,
   catalogRefreshedAt,
   catalogStale,
   catalogRefreshing,
@@ -348,10 +361,16 @@ export default function AgentConfigGrid({
   catalogLoading: boolean;
   catalogError: string | null;
   // ML-U1X-b: Anthropic's live catalog for the Orchestrator role card only —
-  // see `ORCHESTRATOR_ROLE_KEY` / `AgentCard` above.
-  orchestratorModels?: ProviderModel[] | null;
-  orchestratorModelsLoading?: boolean;
-  orchestratorModelsError?: string | null;
+  // see `ORCHESTRATOR_ROLE_KEY` / `AgentCard` above. Required (not optional
+  // with a silent-empty default): a caller that forgets to wire the
+  // Anthropic fetch must fail to compile, not ship a card whose model
+  // picker silently renders zero options with no error (REV-U-UI-04) on the
+  // one agent whose model choice carries the Anthropic-vs-OpenRouter
+  // billing distinction (ML-U1X-b / ADR-ML-3). Callers with no Orchestrator
+  // card in their agent list still pass explicit null/false/null.
+  orchestratorModels: ProviderModel[] | null;
+  orchestratorModelsLoading: boolean;
+  orchestratorModelsError: string | null;
   catalogRefreshedAt: string | null;
   catalogStale: boolean;
   catalogRefreshing: boolean;

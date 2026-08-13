@@ -82,6 +82,11 @@ function renderGrid() {
       catalogModels={[]}
       catalogLoading={false}
       catalogError={null}
+      // REV-U-UI-04: required props — explicit for this fixture (no
+      // Orchestrator card among AGENT_A/AGENT_B), not silently defaulted.
+      orchestratorModels={null}
+      orchestratorModelsLoading={false}
+      orchestratorModelsError={null}
       catalogRefreshedAt={null}
       catalogStale={false}
       catalogRefreshing={false}

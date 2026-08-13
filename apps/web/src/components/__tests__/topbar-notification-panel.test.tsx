@@ -164,3 +164,35 @@ describe("Notification panel close behavior (regression guard)", () => {
     expect(screen.queryByTestId("notification-panel")).toBeNull();
   });
 });
+
+describe("Notification panel focus management (REV-U-UI-05)", () => {
+  it("moves focus into the panel when it opens, so Tab from the bell reaches a menuitem without traversing the rest of the page", async () => {
+    const panel = await openBell();
+    // The panel is portaled to the end of document.body — without explicit
+    // focus management, `document.activeElement` would stay on the bell
+    // button (or wherever it was) instead of landing inside the panel.
+    expect(panel.contains(document.activeElement)).toBe(true);
+  });
+
+  it("returns focus to the bell button on Escape-close", async () => {
+    render(<Topbar />);
+    const bell = await screen.findByTestId("notification-bell");
+    fireEvent.click(bell);
+    await screen.findByTestId("notification-panel");
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByTestId("notification-panel")).toBeNull();
+    expect(document.activeElement).toBe(bell);
+  });
+
+  it("returns focus to the bell button when it closes via an outside click on a non-focusable area", async () => {
+    render(<Topbar />);
+    const bell = await screen.findByTestId("notification-bell");
+    fireEvent.click(bell);
+    await screen.findByTestId("notification-panel");
+
+    fireEvent.mouseDown(document.body);
+    expect(screen.queryByTestId("notification-panel")).toBeNull();
+    expect(document.activeElement).toBe(bell);
+  });
+});

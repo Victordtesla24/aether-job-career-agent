@@ -1131,7 +1131,15 @@ export default function EmailCenterPage() {
                   <>
                     <p
                       data-testid="email-body"
-                      className="whitespace-pre-line rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-aether-muted"
+                      // REV-U-UI-02 / EMAIL-BODY-HORIZONTAL-OVERFLOW-01: an
+                      // unbroken long token (e.g. a tracking/unsubscribe URL)
+                      // in a real email body has no natural break point, so
+                      // `whitespace-pre-line` alone lets it push scrollWidth
+                      // to 8x clientWidth — measured cascading all the way to
+                      // a page-wide horizontal scrollbar on <body>.
+                      // break-words (overflow-wrap: break-word) lets long
+                      // tokens wrap inside the box instead of overflowing it.
+                      className="whitespace-pre-line break-words rounded-xl border border-white/10 bg-white/5 p-4 text-sm text-aether-muted"
                     >
                       {selectedBody}
                     </p>

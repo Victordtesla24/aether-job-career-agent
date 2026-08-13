@@ -16,7 +16,7 @@
  * DOM-nesting contract this design was built against.
  */
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import AgentConfigGrid from "../AgentConfigGrid";
 import type { CatalogAgent } from "../api";
@@ -58,6 +58,11 @@ const gridProps = {
   catalogModels: null,
   catalogLoading: false,
   catalogError: null,
+  // REV-U-UI-04: required props — explicit for this fixture (no Orchestrator
+  // card in AGENTS), not silently defaulted by the component.
+  orchestratorModels: null,
+  orchestratorModelsLoading: false,
+  orchestratorModelsError: null,
   catalogRefreshedAt: null,
   catalogStale: false,
   catalogRefreshing: false,
@@ -112,5 +117,33 @@ describe("AgentConfigGrid recommendation tooltip (U-UI AGENTS-PHANTOM-OVERFLOW-0
     const card = screen.getByTestId("agent-card-jobDiscovery");
     const popover = screen.getByTestId("agent-tip-popover-jobDiscovery");
     expect(card.contains(popover)).toBe(false);
+  });
+});
+
+describe("AgentConfigGrid recommendation tooltip position (REV-U-UI-01)", () => {
+  // The dashboard grid is window-scrolled (no inner scroll container), so a
+  // fixed-position popover measured once on mount stays pinned to its
+  // page-load coordinates forever — off-screen for any card below the
+  // initial fold. jsdom reports all-zero rects, so the resulting pixel
+  // position isn't assertable here, but the fix's observable *behaviour* —
+  // re-measuring on open, and tracking the trigger while the popover stays
+  // open — is: this pins that contract via the window listeners it wires.
+  it("re-measures on open and tracks scroll/resize while open, cleaning up on close", () => {
+    const addSpy = vi.spyOn(window, "addEventListener");
+    const removeSpy = vi.spyOn(window, "removeEventListener");
+
+    render(<AgentConfigGrid agents={AGENTS} {...gridProps} />);
+    const trigger = screen.getByTestId("agent-tip-jobDiscovery");
+
+    fireEvent.mouseEnter(trigger);
+    expect(addSpy).toHaveBeenCalledWith("scroll", expect.any(Function), expect.objectContaining({ capture: true }));
+    expect(addSpy).toHaveBeenCalledWith("resize", expect.any(Function), expect.objectContaining({ passive: true }));
+
+    fireEvent.mouseLeave(trigger);
+    expect(removeSpy).toHaveBeenCalledWith("scroll", expect.any(Function), true);
+    expect(removeSpy).toHaveBeenCalledWith("resize", expect.any(Function));
+
+    addSpy.mockRestore();
+    removeSpy.mockRestore();
   });
 });
