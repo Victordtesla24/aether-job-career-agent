@@ -19,7 +19,12 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { apiBaseUrl, apiRequest, getToken } from "../../../lib/api/client";
+import {
+  apiBaseUrl,
+  apiRequest,
+  describeApiError,
+  getToken,
+} from "../../../lib/api/client";
 import { resolveRun } from "../../../lib/api/agents";
 import { fetchMe } from "../../../lib/api/admin";
 import {
@@ -219,6 +224,48 @@ function autopilotSuppressionHint(job: Job): string | null {
   return `Autopilot paused for this job until ${when} — recent generation attempts couldn't produce a letter`;
 }
 
+/**
+ * Either shape `POST /agents/scout/run` can answer with (MON-020):
+ * the 202 enqueue envelope (`?background=true`) that `resolveRun` polls, or the
+ * synchronous result body the discovery cron still receives. `resolveRun`
+ * collapses the first into the second, so downstream only ever reads the counts.
+ */
+interface ScoutRunEnvelope {
+  job_id?: string;
+  status?: string;
+  persisted?: number;
+  updated?: number;
+  errors?: unknown[];
+}
+
+/**
+ * Honest one-line summary of a FINISHED discovery run, built only from the
+ * counts the backend actually returned. A run that found nothing says so
+ * plainly rather than being dressed up, and a run whose sources reported
+ * errors admits it instead of silently under-reporting.
+ */
+function discoverySummary(out: ScoutRunEnvelope): string {
+  const added = Number(out?.persisted ?? 0);
+  const updated = Number(out?.updated ?? 0);
+  const failed = Array.isArray(out?.errors) ? out.errors.length : 0;
+  const parts: string[] = [];
+  if (added === 0 && updated === 0) {
+    parts.push("Discovery finished — no new roles matched this search.");
+  } else {
+    parts.push(
+      `Discovery finished — ${added} new role${added === 1 ? "" : "s"} added, ` +
+        `${updated} updated.`,
+    );
+  }
+  if (failed > 0) {
+    parts.push(
+      `${failed} source${failed === 1 ? "" : "s"} reported an error, so this ` +
+        "pass may be incomplete.",
+    );
+  }
+  return parts.join(" ");
+}
+
 // ---------------------------------------------------------------------------
 // Presentational: circular match-score ring (SVG)
 // ---------------------------------------------------------------------------
@@ -301,6 +348,15 @@ export default function JobsPage() {
   const [sort, setSort] = useState<"fitScore" | "createdAt">("fitScore");
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // MON-020 — what the background discovery run is doing RIGHT NOW, and what it
+  // finished with. A real pass takes minutes (production discovery-cron
+  // measurement: 255-473s typical, 968s worst case), so the button can no longer
+  // just sit there: `syncPhase` narrates the phase actually in flight and
+  // `syncResult` reports the counts the completed run really returned. Neither
+  // is a fabricated percentage or ETA — nothing server-side reports progress
+  // granularity, so nothing here claims any.
+  const [syncPhase, setSyncPhase] = useState<string | null>(null);
+  const [syncResult, setSyncResult] = useState<string | null>(null);
   // Honest-no-op notice (MV-adv-A-002) — a legitimate business outcome (every
   // proposed edit rejected by the anti-fabrication guard), rendered as an
   // informational notice, never the red error banner, matching Resume
@@ -648,17 +704,41 @@ export default function JobsPage() {
     selectedInsights?.semanticPath === "local" || selectedInsights?.semanticPath === "hf_api";
   const step = selected ? applyStep[selected.id] ?? "idle" : "idle";
 
-  /** Run the real discovery pass for an already-resolved, user-owned target. */
+  /**
+   * Run the real discovery pass for an already-resolved, user-owned target.
+   *
+   * MON-020: the scout is ENQUEUED (`?background=true`) and polled through the
+   * existing background-job machinery instead of being awaited inside the HTTP
+   * request. A real pass takes minutes, Cloudflare aborts the request at ~100s,
+   * and the raw HTML error page it returns used to land in this screen's red
+   * banner. The synchronous mode still exists and is untouched — it is what
+   * `scripts/discovery_cron.sh` uses, and it must stay synchronous there
+   * because the cron fit-scores immediately afterwards.
+   */
   const runDiscoveryFor = async (query: string, location: string) => {
     setRunning(true);
     setError(null);
+    setSyncResult(null);
+    setSyncPhase("Queuing your discovery run…");
     try {
-      await apiRequest("/agents/scout/run", { method: "POST", body: { query, location } });
+      const enqueued = await apiRequest<ScoutRunEnvelope>(
+        "/agents/scout/run?background=true",
+        { method: "POST", body: { query, location } },
+      );
+      setSyncPhase(
+        "Searching your connected job boards. A full pass usually takes a few " +
+          "minutes — you can leave this page and the run keeps going.",
+      );
+      const out = await resolveRun(enqueued);
+      setSyncPhase("Scoring the new roles against your résumé…");
       await apiRequest("/agents/fit-scorer/run", { method: "POST" });
       setInsights({});
       await Promise.all([load(), loadSourceStatus()]);
+      setSyncPhase(null);
+      setSyncResult(discoverySummary(out));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Discovery run failed");
+      setSyncPhase(null);
+      setError(describeApiError(e, "Discovery run failed"));
     } finally {
       setRunning(false);
     }
@@ -1274,6 +1354,35 @@ export default function JobsPage() {
           Clear filters
         </button>
       </div>
+
+      {/* MON-020 — narrate the background discovery run while it is in flight,
+          then report what it actually finished with. Both are driven by real
+          state (the polled job, then the run's own counts); neither invents a
+          percentage, an ETA, or a result. */}
+      {syncPhase ? (
+        <p
+          data-testid="discovery-progress"
+          role="status"
+          aria-live="polite"
+          className="flex items-center gap-2 rounded-xl border border-aether-coral/30 bg-aether-coral/10 p-3 text-sm text-aether-coral"
+        >
+          <span
+            aria-hidden="true"
+            className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-aether-coral"
+          />
+          {syncPhase}
+        </p>
+      ) : null}
+
+      {syncResult ? (
+        <p
+          data-testid="discovery-result"
+          role="status"
+          className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-300"
+        >
+          {syncResult}
+        </p>
+      ) : null}
 
       {error ? (
         <p role="alert" className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">

@@ -82,6 +82,14 @@ def _runs_used(user_id: str) -> int:
     return int(UsageQuotaRepository().get_by_user(user_id)["runsUsed"])
 
 
+def _definitely_stale_age() -> int:
+    """An age comfortably beyond BOTH live staleness windows, read from the
+    implementation rather than hardcoded (MON-020)."""
+    from app.routers.agents import _job_stale_thresholds
+
+    return max(_job_stale_thresholds()) + 60
+
+
 def _seed_bg_job(
     user_id: str,
     agent_key: str,
@@ -91,7 +99,13 @@ def _seed_bg_job(
     started_age_secs: int | None = None,
 ) -> str:
     """Insert a BackgroundJob. ``started_age_secs`` backdates startedAt/createdAt
-    so the staleness watchdog treats the row as abandoned."""
+    so the staleness watchdog treats the row as abandoned.
+
+    Use :func:`_definitely_stale_age` rather than a literal: MON-020 made the
+    processing window derive from the worker's own execution ceiling, so a
+    hardcoded age silently stops being stale the moment that ceiling is retuned.
+    These tests are about refund/terminal-state SEMANTICS, not about the value of
+    the window, so they must not encode it."""
     job_id = new_id()
     started = "now()" if started_age_secs is None else (
         f"now() - make_interval(secs => {int(started_age_secs)})"
@@ -146,7 +160,7 @@ def test_concurrent_watchdog_refunds_decrement_reservation_once(
     _set_runs_used(test_user_id, 3)
     job_id = _seed_bg_job(
         test_user_id, "tailor", status="processing", quota_reserved=True,
-        started_age_secs=1200,
+        started_age_secs=_definitely_stale_age(),
     )
     repo = BackgroundJobRepository()
     # Two concurrent pollers (e.g. two browser tabs) both read the SAME pre-write
@@ -174,7 +188,7 @@ def test_watchdog_fail_then_slow_worker_complete_stays_failed(
     _set_runs_used(test_user_id, 1)  # this job's reservation
     job_id = _seed_bg_job(
         test_user_id, "tailor", status="processing", quota_reserved=True,
-        started_age_secs=1200,
+        started_age_secs=_definitely_stale_age(),
     )
     repo = BackgroundJobRepository()
 

@@ -7,7 +7,8 @@
  */
 import { z } from "zod";
 
-import { apiBaseUrl } from "./client";
+import { apiBaseUrl, apiRequest } from "./client";
+import { resolveRun } from "./agents";
 import { stripCopyOfPrefix } from "../humanize";
 
 const JobStatusSchema = z.enum([
@@ -171,16 +172,28 @@ export async function toggleSaveJob(id: string, options: RequestOptions): Promis
   return JobSchema.parse(body);
 }
 
-/** Trigger a scout discovery run (202 Accepted). */
+/**
+ * Trigger a scout discovery run and wait for it to finish (MON-020).
+ *
+ * Enqueues in background mode and polls the background-job status route rather
+ * than holding the HTTP request open for the whole pass. A real discovery pass
+ * runs for minutes (production discovery-cron measurement: 255-473s typical,
+ * 968s worst case) while Cloudflare aborts the request at ~100s — so Settings'
+ * "Sync All Job Boards" could never have succeeded through the proxy on the
+ * synchronous route either. Resolves only once the run reaches a terminal
+ * state, so the caller's success notice still means the sync really happened.
+ */
 export async function runScoutAgent(
   query: string,
   location: string,
   options: RequestOptions,
 ): Promise<void> {
-  await request("/agents/scout/run", options, {
+  const enqueued = await apiRequest<unknown>("/agents/scout/run?background=true", {
+    ...options,
     method: "POST",
-    body: JSON.stringify({ query, location }),
+    body: { query, location },
   });
+  await resolveRun(enqueued, options);
 }
 
 /** Per-source discovery sync status — counts, last sync time, ok/error/skipped. */

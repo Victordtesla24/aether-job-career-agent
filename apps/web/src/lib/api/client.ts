@@ -79,6 +79,56 @@ export function parseApiErrorDetail(body: string): ApiErrorDetail | undefined {
   return undefined;
 }
 
+/**
+ * Whether an error body came from an INTERMEDIARY (CDN / reverse proxy / load
+ * balancer) rather than from our own API — i.e. it is an HTML page, not JSON.
+ *
+ * MON-020. A discovery run legitimately takes minutes (production discovery-cron
+ * measurement: 255-473s typical, 968s worst case), Cloudflare gave up at ~100s,
+ * and its `text/html` "Error 524" page was embedded verbatim into
+ * `ApiError.message` — so every screen rendering `e.message` dumped raw
+ * Cloudflare markup (Ray ID and all) at the user.
+ *
+ * The Content-Type header alone is not enough: some proxies label an HTML body
+ * `text/plain`, so the body itself is sniffed too.
+ */
+function isNonApiHtmlBody(contentType: string | null, body: string): boolean {
+  if (contentType && contentType.toLowerCase().includes("text/html")) return true;
+  const head = body.trimStart().slice(0, 256).toLowerCase();
+  return (
+    head.startsWith("<!doctype") ||
+    head.startsWith("<html") ||
+    head.startsWith("<head") ||
+    head.startsWith("<body") ||
+    head.startsWith("<?xml")
+  );
+}
+
+/**
+ * The honest sentence shown in place of an intermediary's HTML page.
+ *
+ * Deliberately says only what is actually known: the transport failed and with
+ * which class of failure. It never claims the operation succeeded, never claims
+ * it definitely failed when a timeout leaves that genuinely unknown, and never
+ * invents a retry ETA. The real status stays on `ApiError.status` for callers
+ * that branch on it.
+ */
+function gatewayErrorMessage(status: number): string {
+  if (status === 408 || status === 504 || status === 522 || status === 524) {
+    return (
+      "The server took too long to respond. Your request may still be running — " +
+      "check back in a moment before trying again."
+    );
+  }
+  if (status === 502 || status === 503) {
+    return "The service is temporarily unavailable. Please try again in a moment.";
+  }
+  if (status >= 500) {
+    return `The server returned an unexpected response (HTTP ${status}). Please try again.`;
+  }
+  return `The request was rejected before it reached Aether (HTTP ${status}).`;
+}
+
 /** Human-readable "try again in …" phrasing for an ApiError's retryAfterSeconds. */
 export function formatRetryAfter(seconds: number): string {
   if (seconds < 60) return `${seconds} second${seconds === 1 ? "" : "s"}`;
@@ -256,6 +306,17 @@ export async function apiRequest<T>(path: string, options: RequestOptions = {}):
       typeof window !== "undefined"
     ) {
       window.location.assign("/pricing");
+    }
+    // MON-020: an intermediary's HTML error page is not something any caller can
+    // parse or any user should read. Replace the body with an honest sentence
+    // BEFORE it reaches `ApiError.message`, and drop the
+    // "METHOD /path failed (status):" prefix with it — that prefix exists to
+    // carry a server payload, and there is none here. A JSON body from our own
+    // API is untouched, so every existing parser (`parsePydanticDetail`,
+    // `components/cover-letters/rejection.ts`, `lib/agents-feedback`) keeps
+    // seeing exactly the string it was written against.
+    if (isNonApiHtmlBody(res.headers.get("Content-Type"), detail)) {
+      throw new ApiError(gatewayErrorMessage(res.status), res.status);
     }
     // 429 rate-limit responses (checkout, portal) carry a Retry-After header
     // (seconds) — surface it so the caller can tell the user honestly when to

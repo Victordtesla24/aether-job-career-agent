@@ -2205,9 +2205,14 @@ def _enqueue_single_agent(
     (never a silent success, never a silent sync fallthrough).
 
     ``system_run`` (ADR-P7-05) is honored for the paywall check exactly as the
-    sync path — but ONLY for ``_SYSTEM_RUN_EXEMPT_AGENTS`` (scout, fitScorer),
-    which are NOT enqueued here, so a metered agent with a valid secret still
-    hits the paywall (402). Threaded for parity + defense in depth."""
+    sync path — but ONLY for ``_SYSTEM_RUN_EXEMPT_AGENTS``, so a metered agent
+    with a valid secret still hits the paywall (402).
+
+    ``scout`` reaches this seam too since MON-020 (``/scout/run?background=true``).
+    It is not in :data:`_LLM_TIER_BY_BACKEND`, so ``_call_is_metered`` returns
+    False for it and no quota is reserved or refunded — identical to what the
+    synchronous ``_record_run`` path already does for scout. Nothing about the
+    metering, paywall or cooldown decision changes with the transport."""
     # 1) Paywall FIRST (honest 402 before any row/reserve/enqueue) — scoped
     #    system-run exemption applies identically to the sync path.
     _require_active_subscription(user_id, agent_name=agent_key, system_run=system_run)
@@ -2294,13 +2299,36 @@ def _enqueue_pipeline(
 def _job_stale_thresholds() -> tuple[int, int]:
     """(enqueued_secs, processing_secs) staleness windows (blueprint §7.4).
 
-    enqueued stale > 15 min; processing stale > 12 min. Tunable via
-    ``AETHER_JOB_STALE_SECONDS`` (the enqueued window; processing = that − 180)."""
+    ``enqueued`` stale > 15 min, tunable via ``AETHER_JOB_STALE_SECONDS``: how
+    long a job may sit unclaimed before we conclude no worker will claim it.
+
+    ``processing`` is a DIFFERENT question — "has the worker died mid-run?" —
+    so it is derived from the worker's own per-job execution ceiling
+    (:func:`app.workers.queue.job_timeout_seconds`) plus a 120s settling margin,
+    and overridable with ``AETHER_JOB_PROCESSING_STALE_SECONDS`` (MON-020).
+
+    It used to be ``enqueued − 180``, which only accidentally sat above the ARQ
+    ceiling. Now that background discovery runs share this queue (measured
+    255-473s typical, 968s worst case) the two numbers must not drift apart: a
+    processing window BELOW the ceiling makes the lazy watchdog mark a run
+    "generation timed out (worker unavailable)" — and refund it — while the
+    worker is still legitimately executing it, i.e. a fabricated failure on a
+    run that then completes. Deriving it from the ceiling makes that
+    structurally impossible rather than merely unlikely."""
+    from app.workers.queue import job_timeout_seconds
+
     try:
         enq = int(os.environ.get("AETHER_JOB_STALE_SECONDS", "900"))
     except ValueError:
         enq = 900
-    return enq, max(60, enq - 180)
+    default_proc = job_timeout_seconds() + 120
+    try:
+        proc = int(
+            os.environ.get("AETHER_JOB_PROCESSING_STALE_SECONDS", str(default_proc))
+        )
+    except ValueError:
+        proc = default_proc
+    return enq, max(60, proc)
 
 
 def _job_age_seconds(anchor: Any) -> float:
@@ -2575,9 +2603,44 @@ class ScoutRunRequest(BaseModel):
 
 @router.post("/scout/run", status_code=status.HTTP_202_ACCEPTED)
 def run_scout(
-    body: ScoutRunRequest, current_user: CurrentUser, request: Request
+    body: ScoutRunRequest,
+    current_user: CurrentUser,
+    request: Request,
+    background: bool = Query(
+        default=False,
+        description=(
+            "Enqueue the discovery pass onto the background worker and return "
+            "a job id to poll at GET /agents/jobs/{job_id}, instead of running "
+            "the whole pass inside this request."
+        ),
+    ),
 ) -> dict[str, Any]:
-    """Kick off a scout discovery run for the authenticated user."""
+    """Kick off a scout discovery run for the authenticated user.
+
+    TWO modes, and the DEFAULT is deliberately the synchronous one:
+
+    * ``background=false`` (default) — the pass runs in-request and the response
+      carries its real counts. ``scripts/discovery_cron.sh`` depends on exactly
+      this: it POSTs here and then immediately POSTs ``/agents/fit-scorer/run``
+      to score whatever landed, so scout MUST have finished first. Flipping the
+      default would silently break scheduled discovery for every user. The cron
+      calls 127.0.0.1 directly with no proxy in front of it and no client
+      timeout, so a multi-minute run is perfectly fine there.
+
+    * ``background=true`` (MON-020) — the pass is enqueued onto the SAME ARQ
+      ``run_agent_job`` machinery every other long-running agent already uses,
+      and the caller immediately gets ``{"status": "enqueued", "job_id"}`` to
+      poll at ``GET /agents/jobs/{job_id}``. This is what the browser uses (the
+      Jobs screen's Sync button, Settings' "Sync All Job Boards"): those calls
+      cross Cloudflare, which aborts a request at ~100s and answers with its own
+      HTML error page, while a real pass measures 255-473s (968s worst case).
+
+    Both modes resolve the search target FIRST (F-02), so the AgentRun audit row
+    — and, in background mode, the queued job's params — record the search that
+    ACTUALLY runs: the caller's own profile values when the body omitted them,
+    never two nulls and never a borrowed persona. Both modes go through the same
+    entitlement/cooldown gates; background mode adds no bypass.
+    """
     user_id = current_user["id"]
     # F-02: resolve BEFORE dispatch (same as ``run_pipeline``) so the AgentRun
     # audit row records the search that ACTUALLY ran — the caller's own profile
@@ -2586,9 +2649,17 @@ def run_scout(
     # second DB read, and refuses identically if this route is bypassed.
     params = body.model_dump()
     params["query"], params["location"] = _resolve_scout_target(user_id, params)
+    system_run = _is_system_run(request)
+    if background:
+        # A queue outage raises an honest 503 from ``_enqueue_single_agent``.
+        # There is deliberately NO fallback to the synchronous path: silently
+        # falling back would reintroduce the very 100s proxy timeout this mode
+        # exists to escape, and would look to the caller like a slow success.
+        job_id = _enqueue_single_agent(user_id, "scout", params, system_run=system_run)
+        return {"status": "enqueued", "job_id": job_id}
     output = _dispatch(
         user_id, "scout", params,
-        system_run=_is_system_run(request),
+        system_run=system_run,
     )
     return {
         "status": "accepted",

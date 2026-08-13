@@ -61,7 +61,24 @@ interface BackgroundJobStatus {
 }
 
 const JOB_POLL_INTERVAL_MS = 3000; // §16.2 / J3 step 2
-const JOB_POLL_CAP_MS = 10 * 60 * 1000; // client cap: 10 min (~200 polls)
+
+/**
+ * How long the client keeps polling before it stops waiting.
+ *
+ * MON-020 raised this from 10 min. It must sit at or above the point where the
+ * SERVER guarantees the job has reached a terminal state, otherwise the client
+ * announces "taking longer than expected" while the worker is still legitimately
+ * working — the client-side twin of the watchdog bug fixed in
+ * `routers/agents.py::_job_stale_thresholds`. That point is the worker's own
+ * per-job ceiling (`AETHER_WORKER_JOB_TIMEOUT_SECONDS`, default 1200s) plus the
+ * 120s watchdog settling margin = 22 min, by which time the job is either
+ * completed or has been marked failed (and refunded) by the lazy watchdog.
+ *
+ * Background discovery is what made the gap reachable: a real scout pass
+ * measures 255-473s with a 968s worst case (production discovery-cron log),
+ * so runs past the old 10-min cap are a normal tail, not an anomaly.
+ */
+const JOB_POLL_CAP_MS = 22 * 60 * 1000;
 
 /** Poll a single background job's status (owner-scoped on the server). */
 async function pollJob(
@@ -112,12 +129,24 @@ export async function resolveRun<T>(body: T, options: RequestOptions = {}): Prom
   }
 }
 
+/**
+ * Trigger an agent and resolve its real result.
+ *
+ * `background` (MON-020) asks the endpoint to enqueue rather than run the work
+ * inside the request; `resolveRun` then polls the job to a terminal state, so
+ * the caller still awaits a real result and a real failure. Only endpoints that
+ * implement the flag act on it (today: `/agents/scout/run`) — everywhere else
+ * FastAPI ignores the unknown query param and the call stays synchronous, so
+ * this can never silently change another agent's semantics.
+ */
 export async function runAgent(
   name: string,
   params: Record<string, unknown> = {},
   options: RequestOptions = {},
+  { background = false }: { background?: boolean } = {},
 ): Promise<Record<string, unknown>> {
-  const body = await apiRequest<Record<string, unknown>>(`/agents/${name}/run`, {
+  const path = `/agents/${name}/run${background ? "?background=true" : ""}`;
+  const body = await apiRequest<Record<string, unknown>>(path, {
     ...options,
     method: "POST",
     body: params,
