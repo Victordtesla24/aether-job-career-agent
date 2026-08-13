@@ -68,9 +68,13 @@ import {
   type CareerDataInputs,
 } from "../../../components/settings/career-data";
 import {
+  BASELINE_HELP_TEXT,
   buildUploadNotice,
+  describeUploadError,
   EXTRACTION_COST_HINT,
   EXTRACTION_OPT_IN_LABEL,
+  ORIGINAL_NOT_STORED_LABEL,
+  ORIGINAL_STORED_LABEL,
   type ResumeUploadResult,
 } from "../../../components/settings/resume-upload";
 import { SECTIONS } from "./sections";
@@ -279,8 +283,11 @@ export default function SettingsClient({
         body: form,
       });
       if (!res.ok) {
-        const detail = await res.text().catch(() => "");
-        throw new Error(`Upload failed (${res.status}): ${detail.slice(0, 160)}`);
+        // MON-012: show the server's real rejection reason (unsupported
+        // format, undecodable file, too-short extraction, oversized upload)
+        // verbatim, not a truncated raw-JSON blob.
+        const rawBody = await res.text().catch(() => "");
+        throw new Error(describeUploadError(res.status, rawBody));
       }
       const created = (await res.json()) as ResumeUploadResult;
       setUploadNotice(buildUploadNotice(created));
@@ -717,16 +724,32 @@ export default function SettingsClient({
                       <p className="mono text-[10px] text-aether-muted-dim">
                         uploaded {data.resume.uploadedAt} · {data.resume.versions} versions
                       </p>
+                      {data.resume.activeFile ? (
+                        <p
+                          className={`mt-1 text-[10px] font-medium ${
+                            data.resume.originalStored ? "text-aether-green" : "text-aether-amber"
+                          }`}
+                          data-testid="resume-original-stored-badge"
+                        >
+                          {data.resume.originalStored ? ORIGINAL_STORED_LABEL : ORIGINAL_NOT_STORED_LABEL}
+                        </p>
+                      ) : null}
                     </div>
                   </div>
                   <span className="rounded-md bg-aether-green/15 px-2 py-0.5 text-[10px] font-medium text-aether-green">
                     Active
                   </span>
                 </div>
+                <p
+                  className="mt-3 text-[11px] leading-4 text-aether-muted-dim"
+                  data-testid="resume-baseline-help-text"
+                >
+                  {BASELINE_HELP_TEXT}
+                </p>
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept=".pdf,.txt,.md,application/pdf,text/plain"
+                  accept=".pdf,.docx,.txt,.md"
                   className="hidden"
                   data-testid="resume-upload-input"
                   onChange={(e) => {

@@ -13,6 +13,7 @@ from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import AfterValidator, BaseModel, Field
 
 from app.db import (
+    ensure_resume_columns,
     ensure_user_profile_columns,
     get_connection,
     rows_to_dicts,
@@ -984,6 +985,14 @@ def _build_settings(
             "activeFile": resume_row.get("label") if resume_row else None,
             "uploadedAt": str(resume_row["createdAt"])[:10] if resume_row else None,
             "versions": 0,  # will be filled below
+            # U2a (R-F1): whether THIS resume row has its original upload bytes
+            # stored (Resume.originalFile IS NOT NULL) — the honest signal for
+            # "tailoring will preserve this document's exact format" vs. "this
+            # was uploaded before format preservation existed / has no stored
+            # original and re-flows into the generic template." False (never
+            # None) when there is no resume row at all, so the Settings panel
+            # never has to special-case a missing summary object.
+            "originalStored": bool(resume_row.get("hasOriginal")) if resume_row else False,
         },
         "portfolio": portfolio,
         "agentConfig": {
@@ -1001,6 +1010,10 @@ def get_settings(current_user: CurrentUser) -> dict[str, Any]:
     """Current settings read from the User table."""
     uid = current_user["id"]
     ensure_user_profile_columns()
+    # U2a (R-F1): "originalFile" is a lazily-added column (app.db.ensure_resume_
+    # columns) — must run before the "Latest resume" query below selects a
+    # presence check on it, exactly like every other Resume read path.
+    ensure_resume_columns()
 
     with get_connection() as conn:
         with conn.cursor() as cur:
@@ -1013,10 +1026,12 @@ def get_settings(current_user: CurrentUser) -> dict[str, Any]:
             )
             user_rows = rows_to_dicts(cur)
 
-            # Latest resume
+            # Latest resume. "hasOriginal" is a cheap boolean presence check —
+            # NOT a select of the (up to 10MB) originalFile blob itself, which
+            # has exactly one real consumer, GET /resumes/{id}/original.
             cur.execute(
                 """
-                SELECT id, label, "createdAt"
+                SELECT id, label, "createdAt", "originalFile" IS NOT NULL AS "hasOriginal"
                 FROM "Resume"
                 WHERE "userId" = %s
                 ORDER BY version DESC NULLS LAST, "createdAt" DESC

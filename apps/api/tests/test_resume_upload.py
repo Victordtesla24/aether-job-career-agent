@@ -514,3 +514,45 @@ def test_upload_rejects_files_over_10mb(client, auth_headers):
     assert res.status_code in (413, 422), f"status={res.status_code} body[:300]={res.text[:300]!r}"
     after = len(client.get("/resumes", headers=auth_headers).json())
     assert after == before, "an oversized upload rejected for size must not create a Resume row"
+
+
+# --- U2a Settings badge: GET /workspaces/settings.resume.originalStored ---
+#
+# apps/web/src/app/dashboard/settings/settings-client.tsx renders an honest
+# "Original stored ✓" / "Re-upload to enable format preservation" badge on
+# the active-resume summary card, derived from this field. It must reflect
+# the ACTUAL presence of the stored original bytes, never default to true.
+
+
+def test_settings_reports_original_stored_true_after_a_fresh_upload(client, auth_headers):
+    res = _upload(client, auth_headers, "vik_resume.txt", RESUME_TEXT.encode(), "text/plain")
+    assert res.status_code == 201, res.text
+
+    settings = client.get("/workspaces/settings", headers=auth_headers).json()
+    assert settings["resume"]["originalStored"] is True
+    assert settings["resume"]["activeFile"] == res.json()["label"]
+
+
+def test_settings_reports_original_stored_false_for_a_json_ingested_resume(client, auth_headers):
+    """A resume created via POST /resumes (JSON ingest — no uploaded file
+    bytes at all, e.g. registering an alternate resume variant) genuinely has
+    no original stored; the settings badge must say so honestly instead of
+    defaulting to true."""
+    res = client.post(
+        "/resumes",
+        json={"label": "BA-positioned variant", "raw_text": RESUME_TEXT},
+        headers=auth_headers,
+    )
+    assert res.status_code == 201, res.text
+
+    settings = client.get("/workspaces/settings", headers=auth_headers).json()
+    assert settings["resume"]["originalStored"] is False
+    assert settings["resume"]["activeFile"] == "BA-positioned variant"
+
+
+def test_settings_reports_original_stored_false_when_user_has_no_resume_at_all(
+    client, auth_headers
+):
+    settings = client.get("/workspaces/settings", headers=auth_headers).json()
+    assert settings["resume"]["activeFile"] is None
+    assert settings["resume"]["originalStored"] is False

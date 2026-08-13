@@ -46,6 +46,69 @@ export interface ResumeUploadResult {
   } | null;
 }
 
+/**
+ * U2a (R-F1/R-F3/MON-012) — honest copy for the upload panel's helper text
+ * and the "original stored" badge.
+ *
+ * BASELINE_HELP_TEXT states, before the user picks a file: which formats
+ * Aether genuinely reads, that the uploaded file becomes the user's
+ * immutable baseline (tailoring never rewrites it — see
+ * `apps/api/app/repositories/resume.py`'s `BaselineImmutableError` guard),
+ * and that a resume uploaded before this feature shipped has no stored
+ * original — re-uploading it is what turns format preservation on, not a
+ * bug in the existing file.
+ */
+export const BASELINE_HELP_TEXT =
+  "Supported formats: PDF (.pdf), Word (.docx), and plain text (.txt/.md). " +
+  "Your uploaded file is stored as your immutable baseline — tailoring " +
+  "never alters it. If you uploaded your résumé before this feature " +
+  "existed, no original file was stored for it yet; re-upload it to enable " +
+  "format preservation.";
+
+/** Badge copy for whether the active resume has its original bytes stored. */
+export const ORIGINAL_STORED_LABEL = "Original stored ✓";
+export const ORIGINAL_NOT_STORED_LABEL = "Re-upload to enable format preservation";
+
+/** Hard cap mirroring `lib/api/client.ts`'s `ERROR_MESSAGE_MAX_CHARS` — the
+ * upload call uses multipart `FormData` via a raw `fetch`, not `apiRequest`,
+ * so it cannot reuse that module's private `describeApiError()` machinery
+ * and needs its own (much simpler) bound. */
+const UPLOAD_ERROR_MAX_CHARS = 300;
+
+/**
+ * Turn a failed `POST /resumes/upload` response into the honest message to
+ * show the user (MON-012 / upload-rejection honesty).
+ *
+ * Every rejection this endpoint raises — unsupported format, undecodable
+ * text, too-short extraction, oversized file — is a single human-written
+ * `{"detail": "..."}` string (see `apps/api/app/routers/resumes.py`), never a
+ * Pydantic field-validation array. The previous behaviour showed the raw
+ * `{"detail": "..."}` JSON blob truncated at a fixed character count — a
+ * user rejected for an unsupported format saw a mid-sentence cutoff wrapped
+ * in stray JSON punctuation instead of the actual reason. This shows that
+ * exact sentence, verbatim, with no re-wording — only a defensive length
+ * cap in case a future detail is unexpectedly long.
+ */
+export function describeUploadError(status: number, rawBody: string): string {
+  try {
+    const parsed: unknown = JSON.parse(rawBody);
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      typeof (parsed as { detail?: unknown }).detail === "string"
+    ) {
+      const detail = (parsed as { detail: string }).detail;
+      return detail.length <= UPLOAD_ERROR_MAX_CHARS
+        ? detail
+        : `${detail.slice(0, UPLOAD_ERROR_MAX_CHARS - 1)}…`;
+    }
+  } catch {
+    // Non-JSON body (proxy error page, empty body) — nothing structured to
+    // lift; fall through to an honest status-only message below.
+  }
+  return `Upload failed (HTTP ${status}). Please try again.`;
+}
+
 function describeVersion(result: ResumeUploadResult): string {
   const version = typeof result.version === "number" ? `v${result.version}` : "a new version";
   return result.label

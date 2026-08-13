@@ -407,7 +407,15 @@ export const deleteOffer = (offerId: string, options: RequestOptions = {}) =>
 
 export interface SettingsPayload {
   profile: { fullName: string; email: string; targetRole: string; location: string };
-  resume: { activeFile: string; uploadedAt: string; versions: number };
+  resume: {
+    activeFile: string;
+    uploadedAt: string;
+    versions: number;
+    /** U2a (R-F1): whether the active resume has its original upload bytes
+     * stored (immutable baseline) — false for uploads made before format
+     * preservation existed, or when there is no resume at all. */
+    originalStored: boolean;
+  };
   portfolio: { url: string | null; cadence: string | null; lastSynced: string | null; status?: string };
   agentConfig: { autoApply: boolean; approvalGate: boolean; matchThreshold: number };
   integrations: Array<{ name: string; status: string; detail: string }>;
