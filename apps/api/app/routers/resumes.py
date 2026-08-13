@@ -129,22 +129,30 @@ def _extract_docx_text(data: bytes) -> str:
     lines, all-caps section banners) to reassemble bullets. Table cells are
     appended after the body paragraphs — ``document.paragraphs`` covers only
     body-level paragraphs, so nothing is emitted twice.
+
+    A damaged package fails HONESTLY with a 422, exactly like the sibling
+    ``_extract_pdf_text``. A corrupt .docx surfaces low-level errors from every
+    layer python-docx sits on, and they share no useful base class: a malformed
+    ``[Content_Types].xml`` raises ``lxml.etree.XMLSyntaxError`` (a
+    ``SyntaxError``), a damaged deflate stream inside ``word/document.xml``
+    raises ``zlib.error``. Enumerating that family is a losing game and every
+    miss is an unhandled 500 instead of the honest rejection MON-012 promises,
+    so any parse failure is reported as an unprocessable entity.
     """
     from docx import Document
-    from docx.opc.exceptions import PackageNotFoundError
 
     try:
         document = Document(BytesIO(data))
-    except (PackageNotFoundError, KeyError, ValueError, zipfile.BadZipFile) as exc:
+        lines = [paragraph.text.strip() for paragraph in document.paragraphs]
+        for table in document.tables:
+            for row in table.rows:
+                cells = [cell.text.strip() for cell in row.cells if cell.text.strip()]
+                if cells:
+                    lines.append(" | ".join(cells))
+    except Exception as exc:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_ENTITY, f"Could not parse DOCX: {exc}"
         ) from exc
-    lines = [paragraph.text.strip() for paragraph in document.paragraphs]
-    for table in document.tables:
-        for row in table.rows:
-            cells = [cell.text.strip() for cell in row.cells if cell.text.strip()]
-            if cells:
-                lines.append(" | ".join(cells))
     return "\n".join(lines)
 
 

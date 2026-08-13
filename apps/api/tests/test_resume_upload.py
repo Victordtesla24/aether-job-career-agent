@@ -39,6 +39,8 @@ from __future__ import annotations
 
 import hashlib
 import os
+import struct
+import zipfile
 from io import BytesIO
 
 RESUME_TEXT = """VIKRAM DESHPANDE
@@ -481,6 +483,87 @@ def test_upload_rejects_undecodable_docx_junk_honestly(client, auth_headers):
     junk = _nul_free_random_bytes(4096)
     before = len(client.get("/resumes", headers=auth_headers).json())
     res = _upload(client, auth_headers, "corrupt.docx", junk, DOCX_CONTENT_TYPE)
+    assert res.status_code == 422, res.text
+    _assert_honest_format_rejection_detail(str(res.json().get("detail", "")))
+    after = len(client.get("/resumes", headers=auth_headers).json())
+    assert after == before, "a rejected upload must not create a garbage Resume row"
+
+
+def _make_docx_with_malformed_content_types() -> bytes:
+    """A ZIP that LOOKS like a .docx but whose ``[Content_Types].xml`` is truncated.
+
+    This is the shape a partially-written or truncated OOXML package really
+    has: valid ZIP magic and a ``word/`` member (so ``_looks_like_docx``
+    accepts it), but python-docx's package reader hits ``lxml.etree.
+    XMLSyntaxError`` parsing the content-types part — an exception that is a
+    ``SyntaxError``, sharing no base class with ``PackageNotFoundError`` /
+    ``KeyError`` / ``ValueError`` / ``zipfile.BadZipFile``.
+    """
+    buf = BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("[Content_Types].xml", "<?xml version='1.0'?><Types><Override")
+        archive.writestr("_rels/.rels", "<?xml version='1.0'?><Relationships/>")
+        archive.writestr("word/document.xml", "<?xml version='1.0'?><document/>")
+    return buf.getvalue()
+
+
+def _corrupt_docx_deflate_stream(data: bytes, member: str = "word/document.xml") -> bytes:
+    """A genuine .docx with bytes flipped INSIDE ``member``'s deflate stream.
+
+    ZIP headers and the central directory are left intact, so the file still
+    opens as an archive and lists its members (``_looks_like_docx`` passes) —
+    the damage only surfaces when python-docx decompresses the part, which
+    raises ``zlib.error`` ("invalid bit length repeat"). That is the realistic
+    truncated-download / bit-rot corruption case, and ``zlib.error`` inherits
+    only from ``Exception``.
+    """
+    info = zipfile.ZipFile(BytesIO(data)).getinfo(member)
+    header_offset = info.header_offset
+    name_len, extra_len = struct.unpack("<HH", data[header_offset + 26: header_offset + 30])
+    start = header_offset + 30 + name_len + extra_len
+    assert info.compress_size > 48, (
+        "the .docx main part is unexpectedly tiny — this helper needs a real "
+        f"deflate stream to damage (compress_size={info.compress_size})"
+    )
+    corrupted = bytearray(data)
+    for i in range(start + 8, start + 40):
+        corrupted[i] ^= 0xFF
+    return bytes(corrupted)
+
+
+def test_upload_rejects_docx_with_malformed_content_types_honestly(client, auth_headers):
+    """A .docx whose OOXML package is malformed must 422 honestly, not 500.
+
+    BE review finding (2026-08-13): ``_extract_docx_text`` caught only
+    ``(PackageNotFoundError, KeyError, ValueError, zipfile.BadZipFile)``, so a
+    real corrupt package raised ``lxml.etree.XMLSyntaxError`` straight through
+    the endpoint as an unhandled 500 — the opposite of MON-012's honest
+    rejection, and inconsistent with the sibling ``_extract_pdf_text``.
+    """
+    before = len(client.get("/resumes", headers=auth_headers).json())
+    res = _upload(
+        client,
+        auth_headers,
+        "malformed.docx",
+        _make_docx_with_malformed_content_types(),
+        DOCX_CONTENT_TYPE,
+    )
+    assert res.status_code == 422, res.text
+    _assert_honest_format_rejection_detail(str(res.json().get("detail", "")))
+    after = len(client.get("/resumes", headers=auth_headers).json())
+    assert after == before, "a rejected upload must not create a garbage Resume row"
+
+
+def test_upload_rejects_docx_with_corrupted_deflate_stream_honestly(client, auth_headers):
+    """A genuine .docx damaged mid-stream must 422 honestly, not 500.
+
+    Same BE review finding as above, second reproduction: the archive opens
+    and lists ``word/document.xml``, but decompressing it raises ``zlib.error``
+    — also outside the old narrow ``except`` tuple.
+    """
+    corrupted = _corrupt_docx_deflate_stream(_make_docx_bytes(U2A_DOCX_PARAGRAPHS))
+    before = len(client.get("/resumes", headers=auth_headers).json())
+    res = _upload(client, auth_headers, "truncated.docx", corrupted, DOCX_CONTENT_TYPE)
     assert res.status_code == 422, res.text
     _assert_honest_format_rejection_detail(str(res.json().get("detail", "")))
     after = len(client.get("/resumes", headers=auth_headers).json())
