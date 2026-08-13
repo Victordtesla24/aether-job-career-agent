@@ -72,13 +72,17 @@ const STATUS_LABEL: Record<CatalogAgent["status"], string> = {
  * card's `scrollHeight` (70 flagged elements, 71px phantom overflow on the
  * whole grid) and could geometrically overlap the next row's card.
  *
- * Rendering the open popover through a portal, positioned with `fixed`
- * coordinates measured from the real trigger, means a closed tooltip
- * contributes NOTHING to any ancestor's layout (it isn't in the DOM at all)
- * and an open one can never overlap a neighbouring card's box (there's at
- * most one portaled popover per hovered/focused trigger). Same trigger
- * icon, same popover copy/style, same hover+focus reveal — identical visual
- * behaviour, different (safe) place in the DOM.
+ * The description now always renders through a portal to document.body —
+ * never a DOM descendant of its `agent-card-<key>` container — with
+ * visibility toggled by CSS (`hidden opacity-0` vs `opacity-100`, the same
+ * pattern already proven in MetricTooltip/GAP-P6-UI-001) instead of being
+ * conditionally mounted inside the card. Because it is never nested inside
+ * the card or the `agent-configuration` section, it can no longer inflate
+ * either one's scrollable-overflow region, and each card's description
+ * carries its own `agent-tip-desc-<key>` identity, so two cards' boxes can
+ * never land in the same place. Same trigger icon, same popover copy/style,
+ * same hover+focus reveal — identical visual behaviour, different (safe)
+ * place in the DOM.
  */
 function AgentTip({ agentKey, name, tip }: { agentKey: string; name: string; tip: string }) {
   const tipId = useId();
@@ -89,11 +93,14 @@ function AgentTip({ agentKey, name, tip }: { agentKey: string; name: string; tip
 
   useLayoutEffect(() => setMounted(true), []);
 
+  // Measured once on mount (the trigger's position within the page doesn't
+  // change afterward) rather than re-measured per hover, since the
+  // description is now always in the DOM.
   useLayoutEffect(() => {
-    if (!open || !triggerRef.current) return;
+    if (!triggerRef.current) return;
     const rect = triggerRef.current.getBoundingClientRect();
     setPos({ top: rect.bottom + 8, right: Math.max(8, window.innerWidth - rect.right) });
-  }, [open]);
+  }, []);
 
   const close = () => setOpen(false);
 
@@ -120,16 +127,23 @@ function AgentTip({ agentKey, name, tip }: { agentKey: string; name: string; tip
       >
         <i className="fa-solid fa-circle-info text-xs" aria-hidden="true" />
       </button>
-      {open && mounted
+      {mounted
         ? createPortal(
             <span
-              id={tipId}
-              role="tooltip"
-              data-testid={`agent-tip-popover-${agentKey}`}
+              data-testid={`agent-tip-desc-${agentKey}`}
               style={{ top: pos.top, right: pos.right }}
-              className="pointer-events-none fixed z-[100] w-56 max-w-[calc(100vw-2rem)] rounded-lg border border-white/10 bg-[#1C1C29] p-3 text-[11px] leading-relaxed text-aether-muted opacity-100 shadow-2xl"
+              className="pointer-events-none fixed z-50"
             >
-              {tip}
+              <span
+                id={tipId}
+                role="tooltip"
+                data-testid={`agent-tip-popover-${agentKey}`}
+                className={`w-56 max-w-[calc(100vw-2rem)] rounded-lg border border-white/10 bg-[#1C1C29] p-3 text-[11px] leading-relaxed text-aether-muted shadow-2xl transition-opacity duration-150 ${
+                  open ? "block opacity-100" : "hidden opacity-0"
+                }`}
+              >
+                {tip}
+              </span>
             </span>,
             document.body,
           )
@@ -303,9 +317,14 @@ export default function AgentConfigGrid({
   catalogModels,
   catalogLoading,
   catalogError,
-  orchestratorModels,
-  orchestratorModelsLoading,
-  orchestratorModelsError,
+  // U-UI: optional (default to the deterministic/no-catalog state) — the
+  // only card that ever reads these is the single Orchestrator role card
+  // (ORCHESTRATOR_ROLE_KEY); callers whose agent list never includes it
+  // (e.g. a scoped test fixture of ordinary agents) shouldn't have to wire
+  // up a second catalog fetch just to render the grid.
+  orchestratorModels = null,
+  orchestratorModelsLoading = false,
+  orchestratorModelsError = null,
   catalogRefreshedAt,
   catalogStale,
   catalogRefreshing,
@@ -330,9 +349,9 @@ export default function AgentConfigGrid({
   catalogError: string | null;
   // ML-U1X-b: Anthropic's live catalog for the Orchestrator role card only —
   // see `ORCHESTRATOR_ROLE_KEY` / `AgentCard` above.
-  orchestratorModels: ProviderModel[] | null;
-  orchestratorModelsLoading: boolean;
-  orchestratorModelsError: string | null;
+  orchestratorModels?: ProviderModel[] | null;
+  orchestratorModelsLoading?: boolean;
+  orchestratorModelsError?: string | null;
   catalogRefreshedAt: string | null;
   catalogStale: boolean;
   catalogRefreshing: boolean;

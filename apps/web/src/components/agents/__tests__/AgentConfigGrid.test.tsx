@@ -4,11 +4,16 @@
  *
  * Live audit: 70 elements across the 22 agent cards had scrollHeight >>
  * clientHeight because each card's hover-description popover stayed in the
- * DOM (opacity-0, `.group`/`group-hover`) even while closed, and two
- * adjacent cards' hidden popover boxes geometrically overlapped at rest.
- * The fix renders the popover through a portal, mounted only while
- * hovered/focused — a closed tooltip contributes nothing to any card's DOM
- * at all, so there is nothing to overflow or overlap.
+ * DOM (opacity-0, `.group`/`group-hover`) even while closed, nested inside
+ * the card. The fix renders the description through a portal to
+ * document.body — never a descendant of the card — with visibility toggled
+ * by CSS (matching MetricTooltip's proven `hidden opacity-0` <->
+ * `opacity-100` pattern) rather than by conditional mounting, so it can no
+ * longer inflate the card's or the section's scrollable-overflow region and
+ * can never land in the same DOM position as another card's description.
+ *
+ * See also agent-card-hover-description.test.tsx for the structural
+ * DOM-nesting contract this design was built against.
  */
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
@@ -53,9 +58,6 @@ const gridProps = {
   catalogModels: null,
   catalogLoading: false,
   catalogError: null,
-  orchestratorModels: null,
-  orchestratorModelsLoading: false,
-  orchestratorModelsError: null,
   catalogRefreshedAt: null,
   catalogStale: false,
   catalogRefreshing: false,
@@ -65,30 +67,32 @@ const gridProps = {
 };
 
 describe("AgentConfigGrid recommendation tooltip (U-UI AGENTS-PHANTOM-OVERFLOW-01)", () => {
-  it("contributes zero popover DOM nodes at rest across all cards", () => {
+  it("is hidden (display:none) at rest, even though it's always in the DOM", () => {
     render(<AgentConfigGrid agents={AGENTS} {...gridProps} />);
-    // The exact defect: 70 always-present hidden popover boxes across 22
-    // cards inflated ancestor scrollHeight even though nothing was hovered.
-    expect(document.querySelectorAll('[data-testid^="agent-tip-popover-"]').length).toBe(0);
+    const popover = screen.getByTestId("agent-tip-popover-jobDiscovery");
+    expect(popover.className).toMatch(/\bhidden\b/);
+    expect(popover.className).toMatch(/opacity-0/);
   });
 
-  it("mounts the popover (with the right copy) only while its trigger is hovered, then removes it again", () => {
+  it("becomes visible (with the right copy) while its trigger is hovered, and hides again on mouse leave", () => {
     render(<AgentConfigGrid agents={AGENTS} {...gridProps} />);
     const trigger = screen.getByTestId("agent-tip-jobDiscovery");
-
-    expect(screen.queryByTestId("agent-tip-popover-jobDiscovery")).toBeNull();
-
-    fireEvent.mouseEnter(trigger);
     const popover = screen.getByTestId("agent-tip-popover-jobDiscovery");
     expect(popover.textContent).toMatch(/Finds new postings/);
 
+    fireEvent.mouseEnter(trigger);
+    expect(popover.className).toMatch(/opacity-100/);
+    expect(popover.className).not.toMatch(/\bhidden\b/);
+
     fireEvent.mouseLeave(trigger);
-    expect(screen.queryByTestId("agent-tip-popover-jobDiscovery")).toBeNull();
+    expect(popover.className).toMatch(/\bhidden\b/);
+    expect(popover.className).toMatch(/opacity-0/);
   });
 
-  it("mounts the popover on keyboard focus and removes it on blur / Escape", () => {
+  it("becomes visible on keyboard focus and hides again on Escape, returning focus to the trigger", () => {
     render(<AgentConfigGrid agents={AGENTS} {...gridProps} />);
     const trigger = screen.getByTestId("agent-tip-submission");
+    const popover = screen.getByTestId("agent-tip-popover-submission");
 
     // A real `.focus()` call (not `fireEvent.focus`, which only dispatches
     // the event without moving `document.activeElement`) — needed so the
@@ -96,18 +100,16 @@ describe("AgentConfigGrid recommendation tooltip (U-UI AGENTS-PHANTOM-OVERFLOW-0
     // event that would reopen the popover, matching MetricTooltip's proven
     // Escape-close-refocus test pattern.
     act(() => trigger.focus());
-    expect(screen.getByTestId("agent-tip-popover-submission")).not.toBeNull();
+    expect(popover.className).toMatch(/opacity-100/);
 
     fireEvent.keyDown(trigger, { key: "Escape" });
-    expect(screen.queryByTestId("agent-tip-popover-submission")).toBeNull();
+    expect(popover.className).toMatch(/\bhidden\b/);
     expect(document.activeElement).toBe(trigger);
   });
 
-  it("renders the open popover outside the card's own DOM subtree (portaled), so it can never overlap a neighbouring card's box", () => {
+  it("renders the description outside the card's own DOM subtree (portaled), so it can never overlap a neighbouring card's box", () => {
     render(<AgentConfigGrid agents={AGENTS} {...gridProps} />);
     const card = screen.getByTestId("agent-card-jobDiscovery");
-    fireEvent.mouseEnter(screen.getByTestId("agent-tip-jobDiscovery"));
-
     const popover = screen.getByTestId("agent-tip-popover-jobDiscovery");
     expect(card.contains(popover)).toBe(false);
   });

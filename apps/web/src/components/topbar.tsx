@@ -12,7 +12,7 @@
  */
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { fetchAgents } from "../lib/api/agents";
 import { fetchApprovals, type Approval } from "../lib/api/approvals";
@@ -63,41 +63,6 @@ export function actionableApprovalCount(
   now: number = Date.now(),
 ): number {
   return approvals.filter((a) => a.status === "pending" && !isExpired(a, now)).length;
-}
-
-export interface BellPanelPosition {
-  top: number;
-  left: number;
-  width: number;
-}
-
-/**
- * Anchors the notification panel's `position: fixed` box to the bell
- * button's bottom-right, clamped so it always stays fully inside the
- * viewport (BELL-OVERLAP-01 / BELL-OFFSCREEN-*).
- *
- * The previous implementation positioned the panel with `right: 0` relative
- * to its header wrapper, nested inside the `.glass` topbar's
- * `backdrop-filter`. That produced two live defects: on narrow (mobile)
- * viewports the panel's left edge landed well past x=0 (measured x=-107 on
- * a 390px viewport, live audit BELL-OFFSCREEN-*), and — because the panel's
- * lower portion extended outside the filtered header's own box — the
- * backdrop blur bled semi-transparent page content through the panel
- * (live audit BELL-OVERLAP-01 / KANBAN-HEADER-OVERLAP-01). Computing a
- * viewport-relative `fixed` position here (used together with rendering the
- * panel through a portal, out of the blurred ancestor's subtree) removes
- * both failure modes at the source instead of patching the symptom.
- */
-export function computeBellPanelPosition(
-  buttonRect: { right: number; bottom: number },
-  viewportWidth: number,
-  margin = 16,
-  panelWidth = 320,
-): BellPanelPosition {
-  const width = Math.min(panelWidth, Math.max(0, viewportWidth - margin * 2));
-  const maxLeft = Math.max(margin, viewportWidth - width - margin);
-  const left = Math.min(Math.max(buttonRect.right - width, margin), maxLeft);
-  return { top: buttonRect.bottom + 8, left, width };
 }
 
 /** Human label for the notifications panel (M-05/M-09). */
@@ -230,16 +195,14 @@ export function Topbar({ subtitle }: { title?: string; subtitle?: string }) {
   // list them, honestly reflecting the same items the count is derived from.
   const [approvalItems, setApprovalItems] = useState<Approval[]>([]);
   const [bellOpen, setBellOpen] = useState(false);
-  // U-UI BELL-OVERLAP-01/BELL-OFFSCREEN-*: the panel now renders through a
-  // portal as a viewport-anchored `position: fixed` box (see
-  // computeBellPanelPosition) instead of `absolute` inside the blurred
-  // header. `bellRendered` keeps it mounted for a beat after close so the
-  // exit transition can play instead of the panel vanishing instantly.
-  const [bellRendered, setBellRendered] = useState(false);
-  const [panelPos, setPanelPos] = useState<BellPanelPosition | null>(null);
+  // U-UI BELL-OVERLAP-01/BELL-OFFSCREEN-*: the panel (+ its backdrop) now
+  // render through a portal, out of the blurred `.glass` header's subtree,
+  // as a `position: fixed` box positioned entirely with viewport-safe CSS
+  // (`inset-x-4 sm:inset-x-auto sm:right-4 sm:w-80` — see the render below)
+  // instead of `absolute right-0` nested inside that header. `mounted`
+  // gates the portal until we're on the client (SSR safety).
   const [mounted, setMounted] = useState(false);
   const bellRef = useRef<HTMLDivElement | null>(null);
-  const bellButtonRef = useRef<HTMLButtonElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
@@ -346,19 +309,6 @@ export function Topbar({ subtitle }: { title?: string; subtitle?: string }) {
   // can only mount once we're on the client.
   useEffect(() => setMounted(true), []);
 
-  // U-UI: keep the panel mounted for one transition tick after close so the
-  // exit (opacity/scale) animation can play instead of the panel just
-  // disappearing — "smooth open/close transition" per the design bar.
-  useEffect(() => {
-    if (bellOpen) {
-      setBellRendered(true);
-      return;
-    }
-    if (!bellRendered) return;
-    const t = setTimeout(() => setBellRendered(false), 180);
-    return () => clearTimeout(t);
-  }, [bellOpen, bellRendered]);
-
   // M-05/M-09: close the notifications panel on an outside click or Escape.
   // The full-viewport backdrop rendered with the panel is the primary
   // click-to-close affordance; this listener is defence-in-depth for clicks
@@ -380,27 +330,6 @@ export function Topbar({ subtitle }: { title?: string; subtitle?: string }) {
     return () => {
       document.removeEventListener("mousedown", onDown);
       document.removeEventListener("keydown", onKey);
-    };
-  }, [bellOpen]);
-
-  // U-UI BELL-OFFSCREEN-*/BELL-OVERLAP-01: recompute the panel's
-  // viewport-anchored position whenever it opens or the viewport changes —
-  // getBoundingClientRect on the real bell button, not a class-based guess,
-  // so the panel is provably on-screen at any width.
-  useLayoutEffect(() => {
-    if (!bellOpen) return;
-    function update() {
-      const btn = bellButtonRef.current;
-      if (!btn) return;
-      const rect = btn.getBoundingClientRect();
-      setPanelPos(computeBellPanelPosition(rect, window.innerWidth));
-    }
-    update();
-    window.addEventListener("resize", update);
-    window.addEventListener("scroll", update, true);
-    return () => {
-      window.removeEventListener("resize", update);
-      window.removeEventListener("scroll", update, true);
     };
   }, [bellOpen]);
 
@@ -506,7 +435,6 @@ export function Topbar({ subtitle }: { title?: string; subtitle?: string }) {
         <RealtimeStatusBadge compact hideWhenIdle className="max-w-[8.5rem] shrink-0 sm:max-w-none" />
         <div className="relative" ref={bellRef}>
           <button
-            ref={bellButtonRef}
             type="button"
             onClick={() => setBellOpen((v) => !v)}
             aria-haspopup="menu"
@@ -528,41 +456,36 @@ export function Topbar({ subtitle }: { title?: string; subtitle?: string }) {
         </div>
         {/*
           U-UI BELL-OVERLAP-01 / KANBAN-HEADER-OVERLAP-01 / BELL-OFFSCREEN-*:
-          the panel + its backdrop are portaled to document.body and
-          positioned with `fixed` + computeBellPanelPosition instead of
-          living `absolute` inside the `.glass` (backdrop-filter) header.
-          That escapes the ancestor's filter/stacking context entirely, so
+          the panel + its backdrop are portaled to document.body instead of
+          living `absolute` inside the `.glass` (backdrop-filter) header —
+          that escapes the ancestor's filter/stacking context entirely, so
           the panel's own opaque surface renders correctly (no bleed-through)
-          and its geometry is measured against the real viewport (never
-          off-screen). It may still legitimately sit on top of page content
-          (e.g. kanban column headers) — that's an intentional overlay now
-          backed by a solid surface, a dismissible backdrop and a real
-          z-index, not a rendering defect.
+          regardless of where in the header tree the bell button sits.
+          Horizontal position is plain viewport-safe CSS (no JS measurement
+          to go stale on resize/scroll): `inset-x-4` keeps it fully on-screen
+          with equal margins on narrow viewports where a fixed 320px box
+          anchored to the button would run off the left edge (measured
+          x=-107 on a 390px viewport pre-fix); `sm:inset-x-auto sm:right-4
+          sm:w-80` restores the original flush-right anchor once there's
+          room. It may still legitimately sit on top of page content (e.g.
+          kanban column headers) — that's an intentional overlay now backed
+          by a solid surface, a dismissible backdrop and a real z-index, not
+          a rendering defect.
         */}
-        {mounted && bellRendered
+        {mounted && bellOpen
           ? createPortal(
               <>
                 <div
                   aria-hidden="true"
+                  data-testid="notification-backdrop"
                   onClick={() => setBellOpen(false)}
-                  className={`fixed inset-0 z-[90] bg-black/20 transition-opacity duration-150 ${
-                    bellOpen ? "opacity-100" : "pointer-events-none opacity-0"
-                  }`}
+                  className="fixed inset-0 z-40 bg-black/20"
                 />
                 <div
                   ref={panelRef}
                   role="menu"
                   data-testid="notification-panel"
-                  style={
-                    panelPos
-                      ? { top: panelPos.top, left: panelPos.left, width: panelPos.width }
-                      : { top: 0, left: 0, width: 320, visibility: "hidden" }
-                  }
-                  className={`fixed z-[100] max-w-[calc(100vw-2rem)] origin-top-right rounded-xl border border-white/10 bg-aether-bg-elevated shadow-xl shadow-black/40 transition duration-150 ease-out ${
-                    bellOpen
-                      ? "translate-y-0 scale-100 opacity-100"
-                      : "pointer-events-none -translate-y-1 scale-95 opacity-0"
-                  }`}
+                  className="animate-fade-in fixed top-16 z-50 inset-x-4 sm:inset-x-auto sm:right-4 sm:w-80 rounded-xl border border-white/10 bg-aether-bg-elevated shadow-xl shadow-black/40"
                 >
                   <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
                     <span className="text-sm font-semibold text-aether-text">Notifications</span>

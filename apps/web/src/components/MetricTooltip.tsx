@@ -53,7 +53,7 @@ export function computeHorizontalShift(
 export default function MetricTooltip({ label, value, tooltip, className }: MetricTooltipProps) {
   const tipId = useId();
   const [open, setOpen] = useState(false);
-  const [placement, setPlacement] = useState<"below" | "above">("below");
+  const [placement, setPlacement] = useState<"bottom" | "top">("bottom");
   const [shiftX, setShiftX] = useState(0);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const popoverRef = useRef<HTMLSpanElement>(null);
@@ -70,7 +70,7 @@ export default function MetricTooltip({ label, value, tooltip, className }: Metr
     const popoverHeight = popoverRect.height || popover.offsetHeight;
     const popoverWidth = popoverRect.width || popover.offsetWidth;
     setPlacement(
-      computeFlip(triggerRect.bottom, popoverHeight, window.innerHeight) ? "above" : "below",
+      computeFlip(triggerRect.bottom, popoverHeight, window.innerHeight) ? "top" : "bottom",
     );
     setShiftX(
       computeHorizontalShift(triggerRect.left + triggerRect.width / 2, popoverWidth, window.innerWidth),
@@ -118,7 +118,7 @@ export default function MetricTooltip({ label, value, tooltip, className }: Metr
              * isn't enough room below (see computeFlip / the useLayoutEffect
              * above) instead of always anchoring `top-6`, which clipped the
              * popover's bottom edge past the viewport near the page bottom. */
-            placement === "above" ? "bottom-6" : "top-6"
+            placement === "top" ? "bottom-6" : "top-6"
           } ${
             /* GAP-P6-UI-001: closed popovers must be display:none (not just
              * opacity-0) — an absolutely positioned w-56 box left in the
