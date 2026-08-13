@@ -23,7 +23,7 @@ import {
   relTime,
   runBadge,
 } from "../../components/dashboard/feed";
-import { humanizeActivityMessage } from "../../lib/humanize";
+import { activityMessageAfterAgentName, humanizeActivityMessage } from "../../lib/humanize";
 import { fetchAgentRuns, type AgentRun } from "../../lib/api/agents";
 import { fetchFunnel, type Funnel } from "../../lib/api/analytics";
 import { decideApproval } from "../../components/approvals/api";
@@ -353,7 +353,10 @@ export default function DashboardPage() {
                       <div className="min-w-0 flex-1">
                         <p className="text-sm">
                           <span className="font-medium">{agentDisplayName(r.agentName)}</span>{" "}
-                          {humanizeActivityMessage(desc.text)}
+                          {activityMessageAfterAgentName(
+                            agentDisplayName(r.agentName),
+                            humanizeActivityMessage(desc.text),
+                          )}
                           {desc.highlight ? <span className="text-white">{desc.highlight}</span> : null}
                         </p>
                         <p className="mono mt-1 text-[11px] text-aether-muted-dim">

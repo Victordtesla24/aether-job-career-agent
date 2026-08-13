@@ -17,15 +17,13 @@ const nextConfig = {
   // workspace lives at the plural route (SC-CL-01).
   async redirects() {
     return [
-      {
-        // Root forwards to the dashboard (AuthGuard bounces unauthenticated
-        // visitors to /login). A config redirect — not a page-level
-        // redirect() — because a statically prerendered redirect() ships a
-        // 307 with no Location header, stranding non-JS clients.
-        source: "/",
-        destination: "/dashboard",
-        permanent: false,
-      },
+      // NOTE: the root path `/` is intentionally NOT redirected here anymore.
+      // Auth state lives in localStorage (invisible to the server), so a
+      // static config/middleware redirect cannot tell an authenticated user
+      // from an anonymous one. The root client page (`src/app/page.tsx`) reads
+      // the session once and routes in a SINGLE hop — authenticated →
+      // /dashboard, anonymous → /pricing — instead of the previous two-hop
+      // `/` → /dashboard → (client) /pricing bounce for logged-out visitors.
       {
         source: "/dashboard/cover-letter",
         destination: "/dashboard/cover-letters",

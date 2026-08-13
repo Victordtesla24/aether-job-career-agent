@@ -137,7 +137,7 @@ describe("PricingPage", () => {
     });
   });
 
-  it("H-04/M-01: an unauthenticated Subscribe click routes to /login carrying the plan context (no checkout fired)", async () => {
+  it("L-01/H-04: an unauthenticated Subscribe click routes to /signup carrying the plan context (no checkout fired)", async () => {
     fetchPlansMock.mockResolvedValue(PLANS);
     const hrefSetter = vi.fn();
     Object.defineProperty(window, "location", {
@@ -150,7 +150,7 @@ describe("PricingPage", () => {
     fireEvent.click(screen.getByTestId("subscribe-pro"));
 
     await waitFor(() => {
-      expect(hrefSetter).toHaveBeenCalledWith("/login?plan=pro&interval=month&next=%2Fpricing");
+      expect(hrefSetter).toHaveBeenCalledWith("/signup?plan=pro&interval=month&next=%2Fpricing");
     });
     // The selection must survive login — checkout is NOT started yet.
     expect(startCheckoutMock).not.toHaveBeenCalled();

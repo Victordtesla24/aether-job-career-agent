@@ -49,7 +49,31 @@ export function humanizeActivityMessage(msg: string | null | undefined): string 
   // Only tidy up separators/whitespace when we actually rewrote something —
   // otherwise legitimate trailing punctuation (e.g. "found a strong match — ",
   // which is deliberately followed by a highlight span) would be mangled.
-  return changed ? tidyCopy(out) : out;
+  let result = changed ? tidyCopy(out) : out;
+
+  // Collapse an accidental "Agent Agent" — an agent whose display name already
+  // ends in "Agent" (e.g. "Cover Letter Agent") followed by a template that
+  // begins with "Agent" ("Agent run paused") reads as "…Agent Agent run…".
+  result = result.replace(/\bAgent\s+Agent\b/g, "Agent");
+
+  return result;
+}
+
+/**
+ * Join an agent's display name with a humanised activity message without
+ * producing a redundant "Agent Agent". When the display name already ends in
+ * "Agent" and the message begins with "Agent ", drop that leading "Agent ".
+ * Returns just the (possibly trimmed) message — the caller keeps the display
+ * name in its own (bold) node.
+ */
+export function activityMessageAfterAgentName(
+  displayName: string,
+  humanizedMessage: string,
+): string {
+  if (/agent\s*$/i.test(displayName) && /^agent\s+/i.test(humanizedMessage)) {
+    return humanizedMessage.replace(/^agent\s+/i, "");
+  }
+  return humanizedMessage;
 }
 
 /**
