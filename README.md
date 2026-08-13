@@ -75,6 +75,7 @@ The operator's own Claude Code OAuth token (`sk-ant-oat01-…`) is **already con
 | **Applications & email** | Application tracker; Gmail-connected email triage with draft-and-approve; every outbound action passes an explicit approval item in `/dashboard/approvals` |
 | **Billing & quota** | Monthly agent-run quota per tier; atomic reserve-before-run; USD spend cap; honest 429 + upgrade CTA at exhaustion |
 | **Admin** | User/spend visibility (USD), spend caps, suspend, signup toggle, append-only audit log |
+| **Sales Agent** (`/admin/sales-agent`) | Admin-only view of signups/paid-conversion/estimated-MRR re-projected from the existing `/api/admin/users` data, plus links to the external autonomous growth engine's system of record (Google Sheet CRM + LinkedIn content/messaging Docs). The growth engine itself runs outside this codebase on a 6x/day schedule (Gmail-signal-driven outreach with a compliance footer, suppression list and idempotency keys, draft-only LinkedIn content, daily summary email); see `docs/growth/README.md` |
 
 ## 🏗️ Architecture (as deployed)
 

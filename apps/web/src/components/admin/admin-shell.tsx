@@ -21,6 +21,7 @@ const NAV: Array<{ href: string; label: string }> = [
   { href: "/admin/health", label: "Health" },
   { href: "/admin/users", label: "Users" },
   { href: "/admin/subscriptions", label: "Subscriptions" },
+  { href: "/admin/sales-agent", label: "Sales Agent" },
   { href: "/admin/spend", label: "Spend (US$)" },
   { href: "/admin/settings", label: "Settings" },
   { href: "/admin/audit-log", label: "Audit log" },
