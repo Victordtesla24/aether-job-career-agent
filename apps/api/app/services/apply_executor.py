@@ -975,6 +975,7 @@ def playwright_form_submitter(
                 "applyUrl": apply_url,
                 "capturedAt": datetime.now(timezone.utc).isoformat(),
                 "submitted": submitted,
+                "confirmation": confirmation,
                 "fieldsFilled": filled,
                 "fieldsNotFilled": unfilled,
                 "screenshot": screenshot.name,
@@ -984,6 +985,7 @@ def playwright_form_submitter(
     )
     return {
         "submitted": submitted,
+        "confirmation": confirmation,
         "evidencePath": str(screenshot),
         "destination": destination,
         "filled": filled,
@@ -1129,6 +1131,11 @@ def execute_site_application(
     """
     from app.repositories.approval import ApprovalRepository
 
+    # Both additive column sets are ensured up front, before the gate: every
+    # exit from here (manual step OR transmission) writes one of them, and the
+    # lazy DDL must not be ordered by which branch happens to run first.
+    ensure_application_transmission_columns()
+    ensure_application_manual_step_columns()
     repo = ApprovalRepository()
     approval = repo.get_by_id(approval_id, user_id)
     if approval is None:
@@ -1221,6 +1228,7 @@ def execute_site_application(
         "evidencePath": evidence_path,
         "destination": outcome.get("destination"),
         "mode": outcome.get("mode"),
+        "confirmation": outcome.get("confirmation"),
         "fieldsFilled": outcome.get("filled") or [],
         "fieldsNotFilled": outcome.get("unfilled") or [],
     }

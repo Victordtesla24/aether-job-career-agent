@@ -189,7 +189,7 @@ def _load_application(user_id: str, application_id: str) -> dict[str, Any] | Non
         with conn.cursor() as cur:
             cur.execute(
                 'SELECT a."id", a."jobId", a."resumeId", a."coverLetter", a."applyChannel", '
-                'j."sourceUrl", j."applyEmail", j."title", j."company" '
+                'a."answers", j."sourceUrl", j."applyEmail", j."title", j."company" '
                 'FROM "Application" a JOIN "Job" j ON j."id" = a."jobId" '
                 'WHERE a."id" = %s AND a."userId" = %s',
                 (application_id, user_id),
@@ -234,13 +234,21 @@ def _resume_contact(user_id: str, resume_id: str | None) -> dict[str, Any]:
     return contact if isinstance(contact, dict) else {}
 
 
-def build_apply_profile(user_id: str, resume_id: str | None) -> dict[str, Any]:
+def build_apply_profile(
+    user_id: str,
+    resume_id: str | None,
+    application_answers: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """The user's own facts, assembled for a form fill — nothing invented.
 
-    Sources, in order of authority: the ``applyProfile`` block the user
-    maintains in their agent settings (including ``customAnswers``, their
-    recorded answers to employer screening questions), then their account
-    record, then the contact block of their own résumé.
+    Sources, in order of authority: answers recorded against THIS application
+    (``Application.answers.screeningAnswers`` — what the user typed after a
+    manual step told them exactly which question was blocking it), then the
+    ``applyProfile`` block they maintain in their agent settings (including
+    account-wide ``customAnswers``), then their account record, then the
+    contact block of their own résumé. Every one of those is something the
+    user themselves wrote down; nothing here is derived from the job ad, the
+    employer, or a model.
     """
     user = _load_user(user_id) or {}
     config = user.get("agentConfig")
@@ -264,7 +272,11 @@ def build_apply_profile(user_id: str, resume_id: str | None) -> dict[str, Any]:
         if apply_profile.get(optional):
             profile[optional] = apply_profile[optional]
     answers = apply_profile.get("customAnswers")
-    profile["customAnswers"] = answers if isinstance(answers, dict) else {}
+    custom: dict[str, Any] = dict(answers) if isinstance(answers, dict) else {}
+    per_application = (application_answers or {}).get("screeningAnswers")
+    if isinstance(per_application, dict):
+        custom.update(per_application)
+    profile["customAnswers"] = custom
     return profile
 
 
@@ -352,7 +364,20 @@ def _attempt_transmission(user_id: str, application_id: str, approval_id: str) -
         record_manual_step(user_id, application_id, reason, message)
         raise ManualStepRequired(reason, message)
     apply_url = str(resolved.get("applyUrl") or "")
-    profile = build_apply_profile(user_id, application.get("resumeId"))
+    if not apply_url:
+        # Defensive: an automatable channel is only ever derived FROM a URL, so
+        # this cannot normally happen — and if it ever did, the executor would
+        # fall into its replay mode and record a submission that never left the
+        # building. Refuse instead, honestly.
+        reason, message = _no_channel_reason("unknown", application)
+        record_manual_step(user_id, application_id, reason, message)
+        raise ManualStepRequired(reason, message)
+    answers = application.get("answers")
+    profile = build_apply_profile(
+        user_id,
+        application.get("resumeId"),
+        answers if isinstance(answers, dict) else None,
+    )
     resume_pdf = _render_resume_pdf(user_id, application)
     page_html = fetch_apply_page(apply_url)
     execute_site_application(
