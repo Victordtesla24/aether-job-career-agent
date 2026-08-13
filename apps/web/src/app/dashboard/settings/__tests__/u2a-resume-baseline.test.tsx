@@ -42,6 +42,8 @@ vi.mock("../../../../lib/api/billing", async (importOriginal) => {
 
 // eslint-disable-next-line import/first
 import SettingsClient from "../settings-client";
+// eslint-disable-next-line import/first
+import type { SettingsPayload } from "../../../../lib/api/workspaces";
 
 const CAREER_DATA = { sources: [], linkedinNote: "" };
 const SUBSCRIPTION = {
@@ -53,7 +55,12 @@ const SUBSCRIPTION = {
   quota: { runsUsed: 0, runsAllowed: 5, spendUsedUsd: 0, spendCapUsd: 1.0, periodEnd: null },
 };
 
-function settingsWith(originalStored: boolean) {
+// F-3 refix: annotated with the real `SettingsPayload` type (rather than
+// left to structural inference from the literal below) so `activeFile`'s
+// genuine `string | null` shape is checked here too — that's what let the
+// no-resume test fall back to a suppressing `null as unknown as string`
+// cast in the first place.
+function settingsWith(originalStored: boolean): SettingsPayload {
   return {
     profile: { fullName: "Jamie Rivera", email: "jamie@example.com", targetRole: "Staff Engineer", location: "Sydney, AU" },
     resume: { activeFile: "resume.pdf", uploadedAt: "2026-08-01", versions: 2, originalStored },
@@ -103,6 +110,11 @@ describe("U2a: honest baseline helper text", () => {
     expect(text).toMatch(/immutable baseline/i);
     expect(text).toMatch(/tailoring never alters it/i);
     expect(text).toMatch(/re-upload/i);
+    // F-1 refix: no engine preserves format on download today — the copy
+    // must not claim re-uploading "enables" that as an already-live
+    // behaviour, only that it stores bytes for a future engine.
+    expect(text).not.toMatch(/enable format preservation/i);
+    expect(text).toMatch(/still renders in the aether template/i);
   });
 });
 
@@ -124,12 +136,16 @@ describe("U2a: original-stored badge derived from the real API field", () => {
     render(<SettingsClient supportEmail={null} supportPhone={null} />);
 
     const badge = await waitFor(() => screen.getByTestId("resume-original-stored-badge"));
-    expect(badge.textContent).toMatch(/re-upload to enable format preservation/i);
+    expect(badge.textContent).toMatch(/original not stored/i);
+    expect(badge.textContent).toMatch(/re-upload/i);
+    // F-1 refix: must NOT claim re-uploading "enables format preservation" —
+    // downloads still render in the Aether template regardless of upload age.
+    expect(badge.textContent).not.toMatch(/enable format preservation/i);
   });
 
   it("renders no badge at all when there is no active resume yet", async () => {
     const settings = settingsWith(false);
-    settings.resume.activeFile = null as unknown as string;
+    settings.resume.activeFile = null;
     fetchSettingsMock.mockResolvedValue(settings);
     fetchCareerDataMock.mockResolvedValue(CAREER_DATA);
     fetchSubscriptionMock.mockResolvedValue(SUBSCRIPTION);

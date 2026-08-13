@@ -55,19 +55,33 @@ export interface ResumeUploadResult {
  * immutable baseline (tailoring never rewrites it — see
  * `apps/api/app/repositories/resume.py`'s `BaselineImmutableError` guard),
  * and that a resume uploaded before this feature shipped has no stored
- * original — re-uploading it is what turns format preservation on, not a
- * bug in the existing file.
+ * original bytes.
+ *
+ * FE-review refix (2026-08-13, finding F-1): the previous copy said
+ * re-uploading would "enable format preservation" — false in the PRESENT
+ * TENSE. Storing the original bytes only gives a *future* format-preserving
+ * engine (U2b/R-F4, not yet built) a source document to work from,
+ * regardless of how old or new the upload is: today, `POST
+ * /resumes/{id}/download` still routes every user-authored résumé through
+ * `create_branded_resume_pdf` (see `apps/api/app/services/resume_pdf.py`'s
+ * `resolve_original_pdf`, which only matches the two hand-tuned bundled
+ * seed PDFs) and the stored `originalFile` bytes have exactly one reader,
+ * `GET /resumes/{id}/original` — no download or tailoring path reads them
+ * yet. The copy below says what re-uploading actually does today: stores
+ * the bytes as a source for later, without claiming downloads already look
+ * any different.
  */
 export const BASELINE_HELP_TEXT =
   "Supported formats: PDF (.pdf), Word (.docx), and plain text (.txt/.md). " +
   "Your uploaded file is stored as your immutable baseline — tailoring " +
   "never alters it. If you uploaded your résumé before this feature " +
-  "existed, no original file was stored for it yet; re-upload it to enable " +
-  "format preservation.";
+  "existed, its original bytes were never stored; re-uploading stores " +
+  "them now as the source for a future format-preserving engine — today, " +
+  "every download still renders in the Aether template.";
 
 /** Badge copy for whether the active resume has its original bytes stored. */
 export const ORIGINAL_STORED_LABEL = "Original stored ✓";
-export const ORIGINAL_NOT_STORED_LABEL = "Re-upload to enable format preservation";
+export const ORIGINAL_NOT_STORED_LABEL = "Original not stored — re-upload to store it";
 
 /** Hard cap mirroring `lib/api/client.ts`'s `ERROR_MESSAGE_MAX_CHARS` — the
  * upload call uses multipart `FormData` via a raw `fetch`, not `apiRequest`,

@@ -43,6 +43,8 @@ import struct
 import zipfile
 from io import BytesIO
 
+from app.repositories.resume import ResumeRepository
+
 RESUME_TEXT = """VIKRAM DESHPANDE
 Senior Technical Program Manager — Melbourne, VIC, Australia
 
@@ -639,3 +641,49 @@ def test_settings_reports_original_stored_false_when_user_has_no_resume_at_all(
     settings = client.get("/workspaces/settings", headers=auth_headers).json()
     assert settings["resume"]["activeFile"] is None
     assert settings["resume"]["originalStored"] is False
+
+
+def test_settings_original_stored_badge_survives_a_tailoring_run(
+    client, auth_headers, test_user_id
+):
+    """FE-review refix (2026-08-13, finding F-2 — BLOCKING FALSE HONEST-STATE).
+
+    Before this fix, ``GET /workspaces/settings`` derived ``originalStored``
+    from whichever résumé version was NEWEST (``ORDER BY version DESC ...
+    LIMIT 1``). Every tailored child is created by
+    ``TailorAgent.run``/``ResumeRepository.create`` with NO ``originalFile``
+    bytes at all — only the base résumé ever has them — so the instant a
+    user's first tailoring run produced version 2, the newest-row lookup
+    picked that childless version and the Settings badge flipped from
+    "Original stored" to "Re-upload to enable format preservation" for a
+    baseline whose original bytes are, in fact, still stored and immutable.
+    That instructed a pointless re-upload and was the DEFAULT state for
+    almost every active user (7 base vs 378 tailored résumé rows in prod).
+
+    This test uploads a real base résumé (bytes stored), then simulates
+    exactly what a tailoring run persists — a newer, higher-version child
+    with ``parentId`` set and no original-file fields, the same shape
+    ``TailorAgent.run`` writes via ``ResumeRepository.create`` — and asserts
+    the badge still reports the (unchanged, still-stored) base document.
+    """
+    res = _upload(client, auth_headers, "vik_resume.txt", RESUME_TEXT.encode(), "text/plain")
+    assert res.status_code == 201, res.text
+    base_id = res.json()["id"]
+
+    repo = ResumeRepository()
+    tailored = repo.create(
+        test_user_id,
+        {"raw_text": RESUME_TEXT, "bullets": []},
+        "some-tailored-content-hash",
+        label="Tailored — Staff Engineer @ Acme",
+        version=repo.next_version(test_user_id),
+        parent_id=base_id,
+        approval_status="pending",
+    )
+    assert tailored["parentId"] == base_id
+
+    settings = client.get("/workspaces/settings", headers=auth_headers).json()
+    assert settings["resume"]["originalStored"] is True, (
+        "the base résumé's original bytes are still stored and immutable — "
+        "a later tailoring run must not flip this badge to false"
+    )

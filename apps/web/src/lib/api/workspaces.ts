@@ -408,8 +408,13 @@ export const deleteOffer = (offerId: string, options: RequestOptions = {}) =>
 export interface SettingsPayload {
   profile: { fullName: string; email: string; targetRole: string; location: string };
   resume: {
-    activeFile: string;
-    uploadedAt: string;
+    /** `null` when the user has no resume at all (see workspaces.py's
+     * `_build_settings` — never coerced to `""`). F-3 refix: this used to be
+     * typed as a plain `string`, which forced a `null as unknown as string`
+     * cast into the no-resume test fixture — the exact suppression pattern
+     * PLAN.md bans. */
+    activeFile: string | null;
+    uploadedAt: string | null;
     versions: number;
     /** U2a (R-F1): whether the active resume has its original upload bytes
      * stored (immutable baseline) — false for uploads made before format

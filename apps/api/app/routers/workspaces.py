@@ -948,6 +948,7 @@ class SettingsUpdate(BaseModel):
 def _build_settings(
     user: dict[str, Any],
     resume_row: dict | None,
+    base_resume_row: dict | None,
     portfolio_row: dict | None = None,
 ) -> dict[str, Any]:
     """Assemble the settings payload from real DB columns."""
@@ -985,14 +986,24 @@ def _build_settings(
             "activeFile": resume_row.get("label") if resume_row else None,
             "uploadedAt": str(resume_row["createdAt"])[:10] if resume_row else None,
             "versions": 0,  # will be filled below
-            # U2a (R-F1): whether THIS resume row has its original upload bytes
-            # stored (Resume.originalFile IS NOT NULL) — the honest signal for
-            # "tailoring will preserve this document's exact format" vs. "this
-            # was uploaded before format preservation existed / has no stored
-            # original and re-flows into the generic template." False (never
-            # None) when there is no resume row at all, so the Settings panel
-            # never has to special-case a missing summary object.
-            "originalStored": bool(resume_row.get("hasOriginal")) if resume_row else False,
+            # U2a (R-F1), refixed 2026-08-13 for finding F-2: whether the
+            # user's BASE résumé (parentId IS NULL — the immutable upload
+            # every tailoring run derives from, never `resume_row`, which can
+            # be any later tailored version) has its original upload bytes
+            # stored. That is the honest signal for "a future format-
+            # preserving engine (U2b/R-F4) has a source document for this
+            # user's baseline" vs. "this account's baseline predates
+            # original-byte storage, or has none." Deliberately NOT keyed off
+            # `resume_row` (whichever résumé is newest): every tailored child
+            # is created with no `originalFile` at all, so that would flip a
+            # permanently-stored baseline's badge to a pointless re-upload
+            # prompt the moment the user's first tailoring run completes.
+            # False (never None) when the user has no base résumé at all, so
+            # the Settings panel never has to special-case a missing summary
+            # object.
+            "originalStored": (
+                bool(base_resume_row.get("hasOriginal")) if base_resume_row else False
+            ),
         },
         "portfolio": portfolio,
         "agentConfig": {
@@ -1041,6 +1052,35 @@ def get_settings(current_user: CurrentUser) -> dict[str, Any]:
             )
             resume_rows = rows_to_dicts(cur)
 
+            # FE-review refix (2026-08-13, finding F-2): the "original stored"
+            # badge must reflect the user's IMMUTABLE BASE résumé (`parentId
+            # IS NULL`) — the one document the badge's fact is actually about
+            # — never whichever résumé happens to be newest. Every tailored
+            # child is created with no `originalFile` at all
+            # (`TailorAgent.run`'s `_resumes.create(...)` call never passes
+            # original-file fields — see `apps/api/app/agents/tailor_agent.py`),
+            # so keying the badge off `resume_rows` (latest version) flips a
+            # permanently-stored baseline's badge to the "re-upload" prompt
+            # the instant the user's first tailoring run completes — the
+            # default state for almost every active user (7 base vs 378
+            # tailored résumé rows observed in prod). A base résumé's
+            # stored-original fact never changes when a later version is
+            # tailored, so the badge must not pretend otherwise. Mirrors
+            # `ResumeRepository.get_base`'s ordering (lowest version = the
+            # true original upload) without loading the (up to 10MB)
+            # `originalFile` blob itself.
+            cur.execute(
+                """
+                SELECT "originalFile" IS NOT NULL AS "hasOriginal"
+                FROM "Resume"
+                WHERE "userId" = %s AND "parentId" IS NULL
+                ORDER BY version ASC, "createdAt" ASC
+                LIMIT 1
+                """,
+                (uid,),
+            )
+            base_resume_rows = rows_to_dicts(cur)
+
             # Count resume versions
             cur.execute(
                 'SELECT COUNT(*) AS cnt FROM "Resume" WHERE "userId" = %s',
@@ -1065,10 +1105,11 @@ def get_settings(current_user: CurrentUser) -> dict[str, Any]:
 
     user = user_rows[0]
     resume = resume_rows[0] if resume_rows else None
+    base_resume = base_resume_rows[0] if base_resume_rows else None
     version_count = cnt_rows[0]["cnt"] if cnt_rows else 0
 
     portfolio_row = CareerProfileRepository().get(uid, "portfolio")
-    result = _build_settings(user, resume, portfolio_row)
+    result = _build_settings(user, resume, base_resume, portfolio_row)
     result["resume"]["versions"] = version_count
     result["integrations"] = [
         {
