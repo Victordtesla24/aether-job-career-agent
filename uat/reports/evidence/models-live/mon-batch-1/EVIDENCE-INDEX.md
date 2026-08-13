@@ -1,9 +1,10 @@
 # EVIDENCE-INDEX.md — MON-batch-1
 
 Written by the evidence-remediation agent in response to
-`../mon-batch-1-be-rereview-verdict.json` (one directory up from this file —
-verdict: FAIL on NEW-BE-1 and NEW-BE-2 only; all four prior findings
-independently reconfirmed RESOLVED). This index
+`../mon-batch-1-be-rereview-verdict.json` (one directory up from this file, in
+the main checkout only — see path-convention note below — verdict: FAIL on
+NEW-BE-1 and NEW-BE-2 only; all four prior findings independently
+reconfirmed RESOLVED). This index
 maps every code-fix commit in MON-batch-1 to its RED (fail-before) and GREEN
 (pass-after) evidence. Mechanical evidence-hygiene scope only — no production
 code or test logic was changed to produce this file.
@@ -14,7 +15,14 @@ byte-identical for every file cited here (verified with `diff -q` at write
 time). The two `../mon-batch-1-*-review-verdict.json` files referenced in
 prose (not evidence-map entries — they are the review documents this
 remediation responds to) live one directory up, in
-`uat/reports/evidence/models-live/` directly, in both checkouts:
+`uat/reports/evidence/models-live/` directly — but **only in the main
+checkout** (`aether-job-career-agent`), where the reviewing agents wrote
+them; they were never duplicated into this worktree, unlike every log cited
+below. Resolve `../mon-batch-1-be-rereview-verdict.json` and
+`../mon-batch-1-fe-opus-review-verdict.json` from
+`/home/ubuntu/github_repos/aether-job-career-agent/uat/reports/evidence/models-live/mon-batch-1/EVIDENCE-INDEX.md`'s
+copy of this file, not from this worktree's copy. The log/verdict evidence
+map below (all bare filenames) resolves identically from either copy:
 
 - `aether-wt-market-perf` (this worktree, branch `feat/mon-batch-1`):
   `uat/reports/evidence/models-live/mon-batch-1/`
