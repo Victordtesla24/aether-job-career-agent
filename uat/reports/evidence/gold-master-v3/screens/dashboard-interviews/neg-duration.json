@@ -1,1 +1,0 @@
-{"detail":[{"type":"greater_than_equal","loc":["body","duration_minutes"],"msg":"Input should be greater than or equal to 15","input":-100,"ctx":{"ge":15}}]}
