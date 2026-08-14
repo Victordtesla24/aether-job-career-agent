@@ -130,6 +130,10 @@ class TestSweepProcessesWholeBoard:
             # Always present (0 on a clean, complete board) so an abort can
             # never be mistaken for a finished board.
             "suppressed": 0,
+            # ML-STOPALL-001: jobs skipped honestly because the dispatched
+            # agent is paused by the user's own AgentConfig. Always present
+            # (0 here — nothing was paused on this board).
+            "skipped_paused": 0,
             "needs_continuation": False,
         }
 
