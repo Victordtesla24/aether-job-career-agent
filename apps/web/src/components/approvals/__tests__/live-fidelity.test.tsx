@@ -146,4 +146,65 @@ describe("ApprovalModal live fidelity fetch", () => {
     await waitFor(() => new Promise((resolve) => setTimeout(resolve, 0)));
     expect(fetchResumeFidelityMock).not.toHaveBeenCalled();
   });
+
+  // MF-A (round-5 re-review): built from the reviewer's never-settling-mock
+  // probe (u2b-r5-probe-20260814/reviewer-probe-failure-paths.test.tsx PROBE
+  // A), which proved the frozen "Original layout preserved" claim rendered
+  // as a green "Verified" check for the fetch's entire in-flight window —
+  // indefinitely, on a hang, since nothing bounded it. Unlike that probe
+  // (which documented the bug), this asserts the FIXED behavior: the CHECKING
+  // sentinel, never the frozen claim, for as long as the fetch is
+  // unresolved — including synchronously on the very first render, before
+  // any effect has had a chance to run.
+  it("MF-A: a fetch that never settles shows the CHECKING state, never the frozen green claim, from the first paint onward", async () => {
+    fetchResumeFidelityMock.mockImplementation(() => new Promise(() => {}));
+
+    render(<ApprovalModal approval={approval()} onClose={vi.fn()} onDecide={vi.fn()} />);
+
+    // Synchronous: the very first render already seeded CHECKING — no tick,
+    // no effect flush, needed to avoid the frozen claim.
+    const list = screen.getByTestId("modal-reasoning");
+    expect(list.textContent).not.toContain(FROZEN_CLAIM);
+    expect(list.textContent).toContain("Checking this version's layout fidelity");
+    const checkingItem = screen
+      .getByText(/Checking this version's layout fidelity/)
+      .closest("li");
+    expect(checkingItem?.querySelector(".fa-check")).toBeFalsy();
+    expect(checkingItem?.querySelector(".fa-triangle-exclamation")).toBeFalsy();
+    expect(checkingItem?.querySelector(".fa-circle-notch")).toBeTruthy();
+
+    // Still true well after mount (the reviewer probe's hang window) — no
+    // late flip back to the frozen claim, and no fake "Verified" green
+    // check invented just because time passed.
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    const stillChecking = screen.getByTestId("modal-reasoning");
+    expect(stillChecking.textContent).not.toContain(FROZEN_CLAIM);
+    expect(stillChecking.textContent).toContain("Checking this version's layout fidelity");
+  });
+
+  it("MF-A: switching this modal to a different pending resume_tailor approval reseeds CHECKING synchronously, never showing the new approval's frozen claim", async () => {
+    fetchResumeFidelityMock.mockImplementation(() => new Promise(() => {}));
+    const reasoningWithFrozenClaim = [
+      { kind: "check", text: "Every reworded bullet is grounded in your résumé." },
+      { kind: "check", text: FROZEN_CLAIM },
+    ];
+    const first = approval({
+      id: "appr-1",
+      payload: { kind: "resume_tailor", resume_id: "resume-42", reasoning: reasoningWithFrozenClaim },
+    });
+    const second = approval({
+      id: "appr-2",
+      payload: { kind: "resume_tailor", resume_id: "resume-99", reasoning: reasoningWithFrozenClaim },
+    });
+
+    const { rerender } = render(
+      <ApprovalModal approval={first} onClose={vi.fn()} onDecide={vi.fn()} />,
+    );
+    await screen.findByTestId("modal-reasoning");
+
+    rerender(<ApprovalModal approval={second} onClose={vi.fn()} onDecide={vi.fn()} />);
+    const list = screen.getByTestId("modal-reasoning");
+    expect(list.textContent).not.toContain(FROZEN_CLAIM);
+    expect(list.textContent).toContain("Checking this version's layout fidelity");
+  });
 });

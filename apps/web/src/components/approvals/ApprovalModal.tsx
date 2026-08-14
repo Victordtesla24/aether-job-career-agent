@@ -15,6 +15,7 @@ import type { Approval } from "../../lib/api/approvals";
 import { fetchResumeFidelity } from "../../lib/api/resumes";
 import type { DecisionContext } from "./api";
 import {
+  FIDELITY_CHECKING,
   FIDELITY_FETCH_FAILED,
   type LiveFidelity,
   isExpired,
@@ -34,6 +35,23 @@ interface ApprovalModalProps {
 
 const FOCUSABLE =
   'button:not([disabled]), [href], input:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/**
+ * The résumé id a PENDING ``resume_tailor`` approval's live fidelity check
+ * fetches for, or ``null`` when this approval will never fetch one (wrong
+ * kind, resolved, or a payload with no ``resume_id``). Shared by the state
+ * initializer and the fetch effect below (MF-A) so the two can never
+ * disagree about whether a fetch is coming.
+ */
+function fidelityResumeId(approval: Approval): string | null {
+  if (approval.status !== "pending" || payloadKind(approval) !== "resume_tailor") return null;
+  const resumeId = (approval.payload as { resume_id?: unknown }).resume_id;
+  return typeof resumeId === "string" ? resumeId : null;
+}
+
+function initialFidelity(approval: Approval): LiveFidelity | null {
+  return fidelityResumeId(approval) !== null ? FIDELITY_CHECKING : null;
+}
 
 export function ApprovalModal({ approval, onClose, onDecide }: ApprovalModalProps) {
   const details = parseApprovalPayload(approval);
@@ -56,17 +74,29 @@ export function ApprovalModal({ approval, onClose, onDecide }: ApprovalModalProp
   // verified fidelity — never the frozen mechanism-level snapshot the
   // approval was written with (see lib.ts withLiveFidelity). Resolved
   // approvals and every other kind never fetch — nothing to supersede.
-  const [liveFidelity, setLiveFidelity] = useState<LiveFidelity | null>(null);
+  //
+  // MF-A (round-5 re-review): the frozen claim used to render, unsupervised,
+  // for this fetch's ENTIRE in-flight window (~220-260ms in production;
+  // indefinitely on a hang, since nothing in lib/api bounded a fetch with a
+  // timeout — see resumes.ts FIDELITY_FETCH_TIMEOUT_MS for the other half of
+  // this fix). The lazy initializer seeds FIDELITY_CHECKING synchronously,
+  // in the SAME render that first learns a fetch is coming, so there is
+  // never a paint with the frozen claim on screen — not even one frame — for
+  // an approval this modal is about to check. The render-phase reset below
+  // (React's documented "adjust state when a prop changes" pattern) gives
+  // the same guarantee when this modal is reused for a different approval
+  // without unmounting.
+  const [seenApproval, setSeenApproval] = useState(approval);
+  const [liveFidelity, setLiveFidelity] = useState<LiveFidelity | null>(() =>
+    initialFidelity(approval),
+  );
+  if (approval !== seenApproval) {
+    setSeenApproval(approval);
+    setLiveFidelity(initialFidelity(approval));
+  }
   useEffect(() => {
-    setLiveFidelity(null);
-    const resumeId = (approval.payload as { resume_id?: unknown }).resume_id;
-    if (
-      approval.status !== "pending" ||
-      payloadKind(approval) !== "resume_tailor" ||
-      typeof resumeId !== "string"
-    ) {
-      return;
-    }
+    const resumeId = fidelityResumeId(approval);
+    if (resumeId === null) return;
     let cancelled = false;
     fetchResumeFidelity(resumeId)
       .then((fidelity) => {
@@ -78,7 +108,9 @@ export function ApprovalModal({ approval, onClose, onDecide }: ApprovalModalProp
         // "Verified" check — that silently restores the exact false-claim
         // pattern this slice exists to kill. Downgrade to the honest-unknown
         // warning instead of a no-op (`null` would keep showing the frozen
-        // line unchanged; see withLiveFidelity's docstring).
+        // line unchanged; see withLiveFidelity's docstring). A timed-out
+        // fetch (MF-A) rejects the same as any other network failure and
+        // lands here too — never a silent revert to the frozen text.
         if (!cancelled) setLiveFidelity(FIDELITY_FETCH_FAILED);
       });
     return () => {
@@ -262,13 +294,19 @@ export function ApprovalModal({ approval, onClose, onDecide }: ApprovalModalProp
                       className={`mt-0.5 text-[10px] ${
                         item.kind === "warning"
                           ? "fa-solid fa-triangle-exclamation text-aether-yellow"
-                          : "fa-solid fa-check text-aether-green"
+                          : item.kind === "checking"
+                            ? "fa-solid fa-circle-notch fa-spin text-aether-muted-dim"
+                            : "fa-solid fa-check text-aether-green"
                       }`}
                       aria-hidden="true"
                     />
                     <span>
                       <span className="sr-only">
-                        {item.kind === "warning" ? "Caveat: " : "Verified: "}
+                        {item.kind === "warning"
+                          ? "Caveat: "
+                          : item.kind === "checking"
+                            ? "Checking: "
+                            : "Verified: "}
                       </span>
                       {item.text}
                     </span>

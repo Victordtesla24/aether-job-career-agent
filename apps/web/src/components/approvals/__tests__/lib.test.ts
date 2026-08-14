@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import type { Approval } from "../../../lib/api/approvals";
 import {
   EXPIRY_HOURS,
+  FIDELITY_CHECKING,
+  FIDELITY_FETCH_FAILED,
   canRemove,
   companyInitials,
   isExpired,
@@ -252,5 +254,33 @@ describe("withLiveFidelity", () => {
     const a = approval({ status: "pending", payload: { kind: "resume_tailor", resume_id: "r1" } });
     const noLayout = [frozenReasoning[0]];
     expect(withLiveFidelity(a, noLayout, { preserved: false, note: "reflow" })).toEqual(noLayout);
+  });
+
+  // MF-A (round-5 re-review): FIDELITY_CHECKING must supersede the frozen
+  // claim with an honest in-flight state — never the green "check" the
+  // frozen text renders as, and never left as a no-op the way `live ===
+  // null` is (that would be the exact bug: the frozen "Verified" claim
+  // still on screen for the whole fetch window).
+  it("supersedes the frozen claim with the CHECKING sentinel while the fetch is in flight", () => {
+    const a = approval({ status: "pending", payload: { kind: "resume_tailor", resume_id: "r1" } });
+    const result = withLiveFidelity(a, frozenReasoning, FIDELITY_CHECKING);
+    expect(result[1]).toEqual({
+      kind: "checking",
+      text: "Checking this version's layout fidelity…",
+    });
+    expect(result[1].text.toLowerCase()).not.toContain("original layout preserved");
+  });
+
+  // FIDELITY_CHECKING and FIDELITY_FETCH_FAILED share the same
+  // `preserved: null` shape — withLiveFidelity must tell them apart by
+  // identity, not degrade a genuine in-flight check into the "warning"
+  // styling a real failure gets (or vice versa).
+  it("renders CHECKING and FETCH_FAILED distinctly even though both carry preserved: null", () => {
+    const a = approval({ status: "pending", payload: { kind: "resume_tailor", resume_id: "r1" } });
+    const checking = withLiveFidelity(a, frozenReasoning, FIDELITY_CHECKING);
+    const failed = withLiveFidelity(a, frozenReasoning, FIDELITY_FETCH_FAILED);
+    expect(checking[1].kind).toBe("checking");
+    expect(failed[1].kind).toBe("warning");
+    expect(checking[1].kind).not.toBe(failed[1].kind);
   });
 });

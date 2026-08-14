@@ -11,7 +11,7 @@ import type { Approval } from "../../lib/api/approvals";
 export const EXPIRY_HOURS = 48;
 
 export interface ReasoningItem {
-  kind: "check" | "warning";
+  kind: "check" | "warning" | "checking";
   text: string;
 }
 
@@ -154,6 +154,28 @@ export const FIDELITY_FETCH_FAILED: LiveFidelity = {
 };
 
 /**
+ * Client-side sentinel for the WINDOW BETWEEN deciding to fetch
+ * ``GET /resumes/{id}/fidelity`` and that fetch settling (MF-A, round-5
+ * re-review). Before this sentinel existed, a caller had nothing to pass for
+ * that window but ``live === null`` — ``withLiveFidelity``'s no-op case —
+ * which left the frozen "Original layout preserved" claim rendered as a
+ * green "Verified" check for the fetch's entire in-flight duration
+ * (~220-260ms in production; INDEFINITELY on a hung connection, since
+ * nothing in ``lib/api`` bounded a fetch with a timeout). A reviewer probe
+ * with a never-settling mock reproduced the hang case directly
+ * (`u2b-r5-probe-20260814/reviewer-probe-failure-paths.test.tsx` PROBE A).
+ *
+ * Identified by reference (``live === FIDELITY_CHECKING``), not by its
+ * ``preserved: null`` shape alone — that shape is shared with
+ * ``FIDELITY_FETCH_FAILED``, and the two must render differently (an
+ * in-progress check is not a caveat).
+ */
+export const FIDELITY_CHECKING: LiveFidelity = {
+  preserved: null,
+  note: "Checking this version's layout fidelity…",
+};
+
+/**
  * Supersede the frozen "Original layout" reasoning line the tailoring agent
  * wrote at approval-creation time with the résumé's LIVE fidelity
  * (ML-U2B-approval-honesty ruling 2). A tailoring approval's reasoning is
@@ -167,12 +189,15 @@ export const FIDELITY_FETCH_FAILED: LiveFidelity = {
  * Scoped to PENDING ``resume_tailor`` approvals only: a resolved/rejected
  * approval is historical record and keeps its frozen text verbatim, and
  * every other approval kind has no layout-preservation line to supersede.
- * ``live === null`` (fetch not yet resolved) is a no-op — the frozen line is
- * shown as written while we wait, since "we don't know yet" is not a reason
- * to blank the agent's own reasoning. A fetch FAILURE is never represented
- * as ``null``: callers pass ``FIDELITY_FETCH_FAILED`` instead, so it takes
- * the same honest-unknown "warning" branch as any other unresolved report
- * rather than leaving (or reverting to) the frozen claim on screen.
+ * ``live === null`` means this approval was never going to fetch at all (no
+ * ``resume_id``, wrong kind, resolved status) — a genuine no-op, the frozen
+ * line is shown as written. Once a fetch IS coming, the caller must pass
+ * ``FIDELITY_CHECKING`` from the same render that decides to fetch (never
+ * ``null``) so this function has something honest to show instead of the
+ * frozen claim for the in-flight window — see ``FIDELITY_CHECKING``'s
+ * docstring. A fetch FAILURE (including a client-side timeout) is likewise
+ * never represented as ``null``: callers pass ``FIDELITY_FETCH_FAILED``
+ * instead, taking the honest-unknown "warning" branch.
  */
 export function withLiveFidelity(
   approval: Approval,
@@ -186,10 +211,13 @@ export function withLiveFidelity(
   const idx = reasoning.findIndex((item) => /original layout/i.test(item.text));
   if (idx === -1) return reasoning;
   const next = [...reasoning];
-  next[idx] = {
-    kind: live.preserved === true ? "check" : "warning",
-    text: `Original layout: ${live.note}`,
-  };
+  next[idx] =
+    live === FIDELITY_CHECKING
+      ? { kind: "checking", text: live.note }
+      : {
+          kind: live.preserved === true ? "check" : "warning",
+          text: `Original layout: ${live.note}`,
+        };
   return next;
 }
 

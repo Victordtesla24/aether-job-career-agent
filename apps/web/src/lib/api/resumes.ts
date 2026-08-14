@@ -92,11 +92,25 @@ export const ResumeFidelitySchema = z.object({
 
 export type ResumeFidelity = z.infer<typeof ResumeFidelitySchema>;
 
+// MF-A (round-5 re-review): this render + re-extraction call is the one
+// `fetchResumeFidelity` caller (ApprovalModal) waits on to supersede a
+// green "Verified" claim before approval — a hang here used to leave that
+// claim on screen forever (no timeout anywhere in this module). 10s is a
+// wide margin over the ~220-260ms this endpoint measures in production
+// (`u2b-r5-probe-20260814/live-prod-probe-20260814T0525Z.txt`) while still
+// bounding the wait to something finite. Callers may override it.
+export const FIDELITY_FETCH_TIMEOUT_MS = 10_000;
+
 export async function fetchResumeFidelity(
   id: string,
   options: RequestOptions = {},
 ): Promise<ResumeFidelity> {
-  return ResumeFidelitySchema.parse(await apiRequest<unknown>(`/resumes/${id}/fidelity`, options));
+  return ResumeFidelitySchema.parse(
+    await apiRequest<unknown>(`/resumes/${id}/fidelity`, {
+      timeoutMs: FIDELITY_FETCH_TIMEOUT_MS,
+      ...options,
+    }),
+  );
 }
 
 /** Deterministic before/after ATS re-score + estimated conversion lift (GAP-E2). */
