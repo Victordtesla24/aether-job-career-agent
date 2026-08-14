@@ -1601,27 +1601,26 @@ requested"). The guard added afterwards (conftest schema-pin + prod-DSN abort in
 that incident (a test suite truncating prod) — it gives zero protection against a bad migration, a
 future deploy-script bug, hardware failure, or a DB-provider-side incident.
 
-> **Current install status (MF-3, S-FIX slice C, verified 2026-08-14T02:07Z):** the backup
-> *mechanism* below has been built and proven — one real dump has been taken and a full restore
-> drill run against it (§10.3) — but the recurring **`aether-backup.timer` is NOT YET enabled on
-> the production host** (`systemctl list-timers | grep -i backup` returns nothing;
-> `/etc/systemd/system/` has no `aether-backup.*` unit). `/home/ubuntu/aether-backups/db/` holds
-> exactly one file: the manual dump taken during the drill. Until the Install step (§10.1) is run,
-> **there is no 6-hourly schedule and no bounded RPO** — the only backup that exists is that one
-> manual dump, and the true recovery point is "whenever someone last ran the script by hand". A
-> PASS on this section must not be read as "backups are running now" — they are not, until §10.1's
-> `systemctl enable --now` has actually been executed and `systemctl list-timers
-> aether-backup.timer` shows it active.
+> **Current install status (MF-3, S-FIX slice C, updated 2026-08-14T04:13Z):** the
+> **`aether-backup.timer` IS installed and enabled on the production host** —
+> `systemctl list-timers aether-backup.timer` shows it active (next fire 2026-08-14T06:00:00Z);
+> `/etc/systemd/system/aether-backup.{service,timer}` are symlinked per §10.1. A real 6-hourly-cadence
+> run was triggered manually to prove the installed unit works end-to-end (not just the script in
+> isolation): `aether-20260814T041323Z.sql.gz` (11,628,322 B) landed in both
+> `/home/ubuntu/aether-backups/db/` and `s3://<bucket>/<path>aether-db-backups/`, and a full restore
+> drill against that exact dump (§10.2 recipe) matched the live schema exactly — 33/33 tables,
+> `"User"` 6/6, `"Application"` 585/585, `"Job"` 9500/9500 — with the live `aether` schema re-verified
+> unchanged immediately after (evidence:
+> `uat/reports/evidence/market-perf/s-fix/C-final/TRIGGER-*`, `RESTORE-DRILL-output.log`). The
+> 6-hourly RPO below is now genuinely in effect, not aspirational.
 
-Once installed (§10.1), what this mechanism provides is **scheduled logical backups**, not
-provider-side point-in-time recovery (PITR). This is a deliberate, honest tradeoff: PITR requires a
-toggle on the hosted-DB provider's side (hosteddb.reai.io) that this VM cannot enable from inside
-the guest, and was not confirmed enabled during this pass. `pg_dump` every 6 hours, once the timer
-is enabled, will give:
+What this mechanism provides is **scheduled logical backups**, not provider-side point-in-time
+recovery (PITR). This is a deliberate, honest tradeoff: PITR requires a toggle on the hosted-DB
+provider's side (hosteddb.reai.io) that this VM cannot enable from inside the guest, and was not
+confirmed enabled during this pass. `pg_dump` every 6 hours gives:
 
-* **RPO (Recovery Point Objective):** ~6 hours once the timer is enabled — worst case, up to 6
-  hours of writes since the last successful dump could be lost in a full-loss scenario. **Not yet
-  in effect** — see the install-status callout above.
+* **RPO (Recovery Point Objective):** ~6 hours — worst case, up to 6 hours of writes since the last
+  successful dump could be lost in a full-loss scenario. **In effect as of the install above.**
 * **RTO (Recovery Time Objective):** dominated by the size of the `aether` schema at restore time
   (the drill below restored a ~9.6 MB compressed dump, ~31 tables, in well under a minute); scales
   roughly linearly with data volume.
