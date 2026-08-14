@@ -44,6 +44,7 @@ from app.services.cover_letter_quality import score_cover_letter
 from app.services.cover_letter_quality import (
     split_paragraphs as _quality_split_paragraphs,
 )
+from app.services.evidence_corpus import build_corpus_evidence
 from app.services.fabrication_guard import FabricationGuard
 from app.services.llm_client import (
     LLMClient,
@@ -1546,6 +1547,19 @@ class CoverLetterAgent:
         story_evidence = build_story_evidence(
             user_id, self._stories, job_description=story_jd
         )
+        # U-STORY-1 step 3 (U-STORY-DISCOVERY.md §2.3 gap 2): the
+        # provenance-tagged evidence corpus enters through the SAME door the
+        # tailoring agent already uses (``build_corpus_evidence(user_id, jd)``,
+        # JD-ranked and character-budgeted). Until now only the tailor read it,
+        # so a claim could be citable in the tailored résumé and rejected by
+        # the claim guard of the cover letter belonging to the same
+        # application. Empty string for a user with no ingested corpus — every
+        # self-serve account today — which keeps behaviour byte-identical for
+        # them. It joins BOTH guard corpora below for the same reason story
+        # evidence does: evidence trusted by one guard and invisible to the
+        # other is the §2.2 defect, and re-introducing it for corpus items
+        # would be the same bug wearing a different source label.
+        corpus_evidence = build_corpus_evidence(user_id, story_jd)
         # U-STORY-1 step 2 (U-STORY-DISCOVERY.md §2.2): the Story Bank belongs
         # in the FabricationGuard corpus too. It was in ``claim_evidence``
         # below but NOT here, so a system name, employer or number that only a
@@ -1567,6 +1581,7 @@ class CoverLetterAgent:
             ]
             + ([career_corpus] if career_corpus else [])
             + ([story_evidence] if story_evidence else [])
+            + ([corpus_evidence] if corpus_evidence else [])
         )
 
         # GAP-P6-COV-001: the candidate-claim evidence corpus is the candidate's
@@ -1578,7 +1593,8 @@ class CoverLetterAgent:
         claim_evidence = " ".join(
             p
             for p in (
-                resume_text, career_corpus, story_evidence, signer, position, job["company"]
+                resume_text, career_corpus, story_evidence, corpus_evidence,
+                signer, position, job["company"],
             )
             if p
         )
