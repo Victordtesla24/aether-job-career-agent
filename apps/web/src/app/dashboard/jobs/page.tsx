@@ -1256,7 +1256,13 @@ export default function JobsPage() {
                   <span
                     data-testid="source-status-error"
                     title={s.errorText}
-                    className="max-w-[220px] truncate text-red-300/90"
+                    // A quota pause is a neutral, self-healing state (S-FIX-A/S-2)
+                    // — it carries an explanation but must not read as a failure,
+                    // so the alarm colour follows the badge, not the presence of
+                    // text.
+                    className={`max-w-[220px] truncate ${
+                      s.badge === "error" ? "text-red-300/90" : "text-aether-muted-dim"
+                    }`}
                   >
                     — {s.errorText}
                   </span>

@@ -276,3 +276,128 @@ class TestDiscoverySweep:
         assert rows[a]["status"] == "error"
         assert "adzuna down" in rows[a]["error"]
         assert rows[b]["status"] == "ok"
+
+
+class TestDegradationCopyHonesty:
+    """S-FIX-A round 2 — the degraded-state copy must match reality.
+
+    The budget and 429 paths BOTH fall back to whatever real listings the
+    shared cache already holds. When it holds none for that exact search the
+    adapter raises instead of returning an empty list — and the message the
+    user ends up reading (scout stores it on the source row) therefore must
+    NOT claim "cached listings are still served": in that branch there are, by
+    construction, none. Reviewer finding S-FIX-A-R2-02.
+    """
+
+    _CACHE_CLAIMS = ("cached listings are still served", "still served")
+
+    def test_budget_block_without_cache_never_claims_cached_listings(self, monkeypatch):
+        from app.services.discovery import adzuna_adapter
+        from app.services.discovery.adzuna_adapter import AdzunaAdapter
+        from app.services.discovery.base_adapter import SourceBlockedError
+
+        _counting_fetch(monkeypatch)
+        adzuna_adapter._CALL_LEDGER[adzuna_adapter._today_key()] = 999
+        with pytest.raises(SourceBlockedError) as excinfo:
+            AdzunaAdapter().fetch(query="delivery lead", location="Melbourne")
+        message = str(excinfo.value).lower()
+        for claim in self._CACHE_CLAIMS:
+            assert claim not in message, f"no-cache block message claims {claim!r}"
+        assert "no cached listings" in message, (
+            "the no-cache block must say plainly that nothing is cached"
+        )
+        # The honest cause survives the split.
+        assert "quota" in message and "utc" in message
+
+    def test_http_429_block_without_cache_never_claims_cached_listings(self, monkeypatch):
+        import urllib.error
+
+        from app.services.discovery.adzuna_adapter import AdzunaAdapter
+        from app.services.discovery.base_adapter import SourceBlockedError
+
+        err = urllib.error.HTTPError(
+            "https://api.adzuna.com", 429, "Too Many Requests",
+            {"Retry-After": "42"}, None,  # type: ignore[arg-type]
+        )
+        _counting_fetch(monkeypatch, error=err)
+        with pytest.raises(SourceBlockedError) as excinfo:
+            AdzunaAdapter().fetch(query="delivery lead", location="Melbourne")
+        message = str(excinfo.value).lower()
+        for claim in self._CACHE_CLAIMS:
+            assert claim not in message, f"no-cache 429 message claims {claim!r}"
+        assert "no cached listings" in message
+        assert "42" in message, "the honest retry-after must survive the split"
+
+    def test_stale_cache_path_may_still_promise_the_cache_it_serves(self, monkeypatch):
+        """The WITH-cache branch keeps its reassurance — it is true there."""
+        from app.services.discovery import adzuna_adapter
+        from app.services.discovery.adzuna_adapter import AdzunaAdapter
+
+        calls = _counting_fetch(monkeypatch)
+        first = AdzunaAdapter().fetch(query="delivery lead", location="Melbourne")
+        assert first and calls
+        spent = len(calls)
+        monkeypatch.setenv("AETHER_ADZUNA_CACHE_TTL_SECONDS", "0")
+        adzuna_adapter._CALL_LEDGER[adzuna_adapter._today_key()] = 999
+        served = AdzunaAdapter().fetch(query="delivery lead", location="Melbourne")
+        assert served, "cache-backed degradation returned nothing"
+        assert len(calls) == spent
+
+
+class TestQuotaStateIsRenderableAsQuota:
+    """S-FIX-A round 2 — a daily-quota pause must not read as 'the board blocks us'.
+
+    ``SourceBlockedError`` carries RT-008's meaning: the source PERMANENTLY
+    denies this server, which the UI renders as the flat pill "unavailable
+    (blocked by source)" with the real reason suppressed by design. A shared
+    key's daily quota is temporary and self-healing, so it gets its own
+    subclass — the scout stringifies the class name into the source row's
+    error (``f"{type(exc).__name__}: {exc}"``), which is the contract the Jobs
+    screen keys its quota copy off. Reviewer finding S-FIX-A-R2-03.
+    """
+
+    def test_budget_exhaustion_raises_the_quota_subclass(self, monkeypatch):
+        from app.services.discovery import adzuna_adapter
+        from app.services.discovery.adzuna_adapter import AdzunaAdapter
+        from app.services.discovery.base_adapter import (
+            SourceBlockedError,
+            SourceQuotaError,
+        )
+
+        assert issubclass(SourceQuotaError, SourceBlockedError), (
+            "existing SourceBlockedError handling must keep catching it"
+        )
+        _counting_fetch(monkeypatch)
+        adzuna_adapter._CALL_LEDGER[adzuna_adapter._today_key()] = 999
+        with pytest.raises(SourceQuotaError) as excinfo:
+            AdzunaAdapter().fetch(query="delivery lead", location="Melbourne")
+        # EXACTLY what app.agents.scout_agent stores on the source row.
+        rendered = f"{type(excinfo.value).__name__}: {excinfo.value}"
+        assert rendered.startswith("SourceQuotaError: ")
+        assert len(rendered) <= 240, (
+            "the row's error is rendered verbatim in a UI pill tooltip"
+        )
+
+    def test_rate_limit_cooldown_raises_the_quota_subclass(self, monkeypatch):
+        import urllib.error
+
+        from app.services.discovery.adzuna_adapter import AdzunaAdapter
+        from app.services.discovery.base_adapter import SourceQuotaError
+
+        err = urllib.error.HTTPError(
+            "https://api.adzuna.com", 429, "Too Many Requests",
+            {"Retry-After": "42"}, None,  # type: ignore[arg-type]
+        )
+        _counting_fetch(monkeypatch, error=err)
+        with pytest.raises(SourceQuotaError):
+            AdzunaAdapter().fetch(query="delivery lead", location="Melbourne")
+
+    def test_a_structural_block_is_still_a_plain_source_blocked_error(self):
+        """Wellfound's 403 must NOT be re-labelled as a quota pause."""
+        from app.services.discovery.base_adapter import (
+            SourceBlockedError,
+            SourceQuotaError,
+        )
+
+        exc = SourceBlockedError("Wellfound public listings unavailable: HTTP 403")
+        assert not isinstance(exc, SourceQuotaError)

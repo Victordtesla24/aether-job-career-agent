@@ -34,7 +34,7 @@ from app.services.discovery.base_adapter import (
     AdapterFetchError,
     BaseAdapter,
     JobRaw,
-    SourceBlockedError,
+    SourceQuotaError,
 )
 from app.services.discovery.live_http import fetch_json
 
@@ -69,6 +69,14 @@ _REMOTE_MARKERS = ("remote", "work from home", "wfh", "hybrid", "anywhere")
 # 3. ``_BLOCKED_UNTIL`` — a cooldown deadline set from an HTTP 429's
 #    ``Retry-After``, so a rate-limited key is left alone instead of being
 #    re-probed by every subsequent run.
+#
+# When a guard trips and the cache holds NOTHING for that search, the adapter
+# raises ``SourceQuotaError`` (a ``SourceBlockedError`` subclass), and the
+# message says plainly that no cached listings exist — it never offers a cache
+# it does not have. The subclass is what lets the UI show this as a TEMPORARY
+# "market data paused (API quota), resets 00:00 UTC" state instead of RT-008's
+# permanent "blocked by source" pill, while the scout's block-backoff (which
+# should absolutely apply to an exhausted shared key) is unchanged.
 # ---------------------------------------------------------------------------
 
 #: Response-cache TTL. 4h is the honest middle for job listings: Adzuna's own
@@ -332,22 +340,26 @@ class AdzunaAdapter(BaseAdapter):
                 # Not cached: this page needs a live call, which must clear both
                 # scale guards first (429 cooldown, then today's budget).
                 cooldown = _cooldown_remaining()
-                blocked_reason: str | None = None
+                # The CAUSE only — never a claim about what is being served.
+                # Whether cached listings exist for this exact search is not
+                # known until the lookup below, and the two outcomes get
+                # different sentences (S-FIX-A round 2): promising "cached
+                # listings are still served" in the branch that has none is
+                # exactly the kind of reassuring fiction this product refuses.
+                blocked_cause: str | None = None
                 if cooldown > 0:
-                    blocked_reason = (
+                    blocked_cause = (
                         "Adzuna is rate-limiting this key; cooling off for "
                         f"{int(cooldown)}s before the next call."
                     )
                 elif not _reserve_call():
                     snapshot = budget_snapshot()
-                    blocked_reason = (
+                    blocked_cause = (
                         "Adzuna daily API quota reached "
-                        f"({snapshot['used']}/{snapshot['budget']} calls used on "
-                        f"{snapshot['date']}); the quota resets at 00:00 UTC. "
-                        "Market data refresh is paused until then — cached "
-                        "listings are still served."
+                        f"({snapshot['used']}/{snapshot['budget']} calls on "
+                        f"{snapshot['date']}); it resets at 00:00 UTC."
                     )
-                if blocked_reason is not None:
+                if blocked_cause is not None:
                     # NEVER a silent empty result: fall back to whatever real
                     # data we already hold for this exact search, stale or not,
                     # keeping its ORIGINAL fetch time.
@@ -356,20 +368,30 @@ class AdzunaAdapter(BaseAdapter):
                         payload, fetched_iso = stale
                         served_from_cache += 1
                         logger.warning(
-                            "adzuna: %s serving cached page %d (dataAsOf=%s)",
-                            blocked_reason, page, fetched_iso,
+                            "adzuna: %s Market data refresh is paused until "
+                            "then — cached listings are still served. "
+                            "Serving cached page %d (dataAsOf=%s)",
+                            blocked_cause, page, fetched_iso,
                         )
                     elif page == 1:
-                        # Nothing real to serve. SourceBlockedError (not a plain
-                        # AdapterFetchError) so the scout applies its block
+                        # Nothing real to serve, so the message must NOT offer
+                        # the cache as consolation. SourceQuotaError (not a
+                        # plain AdapterFetchError, and not a bare
+                        # SourceBlockedError) so the scout applies its block
                         # backoff instead of re-probing an exhausted key on
-                        # every tick, and the user sees an honest per-source
-                        # "blocked" state carrying this message.
-                        logger.warning("adzuna: %s", blocked_reason)
-                        raise SourceBlockedError(blocked_reason)
+                        # every tick, while the Jobs screen can tell this
+                        # TEMPORARY, self-healing pause apart from a source
+                        # that structurally refuses us (RT-008) and show this
+                        # message instead of a flat "blocked by source" pill.
+                        message = (
+                            f"{blocked_cause} No cached listings for this "
+                            "search yet."
+                        )
+                        logger.warning("adzuna: %s", message)
+                        raise SourceQuotaError(message)
                     else:
                         logger.warning(
-                            "adzuna: %s stopping after page %d", blocked_reason, page - 1
+                            "adzuna: %s stopping after page %d", blocked_cause, page - 1
                         )
                         break
                 else:
@@ -388,19 +410,33 @@ class AdzunaAdapter(BaseAdapter):
                         retry_after = _rate_limit_retry_after(exc)
                         if retry_after is not None:
                             _start_cooldown(retry_after)
-                            message = (
+                            cause = (
                                 "Adzuna rate limit reached (HTTP 429); backing off "
-                                f"for {int(retry_after)}s before the next call. "
-                                "Cached listings are still served meanwhile."
+                                f"for {int(retry_after)}s before the next call."
                             )
-                            logger.warning("adzuna: %s", message)
                             stale = _cache_get(key, allow_stale=True)
                             if stale is not None:
                                 payload, fetched_iso = stale
                                 served_from_cache += 1
+                                logger.warning(
+                                    "adzuna: %s Cached listings are still "
+                                    "served meanwhile (dataAsOf=%s)",
+                                    cause, fetched_iso,
+                                )
                             elif page == 1:
-                                raise SourceBlockedError(message) from exc
+                                # Same honesty split as the budget path: no
+                                # cache here, so no promise of one.
+                                message = (
+                                    f"{cause} No cached listings for this "
+                                    "search yet."
+                                )
+                                logger.warning("adzuna: %s", message)
+                                raise SourceQuotaError(message) from exc
                             else:
+                                logger.warning(
+                                    "adzuna: %s stopping after page %d",
+                                    cause, page - 1,
+                                )
                                 break
                         elif page == 1:
                             logger.warning("adzuna: search failed on page 1: %s", exc)
