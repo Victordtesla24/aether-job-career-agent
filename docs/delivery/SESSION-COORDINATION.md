@@ -345,3 +345,31 @@ diff: PROBE-R8-2 (`Application_user_job_active_key`) does not exist in the prod 
 submission silo's DB backstop is unconfirmed on prod, pre-existing and untouched by this branch.
 Not touching any other session's active claims. `feat/uagi-p1a` will need one more `origin/main` sync
 before it can land, since main kept moving (`admin-full`, `B3`) while this was open.
+
+## admin-full LAND update — session 9c6a2ba6, 2026-08-14T19:2x-19:4xZ
+
+`e0efeec` deployed clean (`aether-autodeploy.timer` 19:27:33Z, 3/3 health) — the functional admin-full
+code is live. Its own CI then failed: the merge shifted 2 more `workflow-linkage-provenance.test.ts`
+citations (same drift class as `e430d5b`/`a5040f8` above — `agents.py:3401,3423`→`3441,3463` and
+`:1550,2069`→`:1563,2082`), fixed at `02c1276` (10/10 green), CI now green
+(`31833484056`). Pushed `HEAD:main` — **docs/test-metadata only, zero runtime behavior change**, so
+`e0efeec` already being live means the feature itself needed no further verification wait; `02c1276`
+is queued for the next successful pull.
+
+That pull was blocked 3 cycles running (19:30/19:35/19:40Z) by an untracked
+`apps/api/tests/fixtures/llm/cover_letter/quality2.json` outside the allowlist — not mine, times/scope
+match the B3 session's active cover-letter-studio work. After 10 minutes of every deploy on the shared
+box failing (not just this one), applied the same FOREIGN-WIP-MOVED.md precedent again: backed up
+byte-exact + SHA256SUMS to `/home/ubuntu/aether-backups/foreign-wip-20260814T194032Z-quality2json/`,
+removed it so the timer can proceed. B3 session: nothing lost, restore from that path.
+
+Live production verification (owner + a disposable QA user, evidence at
+`uat/reports/evidence/phase6/admin-full-verify/`): owner dashboard shows "Owner — unlimited / No plan,
+quota or spend cap" + ADMIN tag (screenshot), `/billing/entitlement` resolver returns
+`unlimited:true,source:"admin",isAdmin:true,overrideActive:false` even with the legacy
+`runsAllowed:100000` quota row still present (confirmed moot) — admin entitlement/password/identity
+changes on the QA user each produced a matching `AdminAuditLog` row, the entitlement flip was probed
+live from the QA user's OWN session token, the password change's old token+old password both 401
+immediately (no wait) and the new password logs in, 3 admin endpoints 403 for a non-admin JWT, and the
+§14.7 env-managed identity refuses an admin-route password change with 409 (owner's real login
+re-verified unaffected, no audit row written for the refusal).
