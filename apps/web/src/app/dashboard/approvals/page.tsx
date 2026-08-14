@@ -250,6 +250,13 @@ export default function ApprovalsPage() {
    * only authority on each transition). Deliberately does NOT auto-send
    * email_send approvals — bulk approval only records the decision; sending
    * still happens per-item so a mass action can never mass-email.
+   *
+   * U5: an `application_submit` approval behaves differently from
+   * `email_send` here and the confirm copy says so — approving it is enough;
+   * the backend sweep (apps/api/app/workers/apply_sweep.py) drives the actual
+   * transmission afterwards (email if the posting publishes one, otherwise a
+   * filled-out form on the employer's own site) with no further per-card
+   * click, unlike an `email_send` approval.
    */
   const bulkDecide = async (decision: "approve" | "reject") => {
     const targets = (approvals ?? []).filter((a) => a.status === "pending" && !isExpired(a));
@@ -259,7 +266,9 @@ export default function ApprovalsPage() {
       !window.confirm(
         `${verb} all ${targets.length} pending request${targets.length === 1 ? "" : "s"}? ` +
           (decision === "approve"
-            ? "Approved emails are NOT sent automatically — send each from its card."
+            ? "Approved emails are NOT sent automatically — send each from its card. " +
+              "Approved applications are queued for automatic submission (email or the " +
+              "employer's own form) with no further action from you."
             : "Rejected requests can be re-created by the agents on their next run."),
       )
     ) {

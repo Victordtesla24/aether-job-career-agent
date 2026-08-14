@@ -210,6 +210,111 @@ export function shortDate(iso: string): string {
   return d.toLocaleDateString("en-AU", { day: "numeric", month: "short" });
 }
 
+// ---- U5 — honest submission-state labels -----------------------------------
+//
+// U-PLAN "U5 MANDATE SHARPENED": every approved application reaches either
+// TRANSMITTED (email or web-form, evidence + timestamp/channel) or an HONEST
+// ACTIONABLE manual-step state — never a silent "prepared only". These pure
+// helpers turn the machine channel/reason codes the backend records
+// (apps/api/app/services/apply_channel_resolver.py,
+// apps/api/app/services/apply_executor.py `record_manual_step`) into the
+// human copy the card/detail-panel UI renders, so that copy lives in one
+// tested place instead of being duplicated inline in JSX.
+
+/** Machine channel code → human label (apply_channel_resolver.py CHANNELS). */
+const CHANNEL_LABELS: Readonly<Record<string, string>> = {
+  gmail: "email",
+  ashby: "Ashby application form",
+  greenhouse: "Greenhouse application form",
+  lever: "Lever application form",
+  smartrecruiters: "SmartRecruiters application form",
+  generic: "the employer's application form",
+  "seek-manual": "Seek (not automated)",
+  unknown: "an unresolved channel",
+};
+
+/** Human label for a transmission/apply channel code. Never fabricates a
+ *  specific channel for a missing/unknown code — falls back to a neutral
+ *  phrase (absent) or the raw code itself (unrecognised, so a future channel
+ *  this UI hasn't been taught about is still legible, not silently hidden). */
+export function channelLabel(channel: string | null | undefined): string {
+  if (!channel) return "the employer";
+  return CHANNEL_LABELS[channel] ?? channel;
+}
+
+/** Machine manual-step reason code → human headline
+ *  (apps/api/app/services/apply_executor.py callers of `record_manual_step`). */
+const MANUAL_STEP_LABELS: Readonly<Record<string, string>> = {
+  unknown_required_question: "A required question needs your answer",
+  captcha: "A CAPTCHA blocked automatic submission",
+  login_wall: "This posting requires logging in to apply",
+  no_automatable_channel: "No automatic submission path exists for this posting yet",
+  submit_control_not_found: "Aether filled the form but could not find its submit button",
+  no_confirmation: "Aether submitted the form but the site did not confirm it",
+};
+
+/** Human headline for a manual-step reason code. Unknown codes de-slugify
+ *  rather than fall back to a vague generic label, so a reason this UI has
+ *  not been taught about is still legible instead of hidden. */
+export function manualStepLabel(reason: string | null | undefined): string {
+  if (!reason) return "Manual step needed";
+  return (
+    MANUAL_STEP_LABELS[reason] ??
+    reason.replace(/_/g, " ").replace(/^./, (c) => c.toUpperCase())
+  );
+}
+
+/** The facts `describeTransmission` needs — a structural subset of
+ *  `TrackerApplication` so it stays usable from a bare `{app}`-shaped object
+ *  in tests without importing the full schema type. */
+export type TransmissionFacts = {
+  transmittedTo?: string | null;
+  transmittedAt?: string | null;
+  transmissionChannel?: string | null;
+  transmissionRef?: string | null;
+};
+
+export type TransmissionSummary = {
+  /** One-line honest statement of what happened and when. */
+  headline: string;
+  /** Set ONLY when `transmissionRef` is an http(s) URL — a real clickable
+   *  link. The site-apply path stores a server-side screenshot FILE PATH in
+   *  the same column (apps/api/app/services/apply_executor.py
+   *  `_record_site_transmission`), which is never rendered as a link: an
+   *  unopenable `file://` or bare path would be a broken promise, not evidence. */
+  evidenceUrl: string | null;
+  /** Non-link evidence note for the cases `evidenceUrl` can't cover. */
+  evidenceNote: string | null;
+};
+
+/**
+ * Honest one-line summary of a TRANSMITTED application, channel-aware.
+ *
+ * `transmissionChannel`/`transmissionRef` are shared columns written by BOTH
+ * transmission paths (apps/api/app/services/application_submission.py W-SUB
+ * email send, and U5b's `_record_site_transmission` for a filled ATS form) —
+ * `gmail` (or an absent channel, matching every pre-U5 row) means the email
+ * path; anything else means a web-form submission on that channel.
+ */
+export function describeTransmission(app: TransmissionFacts): TransmissionSummary {
+  const when = app.transmittedAt ? ` on ${shortDate(app.transmittedAt)}` : "";
+  const isEmail = !app.transmissionChannel || app.transmissionChannel === "gmail";
+  const ref = app.transmissionRef ?? null;
+  const looksLikeUrl = ref !== null && /^https?:\/\//i.test(ref);
+  if (isEmail) {
+    return {
+      headline: `Sent by Aether to ${app.transmittedTo ?? "the employer"}${when}`,
+      evidenceUrl: null,
+      evidenceNote: ref ? `message ${ref} (in your Gmail Sent folder)` : null,
+    };
+  }
+  return {
+    headline: `Submitted by Aether via ${channelLabel(app.transmissionChannel)}${when}`,
+    evidenceUrl: looksLikeUrl ? ref : null,
+    evidenceNote: !looksLikeUrl && ref ? "confirmation screenshot saved by Aether" : null,
+  };
+}
+
 function metaOf(app: TrackerApplication): TrackerMeta {
   return (app.answers ?? {}) as TrackerMeta;
 }

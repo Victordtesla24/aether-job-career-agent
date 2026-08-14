@@ -18,6 +18,7 @@ import { submitApplication } from "../../../lib/api/applications";
 import { createApproval, fetchApprovals, type Approval } from "../../../lib/api/approvals";
 import { apiRequest } from "../../../lib/api/client";
 import type { Job } from "../../../lib/api/jobs";
+import { downloadResume } from "../../../lib/api/resumes";
 import SankeyFlow from "../../../components/applications/SankeyFlow";
 import { useRealtimeResources } from "../../../hooks/useRealtime";
 import {
@@ -41,8 +42,10 @@ import {
   STAGE_TO_APP_STATUS,
   STAGE_TO_JOB_STATUS,
   buildStages,
+  describeTransmission,
   fitClass,
   initials,
+  manualStepLabel,
   moveTargetsFor,
   shortDate,
   timeAgo,
@@ -236,32 +239,34 @@ function MoveMenu({
 }
 
 /**
- * W-SUB — says whether Aether actually TRANSMITTED this application.
+ * W-SUB / U5 — says whether Aether actually TRANSMITTED this application, or
+ * ran into an honest, actionable obstacle trying to.
  *
  * Ground truth this exists to correct: `Application.status = "submitted"`
  * records that the application was marked submitted, not that anything was
  * sent. Before W-SUB nothing in the product could send an application at all,
  * yet 86 production rows sat in the Submitted column with no qualification —
- * the product's biggest false claim.
+ * the product's biggest false claim. U5 added a second real transmission path
+ * (a filled-out web form on the employer's own ATS, not just email) and the
+ * NO-PREPARED-ONLY invariant: an approved application that could not be sent
+ * must land in a visible manual-step state instead of sitting silently
+ * "prepared" (U-PLAN "U5 MANDATE SHARPENED").
  *
  * History is not rewritten and the card is not moved. The badge simply states
- * which happened. Renders nothing when the API did not supply the field (an
- * older build), because inventing either answer is exactly the failure mode
- * being fixed.
+ * which of the three happened. Any field this component reads degrades to
+ * "don't claim it" when the API omits it (an older build, or — as of the
+ * backend contract this shipped against — the manual-step columns not yet
+ * selected by GET /applications), because inventing an answer is exactly the
+ * failure mode being fixed.
  */
 function SubmissionBadge({ app }: { app?: TrackerApplication }) {
-  if (!app || app.transmitted == null) return null;
+  if (!app) return null;
   if (app.transmitted) {
+    const t = describeTransmission(app);
     return (
       <span
         data-testid="submission-transmitted-badge"
-        title={
-          app.transmittedTo
-            ? `Emailed to ${app.transmittedTo}${
-                app.transmittedAt ? ` on ${shortDate(app.transmittedAt)}` : ""
-              }. Check your Gmail Sent folder for the copy.`
-            : "Sent by Aether."
-        }
+        title={`${t.headline}${t.evidenceNote ? ` · ${t.evidenceNote}` : ""}.`}
         className="mt-2 inline-flex items-center gap-1 rounded-md bg-aether-green/15 px-2 py-0.5 text-[10px] text-aether-green"
       >
         <i className="fa-solid fa-paper-plane text-[9px]" aria-hidden="true" />
@@ -269,6 +274,23 @@ function SubmissionBadge({ app }: { app?: TrackerApplication }) {
       </span>
     );
   }
+  if (app.manualStepReason) {
+    return (
+      <span
+        data-testid="submission-manual-step-badge"
+        title={
+          app.manualStepDetail
+            ? `${manualStepLabel(app.manualStepReason)}: "${app.manualStepDetail}"`
+            : manualStepLabel(app.manualStepReason)
+        }
+        className="mt-2 inline-flex items-center gap-1 rounded-md bg-aether-coral/15 px-2 py-0.5 text-[10px] text-aether-coral"
+      >
+        <i className="fa-solid fa-triangle-exclamation text-[9px]" aria-hidden="true" />
+        Manual step needed
+      </span>
+    );
+  }
+  if (app.transmitted == null) return null;
   return (
     <span
       data-testid="submission-not-transmitted-badge"
@@ -276,7 +298,7 @@ function SubmissionBadge({ app }: { app?: TrackerApplication }) {
         "Aether did not send this application — it is recorded as prepared. " +
         (app.autoSubmittable
           ? "Approve it in Approvals to email it to the employer."
-          : "This posting publishes no application email address, so it must be submitted on the employer's site.")
+          : "This posting publishes no application email address. Approve it in Approvals and Aether will attempt to submit it automatically through the employer's own application form.")
       }
       className="mt-2 inline-flex items-center gap-1 rounded-md bg-aether-yellow/15 px-2 py-0.5 text-[10px] text-aether-yellow"
     >
@@ -316,6 +338,29 @@ function CardMeta({
     case "tailoring":
       return <p className="mono mt-2 text-[10px] text-aether-coral">tailoring resume…</p>;
     case "ready":
+      // U5: a manual-step application WAS approved and Aether DID attempt it —
+      // its ApprovalRequest.status is 'approved', not 'pending', so it never
+      // matches `hasPendingApproval` below. Without this branch first, the
+      // card would show the misleading "no pending approval / Request
+      // approval" pair, implying nothing had happened yet when Aether ran
+      // into a real, honest obstacle. Checked before the pending-approval
+      // branches so it always wins for a card in this state.
+      if (card.app?.manualStepReason) {
+        return (
+          <span
+            data-testid="ready-manual-step-badge"
+            title={
+              card.app.manualStepDetail
+                ? `${manualStepLabel(card.app.manualStepReason)}: "${card.app.manualStepDetail}"`
+                : manualStepLabel(card.app.manualStepReason)
+            }
+            className="mt-2 inline-flex items-center gap-1 rounded-md bg-aether-coral/15 px-2 py-0.5 text-[10px] text-aether-coral"
+          >
+            <i className="fa-solid fa-triangle-exclamation text-[9px]" aria-hidden="true" />
+            {manualStepLabel(card.app.manualStepReason)}
+          </span>
+        );
+      }
       // P0-3 deadlock fix: the old static "needs approval" badge lied when the
       // approval had expired/been purged (48h window) — the draft then had NO
       // route back into the queue. Show the badge only for a LIVE pending
@@ -876,9 +921,11 @@ export default function ApplicationsPage() {
               <i className="fa-solid fa-xmark" aria-hidden="true" />
             </button>
           </div>
-          {/* W-SUB: the detail panel states, in words, whether Aether
+          {/* W-SUB / U5: the detail panel states, in words, whether Aether
               actually transmitted this application — the claim the "status:
-              submitted" line above cannot make on its own. */}
+              submitted" line above cannot make on its own — and, per the
+              NO-PREPARED-ONLY invariant, the exact honest obstacle when it
+              tried and could not. */}
           {detail.transmitted != null ? (
             <p
               data-testid="application-transmission-line"
@@ -887,17 +934,78 @@ export default function ApplicationsPage() {
               }`}
             >
               {detail.transmitted
-                ? `Sent by Aether to ${detail.transmittedTo ?? "the employer"}${
-                    detail.transmittedAt ? ` on ${shortDate(detail.transmittedAt)}` : ""
-                  }${
-                    detail.transmissionRef
-                      ? ` · message ${detail.transmissionRef} (in your Gmail Sent folder)`
-                      : ""
-                  }`
-                : detail.autoSubmittable
-                  ? "Not sent by Aether — prepared only. Approve it in Approvals to email it to the employer."
-                  : "Not sent by Aether — prepared only. This posting publishes no application email address, so it must be submitted on the employer's own site."}
+                ? describeTransmission(detail).headline +
+                  (describeTransmission(detail).evidenceNote
+                    ? ` · ${describeTransmission(detail).evidenceNote}`
+                    : "")
+                : detail.manualStepReason
+                  ? // The manual-step block below carries the full detail —
+                    // this line just states the top-level fact plainly.
+                    "Not sent by Aether — Aether tried and ran into an obstacle. See below."
+                  : detail.autoSubmittable
+                    ? "Not sent by Aether — prepared only. Approve it in Approvals to email it to the employer."
+                    : "Not sent by Aether — prepared only. This posting publishes no application email address. Approve it in Approvals and Aether will attempt to submit it automatically through the employer's own application form."}
             </p>
+          ) : null}
+          {detail.transmitted && describeTransmission(detail).evidenceUrl ? (
+            <a
+              href={describeTransmission(detail).evidenceUrl ?? undefined}
+              target="_blank"
+              rel="noopener noreferrer"
+              data-testid="application-evidence-link"
+              className="mt-1 inline-flex items-center gap-1 text-xs text-aether-green underline decoration-dotted"
+            >
+              View submission evidence ↗
+            </a>
+          ) : null}
+          {/* U5 NO-PREPARED-ONLY: the honest actionable state — the employer's
+              own verbatim question/obstacle, never a paraphrase, plus a
+              one-click assist package (the same tailored artifacts Aether
+              already prepared) so the user can finish it themselves. */}
+          {!detail.transmitted && detail.manualStepReason ? (
+            <div
+              data-testid="application-manual-step-block"
+              className="mt-3 rounded-xl border border-aether-coral/30 bg-aether-coral/10 p-3"
+            >
+              <p className="flex items-center gap-1.5 text-xs font-semibold text-aether-coral">
+                <i className="fa-solid fa-triangle-exclamation text-[10px]" aria-hidden="true" />
+                {manualStepLabel(detail.manualStepReason)}
+              </p>
+              {detail.manualStepDetail ? (
+                <p
+                  data-testid="application-manual-step-detail"
+                  className="mt-1.5 text-xs italic leading-relaxed text-aether-muted"
+                >
+                  &ldquo;{detail.manualStepDetail}&rdquo;
+                </p>
+              ) : null}
+              {detail.manualStepAt ? (
+                <p className="mt-1 text-[10px] text-aether-muted-dim">
+                  Aether attempted this {shortDate(detail.manualStepAt)}
+                </p>
+              ) : null}
+              <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  data-testid="manual-step-download-resume-btn"
+                  onClick={() => void downloadResume(detail.resumeId)}
+                  className="rounded-lg border border-white/15 px-2.5 py-1.5 text-xs font-medium text-aether-muted transition hover:border-white/30 hover:text-white"
+                >
+                  <i className="fa-solid fa-download mr-1.5 text-[10px]" aria-hidden="true" />
+                  Download tailored résumé
+                </button>
+                {detail.applyUrl && !detail.applyUrl.includes("demo.aether.dev") ? (
+                  <a
+                    href={detail.applyUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="rounded-lg border border-white/15 px-2.5 py-1.5 text-xs font-medium text-aether-muted transition hover:border-white/30 hover:text-white"
+                  >
+                    Open posting to finish it yourself ↗
+                  </a>
+                ) : null}
+              </div>
+            </div>
           ) : null}
           <div className="mt-3 flex flex-wrap items-center gap-3">
             {detail.applyUrl && !detail.applyUrl.includes("demo.aether.dev") ? (
@@ -1211,6 +1319,12 @@ export default function ApplicationsPage() {
                   </div>
                   <h3 className="mt-2.5 text-xs font-semibold leading-tight">{a.jobTitle}</h3>
                   <p className="text-[11px] text-aether-muted-dim">{a.company}</p>
+                  {/* U5: "applied" above only means the job moved into the
+                      applied bucket — it does NOT say Aether transmitted
+                      anything. This history view is exactly where that
+                      distinction matters most, so the same honest badge the
+                      board's Submitted column uses renders here too. */}
+                  <SubmissionBadge app={a} />
                   {a.applyUrl && !a.applyUrl.includes("demo.aether.dev") ? (
                     <a
                       href={a.applyUrl}

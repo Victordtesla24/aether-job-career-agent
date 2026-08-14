@@ -35,6 +35,22 @@ export const ApplicationSchema = z.object({
   autoSubmittable: z.boolean().nullish(),
   applyEmail: z.string().nullish(),
   applyEmailSource: z.string().nullish(),
+  // U5 — the honest "or an actionable manual step" half of the NO-PREPARED-ONLY
+  // invariant (apps/api/app/services/apply_executor.py record_manual_step /
+  // apply_channel_resolver.py). Additive nullable DB columns
+  // (applyChannel/manualStepReason/manualStepDetail/manualStepAt); NOT YET
+  // selected by GET /applications as of the U5a/U5b backend contract this was
+  // built against (apps/api/app/routers/applications.py `_COLUMNS` /
+  // apps/api/app/services/application_submission.py `submission_view` — read,
+  // never modified, from this FE-only slice). Declared here as nullish so the
+  // schema parses successfully either way: absent today reads as "unknown,
+  // don't claim a manual step" (the same honest-degrade rule `transmitted`
+  // already uses below), and the UI below picks the fields up the moment the
+  // backend adds them to the SELECT — no second FE deploy required.
+  applyChannel: z.string().nullish(),
+  manualStepReason: z.string().nullish(),
+  manualStepDetail: z.string().nullish(),
+  manualStepAt: z.string().nullish(),
 });
 
 export type Application = z.infer<typeof ApplicationSchema>;
