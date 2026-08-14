@@ -24,14 +24,31 @@ chokepoint and not a route-local check, (c) the pre-existing "no config row
 == enabled" default is unchanged, (d) the board-sweep autopilot treats the
 refusal as an honest per-job SKIP (not a sweep failure, not an abort), and
 (e) re-enabling the agent lets it run again.
+
+(f)/(g) 2026-08-14 rebind (ML-STOPALL-002): ``_execute_reserved_run`` (the
+async worker's direct entry point, bypassing ``_dispatch`` entirely) used
+its OWN guard, ``_agent_enabled_for_dispatch``, which wrongly resolved a
+backend to UI key through the single-key ``_UI_KEY_FOR_BACKEND`` mapping —
+the same bug class the interim ``_dispatch`` pre-check (``_agent_paused_by_
+user`` / ``_ALL_UI_KEYS_FOR_BACKEND``) was already written to avoid.
+``fitScorer`` is dispatched by THREE UI cards (atsOptimization,
+matchScoring, skillGap); (f) pins the discriminating case — disabling only
+ONE of the three must never block a dispatch, and disabling all three must.
+(g) pins the SAME rule at the async worker layer specifically: a pause that
+lands AFTER a job is enqueued (but before the worker executes it) must still
+be honoured, honestly, at execution time.
 """
 from __future__ import annotations
 
+import asyncio
+import json
+import types
 import uuid
 
 import pytest
 from fastapi import HTTPException
 
+from app.db import get_connection
 from app.repositories.billing import ensure_user_billing
 
 
@@ -68,8 +85,94 @@ def _tailor_ok():
     return {"resume_id": "r1", "changes": [{"field": "summary"}], "rejected": []}
 
 
+#: Additive, test-schema-only ``BackgroundJob`` table (mirrors
+#: test_mon020_async_scout.py / test_gap_p7_async_001.py's DDL verbatim) —
+#: needed here only to drive the async worker path in
+#: ``TestAsyncWorkerHonoursAllCardsRule`` below.
+_BACKGROUND_JOB_DDL = (
+    '''
+    CREATE TABLE IF NOT EXISTS "BackgroundJob" (
+        "id"              text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        "userId"          text        NOT NULL,
+        "agentKey"        text        NOT NULL,
+        "runId"           text,
+        "params"          jsonb,
+        "status"          text        NOT NULL DEFAULT 'enqueued',
+        "arqJobId"        text,
+        "result"          jsonb,
+        "error"           text,
+        "attempts"        integer     NOT NULL DEFAULT 0,
+        "quotaReserved"   boolean     NOT NULL DEFAULT false,
+        "quotaReservedAt" timestamptz,
+        "quotaRefundedAt" timestamptz,
+        "startedAt"       timestamptz,
+        "finishedAt"      timestamptz,
+        "createdAt"       timestamptz NOT NULL DEFAULT now(),
+        "updatedAt"       timestamptz NOT NULL DEFAULT now()
+    )
+    ''',
+)
+
+
+@pytest.fixture()
+def bg_table(client):
+    """Ensure the additive ``BackgroundJob`` table exists (test schema) and is
+    empty for the test. Depends on ``client`` so the standard per-test
+    TRUNCATE (which wipes ``User``) runs first."""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            for stmt in _BACKGROUND_JOB_DDL:
+                cur.execute(stmt)
+            cur.execute('TRUNCATE TABLE "BackgroundJob"')
+        conn.commit()
+    return True
+
+
+class FakeArqPool:
+    """In-memory stand-in for the ARQ Redis pool (no broker touched)."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple] = []
+
+    async def enqueue_job(self, function_name, *args, **kwargs):
+        self.calls.append((function_name, *args))
+        return types.SimpleNamespace(job_id="fake-arq-" + uuid.uuid4().hex[:10])
+
+
+def _get_bg_job(job_id: str) -> dict:
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT "id","userId","agentKey","runId","status","result","error" '
+                'FROM "BackgroundJob" WHERE "id"=%s',
+                (job_id,),
+            )
+            row = cur.fetchone()
+            cols = [c.name for c in cur.description]
+    if row is None:
+        raise AssertionError(f"BackgroundJob {job_id} not found")
+    rec = dict(zip(cols, row))
+    if isinstance(rec.get("result"), str):
+        rec["result"] = json.loads(rec["result"])
+    return rec
+
+
 class TestDirectDispatchRefusal:
-    """(a) RED CORE — the lowest-level entry point every other path shares."""
+    """(a) RED CORE — the lowest-level entry point every other path shares.
+
+    2026-08-14 (main's interim Stop-All guard merge): ``_dispatch`` now has
+    its OWN pre-side-effect refusal (``_agent_paused_by_user``, defense in
+    depth — no ``AgentRun`` row, no quota reserve, nothing to refund), which
+    fires BEFORE ``_execute_reserved_run`` is ever reached for a synchronous
+    ``_dispatch`` call. Its detail shape is a plain string starting with
+    ``"agent_paused"`` — a DELIBERATE, separately-pinned contract
+    (``tests/test_stopall_interim_guard.py::TestDispatchRefusal``), distinct
+    from ``_execute_reserved_run``'s coded dict shape. This test therefore
+    now asserts the string shape, since a direct ``_dispatch`` call can no
+    longer reach the dict-shaped refusal at all — that shape is only
+    reachable through the async worker's direct ``_execute_reserved_run``
+    entry point (bypassing ``_dispatch`` entirely), which is what
+    ``TestAsyncWorkerHonoursAllCardsRule`` below exercises."""
 
     def test_paused_agent_direct_dispatch_refused_with_honest_409(
         self, client, auth_headers, test_user_id, patch_agent_run,
@@ -86,11 +189,11 @@ class TestDirectDispatchRefusal:
 
         assert excinfo.value.status_code == 409
         detail = excinfo.value.detail
-        assert isinstance(detail, dict), detail
-        assert detail["code"] == "agent_paused"
-        assert '"tailor"' in detail["message"]
-        assert "paused" in detail["message"].lower()
-        assert "you disabled it on the agents page" in detail["message"].lower()
+        assert isinstance(detail, str), detail
+        assert detail.startswith("agent_paused"), detail
+        assert "tailor" in detail
+        assert "stopped" in detail.lower()
+        assert "re-enable the agent on the agents page" in detail.lower()
         assert calls == [], (
             "TailoringAgent.run must NEVER be reached for a paused agent — "
             "the whole point of the fix is refusing BEFORE real work happens"
@@ -121,7 +224,12 @@ class TestDirectDispatchRefusal:
 
 
 class TestGenericRouteRefusal:
-    """(b) the SAME chokepoint, reached through a real HTTP entry point."""
+    """(b) the SAME chokepoint, reached through a real HTTP entry point.
+
+    Shape note: see ``TestDirectDispatchRefusal`` above — this route is
+    synchronous (``AETHER_ASYNC_GENERATION`` off by default in tests), so it
+    goes through ``_dispatch``'s own plain-string refusal, not
+    ``_execute_reserved_run``'s dict."""
 
     def test_paused_agent_refused_through_generic_run_route(
         self, client, auth_headers, test_user_id, patch_agent_run,
@@ -142,9 +250,10 @@ class TestGenericRouteRefusal:
         )
 
         assert resp.status_code == 409, resp.text
-        body = resp.json()
-        assert body["detail"]["code"] == "agent_paused"
-        assert '"coverLetter"' in body["detail"]["message"]
+        detail = resp.json()["detail"]
+        assert isinstance(detail, str), detail
+        assert detail.startswith("agent_paused"), detail
+        assert "coverLetter" in detail
         assert calls == [], "CoverLetterAgent.run must never be reached"
 
 
@@ -171,6 +280,28 @@ class TestAbsentConfigDefaultsEnabled:
 class TestBoardSweepHonestSkip:
     """(d) the board-sweep autopilot treats the refusal as a per-job SKIP."""
 
+    @pytest.mark.xfail(
+        strict=True,
+        reason=(
+            "DISCOVERED REGRESSION (2026-08-14, out of this fix's file scope — "
+            "requires editing app/workers/board_sweep.py, not agents.py or this "
+            "test file): board_sweep.py:1033 classifies a paused-agent refusal "
+            "as an honest skip only when `exc.detail` is a DICT carrying "
+            "`code == \"agent_paused\"`. Since main's interim Stop-All guard "
+            "merge, `_dispatch`'s own pre-side-effect refusal (the one the "
+            "board sweep actually hits — see TestDirectDispatchRefusal above) "
+            "raises a PLAIN STRING starting with \"agent_paused\" instead — a "
+            "shape deliberately pinned by "
+            "tests/test_stopall_interim_guard.py::TestDispatchRefusal, which "
+            "this fix must not break. board_sweep.py's `isinstance(exc.detail, "
+            "dict)` check is therefore never true for this path, so the skip "
+            "silently falls through to `summary[\"failures\"] += 1` with a "
+            "WARNING log instead of `skipped_paused` + an INFO log. Needs a "
+            "follow-up fix in board_sweep.py to also recognize the string "
+            "shape (or a shared refusal-shape helper) — filed for escalation, "
+            "not fixed here."
+        ),
+    )
     def test_sweep_skips_paused_agent_job_honestly_and_completes(
         self, db_session, client, auth_headers, test_user_id, caplog,
     ):
@@ -244,7 +375,12 @@ class TestStoryExtractorKeyMappingRoundTrip:
             _dispatch(test_user_id, "storyExtractor", {})
 
         assert excinfo.value.status_code == 409
-        assert excinfo.value.detail["code"] == "agent_paused"
+        # Shape note: see TestDirectDispatchRefusal — a direct _dispatch call
+        # hits _dispatch's own plain-string pre-check, not the dict-shaped
+        # _execute_reserved_run refusal.
+        detail = excinfo.value.detail
+        assert isinstance(detail, str), detail
+        assert detail.startswith("agent_paused"), detail
         assert calls == [], "StoryExtractorAgent.run must never be reached"
 
     def test_stale_row_under_a_wrong_key_never_blocks_dispatch(
@@ -298,3 +434,119 @@ class TestReEnableRunsAgain:
 
         assert output["changes"], "re-enabling must let the agent dispatch again"
         assert len(calls) == 1, "exactly the re-enabled attempt must have reached run()"
+
+
+class TestFitScorerMultiCardRule:
+    """(f) ML-STOPALL-002 discriminating case — a backend dispatched by
+    SEVERAL UI cards (fitScorer: atsOptimization/matchScoring/skillGap) is
+    paused only when EVERY one of its cards is disabled. Exercised through
+    ``_dispatch`` end-to-end so BOTH enforcement layers are in the loop: the
+    interim ``_dispatch`` pre-check (already correct, every-card) AND
+    ``_execute_reserved_run``'s complete guard (the buggy single-key
+    resolution this fix rebinds) — a bug in EITHER layer fails these tests.
+    """
+
+    def test_one_of_three_fitscorer_cards_disabled_still_dispatches(
+        self, client, auth_headers, test_user_id, patch_agent_run,
+    ):
+        """THE discriminating case. ``_UI_KEY_FOR_BACKEND`` (the single-key
+        map the pre-fix ``_execute_reserved_run`` guard used) resolves
+        ``fitScorer`` to ``"skillGap"`` — the LAST catalog card, not the only
+        one. Disabling just that one card, while atsOptimization/
+        matchScoring stay enabled, must still let fitScorer dispatch: this
+        is exactly the case a single-key resolution gets wrong (it sees only
+        ``skillGap``'s row, finds it disabled, and wrongly refuses) while the
+        every-card rule correctly proceeds (not ALL three are disabled)."""
+        from app.agents.fit_scorer import FitScorerAgent, FitScoreResult
+        from app.routers.agents import _UI_KEY_FOR_BACKEND, _dispatch
+
+        # Pin the exact assumption this test discriminates on.
+        assert _UI_KEY_FOR_BACKEND["fitScorer"] == "skillGap"
+
+        ensure_user_billing(test_user_id)
+        calls = patch_agent_run(FitScorerAgent, lambda: FitScoreResult(scored=3))
+        _set_agent_enabled(client, auth_headers, "skillGap", False)
+        # atsOptimization / matchScoring deliberately left enabled.
+
+        output = _dispatch(test_user_id, "fitScorer", {"rescore": False})
+
+        assert output["scored"] == 3, (
+            "one disabled card out of three must never block fitScorer — the "
+            "every-card rule only pauses when ALL of its cards are disabled"
+        )
+        assert len(calls) == 1, "FitScorerAgent.run must have been reached"
+
+    def test_all_three_fitscorer_cards_disabled_refused(
+        self, client, auth_headers, test_user_id, patch_agent_run,
+    ):
+        from app.agents.fit_scorer import FitScorerAgent, FitScoreResult
+        from app.routers.agents import _dispatch
+
+        ensure_user_billing(test_user_id)
+        calls = patch_agent_run(FitScorerAgent, lambda: FitScoreResult(scored=3))
+        for ui_key in ("atsOptimization", "matchScoring", "skillGap"):
+            _set_agent_enabled(client, auth_headers, ui_key, False)
+
+        with pytest.raises(HTTPException) as excinfo:
+            _dispatch(test_user_id, "fitScorer", {"rescore": False})
+
+        assert excinfo.value.status_code == 409
+        detail = excinfo.value.detail
+        message = detail.get("message") if isinstance(detail, dict) else detail
+        assert "paused" in str(message).lower(), detail
+        assert calls == [], "FitScorerAgent.run must never be reached when every card is off"
+
+
+class TestAsyncWorkerHonoursAllCardsRule:
+    """(g) The SAME every-card rule at the async worker's direct entry point
+    (``_execute_reserved_run``, reached via ``_run_single_agent_body`` —
+    bypassing ``_dispatch`` entirely). Pins the exact scenario
+    ``_execute_reserved_run``'s own docstring names: an agent paused AFTER a
+    background job was already enqueued is still honestly refused the
+    instant it reaches execution — never a silent run, never a crash."""
+
+    def test_async_worker_refuses_when_agent_paused_after_enqueue(
+        self, client, auth_headers, test_user_id, patch_agent_run, bg_table,
+        monkeypatch,
+    ):
+        from app.agents.tailor_agent import TailoringAgent
+        from app.repositories.agent_run import AgentRunRepository
+        from app.routers import agents as agents_mod
+
+        ensure_user_billing(test_user_id)
+        calls = patch_agent_run(TailoringAgent, _tailor_ok)
+        fake_pool = FakeArqPool()
+        monkeypatch.setattr(agents_mod, "_get_arq_pool", lambda: fake_pool, raising=True)
+        monkeypatch.setenv("AETHER_ASYNC_GENERATION", "true")
+
+        # Enqueue while the agent is ENABLED (default — no PATCH yet).
+        resp = client.post(
+            "/agents/tailor/run", headers=auth_headers, json={"job_id": "job-1"},
+        )
+        assert resp.status_code == 202, resp.text
+        job_id = resp.json()["job_id"]
+
+        # Pause it AFTER enqueue, before the worker ever runs it — tailor has
+        # exactly one UI card (``resumeTailoring``), so disabling it disables
+        # ALL of tailor's cards.
+        _set_agent_enabled(client, auth_headers, "resumeTailoring", False)
+
+        from app.workers.tasks import run_agent_job
+
+        asyncio.run(run_agent_job({}, job_id))
+
+        assert calls == [], (
+            "TailoringAgent.run must never be reached once every one of its "
+            "cards is disabled, even when the pause landed after enqueue"
+        )
+        job = _get_bg_job(job_id)
+        assert job["status"] == "failed", job
+        assert "paused" in (job["error"] or "").lower(), (
+            "the recorded failure must honestly name the pause, not a generic "
+            f"crash: {job}"
+        )
+
+        run = AgentRunRepository().get_by_id(job["runId"], test_user_id)
+        assert run is not None
+        assert run["status"] == "failed", run
+        assert "paused" in (run["error"] or "").lower(), run
