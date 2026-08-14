@@ -38,12 +38,32 @@ written directly into the test database by the test itself.
 from __future__ import annotations
 
 import ast
+import importlib.util
 import json
 import re
+import sys
 import uuid
 from pathlib import Path
 
 import pytest
+
+#: The ops one-shot lives outside the ``app`` package (repo ``scripts/``), so it
+#: has to be loaded by path rather than imported. Exercised end-to-end by
+#: :class:`TestBackfillOpsScript`.
+_BACKFILL_SCRIPT = (
+    Path(__file__).resolve().parents[3] / "scripts" / "backfill_submission_truth.py"
+)
+
+
+def _load_backfill_script():
+    """Import ``scripts/backfill_submission_truth.py`` as a module, by path."""
+    spec = importlib.util.spec_from_file_location(
+        "u5d_backfill_submission_truth", _BACKFILL_SCRIPT
+    )
+    assert spec and spec.loader, f"no import spec for {_BACKFILL_SCRIPT}"
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def _uid() -> str:
@@ -494,6 +514,125 @@ class TestFalsePositiveBackfill:
         assert row["submissionState"] == "not_transmitted"
         assert row["submissionTruthState"] == "recorded_transmission_unverified"
         assert "unverified" in row["submissionTruthNote"].lower()
+
+
+class TestBackfillOpsScript:
+    """The ops one-shot ITSELF — argument parsing, both branches, the JSON it
+    prints — executed end-to-end against the TEST database.
+
+    U5d shipped ``scripts/backfill_submission_truth.py`` with a docstring
+    promising *"DRY RUN IS THE DEFAULT — it only ever runs SELECTs"*, while
+    every dry-run entry point reached ``_ensure_columns()`` ->
+    ``ALTER TABLE "Application" ADD COLUMN IF NOT EXISTS …``. The production
+    census (``BACKFILL-PROD-CENSUS.json``) recorded
+    ``submissionTruthColumnsPresent: 0``, so that dry run would have issued the
+    DDL on the live database — the one thing its safety claim ruled out. No
+    test imported the script at all, so nothing caught it.
+    """
+
+    def _seed_false_positive(self, db_session, user_id: str) -> str:
+        """One claimed-submitted row with no transmission evidence behind it."""
+        job_id = _seed_job(db_session, user_id)
+        resume_id = _seed_resume(db_session, user_id, source_job_id=job_id)
+        return _seed_application(
+            db_session, user_id, job_id, resume_id, status="submitted"
+        )
+
+    def test_dry_run_reports_the_census_and_writes_nothing(
+        self, db_session, user_id, monkeypatch, capsys
+    ):
+        from app.db import ensure_application_submission_truth_columns
+
+        script = _load_backfill_script()
+        app_id = self._seed_false_positive(db_session, user_id)
+
+        monkeypatch.setattr(sys, "argv", ["backfill", "--user-id", user_id])
+        assert script.main() == 0
+
+        report = json.loads(capsys.readouterr().out)
+        assert report["mode"] == "dry-run"
+        assert report["scope"] == user_id
+        assert report["state"] == "recorded_transmission_unverified"
+        assert report["matching_before"] == 1
+        assert report["sample_ids"] == [app_id]
+        assert "reclassified" not in report, "a dry run may not report a write"
+
+        # The row is untouched: same status, still unstamped. (The test does
+        # its own DDL here — the script's dry run must not have done any.)
+        ensure_application_submission_truth_columns()
+        with db_session.cursor() as cur:
+            cur.execute(
+                'SELECT "status","submissionTruthState","submissionTruthAt" '
+                'FROM "Application" WHERE "id" = %s',
+                (app_id,),
+            )
+            assert cur.fetchone() == ("submitted", None, None)
+
+    def test_dry_run_never_reaches_the_ddl_helpers(
+        self, db_session, user_id, monkeypatch, capsys
+    ):
+        """The docstring's promise, pinned at the call chain.
+
+        Asserting "no row changed" cannot catch this: ``ADD COLUMN IF NOT
+        EXISTS`` changes no row. The only honest check is that the default path
+        never reaches the ensure-columns helpers at all.
+        """
+        from app.services import submission_truth
+
+        script = _load_backfill_script()
+        self._seed_false_positive(db_session, user_id)
+
+        def _forbidden() -> None:
+            raise AssertionError("dry run issued DDL — it claims SELECTs only")
+
+        monkeypatch.setattr(
+            submission_truth, "ensure_application_transmission_columns", _forbidden
+        )
+        monkeypatch.setattr(
+            submission_truth, "ensure_application_submission_truth_columns", _forbidden
+        )
+        monkeypatch.setattr(sys, "argv", ["backfill", "--user-id", user_id])
+
+        assert script.main() == 0
+        assert json.loads(capsys.readouterr().out)["matching_before"] == 1
+
+    def test_apply_reclassifies_and_reports_the_real_rowcount(
+        self, db_session, user_id, monkeypatch, capsys
+    ):
+        from app.services.submission_truth import STATE_UNVERIFIED
+
+        script = _load_backfill_script()
+        app_id = self._seed_false_positive(db_session, user_id)
+
+        monkeypatch.setattr(sys, "argv", ["backfill", "--apply", "--user-id", user_id])
+        assert script.main() == 0
+
+        report = json.loads(capsys.readouterr().out)
+        assert report["mode"] == "apply"
+        assert report["matching_before"] == 1
+        assert report["reclassified"] == 1
+        assert report["remaining"] == 0
+
+        with db_session.cursor() as cur:
+            cur.execute(
+                'SELECT "status","submissionTruthState" FROM "Application" '
+                'WHERE "id" = %s',
+                (app_id,),
+            )
+            # The user's own tracker status survives; the truth is ADDED beside it.
+            assert cur.fetchone() == ("submitted", STATE_UNVERIFIED)
+
+    def test_missing_database_url_is_refused_not_guessed(
+        self, monkeypatch, capsys
+    ):
+        script = _load_backfill_script()
+        monkeypatch.delenv("DATABASE_URL", raising=False)
+        monkeypatch.setattr(sys, "argv", ["backfill"])
+
+        assert script.main() == 2, "no DSN must be a refusal, never a default"
+        captured = capsys.readouterr()
+        assert "DATABASE_URL" in captured.err
+        assert captured.out == "", "a refused run may not print a census"
 
 
 # ---------------------------------------------------------------------------

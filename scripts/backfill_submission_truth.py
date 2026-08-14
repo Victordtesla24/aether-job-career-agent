@@ -17,13 +17,32 @@ tracker data), does not delete a row, does not touch status-event history, and
 cannot write a positive claim: no code path here can set ``transmittedAt``.
 Idempotent — a second run reclassifies 0.
 
-USAGE (DRY RUN IS THE DEFAULT — it only ever runs SELECTs):
+USAGE (DRY RUN IS THE DEFAULT):
 
     cd apps/api && python3 ../../scripts/backfill_submission_truth.py
     cd apps/api && python3 ../../scripts/backfill_submission_truth.py --apply
 
+WHAT EACH MODE TOUCHES — stated precisely, because this gets pointed at
+production:
+
+* **dry run (default): SELECTs only. No DDL, no row writes.** It reads
+  ``information_schema`` to see which of the additive columns
+  (``transmittedAt``, ``submissionTruthState``) exist and drops the matching
+  conjunct for any that do not — an absent additive column is logically NULL
+  for every row, so the census is exact either way. It therefore reports a
+  true count against a database where the columns have never been created,
+  WITHOUT creating them. Pinned by
+  ``TestBackfillOpsScript::test_dry_run_never_reaches_the_ddl_helpers``.
+* **``--apply``: additive DDL, then one UPDATE.** It first ensures the two
+  columns exist (``ALTER TABLE "Application" ADD COLUMN IF NOT EXISTS`` —
+  additive, idempotent, no DROP, no DEFAULT rewrite, per ADR-TR-1), then runs
+  the guarded UPDATE described above. Probed on production 2026-08-14T09:00Z,
+  ``submissionTruthState``/``submissionTruthAt`` do NOT exist there yet, so the
+  first ``--apply`` is what creates them.
+
 ``DATABASE_URL`` comes from the environment (``os.environ`` only — never a
-literal in source). ``--user-id`` scopes the pass to one owner.
+literal in source); an unset ``DATABASE_URL`` is refused, never defaulted.
+``--user-id`` scopes the pass to one owner.
 """
 from __future__ import annotations
 
@@ -63,14 +82,19 @@ def main() -> int:
         unverified_submission_ids,
     )
 
-    before = count_unverified_submissions(args.user_id)
+    # A dry run must not reach the ALTER TABLE helpers at all — that is the
+    # promise this script makes to whoever points it at production.
+    read_only = not args.apply
+    before = count_unverified_submissions(args.user_id, read_only=read_only)
     report = {
         "mode": "apply" if args.apply else "dry-run",
         "scope": args.user_id or "all-users",
         "state": STATE_UNVERIFIED,
         "note": NOTE_UNVERIFIED,
         "matching_before": before,
-        "sample_ids": unverified_submission_ids(args.user_id, limit=args.sample),
+        "sample_ids": unverified_submission_ids(
+            args.user_id, limit=args.sample, read_only=read_only
+        ),
     }
     if args.apply:
         report.update(backfill_unverified_submissions(args.user_id))

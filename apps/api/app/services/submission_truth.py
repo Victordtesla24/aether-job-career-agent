@@ -58,17 +58,38 @@ NOTE_UNVERIFIED = "recorded — transmission unverified (pre-fix)"
 #: an unstamped (NULL) row.
 _NOTES = {STATE_UNVERIFIED: NOTE_UNVERIFIED}
 
-#: The false-positive predicate, verbatim from the census: a row that CLAIMS a
-#: submission (``status = 'submitted'``) while carrying no transmission
-#: evidence whatsoever. Rows the user moved further along their own pipeline
-#: (screening / interview / offer) are deliberately excluded — those carry the
-#: user's own later, independent knowledge of what happened, and re-labelling
-#: them "unverified" would contradict evidence we do not have.
-_UNVERIFIED_PREDICATE = '''
-    "status" = 'submitted'::"ApplicationStatus"
-    AND "transmittedAt" IS NULL
-    AND "submissionTruthState" IS NULL
-'''
+#: The columns the predicate names that are ADDITIVE — created lazily by the
+#: ``ensure_*`` DDL (ADR-TR-1) rather than present in the base Prisma schema, so
+#: either may legitimately be missing from a given database. Probed on
+#: production 2026-08-14T09:00Z: ``transmittedAt`` present,
+#: ``submissionTruthState`` ABSENT — which is exactly why a census must be able
+#: to run without creating it (see :func:`_read_predicate`).
+_ADDITIVE_PREDICATE_COLUMNS = ("transmittedAt", "submissionTruthState")
+
+
+def _unverified_predicate(present: frozenset[str] | None = None) -> str:
+    """The false-positive predicate, verbatim from the census: a row that CLAIMS
+    a submission (``status = 'submitted'``) while carrying no transmission
+    evidence whatsoever. Rows the user moved further along their own pipeline
+    (screening / interview / offer) are deliberately excluded — those carry the
+    user's own later, independent knowledge of what happened, and re-labelling
+    them "unverified" would contradict evidence we do not have.
+
+    ``present`` names the additive columns that actually exist right now. An
+    absent additive column is logically NULL for every existing row, so dropping
+    its ``IS NULL`` conjunct is an EXACT rewrite of the predicate, not an
+    approximation — which is what lets the read-only census (below) run against
+    a database whose truth columns have never been created, without creating
+    them. ``None`` means "all present", the state every write path guarantees by
+    calling :func:`_ensure_columns` first.
+    """
+    clauses = ['"status" = \'submitted\'::"ApplicationStatus"']
+    clauses += [
+        f'"{column}" IS NULL'
+        for column in _ADDITIVE_PREDICATE_COLUMNS
+        if present is None or column in present
+    ]
+    return "\n    AND ".join(clauses)
 
 
 def submission_note_for(state: str | None) -> str | None:
@@ -83,14 +104,46 @@ def _ensure_columns() -> None:
     ensure_application_submission_truth_columns()
 
 
-def count_unverified_submissions(user_id: str | None = None) -> int:
+def _present_additive_columns() -> frozenset[str]:
+    """Which additive predicate columns exist. Pure SELECT — issues NO DDL."""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT column_name FROM information_schema.columns"
+                " WHERE table_name = 'Application'"
+                " AND table_schema = ANY(current_schemas(false))"
+                " AND column_name = ANY(%s)",
+                (list(_ADDITIVE_PREDICATE_COLUMNS),),
+            )
+            return frozenset(str(row[0]) for row in cur.fetchall())
+
+
+def _read_predicate(read_only: bool) -> str:
+    """Resolve the predicate for a read, ensuring the columns unless forbidden.
+
+    ``read_only=True`` is the contract the ops one-shot's DRY RUN advertises to
+    an operator pointing it at production: SELECTs only, no DDL. It is honoured
+    here rather than merely documented — see
+    ``scripts/backfill_submission_truth.py`` and
+    ``TestBackfillOpsScript::test_dry_run_never_reaches_the_ddl_helpers``.
+    """
+    if read_only:
+        return _unverified_predicate(_present_additive_columns())
+    _ensure_columns()
+    return _unverified_predicate()
+
+
+def count_unverified_submissions(
+    user_id: str | None = None, *, read_only: bool = False
+) -> int:
     """How many rows still claim a submission with no transmission evidence.
 
     Counted for real against the predicate the backfill uses, so the "before"
     number and the reclassified number can never drift apart.
+
+    ``read_only=True`` additionally guarantees the count costs no DDL.
     """
-    _ensure_columns()
-    sql = f'SELECT count(*) FROM "Application" WHERE {_UNVERIFIED_PREDICATE}'
+    sql = f'SELECT count(*) FROM "Application" WHERE {_read_predicate(read_only)}'
     params: tuple[Any, ...] = ()
     if user_id is not None:
         sql += ' AND "userId" = %s'
@@ -117,7 +170,7 @@ def backfill_unverified_submissions(user_id: str | None = None) -> dict[str, Any
     sql = f'''
         UPDATE "Application"
         SET "submissionTruthState" = %s, "submissionTruthAt" = NOW()
-        WHERE {_UNVERIFIED_PREDICATE}
+        WHERE {_unverified_predicate()}
     '''
     params: tuple[Any, ...] = (STATE_UNVERIFIED,)
     if user_id is not None:
@@ -142,10 +195,15 @@ def backfill_unverified_submissions(user_id: str | None = None) -> dict[str, Any
     }
 
 
-def unverified_submission_ids(user_id: str | None = None, limit: int = 50) -> list[str]:
-    """Sample of the rows the predicate matches — for evidence capture only."""
-    _ensure_columns()
-    sql = f'SELECT "id" FROM "Application" WHERE {_UNVERIFIED_PREDICATE}'
+def unverified_submission_ids(
+    user_id: str | None = None, limit: int = 50, *, read_only: bool = False
+) -> list[str]:
+    """Sample of the rows the predicate matches — for evidence capture only.
+
+    ``read_only=True`` guarantees the sample costs no DDL (see
+    :func:`_read_predicate`).
+    """
+    sql = f'SELECT "id" FROM "Application" WHERE {_read_predicate(read_only)}'
     params: tuple[Any, ...] = ()
     if user_id is not None:
         sql += ' AND "userId" = %s'
