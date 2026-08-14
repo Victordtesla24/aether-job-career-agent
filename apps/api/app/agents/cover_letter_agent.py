@@ -1535,25 +1535,6 @@ class CoverLetterAgent:
         # injection clause can no longer "ground" an injected token and wave it
         # past the guard. Legitimate requirements survive sanitization intact.
         sanitized_description = sanitize_untrusted_text(raw_description)
-        corpus = " ".join(
-            [
-                resume_text,
-                job["title"],
-                job["company"],
-                sanitized_description,
-                self._today(),
-                signer,
-                position,
-            ]
-            + ([career_corpus] if career_corpus else [])
-        )
-
-        # GAP-P6-COV-001: the candidate-claim evidence corpus is the candidate's
-        # OWN evidence only — résumé + story bank + career + profile + company
-        # NAME (so naming the target company is not flagged). The job DESCRIPTION
-        # is NEVER evidence: a claim backed only by the posting is a fabrication
-        # about the candidate. The job TITLE is the risk signal for the tempting
-        # role-specialty terms a draft is most likely to over-claim ('intake').
         # U-STORY-1 step 1: the Story Bank is selected against THIS posting
         # (same scorer ``GET /stories?job_id=`` already exposes) and bounded by
         # the same character budget the corpus path uses. The job description
@@ -1565,6 +1546,35 @@ class CoverLetterAgent:
         story_evidence = build_story_evidence(
             user_id, self._stories, job_description=story_jd
         )
+        # U-STORY-1 step 2 (U-STORY-DISCOVERY.md §2.2): the Story Bank belongs
+        # in the FabricationGuard corpus too. It was in ``claim_evidence``
+        # below but NOT here, so a system name, employer or number that only a
+        # stored story evidences passed the §9 unsupported-claim check and was
+        # then flagged by ``FabricationGuard.check`` as an unsupported entity —
+        # the candidate's own true, stored achievement read as a fabrication.
+        # This is a strict WIDENING with candidate-own evidence the neighbouring
+        # claim guard already trusts; an entity NOTHING supports is still
+        # flagged, unchanged.
+        corpus = " ".join(
+            [
+                resume_text,
+                job["title"],
+                job["company"],
+                sanitized_description,
+                self._today(),
+                signer,
+                position,
+            ]
+            + ([career_corpus] if career_corpus else [])
+            + ([story_evidence] if story_evidence else [])
+        )
+
+        # GAP-P6-COV-001: the candidate-claim evidence corpus is the candidate's
+        # OWN evidence only — résumé + story bank + career + profile + company
+        # NAME (so naming the target company is not flagged). The job DESCRIPTION
+        # is NEVER evidence: a claim backed only by the posting is a fabrication
+        # about the candidate. The job TITLE is the risk signal for the tempting
+        # role-specialty terms a draft is most likely to over-claim ('intake').
         claim_evidence = " ".join(
             p
             for p in (

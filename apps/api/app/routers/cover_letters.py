@@ -725,17 +725,6 @@ def _refine_cover_letter_body(
     # The letter date, signer and current position are system/profile ground
     # truth, so they join the guard's evidence corpus (mirrors the agent).
     sanitized_description = sanitize_untrusted_text(raw_description)
-    corpus = " ".join(
-        [
-            resume_text,
-            job["title"],
-            job["company"],
-            sanitized_description,
-            letter_date(),
-            signer,
-            position,
-        ]
-    )
     # ML-W26: the refine path's own draft loop ran ONLY the FabricationGuard
     # above — never the §9 claim guard (``unsupported_claim_tokens``) the main
     # generation path wires through ``CoverLetterAgent._draft``/``run()``. The
@@ -755,6 +744,30 @@ def _refine_cover_letter_body(
     # description remains risk vocabulary, never evidence.
     story_jd = f"{job['title']} at {job['company']}. {sanitized_description}"
     story_evidence = build_story_evidence(user_id, job_description=story_jd)
+    # U-STORY-1 step 2 (U-STORY-DISCOVERY.md §2.2): the FabricationGuard corpus
+    # carries the Story Bank here too — the main generation path's §2.2
+    # asymmetry existed verbatim on this path, and the two must never fork. The
+    # letter date, signer and current position are system/profile ground truth,
+    # so they join it as before. Strict widening with candidate-own evidence:
+    # an entity nothing supports is still flagged.
+    #
+    # Deliberately NOT widened here: ``career_corpus`` is in the generation
+    # path's FabricationGuard corpus (cover_letter_agent.py:1548) and still is
+    # not in this one. That is a SECOND, pre-existing asymmetry of the same
+    # class, outside the U-STORY-1 brief — reported for an orchestrator ruling
+    # rather than silently changed under a story-evidence commit.
+    corpus = " ".join(
+        [
+            resume_text,
+            job["title"],
+            job["company"],
+            sanitized_description,
+            letter_date(),
+            signer,
+            position,
+        ]
+        + ([story_evidence] if story_evidence else [])
+    )
     claim_evidence = " ".join(
         p
         for p in (resume_text, career_corpus, story_evidence, signer, position, job["company"])
