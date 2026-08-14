@@ -17,8 +17,8 @@
       "tests/test_ml_w17_application_race_unique_index.py::TestEnsureIndexSkipsOnExistingViolations::test_promotion_endpoints_stay_healthy_when_violations_already_exist",
       "tests/test_mv_clstudio_j_residuals.py::test_llm_failure_surfaces_honest_message_and_refunds"
     ],
-    "failures_adjudication": "PENDING rerun-once in isolation (shared aether_test schema; concurrent session 9c6a2ba6 gate runs preceded this suite — known contention class per aether-shared-test-db-flakiness). Result will be recorded below when the isolated rerun completes.",
-    "rerun_once": null
+    "failures_adjudication": "ADJUDICATED 16:4xZ: rerun-once in isolation reproduced ALL 9 (9 failed / 82 passed, 63.9s) — genuine pre-existing reds on origin/main, NOT test-DB contention. Git archaeology: the 5 failing test files are Jul-16→29 vintage; the code under them took today's U5/U5d-2/U-AX landings (51a083d, 437a73d, 10565d3, 3f495fd) by session 9c6a2ba6 — targeted-gate-only regression class. Reported to that session via SESSION-COORDINATION.md (their active file territory). Adoption rule: if still red and unowned when my final gate runs, ORCH-EXEC fixes them then.",
+    "rerun_once": { "failed": 9, "passed": 82, "duration_s": 63.88, "verdict": "genuine reds, reproduced in isolation" }
   },
   "web_vitest": {
     "command": "pnpm vitest run --maxWorkers=2",
