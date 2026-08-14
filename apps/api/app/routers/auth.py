@@ -276,6 +276,7 @@ def forgot_password(request: Request, body: ForgotPasswordRequest) -> ForgotPass
     domain), and that must not be reported to the visitor as a successful
     send just because ``emailSendingEnabled`` is true.
     """
+    from app.repositories.admin import password_is_env_managed
     from app.services import email_sender
     from app.services.password_reset import build_reset_email_body, create_reset_token
     from app.services.stripe_gateway import app_base_url
@@ -285,6 +286,18 @@ def forgot_password(request: Request, body: ForgotPasswordRequest) -> ForgotPass
     email_enabled = email_sender.is_configured()
     user = UserRepository().get_by_email(body.email)
     if user is not None and user.get("passwordHash"):
+        if password_is_env_managed(user.get("email")):
+            # §14.7: the link will be REFUSED at completion (the environment
+            # owns this password). The response stays byte-identical — softening
+            # it here would turn this route into an account-enumeration oracle
+            # for the operator address — but the operator gets a log line
+            # instead of a silent dead end. Value-free: no address, no hash.
+            logger.info(
+                "forgot-password: userId=%s is the env-managed admin identity; "
+                "the reset link will be refused at completion because "
+                "AETHER_ADMIN_PASSWORD_HASH is re-applied on every restart",
+                user["id"],
+            )
         raw_token = create_reset_token(user["id"])
         if email_enabled:
             reset_url = f"{app_base_url()}/reset-password?token={raw_token}"
@@ -329,10 +342,27 @@ def reset_password(request: Request, body: ResetPasswordRequest) -> ResetPasswor
     ``guard_login_attempt``'s shape). A rejected token — unknown, expired, or
     already used — is a generic 400 that reveals nothing about WHY it failed.
     On success, ``UserRepository.set_password`` stamps ``passwordChangedAt``,
-    which invalidates every session token minted before this moment (see
+    which rejects session tokens minted before it (see
     ``app.middleware.auth.get_current_user``) — the caller must sign in again
-    with the new password.
+    with the new password. Sessions minted inside the last
+    ``_IAT_GRACE_SECONDS`` before the stamp are the documented exception: the
+    slack that stops an immediate post-reset login from 401ing itself also
+    spares them. ``POST /admin/users/{id}/password``, whose whole purpose is a
+    lockout, waits that window out first; the self-service path deliberately
+    does not, because the person resetting IS the account holder.
+
+    §14.7: an identity whose password is managed by server configuration
+    (``AETHER_ADMIN_PASSWORD_HASH``, re-applied by ``apply_admin_rotation`` on
+    every boot) is REFUSED with a 409 naming the mechanism and the remedy.
+    Accepting it would show a success screen for a password the next restart
+    silently reverts — the account holder would then be locked out with nothing
+    anywhere explaining why. The token is consumed first either way, so a link
+    that can never complete does not stay live.
     """
+    from app.repositories.admin import (
+        ENV_MANAGED_PASSWORD_MESSAGE,
+        password_is_env_managed,
+    )
     from app.services.password_reset import consume_reset_token
 
     guard_reset_password_attempt(request, body.token)
@@ -344,5 +374,11 @@ def reset_password(request: Request, body: ResetPasswordRequest) -> ResetPasswor
             detail="This reset link is invalid or has expired. Request a new one.",
         )
     reset_reset_password_failures(request, body.token)
+    user = UserRepository().get_by_id(user_id)
+    if password_is_env_managed(user.get("email") if user else None):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=ENV_MANAGED_PASSWORD_MESSAGE,
+        )
     UserRepository().set_password(user_id, hash_password(body.password))
     return ResetPasswordResponse()

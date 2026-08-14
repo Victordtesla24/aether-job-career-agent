@@ -201,17 +201,49 @@ export default function DashboardPage() {
   // AgentRun.output.approval_status snapshot cached at generation time.
   const pendingApprovalIds = new Set(pending.map((a) => a.id));
 
-  async function resolveApproval(id: string, action: "approve" | "reject") {
+  async function resolveApproval(
+    id: string,
+    action: "approve" | "reject",
+    acknowledgeBelowFloor = false,
+  ) {
     setBusyApprovalId(id);
     setApprovalActionError(null);
     try {
-      await decideApproval(id, action);
+      await decideApproval(
+        id,
+        action,
+        acknowledgeBelowFloor ? { acknowledgeBelowFloor: true } : {},
+      );
       approvals.setData(pending.filter((a) => a.id !== id));
       showToast(
         action === "approve" ? "Approved ✓" : "Rejected",
         "success",
       );
     } catch (e: unknown) {
+      // U2c: a 409 on APPROVE whose detail asks for acknowledge_below_floor is
+      // NOT a stale request — it is the quality-floor gate. The artifact is
+      // readable and approvable; the human just has to say "yes, below floor"
+      // once. Offer that here instead of leaking the raw 409 and dropping the
+      // card. (The Approvals modal has always handled this; the dashboard
+      // cards did not — this closes that gap so no approve surface forks.)
+      if (
+        action === "approve" &&
+        !acknowledgeBelowFloor &&
+        e instanceof ApiError &&
+        e.status === 409 &&
+        /acknowledge_below_floor/.test(e.message)
+      ) {
+        const reason =
+          /Below quality floor:[^"]*?floor\.?/i.exec(e.message)?.[0] ??
+          "This artifact is below the quality floor.";
+        if (
+          typeof window !== "undefined" &&
+          window.confirm(`${reason}\n\nApprove it anyway?`)
+        ) {
+          await resolveApproval(id, "approve", true);
+        }
+        return;
+      }
       const msg = describeApprovalError(e, action);
       setApprovalActionError(msg);
       showToast(msg, "error");

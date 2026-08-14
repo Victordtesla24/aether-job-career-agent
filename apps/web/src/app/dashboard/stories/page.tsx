@@ -5,6 +5,27 @@
  * that power resumes, cover letters and interview answers. Backed by
  * GET/POST/PUT/DELETE /stories, GET /stories/stats and
  * POST /agents/story-extractor/run. Layout mirrors design/screens/story-bank.html.
+ *
+ * S-UI B3 (presentation only).
+ * --------------------------
+ * Two things were measured on production 2026-08-14 and both are fixed here
+ * without touching a single request (evidence: b3/before/before-notes.json,
+ * b3/diagnosis/STORY-BANK-SECTION-NOT-FOUND.md):
+ *
+ * 1. **"Section not found"** — NOT a defect of this page. `/dashboard/stories`
+ *    renders correctly and the sidebar links to it; the report came from the
+ *    WIREFRAME name `/dashboard/story-bank`, which fell through to the
+ *    `[...slug]` catch-all. That dead end is fixed in the catch-all itself,
+ *    which now names the section a near-miss meant (`lib/navigation-suggest.ts`).
+ * 2. **9,071 px tall at 1600 / 18,216 px at 390** — every card printed all four
+ *    STAR fields in full. The cards now clamp to three lines each and the full
+ *    story opens in an `elev-3` sheet (§5.8 / X-2), so the page ends (D-ε).
+ *
+ * ARCHIVE / RESTORE / DEDUP: those surfaces belong to the U-STORY workstream
+ * and are not on `main` at this commit (`grep -rn "archive\|restore\|dedup"
+ * src/components/stories src/lib/api/stories.ts` → no hits). Nothing of theirs
+ * was removed here; when they land they slot into the same card footer and the
+ * same sheet.
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -13,7 +34,12 @@ import { useRealtimeResources } from "../../../hooks/useRealtime";
 import { extractorTriggerState } from "../../../components/stories/logic";
 import { StoryAside } from "../../../components/stories/story-aside";
 import { StoryCard } from "../../../components/stories/story-card";
+import { StorySheet } from "../../../components/stories/story-sheet";
 import { EMPTY_STORY_FORM, StoryForm } from "../../../components/stories/story-form";
+import PageHeader from "../../../components/shell/PageHeader";
+import SegmentedControl from "../../../components/ui/SegmentedControl";
+import Section from "../../../components/ui/Section";
+import { button } from "../../../components/ui/recipes";
 import {
   createStory,
   deleteStory,
@@ -41,6 +67,8 @@ export default function StoryBankPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [demoEmpty, setDemoEmpty] = useState(false);
+  /** Presentation-only: which story the `elev-3` read sheet is showing. */
+  const [readingId, setReadingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window !== "undefined" && window.location.search.includes("demo=empty")) {
@@ -168,49 +196,62 @@ export default function StoryBankPage() {
 
   const showEmpty = stories !== null && effectiveStories.length === 0;
   const importResumeState = extractorTriggerState(running, "Import from Resume", "Importing…");
+  const reading = visibleStories.find((s) => s.id === readingId) ?? null;
+
+  /** Per-category counts for the segmented control — computed from the list
+   *  already in hand, never a second request. */
+  const filterItems = useMemo(
+    () =>
+      FILTERS.map((f) => ({
+        value: f,
+        label: f,
+        count:
+          f === "All"
+            ? effectiveStories.length
+            : effectiveStories.filter((s) => s.category === f).length,
+      })),
+    [effectiveStories],
+  );
 
   return (
-    <div className="space-y-7">
-      {/* Header */}
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0">
-          <div className="mb-1 flex items-center gap-2 text-[13px] text-aether-muted">
-            <i className="fa-solid fa-book-bookmark text-aether-coral" aria-hidden="true" />
-            Story Bank
-          </div>
-          <h1 className="text-2xl font-bold">Achievement &amp; Narrative Library</h1>
-          <p className="mt-1 text-sm text-aether-muted">
-            Reusable STAR+R evidence blocks that power your resumes, cover letters and interview answers.
-          </p>
-        </div>
-        <button
-          type="button"
-          data-testid="add-story-btn"
-          onClick={openCreate}
-          className="flex min-h-[44px] items-center gap-2 rounded-xl bg-aether-coral px-4 py-2.5 text-sm font-semibold text-aether-bg transition hover:bg-[#ff7d4d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-aether-coral/50"
-        >
-          <i className="fa-solid fa-plus" aria-hidden="true" />
-          New Story
-        </button>
-      </header>
+    <div className="space-y-5">
+      <div className="mb-1 flex items-center gap-2 text-[13px] text-aether-muted">
+        <i className="fa-solid fa-book-bookmark text-aether-coral" aria-hidden="true" />
+        Story Bank
+      </div>
+      <PageHeader
+        title="Achievement & Narrative Library"
+        subtitle="Reusable STAR+R evidence blocks that power your resumes, cover letters and interview answers."
+        action={
+          <button
+            type="button"
+            data-testid="add-story-btn"
+            onClick={openCreate}
+            className={button({ tone: "primary", size: "md", class: "h-10 text-aether-bg" })}
+          >
+            <i className="fa-solid fa-plus" aria-hidden="true" />
+            New Story
+          </button>
+        }
+      />
 
       {/* Stat strip */}
       <section
-        className="grid grid-cols-2 gap-4 lg:grid-cols-4"
+        className="grid grid-cols-2 gap-3 lg:grid-cols-4"
         data-testid="story-stats"
         aria-label="Story bank statistics"
       >
         {(
           [
-            ["Total Stories", effectiveStats.total, ""],
-            ["Quantified w/ Metrics", effectiveStats.quantified, "text-[#34D399]"],
+            ["Total Stories", effectiveStats.total, "text-aether-text"],
+            ["Quantified w/ Metrics", effectiveStats.quantified, "text-state-ok"],
             ["Starred", effectiveStats.starred, "text-[#FBBF24]"],
-            ["Categories Covered", effectiveStats.categories, "text-[#A78BFA]"],
+            ["Categories Covered", effectiveStats.categories, "text-state-info"],
           ] as const
         ).map(([label, value, cls]) => (
-          <div key={label} className="glass rounded-2xl border border-white/10 p-4">
-            <div className="mb-1 text-[11px] text-aether-muted">{label}</div>
-            <div className={`mono text-2xl font-bold ${cls}`}>{value}</div>
+          <div key={label} className="elev-1 rounded-xl px-4 py-3">
+            <div className="type-section">{label}</div>
+            <div className={`mono mt-1.5 text-2xl font-bold leading-none ${cls}`}>{value}</div>
           </div>
         ))}
       </section>
@@ -218,66 +259,48 @@ export default function StoryBankPage() {
       {error ? (
         <p
           role="alert"
-          className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300"
+          className="rounded-xl border border-state-danger/30 bg-state-danger/10 p-3 text-sm text-state-danger"
         >
           {error}
         </p>
       ) : null}
 
       {creating ? (
-        <div
-          className="glass rounded-2xl border border-aether-coral/30 p-5"
-          data-testid="create-story-panel"
-        >
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-aether-muted">
-            New story
-          </h2>
+        <Section eyebrow="New story" testId="create-story-panel" accent>
           <StoryForm
             initial={EMPTY_STORY_FORM}
             submitLabel="Create Story"
             onSubmit={create}
             onCancel={closeCreate}
           />
-        </div>
+        </Section>
       ) : null}
 
-      <div className="flex flex-col gap-6 lg:flex-row">
+      <div className="flex flex-col gap-5 lg:flex-row lg:items-start">
         {/* Left: filters + story list */}
         <section className="min-w-0 flex-1 space-y-4">
-          <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Filter stories by category">
-            {FILTERS.map((f) => {
-              const active = filter === f;
-              return (
-                <button
-                  key={f}
-                  type="button"
-                  data-testid={`filter-${f.toLowerCase().replace(/[^a-z]+/g, "-")}`}
-                  aria-pressed={active}
-                  onClick={() => setFilter(f)}
-                  className={`min-h-[36px] rounded-lg px-3 py-1.5 text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-aether-coral/40 ${
-                    active
-                      ? "bg-white/10 text-white"
-                      : "text-aether-muted hover:bg-white/5 hover:text-white"
-                  }`}
-                >
-                  {f}
-                </button>
-              );
-            })}
-          </div>
+          <SegmentedControl
+            items={filterItems}
+            value={filter}
+            onChange={setFilter}
+            ariaLabel="Filter stories by category"
+            idPrefix="story-filter"
+            size="sm"
+            testIdFor={(f) => `filter-${f.toLowerCase().replace(/[^a-z]+/g, "-")}`}
+          />
 
           {stories === null ? (
-            <div className="space-y-4" aria-busy="true" data-testid="stories-loading">
+            <div className="space-y-3" aria-busy="true" data-testid="stories-loading">
               {[0, 1, 2].map((i) => (
-                <div key={i} className="glass h-44 animate-pulse rounded-2xl border border-white/10" />
+                <div key={i} className="elev-1 h-40 animate-pulse rounded-2xl" />
               ))}
             </div>
           ) : showEmpty ? (
             <div
-              className="rounded-2xl border border-dashed border-white/15 p-10 text-center"
+              className="rounded-2xl border border-dashed border-hairline-strong p-10 text-center"
               data-testid="stories-empty-state"
             >
-              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-[#FF6B35]/25 bg-[#FF6B35]/12">
+              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-aether-coral/25 bg-aether-coral/[0.12]">
                 <i className="fa-solid fa-book-bookmark text-xl text-aether-coral" aria-hidden="true" />
               </div>
               <h3 className="mb-1.5 text-base font-semibold">Your Story Bank is empty</h3>
@@ -292,31 +315,40 @@ export default function StoryBankPage() {
                   onClick={() => void extract()}
                   disabled={importResumeState.disabled}
                   aria-busy={running}
-                  className="min-h-[44px] rounded-xl bg-aether-coral px-4 py-2.5 text-sm font-semibold text-aether-bg transition hover:bg-[#ff7d4d] disabled:opacity-50"
+                  className={button({
+                    tone: "primary",
+                    size: "md",
+                    class: "min-h-[44px] text-aether-bg",
+                  })}
                 >
-                  <i className="fa-solid fa-file-import mr-1.5" aria-hidden="true" />
+                  <i className="fa-solid fa-file-import" aria-hidden="true" />
                   {importResumeState.label}
                 </button>
                 <button
                   type="button"
                   data-testid="empty-add-manual"
                   onClick={openCreate}
-                  className="min-h-[44px] rounded-xl border border-white/10 bg-white/8 px-4 py-2.5 text-sm font-medium transition hover:bg-white/12"
+                  className={button({ tone: "neutral", size: "md", class: "min-h-[44px]" })}
                 >
-                  <i className="fa-solid fa-plus mr-1.5" aria-hidden="true" />
+                  <i className="fa-solid fa-plus" aria-hidden="true" />
                   Add Manually
                 </button>
               </div>
             </div>
           ) : visibleStories.length === 0 ? (
             <div
-              className="rounded-2xl border border-dashed border-white/15 p-8 text-center text-sm text-aether-muted"
+              className="rounded-2xl border border-dashed border-hairline-strong p-8 text-center text-sm text-aether-muted"
               data-testid="stories-filter-empty"
             >
-              No stories in <span className="font-semibold text-white">{filter}</span> yet.
+              No stories in <span className="font-semibold text-aether-text">{filter}</span> yet.
             </div>
           ) : (
-            <div className="space-y-4" data-testid="story-list">
+            /* D-ε: the list scrolls inside its own container so the page ends.
+               Before this batch 20 stories made the document 9,071px tall. */
+            <div
+              className="max-h-[calc(100vh-320px)] space-y-3 overflow-y-auto overscroll-contain pr-1"
+              data-testid="story-list"
+            >
               {visibleStories.map((story) => (
                 <StoryCard
                   key={story.id}
@@ -330,6 +362,7 @@ export default function StoryBankPage() {
                   onSave={(input) => saveEdit(story.id, input)}
                   onDelete={() => void remove(story.id)}
                   onToggleStar={() => void star(story)}
+                  onRead={() => setReadingId(story.id)}
                 />
               ))}
             </div>
@@ -343,6 +376,8 @@ export default function StoryBankPage() {
           onDraftMissing={() => void extract()}
         />
       </div>
+
+      <StorySheet story={reading} onClose={() => setReadingId(null)} />
     </div>
   );
 }

@@ -1237,6 +1237,23 @@ export default function SettingsClient({
                 <p data-testid="billing-loading" className="text-xs text-aether-muted">
                   Loading your plan…
                 </p>
+              ) : subscription.entitlement?.unlimited === true ? (
+                /*
+                  ADMIN-FULL / OWNER EXPERIENCE: an owner holds no plan and no
+                  quota — the server enforces neither — so this card shows no
+                  price, no run counter, no spend cap and no upgrade path.
+                  Showing "Pro 98/100" to an account nothing meters would be
+                  fabricated UI.
+                */
+                <div data-testid="billing-owner-unlimited">
+                  <p className="text-sm font-semibold" data-testid="billing-plan-name">
+                    Owner — unlimited
+                  </p>
+                  <p className="mt-1 text-xs text-aether-muted-dim">
+                    This account is an Aether administrator: no plan, no run quota
+                    and no spend cap are applied to it. Nothing is billed here.
+                  </p>
+                </div>
               ) : (
                 <>
                   <div className="flex flex-wrap items-center justify-between gap-3">

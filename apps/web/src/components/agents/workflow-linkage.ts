@@ -394,7 +394,7 @@ const HOP = {
     to: "agent.jobDiscovery",
     kind: "triggers",
     mechanism: "_pipeline_core sequential _dispatch",
-    evidence: "apps/api/app/routers/agents.py:3401,3423",
+    evidence: "apps/api/app/routers/agents.py:3441,3463",
     discoveryEvidence: "apps/api/app/routers/agents.py:3380",
     anchors: ["def _pipeline_core(", 'scout_out = _dispatch(user_id, "scout", params)'],
     status: "live",
@@ -470,7 +470,7 @@ const HOP = {
     mechanism:
       "synthesis over the user's own postings; optional guard-checked LLM narrative",
     evidence:
-      "apps/api/app/agents/company_research_agent.py:53,183; narrative opt-in at apps/api/app/routers/agents.py:1550,2069",
+      "apps/api/app/agents/company_research_agent.py:53,183; narrative opt-in at apps/api/app/routers/agents.py:1563,2082",
     discoveryEvidence:
       "apps/api/app/agents/company_research_agent.py:53; narrative opt-in at apps/api/app/routers/agents.py:2020-2027",
     anchors: [

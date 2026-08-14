@@ -114,7 +114,13 @@ export function SubscriptionGate({ children }: { children: React.ReactNode }) {
     fetchEntitlement()
       .then((ent) => {
         if (!active) return;
-        const gated = ent.requiresSubscription && !ent.active_paid;
+        // ADMIN-FULL: `unlimited` is the ONE server-side resolver's verdict
+        // (admin, or an admin-granted unlimited entitlement). The backend
+        // already refuses to charge, meter or wall these accounts, so showing
+        // them an upsell would be dishonest UI, not protection. This mirrors a
+        // real exemption — it never grants one the server would not.
+        const gated =
+          ent.requiresSubscription && !ent.active_paid && !ent.unlimited;
         setState(gated ? "gated" : "allowed");
       })
       .catch(() => {

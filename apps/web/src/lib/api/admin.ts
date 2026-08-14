@@ -8,6 +8,7 @@
  */
 import { z } from "zod";
 
+import { EntitlementViewSchema } from "./billing";
 import { apiRequest, type RequestOptions } from "./client";
 
 // --------------------------------------------------------------------------- //
@@ -65,6 +66,9 @@ export const AdminUserSchema = z.object({
   id: z.string(),
   email: z.string(),
   name: z.string().nullable(),
+  // ADMIN-FULL: username is a real login identity an admin can search and edit.
+  // Optional-with-default so an older API payload still parses.
+  username: z.string().nullable().optional().default(null),
   isAdmin: z.boolean(),
   suspended: z.boolean(),
   plan: z.string().nullable(),
@@ -139,8 +143,117 @@ export const AdminUserDetailSchema = z.object({
   spendUsd: z.number(),
   runCount: z.number(),
   currency: z.string(),
+  entitlement: EntitlementViewSchema.optional().default({}),
 });
 export type AdminUserDetail = z.infer<typeof AdminUserDetailSchema>;
+
+// --------------------------------------------------------------------------- //
+// User management (ADMIN-FULL)
+//
+// Plan changes are ENTITLEMENT OVERRIDES — immediate, Stripe-independent, and
+// visibly an override in the panel + the audit trail. Stripe-linked actions
+// (cancel / refund) route through the backend's existing billing service, which
+// is why there is no client-side Stripe anything here.
+// --------------------------------------------------------------------------- //
+
+/** `none` clears any existing override and returns the user to their real plan. */
+export type EntitlementOverrideKind = "comp" | "tier" | "unlimited" | "none";
+
+const EntitlementResponseSchema = z.object({
+  userId: z.string(),
+  entitlement: EntitlementViewSchema,
+});
+
+export async function setEntitlementOverride(
+  userId: string,
+  body: { kind: EntitlementOverrideKind; planId?: string; note?: string },
+  options: RequestOptions = {},
+): Promise<z.infer<typeof EntitlementResponseSchema>> {
+  return EntitlementResponseSchema.parse(
+    await apiRequest<unknown>(`/admin/users/${encodeURIComponent(userId)}/entitlement`, {
+      ...options,
+      method: "POST",
+      body,
+    }),
+  );
+}
+
+/**
+ * Set a user's password on their behalf. The plaintext is sent once over the
+ * authenticated HTTPS call, hashed server-side by the app's own hasher, and
+ * never stored, echoed or audited by value — the audit records the EVENT.
+ *
+ * ``sessionsInvalidated`` is what the API MEASURED after writing, not a
+ * constant: true means every token minted before ``sessionsInvalidatedBefore``
+ * is already rejected. Callers must render the false case honestly instead of
+ * assuming the lockout happened. A 409 means this identity's password is
+ * managed by server configuration (§14.7) and cannot be set from the app.
+ */
+export async function setUserPassword(
+  userId: string,
+  newPassword: string,
+  options: RequestOptions = {},
+): Promise<{
+  userId: string;
+  passwordChanged: boolean;
+  sessionsInvalidated: boolean;
+  sessionsInvalidatedBefore?: string | null;
+}> {
+  return apiRequest(`/admin/users/${encodeURIComponent(userId)}/password`, {
+    ...options,
+    method: "POST",
+    body: { newPassword },
+  });
+}
+
+const IdentityFieldsSchema = z.object({
+  email: z.string().nullable(),
+  username: z.string().nullable(),
+  name: z.string().nullable(),
+});
+
+const IdentityResponseSchema = z.object({
+  userId: z.string(),
+  before: IdentityFieldsSchema,
+  after: IdentityFieldsSchema,
+});
+
+export async function updateUserIdentity(
+  userId: string,
+  patch: { email?: string; username?: string; name?: string },
+  options: RequestOptions = {},
+): Promise<z.infer<typeof IdentityResponseSchema>> {
+  return IdentityResponseSchema.parse(
+    await apiRequest<unknown>(`/admin/users/${encodeURIComponent(userId)}/identity`, {
+      ...options,
+      method: "POST",
+      body: patch,
+    }),
+  );
+}
+
+export async function cancelUserSubscription(
+  userId: string,
+  atPeriodEnd: boolean,
+  options: RequestOptions = {},
+): Promise<{ userId: string; atPeriodEnd: boolean; cancelAtPeriodEnd: boolean; planId: string }> {
+  return apiRequest(`/admin/users/${encodeURIComponent(userId)}/subscription/cancel`, {
+    ...options,
+    method: "POST",
+    body: { atPeriodEnd },
+  });
+}
+
+export async function refundUserSubscription(
+  userId: string,
+  options: RequestOptions = {},
+): Promise<{ userId: string; refundId: string | null; status: string | null; planId: string }> {
+  return apiRequest(`/admin/users/${encodeURIComponent(userId)}/subscription/refund`, {
+    ...options,
+    method: "POST",
+    body: {},
+  });
+}
 
 export async function fetchAdminUser(
   userId: string,
@@ -260,6 +373,20 @@ export async function fetchAuditLog(
 ): Promise<AuditLog> {
   return AuditLogSchema.parse(
     await apiRequest<unknown>(`/admin/audit-log?limit=${limit}&offset=${offset}`, options),
+  );
+}
+
+/** The append-only audit trail for ONE user (ADMIN-FULL user panel). */
+export async function fetchUserAuditLog(
+  userId: string,
+  limit = 25,
+  options: RequestOptions = {},
+): Promise<AuditLog> {
+  return AuditLogSchema.parse(
+    await apiRequest<unknown>(
+      `/admin/users/${encodeURIComponent(userId)}/audit?limit=${limit}`,
+      options,
+    ),
   );
 }
 

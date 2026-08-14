@@ -112,7 +112,7 @@ class UserRepository:
                 rows = rows_to_dicts(cur)
         return rows[0] if rows else None
 
-    def set_password(self, user_id: str, password_hash: str) -> None:
+    def set_password(self, user_id: str, password_hash: str, cur: Any = None) -> None:
         """Set a new password hash and stamp ``passwordChangedAt`` (O-4).
 
         Used by ``POST /auth/reset-password``. Stamping the timestamp is the
@@ -120,15 +120,29 @@ class UserRepository:
         carries an ``iat`` earlier than the new value and is rejected by
         ``app.middleware.auth.get_current_user`` on its next use, forcing a
         fresh ``/login`` with the new password.
+
+        ``cur`` (optional) writes inside the caller's OPEN transaction and does
+        NOT commit, so an admin route can commit the change together with the
+        ``AdminAuditLog`` row that records it — otherwise a failure between the
+        two leaves a durable, unaudited password change (and a target whose
+        sessions were silently invalidated). The caller must have run
+        ``ensure_password_reset_columns()`` before opening that transaction.
         """
+
+        def _run(c: Any) -> None:
+            c.execute(
+                'UPDATE "User" SET "passwordHash"=%s, "passwordChangedAt"=now(),'
+                ' "updatedAt"=now() WHERE "id"=%s',
+                (password_hash, user_id),
+            )
+
+        if cur is not None:
+            _run(cur)
+            return
         ensure_password_reset_columns()
         with get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    'UPDATE "User" SET "passwordHash"=%s, "passwordChangedAt"=now(),'
-                    ' "updatedAt"=now() WHERE "id"=%s',
-                    (password_hash, user_id),
-                )
+            with conn.cursor() as c:
+                _run(c)
             conn.commit()
 
     def touch_last_login(self, user_id: str) -> None:

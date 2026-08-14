@@ -359,6 +359,24 @@ export function Rail({
             </div>
           ) : subscription === null ? (
             <p className="type-meta">Plan unavailable</p>
+          ) : subscription.entitlement?.unlimited === true ? (
+            /*
+              ADMIN-FULL / OWNER EXPERIENCE: an owner holds no plan and no
+              quota — the server enforces neither — so rendering "Pro 98/100"
+              here would be a number nothing can ever enforce. Say what is
+              actually true instead, and offer no upgrade path.
+            */
+            <>
+              <p className="text-xs font-medium" data-testid="sidebar-plan-name">
+                Owner — unlimited
+              </p>
+              <p
+                className="type-mono-micro mt-1 text-aether-muted-dim"
+                data-testid="sidebar-plan-unlimited"
+              >
+                No plan, quota or spend cap
+              </p>
+            </>
           ) : (
             <>
               <p className="text-xs font-medium" data-testid="sidebar-plan-name">

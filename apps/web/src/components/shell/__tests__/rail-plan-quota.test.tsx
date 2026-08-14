@@ -60,6 +60,23 @@ function subscription(overrides: Partial<SubscriptionState> = {}): SubscriptionS
       spendCapUsd: 10,
       periodEnd: "2026-08-01T00:00:00Z",
     },
+    // ADMIN-FULL: GET /billing/subscription now carries the ONE server-side
+    // entitlement verdict. This fixture is an ordinary paying user — not an
+    // admin and under no override — so every assertion below is unchanged.
+    entitlement: {
+      unlimited: false,
+      entitled: true,
+      source: "plan",
+      isAdmin: false,
+      planId: "pro",
+      activePaid: true,
+      overrideActive: false,
+      overrideKind: null,
+      overridePlanId: null,
+      overrideNote: null,
+      overrideSetBy: null,
+      overrideSetAt: null,
+    },
     ...overrides,
   };
 }

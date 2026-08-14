@@ -53,8 +53,8 @@ function formatDelta(delta: number): string {
 }
 
 function deltaTone(delta: number): string {
-  if (delta > 0) return "text-aether-green";
-  if (delta < 0) return "text-red-300";
+  if (delta > 0) return "text-state-ok";
+  if (delta < 0) return "text-state-danger";
   return "text-aether-muted-dim";
 }
 
@@ -72,18 +72,16 @@ export default function TailoringImpact({
 
   return (
     <section
-      className="glass rounded-2xl border border-white/10 p-5"
+      className="elev-1 rounded-2xl p-5"
       data-testid="tailoring-impact"
     >
-      <h3 className="text-sm font-semibold uppercase tracking-wide text-aether-muted-dim">
-        Tailoring Impact — Before vs After
-      </h3>
+      <h3 className="type-section">Tailoring Impact — Before vs After</h3>
 
       <div className="mt-3 flex flex-wrap items-center gap-3">
         <div>
-          <p className="text-[10px] uppercase tracking-wide text-aether-muted-dim">Before (baseline)</p>
+          <p className="type-section">Before (baseline)</p>
           <p
-            className={`mono text-2xl font-bold ${beforeAts === null ? "text-aether-muted-dim" : ""}`}
+            className={`mono mt-1 text-2xl font-bold ${beforeAts === null ? "text-state-neutral" : ""}`}
             data-testid="ats-before"
           >
             {beforeAts === null ? "—" : beforeAts}
@@ -91,10 +89,10 @@ export default function TailoringImpact({
         </div>
         <span className="text-aether-muted-dim">→</span>
         <div>
-          <p className="text-[10px] uppercase tracking-wide text-aether-muted-dim">After (tailored)</p>
+          <p className="type-section">After (tailored)</p>
           <p
-            className={`mono text-2xl font-bold ${
-              afterAts === null ? "text-aether-muted-dim" : "text-aether-green"
+            className={`mono mt-1 text-2xl font-bold ${
+              afterAts === null ? "text-state-neutral" : "text-state-ok"
             }`}
             data-testid="ats-after"
           >
@@ -113,7 +111,7 @@ export default function TailoringImpact({
 
       {beforeAts === null || afterAts === null ? (
         <p
-          className="mt-2 text-xs text-aether-muted-dim"
+          className="mt-2 text-[11px] leading-[1.5] text-aether-muted-dim"
           data-testid="ats-unmeasured-caveat"
         >
           Not measured
@@ -123,12 +121,12 @@ export default function TailoringImpact({
       ) : null}
 
       <div className="mt-4" data-testid="dimension-threshold-line">
-        <p className="text-[10px] uppercase tracking-wide text-aether-muted-dim">
+        <p className="type-section">
           10-dimension fit score · baseline vs tailored · threshold {DIMENSION_THRESHOLD}%
         </p>
       </div>
 
-      <div className="mt-2 space-y-1.5">
+      <div className="mt-2 space-y-1">
         {beforeDimensions.map((dim) => {
           // F-UAX-05: pair by LABEL, never by array index — an index pairing
           // silently mismatches two dimensions the moment either list is
@@ -145,27 +143,27 @@ export default function TailoringImpact({
             <div
               key={dim.label}
               data-testid="dimension-row"
-              className="grid grid-cols-[1fr,auto,auto,auto,auto] items-center gap-2 rounded-lg border border-white/10 p-2 text-xs"
+              className="grid grid-cols-[1fr,2.5rem,0.75rem,2.5rem,2.75rem] items-center gap-2 rounded-lg border border-hairline px-2.5 py-1.5 text-[12px] transition-colors duration-[--dur-fast] hover:border-hairline-strong"
             >
               <span className="truncate font-medium text-aether-muted">{dim.label}</span>
-              <span className="mono text-aether-muted-dim" data-testid="dimension-before">
+              <span className="mono text-right text-aether-muted-dim" data-testid="dimension-before">
                 {beforeUnknown ? "—" : dim.score}
               </span>
               <span className="text-aether-muted-dim">→</span>
               <span
-                className={`mono font-semibold ${
+                className={`mono text-right font-semibold ${
                   afterUnknown
-                    ? "text-aether-muted-dim"
+                    ? "text-state-neutral"
                     : after!.score > DIMENSION_THRESHOLD
-                      ? "text-aether-green"
-                      : "text-aether-amber"
+                      ? "text-state-ok"
+                      : "text-state-warn"
                 }`}
                 data-testid="dimension-after"
               >
                 {afterUnknown ? "—" : after!.score}
               </span>
               <span
-                className={`mono ${delta === null ? "text-aether-muted-dim" : deltaTone(delta)}`}
+                className={`mono text-right ${delta === null ? "text-state-neutral" : deltaTone(delta)}`}
                 data-testid="dimension-delta"
               >
                 {delta === null ? "n/a" : formatDelta(delta)}
