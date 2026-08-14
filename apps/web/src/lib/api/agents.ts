@@ -29,6 +29,15 @@ export const AgentRunSchema = z.object({
   // FRESH heartbeat as proof of life (a legitimately long run is then never
   // called stalled) and falls back to wall-clock age when there is none.
   heartbeatAt: z.string().nullish(),
+  // B6 — the id of the AgentRun that CAUSED this one (e.g. every pipeline
+  // step's supervisor run), or null for a run with no recorded parent (every
+  // pre-B6 row, and every directly-triggered single run). `.nullish()` — not
+  // `.optional()` — so a row that carries the key with a real value round-
+  // trips exactly, matching the backend's "always present, None where there
+  // is no parent" contract (`apps/api/tests/test_b6_parent_run_id.py`); an
+  // omitted key parses the same as an explicit null rather than erroring on
+  // an older cached response shape.
+  parentRunId: z.string().nullish(),
 });
 
 export type AgentRun = z.infer<typeof AgentRunSchema>;
