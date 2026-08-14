@@ -461,5 +461,29 @@ can silently defeat the timer's diff-trigger — always check `ActiveEnterTimest
   `components/analytics/TailoringImpact.tsx`, `lib/navigation-suggest.ts` (+ test),
   `components/agents/workflow-linkage.ts` (citation re-anchor only), this doc. No migration, no `apps/api`.
 - Not touching any other session's active claims.
-- Next: live verification on production (owner JWT) — Resume Studio aha moment, Cover Letter Studio,
-  Story Bank fix — evidence to `uat/reports/evidence/market-perf/s-ui/b3/land/`.
+
+### B3 LIVE-VERIFIED — session 9c6a2ba6, 2026-08-14T20:1xZ
+
+Real owner login (production `/login` form, not a minted token), real owner data. Evidence:
+`uat/reports/evidence/market-perf/s-ui/b3/land/` (`land-notes.json` + 17 screenshots + capture script).
+
+- **Resume Studio aha moment**: opened v548 (real tailored version, Staff Software Engineer @ Canva).
+  Hero shows `56 → 56` (`±0` — genuinely unchanged, not a fabricated lift), `Verified · all 4 changes
+  present in the file you download`, 4 change cards / 4 coral-washed changed bullets, Format Integrity
+  independently flags `Layout hash differs from the base`. U2c's quality-floor banner and a tailoring-
+  run-incomplete banner both render untouched (wiring/copy verbatim, presentation only).
+- **Cover Letter Studio**: newest draft opens by default; Evidence Trace panel shows 4 grounded
+  citations (green, each naming its Story Bank source) and 2 ungrounded terms (amber, "no source yet —
+  add or soften") — real U-STORY-1 data, honest both ways.
+- **Story Bank fix**: the exact original repro (`/dashboard/story-bank`) now renders "Did you mean
+  Story Bank?" linking to `/dashboard/stories`; followed the link and landed on the real page. Negative
+  control (`/dashboard/does-not-exist`) correctly shows no suggestion.
+- **Sweep**: all 3 studio pages × 3 viewports (390/834/1600) — `horizontalScroll: false` everywhere,
+  0 console errors, 0 page errors, 0 `/api/*` responses ≥400 across the whole run.
+- **Final health**: 3/3 (`/api/health` via nginx, `127.0.0.1:3000/api/health`, `/` via nginx) all 200.
+  `/var/log/aether/api.log` since the restart: a handful of `psycopg2.OperationalError` connection-pool
+  warm-up reconnects (clustered in the first ~30s post-restart, self-healed, zero 5xx ever served to a
+  client) and unrelated background-worker warnings (wellfound 404, one user's `MissingResumeError` on
+  discovery-sweep) — pre-existing, not B3-caused, no user-facing impact.
+
+B3 (Resume Studio aha moment, Cover Letter Studio, Story Bank fix) is VERIFIED-CLOSED on production.
