@@ -8,7 +8,7 @@
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { AuthApiError, login, registerAccount } from "../../lib/api/auth";
+import { AuthApiError, forgotPassword, login, registerAccount, resetPassword } from "../../lib/api/auth";
 
 function jsonResponse(body: unknown, status: number, headers: Record<string, string> = {}) {
   return new Response(JSON.stringify(body), {
@@ -186,5 +186,165 @@ describe("register 422 message hygiene (MV-signup-003)", () => {
     await expect(
       registerAccount({ email: "a@example.com", password: "z".repeat(80) }, "http://api.test"),
     ).rejects.toMatchObject({ status: 422, message: "password must be at most 72 bytes" });
+  });
+});
+
+/**
+ * forgotPassword / resetPassword (O-4 / MF-2 — S-FIX slice D reviewer round).
+ *
+ * These exercise the REAL fetch wrappers in lib/api/auth.ts end to end
+ * (request shape, response parsing, and every documented error mapping).
+ * Prior to this addition, both the forgot-password and reset-password PAGE
+ * tests mocked ``../lib/api/auth`` wholesale (see
+ * app/forgot-password/__tests__/page.test.tsx and
+ * app/reset-password/__tests__/page.test.tsx), so this client-layer file
+ * never actually ran these two functions.
+ */
+describe("forgotPassword", () => {
+  it("posts the email and returns the honest emailSendingEnabled/deliveryDegraded shape", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ ok: true, emailSendingEnabled: true, deliveryDegraded: false }, 200));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await forgotPassword("user@example.com", "http://api.test");
+
+    expect(result).toEqual({ ok: true, emailSendingEnabled: true, deliveryDegraded: false });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://api.test/auth/forgot-password",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ email: "user@example.com" }),
+      }),
+    );
+  });
+
+  it("surfaces the deliveryDegraded=true state as-is (MF-3) — the client must not paper over it", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(jsonResponse({ ok: true, emailSendingEnabled: true, deliveryDegraded: true }, 200)),
+    );
+
+    const result = await forgotPassword("user@example.com", "http://api.test");
+    expect(result.emailSendingEnabled).toBe(true);
+    expect(result.deliveryDegraded).toBe(true);
+  });
+
+  it("surfaces a 429 with the Retry-After seconds", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        jsonResponse(
+          { detail: "Too many password-reset requests for this email. Please wait and try again." },
+          429,
+          { "Retry-After": "300" },
+        ),
+      ),
+    );
+
+    try {
+      await forgotPassword("spam@example.com", "http://api.test");
+      expect.unreachable("forgotPassword should have thrown");
+    } catch (err) {
+      expect(err).toBeInstanceOf(AuthApiError);
+      const authErr = err as AuthApiError;
+      expect(authErr.status).toBe(429);
+      expect(authErr.retryAfterSeconds).toBe(300);
+      expect(authErr.message).toMatch(/too many attempts/i);
+    }
+  });
+
+  it("cleans a 422 email-validation message the same way register does", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        jsonResponse(
+          {
+            detail: [
+              { msg: "value is not a valid email address: missing an @ sign.", type: "value_error" },
+            ],
+          },
+          422,
+        ),
+      ),
+    );
+
+    await expect(forgotPassword("not-an-email", "http://api.test")).rejects.toMatchObject({
+      status: 422,
+      message: "Please enter a valid email address.",
+    });
+  });
+
+  it("falls back to a generic message for an unmapped status", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({}, 503)));
+
+    await expect(forgotPassword("user@example.com", "http://api.test")).rejects.toMatchObject({
+      status: 503,
+      message: expect.stringMatching(/request failed \(503\)/i),
+    });
+  });
+});
+
+describe("resetPassword", () => {
+  it("posts the token and new password and resolves on 200", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ ok: true }, 200));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await resetPassword("raw-token-123", "BrandNewPassw0rd", "http://api.test");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://api.test/auth/reset-password",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ token: "raw-token-123", password: "BrandNewPassw0rd" }),
+      }),
+    );
+  });
+
+  it("surfaces an invalid/expired token as a 400 with the backend's own detail", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(jsonResponse({ detail: "This reset link is invalid or has expired." }, 400)),
+    );
+
+    await expect(resetPassword("stale-token", "BrandNewPassw0rd", "http://api.test")).rejects.toMatchObject({
+      status: 400,
+      message: "This reset link is invalid or has expired.",
+    });
+  });
+
+  it("surfaces a 429 with the Retry-After seconds", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        jsonResponse({ detail: "Too many reset attempts for this token." }, 429, { "Retry-After": "60" }),
+      ),
+    );
+
+    try {
+      await resetPassword("guess-1", "BrandNewPassw0rd", "http://api.test");
+      expect.unreachable("resetPassword should have thrown");
+    } catch (err) {
+      expect(err).toBeInstanceOf(AuthApiError);
+      expect((err as AuthApiError).status).toBe(429);
+      expect((err as AuthApiError).retryAfterSeconds).toBe(60);
+    }
+  });
+
+  it("cleans a 422 weak-password message the same way register does", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        jsonResponse(
+          { detail: [{ msg: "Value error, password must be at least 8 characters", type: "value_error" }] },
+          422,
+        ),
+      ),
+    );
+
+    await expect(resetPassword("raw-token", "short", "http://api.test")).rejects.toMatchObject({
+      status: 422,
+      message: "password must be at least 8 characters",
+    });
   });
 });

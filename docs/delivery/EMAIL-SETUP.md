@@ -86,15 +86,26 @@ already renders whichever state the backend reports.
 
 (Wrong credentials, provider outage, unverified sending domain, etc.)
 `send_email` never raises — the endpoint still returns `200
-{"emailSendingEnabled": true}` (the flag reflects **configuration**, not
-per-request delivery success, to avoid ambiguity for the anti-enumeration
-guarantee) and logs the failure at `WARNING`/`ERROR` with the provider's own
-response so the operator can diagnose it
-(`apps/api/app/services/email_sender.py::_send_via_smtp` /
-`_send_via_api`). The visitor sees the same "check your inbox" copy either
-way — there is no way to distinguish a real failure from a real success
-without breaking anti-enumeration, which is why provider correctness should
-be verified with a real test send (step 4 above) rather than trusted blind.
+{"emailSendingEnabled": true}` (that flag reflects **configuration**, not
+per-request delivery success) and logs the failure at `WARNING`/`ERROR` with
+the provider's own response so the operator can diagnose it
+(`apps/api/app/services/email_sender.py::_send_via_smtp` / `_send_via_api`).
+
+**MF-3 correction:** a per-*address* result genuinely cannot be surfaced
+without breaking anti-enumeration (an unknown address never even attempts a
+send), but a **deployment-level** one can — a provider outage is independent
+of whether the requested account exists. `email_sender.delivery_degraded()`
+tracks whether the most recently ATTEMPTED send in this process succeeded,
+and `POST /auth/forgot-password` returns it as a second response field,
+`deliveryDegraded`. Every request (known address or not) reads the same
+shared, process-global value at response time, so it never reveals whether
+THIS request's address actually triggered a send attempt — anti-enumeration
+holds. The frontend uses it: `emailSendingEnabled: true, deliveryDegraded:
+true` renders an honest "we're having trouble delivering emails right now"
+state instead of the false-success "check your inbox" copy. Provider
+correctness should still be verified with a real test send (step 4 above)
+rather than trusted blind — `deliveryDegraded` only reflects live traffic,
+not a pre-flight check.
 
 ## Scope
 

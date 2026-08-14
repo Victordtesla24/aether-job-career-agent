@@ -69,6 +69,29 @@ def _api_env() -> _ApiConfig | None:
     }
 
 
+# Process-level "did the most recent ATTEMPTED send succeed" state (MF-3).
+# Deliberately deployment-level, not per-request/per-address: a provider
+# outage is independent of whether any particular account exists, so a
+# caller reading this after building its response does not weaken
+# anti-enumeration (every request reads the same shared value; it is never
+# derived from whether THIS request happened to attempt a send). ``None``
+# means no attempt has happened yet this process — reported as "not
+# degraded" (no evidence of failure).
+_last_attempted_send_ok: bool | None = None
+
+
+def delivery_degraded() -> bool:
+    """True iff the most recent ATTEMPTED outbound send in this process failed.
+
+    "Attempted" excludes the no-provider-configured case (that is already
+    surfaced honestly via ``is_configured()`` / ``emailSendingEnabled``) —
+    this only tracks real transport failures: bad credentials, provider
+    outage, unverified sending domain, etc. (see ``_send_via_smtp`` /
+    ``_send_via_api``).
+    """
+    return _last_attempted_send_ok is False
+
+
 def active_provider() -> str | None:
     """``"smtp"`` | ``"api"`` | ``None`` — whichever provider is configured.
 
@@ -178,8 +201,12 @@ def send_email(to_email: str, subject: str, text_body: str) -> bool:
     Never raises — a transactional-email failure must never break the
     caller's request (``POST /auth/forgot-password`` stays a 200 either way,
     to preserve anti-enumeration). No provider configured logs one
-    operator-actionable INFO line and returns ``False``.
+    operator-actionable INFO line and returns ``False`` (this case does NOT
+    update ``delivery_degraded()`` — "not configured" and "configured but
+    failing" are honestly distinct states, surfaced separately to callers as
+    ``emailSendingEnabled`` and ``deliveryDegraded`` respectively).
     """
+    global _last_attempted_send_ok
     provider = active_provider()
     if provider is None:
         logger.info(
@@ -189,6 +216,8 @@ def send_email(to_email: str, subject: str, text_body: str) -> bool:
             to_email,
         )
         return False
-    if provider == "smtp":
-        return _send_via_smtp(to_email, subject, text_body)
-    return _send_via_api(to_email, subject, text_body)
+    ok = _send_via_smtp(to_email, subject, text_body) if provider == "smtp" else _send_via_api(
+        to_email, subject, text_body
+    )
+    _last_attempted_send_ok = ok
+    return ok

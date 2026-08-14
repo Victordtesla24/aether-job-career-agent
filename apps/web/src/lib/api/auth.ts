@@ -143,10 +143,17 @@ export async function registerAccount(
  * (anti-enumeration). ``emailSendingEnabled`` is the one honest signal: when
  * false, no outbound-email provider is configured on the backend today, so
  * no link was ever actually sent for ANY address.
+ *
+ * ``deliveryDegraded`` (MF-3): true when the provider IS configured but the
+ * most recent attempted send in this deployment actually failed (bad
+ * credentials, provider outage, unverified sending domain). A configured
+ * provider is not the same as a working one — the UI must not claim "we've
+ * sent a link" when the last real attempt failed.
  */
 export interface ForgotPasswordResult {
   ok: boolean;
   emailSendingEnabled: boolean;
+  deliveryDegraded: boolean;
 }
 
 function toRateLimitError(res: Response): AuthApiError {

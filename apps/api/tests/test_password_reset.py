@@ -17,6 +17,23 @@ from __future__ import annotations
 
 import time
 
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _reset_email_delivery_state(monkeypatch):
+    """MF-3: ``email_sender._last_attempted_send_ok`` is process-global BY
+    DESIGN (a deployment-level "is the last attempted send healthy" flag —
+    see ``email_sender.delivery_degraded``'s docstring). That is exactly
+    right for production but would leak state between tests in this same
+    file/process if left alone, so pin it back to "no attempt yet" before
+    every test regardless of execution order.
+    """
+    from app.services import email_sender
+
+    monkeypatch.setattr(email_sender, "_last_attempted_send_ok", None)
+    yield
+
 
 def _register(client, email="reset-target@example.com", password="OldPassw0rd"):
     resp = client.post("/auth/register", json={"email": email, "password": password})
@@ -63,7 +80,9 @@ class TestForgotPasswordHonestAntiEnumeration:
         email, _ = _register(client, email="provider-on@example.com")
         resp = client.post("/auth/forgot-password", json={"email": email})
         assert resp.status_code == 200, resp.text
-        assert resp.json()["emailSendingEnabled"] is True
+        body = resp.json()
+        assert body["emailSendingEnabled"] is True
+        assert body["deliveryDegraded"] is False
         assert sent_to == [email]
 
 
@@ -307,3 +326,89 @@ class TestPasswordResetRateLimiting:
         # never anything else.
         blocked_index = statuses.index(429)
         assert all(s == 400 for s in statuses[:blocked_index]), statuses
+
+
+class TestForgotPasswordDeliveryDegraded:
+    """MF-3: a provider that is CONFIGURED but actually FAILING must not be
+    reported as a successful send. These go through the real
+    ``email_sender.send_email`` (only the transport call — ``httpx.post`` —
+    is faked), unlike the tests above, so the internal
+    ``delivery_degraded()`` state genuinely reflects a real attempt rather
+    than a fully-mocked-out ``send_email``.
+    """
+
+    def test_provider_send_failure_reports_degraded_flag_not_fake_success(self, client, monkeypatch):
+        monkeypatch.setenv("AETHER_EMAIL_API_KEY", "test-key")
+        monkeypatch.setenv("AETHER_EMAIL_FROM", "noreply@aether.local")
+
+        import httpx
+
+        class _FailResponse:
+            status_code = 502
+            text = "Bad Gateway"
+
+        monkeypatch.setattr(httpx, "post", lambda *a, **k: _FailResponse())
+
+        email, _ = _register(client, email="degraded-flag@example.com")
+        resp = client.post("/auth/forgot-password", json={"email": email})
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        # A real send was attempted (provider is configured) but it failed —
+        # the honest response must say both things, never collapse "attempted"
+        # into "succeeded".
+        assert body["emailSendingEnabled"] is True
+        assert body["deliveryDegraded"] is True
+
+    def test_successful_send_reports_not_degraded(self, client, monkeypatch):
+        monkeypatch.setenv("AETHER_EMAIL_API_KEY", "test-key")
+        monkeypatch.setenv("AETHER_EMAIL_FROM", "noreply@aether.local")
+
+        import httpx
+
+        class _OkResponse:
+            status_code = 200
+            text = "ok"
+
+        monkeypatch.setattr(httpx, "post", lambda *a, **k: _OkResponse())
+
+        email, _ = _register(client, email="healthy-flag@example.com")
+        resp = client.post("/auth/forgot-password", json={"email": email})
+        assert resp.status_code == 200, resp.text
+        body = resp.json()
+        assert body["emailSendingEnabled"] is True
+        assert body["deliveryDegraded"] is False
+
+    def test_unknown_email_reflects_shared_process_state_not_per_request(self, client, monkeypatch):
+        """Anti-enumeration: an UNKNOWN address never triggers a send attempt
+        at all, yet during a provider outage it must still report
+        ``deliveryDegraded: true`` — identical to a known address — because
+        the flag is a shared, process-level signal read at response time,
+        never derived from whether THIS request itself attempted a send.
+        Deriving it per-request would leak account existence: an attacker
+        could tell a known address apart from an unknown one during an
+        outage purely from this field.
+        """
+        monkeypatch.setenv("AETHER_EMAIL_API_KEY", "test-key")
+        monkeypatch.setenv("AETHER_EMAIL_FROM", "noreply@aether.local")
+
+        import httpx
+
+        class _FailResponse:
+            status_code = 502
+            text = "down"
+
+        monkeypatch.setattr(httpx, "post", lambda *a, **k: _FailResponse())
+
+        # Trip the flag via a KNOWN account first (a real send is attempted
+        # and fails).
+        email, _ = _register(client, email="trip-flag@example.com")
+        tripped = client.post("/auth/forgot-password", json={"email": email})
+        assert tripped.json()["deliveryDegraded"] is True
+
+        # An entirely UNKNOWN address — no send is even attempted for it —
+        # must still see the same shared degraded state.
+        resp = client.post(
+            "/auth/forgot-password", json={"email": "definitely-nobody-mf3@example.com"}
+        )
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["deliveryDegraded"] is True

@@ -37,7 +37,7 @@ describe("ForgotPasswordClient", () => {
   });
 
   it("shows the honest 'sent' state when the backend reports emailSendingEnabled=true", async () => {
-    forgotPasswordMock.mockResolvedValue({ ok: true, emailSendingEnabled: true });
+    forgotPasswordMock.mockResolvedValue({ ok: true, emailSendingEnabled: true, deliveryDegraded: false });
     render(<ForgotPasswordClient supportEmail="help@aether.example" supportPhone={null} />);
 
     fireEvent.change(screen.getByLabelText(/^email$/i), { target: { value: "user@example.com" } });
@@ -46,6 +46,21 @@ describe("ForgotPasswordClient", () => {
     await waitFor(() => expect(screen.getByTestId("forgot-password-sent")).toBeTruthy());
     expect(forgotPasswordMock).toHaveBeenCalledWith("user@example.com");
     expect(screen.queryByTestId("forgot-password-not-configured")).toBeFalsy();
+    expect(screen.queryByTestId("forgot-password-degraded")).toBeFalsy();
+  });
+
+  it("MF-3: does NOT claim success when the backend reports deliveryDegraded=true, even though emailSendingEnabled is true", async () => {
+    forgotPasswordMock.mockResolvedValue({ ok: true, emailSendingEnabled: true, deliveryDegraded: true });
+    render(<ForgotPasswordClient supportEmail="help@aether.example" supportPhone={null} />);
+
+    fireEvent.change(screen.getByLabelText(/^email$/i), { target: { value: "user@example.com" } });
+    fireEvent.click(screen.getByRole("button", { name: /send reset link/i }));
+
+    await waitFor(() => expect(screen.getByTestId("forgot-password-degraded")).toBeTruthy());
+    // The banned optimistic-success pattern: must never render the fake "sent" copy.
+    expect(screen.queryByTestId("forgot-password-sent")).toBeFalsy();
+    const degraded = screen.getByTestId("forgot-password-degraded");
+    expect(degraded.textContent).toContain("help@aether.example");
   });
 
   it("shows the honest 'not configured' + support-contact state when emailSendingEnabled=false", async () => {

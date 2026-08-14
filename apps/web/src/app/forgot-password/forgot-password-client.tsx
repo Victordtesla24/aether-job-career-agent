@@ -10,13 +10,20 @@
  *
  * Submits POST /api/auth/forgot-password with the visitor's email. The
  * response is ALWAYS a 200 (anti-enumeration — it never reveals whether an
- * account exists for that address) with one honest signal:
- * ``emailSendingEnabled``. When true, a reset link was genuinely attempted
- * and the page shows the standard "check your inbox" state. When false, no
- * outbound-email provider is configured on this deployment today, and the
- * page falls back to the PRE-EXISTING honest copy (MV-login-004): it does
- * NOT claim an email was sent, and instead points the visitor at the
- * operator's support contact so a manual reset can still happen.
+ * account exists for that address) with two honest signals:
+ * ``emailSendingEnabled`` and ``deliveryDegraded``. When
+ * ``emailSendingEnabled`` is true AND delivery is not degraded, a reset link
+ * was genuinely attempted and the page shows the standard "check your
+ * inbox" state. When ``emailSendingEnabled`` is false, no outbound-email
+ * provider is configured on this deployment today, and the page falls back
+ * to the PRE-EXISTING honest copy (MV-login-004): it does NOT claim an
+ * email was sent, and instead points the visitor at the operator's support
+ * contact so a manual reset can still happen. When ``emailSendingEnabled``
+ * is true but ``deliveryDegraded`` is true (MF-3), a provider IS configured
+ * but its most recent attempted send actually failed (bad credentials,
+ * outage, unverified domain) — the page must NOT render the fake-success
+ * "we've sent a link" copy in that case either, since nothing was
+ * confirmed delivered.
  */
 import Link from "next/link";
 import { FormEvent, useState } from "react";
@@ -46,6 +53,7 @@ type SubmitState =
   | { status: "submitting" }
   | { status: "sent" }
   | { status: "not-configured" }
+  | { status: "degraded" }
   | { status: "error"; message: string };
 
 export default function ForgotPasswordClient({
@@ -63,7 +71,13 @@ export default function ForgotPasswordClient({
     setState({ status: "submitting" });
     try {
       const result = await forgotPassword(email);
-      setState({ status: result.emailSendingEnabled ? "sent" : "not-configured" });
+      if (!result.emailSendingEnabled) {
+        setState({ status: "not-configured" });
+      } else if (result.deliveryDegraded) {
+        setState({ status: "degraded" });
+      } else {
+        setState({ status: "sent" });
+      }
     } catch (err) {
       setState({
         status: "error",
@@ -101,6 +115,35 @@ export default function ForgotPasswordClient({
             >
               If an account exists for that email, we&apos;ve sent a link to reset your password. It
               expires in 1 hour and can only be used once.
+            </p>
+          ) : state.status === "degraded" ? (
+            <p
+              role="status"
+              data-testid="forgot-password-degraded"
+              className="text-sm text-aether-muted leading-relaxed"
+            >
+              We&apos;re having trouble delivering reset emails right now, so we can&apos;t confirm one
+              was sent.{" "}
+              {supportEmail ? (
+                <>
+                  To regain access to your account, email{" "}
+                  <a href={`mailto:${supportEmail}`} className="text-aether-indigo hover:underline">
+                    {supportEmail}
+                  </a>{" "}
+                  from the address you registered with and we&apos;ll help you reset it.
+                  <SupportPhoneLine supportPhone={supportPhone} />
+                </>
+              ) : (
+                <>
+                  Please try again shortly, or reach the operator through the channel described on
+                  our{" "}
+                  <Link href="/terms" className="text-aether-indigo hover:underline">
+                    Terms
+                  </Link>{" "}
+                  page.
+                  <SupportPhoneLine supportPhone={supportPhone} />
+                </>
+              )}
             </p>
           ) : state.status === "not-configured" ? (
             <p

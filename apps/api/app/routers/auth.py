@@ -218,8 +218,18 @@ class ForgotPasswordResponse(BaseModel):
     # returned: ``False`` means no outbound-email provider is configured
     # today, so no email was ever attempted for ANY address — the frontend
     # renders that plainly rather than claiming a link was sent.
+    #
+    # ``deliveryDegraded`` (MF-3): a provider CAN be configured and still be
+    # failing (bad credentials, provider outage, unverified sending domain).
+    # This reflects ``email_sender.delivery_degraded()`` — a process-level,
+    # deployment-wide "did the most recent attempted send succeed" flag, NOT
+    # a per-request/per-address result. It is safe against anti-enumeration
+    # for that exact reason: every request (known address or not) reads the
+    # same shared value at response time, so it never reveals whether THIS
+    # request's address actually triggered a send attempt.
     ok: bool = True
     emailSendingEnabled: bool
+    deliveryDegraded: bool = False
 
 
 class ResetPasswordRequest(BaseModel):
@@ -259,6 +269,12 @@ def forgot_password(request: Request, body: ForgotPasswordRequest) -> ForgotPass
     attempted; either way the response's ``emailSendingEnabled`` flag tells
     the frontend the honest truth instead of claiming a link was sent when it
     was not.
+
+    ``deliveryDegraded`` (MF-3) additionally reports whether the most recent
+    ATTEMPTED send in this process actually succeeded — a configured
+    provider can still be failing (bad credentials, outage, unverified
+    domain), and that must not be reported to the visitor as a successful
+    send just because ``emailSendingEnabled`` is true.
     """
     from app.services import email_sender
     from app.services.password_reset import build_reset_email_body, create_reset_token
@@ -296,7 +312,10 @@ def forgot_password(request: Request, body: ForgotPasswordRequest) -> ForgotPass
             "forgot-password: requested for an address with no local "
             "password account (anti-enumeration 200; no token minted)"
         )
-    return ForgotPasswordResponse(emailSendingEnabled=email_enabled)
+    return ForgotPasswordResponse(
+        emailSendingEnabled=email_enabled,
+        deliveryDegraded=email_sender.delivery_degraded(),
+    )
 
 
 @router.post(
