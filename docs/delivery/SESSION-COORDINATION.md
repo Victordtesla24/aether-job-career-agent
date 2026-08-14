@@ -282,6 +282,47 @@ regression set, 147 tests) green on origin/main content both before AND after U2
 merged in. Evidence: `uat/reports/evidence/market-perf/main-reds/land/`. The 9 reds ORCH-EXEC reported
 are CLOSED on `main`.
 
+## 2026-08-14T18:5xZ — session 9c6a2ba6 pushed slice sui-b3 (studios) to the feature branch
+- **Slice:** S-UI **B3** — Resume Studio (the aha moment), Cover Letter Studio, Story Bank. Branch
+  `feat/sui-b3` @ `f110ce9` (merged with `origin/main c5db511`, U2c threshold wiring re-applied verbatim).
+  Independent judge verdict: PASS (`uat/reports/evidence/market-perf/s-ui/b3/judge/B3-JUDGE-REPORT.md`,
+  per-page scores 8/8/9, bar is ≥8).
+- **Files (FE presentation only; `apps/api` diff vs origin/main = EMPTY — 0 files):**
+  `apps/web/src/app/dashboard/{resume,cover-letters,stories,[...slug]}/page.tsx`,
+  `components/resume/{AhaHero,ChangeList,diff-semantics}.{tsx,ts}` (+ tests),
+  `components/cover-letters/*` (7 panels), `components/stories/{story-card,story-sheet,story-aside}.tsx`,
+  `components/analytics/TailoringImpact.tsx`, `lib/navigation-suggest.ts` (+ test), and this doc.
+- **Story Bank "Section not found" root cause (diagnosis/STORY-BANK-SECTION-NOT-FOUND.json):** the real
+  page ships at `/dashboard/stories`; the wireframe name `/dashboard/story-bank` hit the `[...slug]`
+  catch-all and dead-ended. Routing/anchor/data/API all ruled out with evidence — the fix is a
+  "Did you mean Story Bank?" suggestion that SUGGESTS, never redirects (silent-fallback rule). No API
+  change; `apps/api` untouched.
+- **Gates (fixer-hard reverify @ f110ce9, artefacts `uat/reports/evidence/market-perf/s-ui/b3/gates/*-fixer-reverify.txt`):**
+  targeted vitest 26 files / 126 tests PASS; full vitest (post-merge) 203 files / 1661 PASS; `tsc --noEmit`
+  0; `next lint --max-warnings=0` clean; worktree `next build` exit 0. No existing test modified (3 NEW
+  test files for B3-created code only; carve-out: none).
+- Touches no other session's active claims.
+
+### Correction — this batch DOES land to `main` now, superseding the note above
+S-UI-REBUILD-SPEC.md §6.5 describes ONE coordinated landing after all five batches (B0–B4) merge into
+`feat/sui-rebuild`. In practice B0/B1(`feat/sui1-agents`→dashboard+analytics)/B2 already each landed to
+`main` individually with their own deploy + live-verify (see B2 LAND/VERIFY entries, `analytics-viz`
+entries, this doc's history) — this session's standing mandate is thin-slice continuous production
+delivery (owner instruction, 2026-08-13), which supersedes the batched-integration plan in §6.5 for this
+workstream. B3 follows the same precedent: landing directly to `main` per-batch rather than waiting on
+B4. Recorded here so a future reader of §6.5 isn't misled by the doc text, and so the earlier "NOT main
+landing" note on this same branch (superseded, not deleted, see git history) doesn't cause confusion.
+
+## Claim — session 9c6a2ba6, slice sui-b3, 2026-08-14T19:3xZ — LANDING to main
+
+Landing `feat/sui-b3` (Resume Studio aha moment, Cover Letter Studio, Story Bank fix) to `main`, worktree
+`aether-wt-sui-b3`. Merged latest `origin/main` (`e0efeec`, includes admin-full + dashboard 409 hotfix)
+into the branch; re-running targeted gates + `next build` on the merged tree before push. `apps/api` diff
+vs `origin/main` remains EMPTY (B3 is FE-only). Files listed above, plus this doc. Not touching any other
+session's active claims (ORCH-EXEC's MON-*/B5/B7/D.*/routers/agents.py, sidebar.tsx deletion).
+
+- **Expected deploy window:** next `aether-autodeploy.timer` cycle (5-min) after `HEAD:main` push.
+
 ## 2026-08-14T19:0xZ — session 9c6a2ba6 CLAIMS a web deploy (dashboard below-floor 409 hotfix)
 - Prod bug: Dashboard "Needs Approval" inline Approve leaked the U2c quality-floor 409 as a raw exception + dropped the card (mislabeled "already handled"). Fix: resolveApproval detects the below-floor 409 (acknowledge_below_floor token), offers Approve-anyway, re-sends with the flag. Files: apps/web/src/app/dashboard/page.tsx + its test. Push HEAD:main → auto-deploy web rebuild.
 

@@ -59,18 +59,18 @@ export function StoryAside({
 }) {
   const extractorState = extractorTriggerState(drafting, "Draft missing stories", "Drafting from resume…");
   return (
-    <aside className="w-full space-y-4 lg:w-80 lg:shrink-0" aria-label="Story insights">
-      <section className="glass rounded-2xl border border-white/10 p-5" data-testid="question-mapper">
+    <aside className="w-full space-y-4 lg:w-[300px] lg:shrink-0 lg:sticky lg:top-20" aria-label="Story insights">
+      <section className="elev-1 rounded-2xl p-5" data-testid="question-mapper">
         <div className="mb-3 flex items-center gap-2">
           <i className="fa-solid fa-diagram-project text-aether-coral" aria-hidden="true" />
-          <h2 className="text-sm font-semibold">Interview Question Mapper</h2>
+          <h2 className="text-[13px] font-semibold tracking-[-0.01em]">Interview Question Mapper</h2>
         </div>
         <p className="mb-4 text-[11px] text-aether-muted">Which stories answer common questions.</p>
         <div className="space-y-3 text-[13px]">
           {MAPPER_QUESTIONS.map(({ q, categories, accent }) => {
             const match = bestStory(stories, categories);
             return (
-              <div key={q} className="glass-raised rounded-xl border border-white/10 p-3">
+              <div key={q} className="elev-2 rounded-xl p-3">
                 <div className="mb-1 text-[#C7C7D6]">{q}</div>
                 <div
                   className={`flex items-center text-[11px] ${match ? accent : "text-aether-muted-dim"}`}
@@ -96,20 +96,20 @@ export function StoryAside({
         </div>
       </section>
 
-      <section className="glass rounded-2xl border border-white/10 p-5" data-testid="coverage-gaps">
+      <section className="elev-1 rounded-2xl p-5" data-testid="coverage-gaps">
         <div className="mb-3 flex items-center gap-2">
           <i className="fa-solid fa-triangle-exclamation text-[#FBBF24]" aria-hidden="true" />
-          <h2 className="text-sm font-semibold">Coverage Gaps</h2>
+          <h2 className="text-[13px] font-semibold tracking-[-0.01em]">Coverage Gaps</h2>
         </div>
         <div className="space-y-2 text-[13px] text-[#C7C7D6]">
           {COVERAGE_THEMES.map(({ label, keywords }) => {
             const count = coverageCount(stories, keywords);
             const status =
               count === 0
-                ? { text: "No story", cls: "text-[#F87171]" }
+                ? { text: "No story", cls: "text-state-danger" }
                 : count === 1
                   ? { text: "Thin", cls: "text-[#FBBF24]" }
-                  : { text: "Covered", cls: "text-[#34D399]" };
+                  : { text: "Covered", cls: "text-state-ok" };
             return (
               <div key={label} className="flex items-center justify-between gap-2">
                 <span>{label}</span>

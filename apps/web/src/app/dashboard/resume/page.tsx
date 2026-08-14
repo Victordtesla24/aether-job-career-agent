@@ -3,10 +3,34 @@
 /**
  * Resume workspace — version list, tailoring runs and evidence-linked diffs
  * backed by GET /resumes, GET /resumes/{id}/diff and POST /agents/tailor/run.
+ *
+ * S-UI B3 — THE AHA MOMENT (presentation only).
+ * -------------------------------------------
+ * Every fetch, every hook call, every piece of derived state below is the same
+ * as it was before this batch: same endpoints, same order, same conditions,
+ * same honesty branches. What changed is the SHAPE of the screen. The old page
+ * opened with two near-empty 240px identity panels, a `— / —` integrity strip
+ * and a 1,000px void beside eight identically-titled version cards; the first
+ * thing a subscriber saw after their first tailoring run was nothing at all.
+ *
+ * It now opens with the measured transformation — baseline ATS -> this
+ * version's ATS with the exact delta, the changed lines with the words that
+ * are genuinely new marked in the SAME coral the PDF renderer washes them in
+ * (`components/resume/diff-semantics.ts` mirrors `services/resume_pdf.py`),
+ * the file-level verification verdict exactly as `GET /resumes/{id}/fidelity`
+ * reports it, and the 10-dimension scorecard with `—` wherever a dimension was
+ * not measured. Nothing here renders a number the machinery did not measure,
+ * and every honesty branch that existed before still exists, word for word.
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import MetricTooltip from "../../../components/MetricTooltip";
+import AhaHero from "../../../components/resume/AhaHero";
+import ChangeList from "../../../components/resume/ChangeList";
+import { changeCounts, renderBullets } from "../../../components/resume/diff-semantics";
+import PageHeader from "../../../components/shell/PageHeader";
+import Section from "../../../components/ui/Section";
+import { button, chip, listCard } from "../../../components/ui/recipes";
 import { QualityFloorNotice } from "../../../components/quality/QualityFloorNotice";
 import { type QualityGate, qualityGateFrom } from "../../../lib/quality-gate";
 import { useRealtimeResources } from "../../../hooks/useRealtime";
@@ -105,6 +129,9 @@ function asFidelityReport(value: unknown): FormatFidelityReport | null {
 /** How many version cards to show before "Show more" (MV-resume-studio-005). */
 const VERSIONS_PAGE_SIZE = 8;
 
+/** How many change cards the studio opens with before "Show all". */
+const CHANGES_PREVIEW = 4;
+
 /** Substring of the honest no-op message the tailor run returns / a failed async
  *  job surfaces, so the UI can render it as an informational notice rather than a
  *  scary error (MV-resume-studio-003). */
@@ -168,6 +195,23 @@ export default function ResumePage() {
   const [qualityGate, setQualityGate] = useState<QualityGate | null>(null);
   const [downloadNote, setDownloadNote] = useState<string | null>(null);
   const [visibleCount, setVisibleCount] = useState(VERSIONS_PAGE_SIZE);
+  /** Presentation-only rail filter — 486 identically-titled versions are
+   *  unusable without one (§4.4). Filters the ALREADY-fetched list; it makes
+   *  no request and changes no query. */
+  const [versionFilter, setVersionFilter] = useState("");
+  const [allChanges, setAllChanges] = useState(false);
+  /**
+   * True while the four per-version reads (`/diff`, `/ats`, `/tailoring-impact`,
+   * `/fidelity`) for the OPEN version are in flight.
+   *
+   * This is an honesty flag, not a spinner. Without it the aha hero mounted
+   * with every measurement still `null` and therefore printed "not measured"
+   * and a neutral verification chip for a beat before the real numbers
+   * arrived — a false negative claim about the user's own resume. M7: the
+   * skeleton stands at the FINAL geometry instead, so nothing is claimed and
+   * nothing shifts when the data lands.
+   */
+  const [detailLoading, setDetailLoading] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -276,11 +320,13 @@ export default function ResumePage() {
 
   const openResume = async (resume: Resume) => {
     setSelected(resume);
+    setDetailLoading(true);
     setDiff(null);
     setAts(null);
     setTailoringImpact(null);
     setFidelity(null);
     setDownloadNote(null);
+    setAllChanges(false);
     // W-TAILOR-CONVERGE item 5: the before/after ATS panel used to exist only
     // in transient state populated by the tailor RUN response, so a reload (or
     // simply opening an older version) showed nothing. The tailoring agent now
@@ -344,16 +390,9 @@ export default function ResumePage() {
       );
     } catch {
       setFidelity(null);
+    } finally {
+      setDetailLoading(false);
     }
-  };
-
-  const bullets = (resume: Resume): string[] => {
-    const sections = resume.sections as { bullets?: unknown };
-    return Array.isArray(sections.bullets)
-      ? (sections.bullets as Array<{ text?: string } | string>).map((b) =>
-          typeof b === "string" ? b : (b.text ?? ""),
-        )
-      : [];
   };
 
   // Real per-version format-integrity signal (MV-resume-studio-004): the base is
@@ -429,46 +468,76 @@ export default function ResumePage() {
   // numbers instead of presenting a delta computed off a placeholder.
   const conversionDegraded = conversion?.provenance === "degraded";
 
+  const changes = useMemo(() => diff?.changes ?? [], [diff]);
+  const counts = useMemo(() => changeCounts(changes), [changes]);
+  const evidenceCovered = useMemo(
+    () => changes.filter((c) => c.evidenceRef).length,
+    [changes],
+  );
+  /** The bullets the DOWNLOAD would draw, resolved through the renderer's own
+   *  swap/wash rules — so the studio and the produced file agree. */
+  const renderedBullets = useMemo(() => {
+    if (!selected) return [];
+    const sections = selected.sections as { bullets?: unknown };
+    const stored = Array.isArray(sections.bullets)
+      ? (sections.bullets as Array<{ text?: string } | string>).map((b) =>
+          typeof b === "string" ? b : (b.text ?? ""),
+        )
+      : [];
+    return renderBullets(stored, changes);
+  }, [selected, changes]);
+  const changedBulletCount = renderedBullets.filter((b) => b.changed).length;
+
+  /** Rail filter — pure client-side narrowing of the fetched list. */
+  const filteredResumes = useMemo(() => {
+    const list = resumes ?? [];
+    const q = versionFilter.trim().toLowerCase();
+    if (!q) return list;
+    return list.filter(
+      (r) =>
+        `v${r.version}`.includes(q) ||
+        (r.label ?? "").toLowerCase().includes(q),
+    );
+  }, [resumes, versionFilter]);
+
   return (
-    <div className="space-y-6">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold">Resume</h1>
-          <p className="text-sm text-aether-muted">
-            Versioned, evidence-linked tailoring. Base resume is immutable.
-          </p>
-        </div>
-        <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto">
-          <select
-            value={selectedJob}
-            onChange={(e) => setSelectedJob(e.target.value)}
-            className="glass w-full min-w-0 rounded-lg border border-white/10 bg-transparent px-3 py-2 text-sm sm:w-auto"
-            aria-label="Select a job to tailor for"
-            data-testid="tailor-job-select"
-          >
-            <option value="" className="bg-black">
-              Select a job to tailor for…
-            </option>
-            {jobs.map((job) => (
-              <option key={job.id} value={job.id} className="bg-black">
-                {job.title} · {job.company}
+    <div className="space-y-5">
+      <PageHeader
+        title="Resume Studio"
+        subtitle="Versioned, evidence-linked tailoring. Base resume is immutable."
+        action={
+          <div className="flex w-full min-w-0 flex-wrap items-center gap-2 sm:w-auto">
+            <select
+              value={selectedJob}
+              onChange={(e) => setSelectedJob(e.target.value)}
+              className="elev-1 h-10 w-full min-w-0 rounded-lg border-hairline px-3 text-sm text-aether-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-aether-coral/50 sm:w-[280px]"
+              aria-label="Select a job to tailor for"
+              data-testid="tailor-job-select"
+            >
+              <option value="" className="bg-black">
+                Select a job to tailor for…
               </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            data-testid="run-tailor-btn"
-            onClick={() => void runTailor()}
-            disabled={running || !selectedJob}
-            className="rounded-xl bg-aether-coral px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
-          >
-            {running ? "Tailoring..." : "Tailor Resume"}
-          </button>
-        </div>
-      </header>
+              {jobs.map((job) => (
+                <option key={job.id} value={job.id} className="bg-black">
+                  {job.title} · {job.company}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              data-testid="run-tailor-btn"
+              onClick={() => void runTailor()}
+              disabled={running || !selectedJob}
+              className={button({ tone: "primary", size: "md", class: "h-10 text-aether-bg" })}
+            >
+              {running ? "Tailoring..." : "Tailor Resume"}
+            </button>
+          </div>
+        }
+      />
 
       {error ? (
-        <p className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">
+        <p className="rounded-xl border border-state-danger/30 bg-state-danger/10 p-3 text-sm text-state-danger">
           {error}
         </p>
       ) : null}
@@ -476,313 +545,258 @@ export default function ResumePage() {
       {notice ? (
         <p
           data-testid="tailor-notice"
-          className="rounded-xl border border-aether-amber/30 bg-aether-amber/10 p-3 text-sm text-aether-amber"
+          className="rounded-xl border border-state-warn/30 bg-state-warn/10 p-3 text-sm text-state-warn"
         >
           {notice}
         </p>
       ) : null}
 
-      <section className="grid gap-4 lg:grid-cols-2" data-design-id="panes-rs0405">
-        <div className="glass min-h-[240px] min-w-0 rounded-2xl border border-white/10 p-5" data-design-id="pane-original-rs04">
-          <div className="flex items-center gap-2">
-            <span className="h-2 w-2 rounded-full bg-aether-muted-dim" aria-hidden="true" />
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-aether-muted">Original — Base Resume</h2>
-          </div>
-          {originalIdentity ? (
-            <>
-              <p className="mt-3 break-words text-lg font-bold tracking-wide" data-testid="hero-original-name">
-                {originalIdentity.name}
-              </p>
-              <p className="break-words text-xs text-aether-muted-dim" data-testid="hero-original-title">
-                {originalIdentity.title}
-              </p>
-            </>
-          ) : (
-            <p className="mt-3 text-sm text-aether-muted-dim" data-testid="hero-original-empty">
-              No base resume yet.
-            </p>
-          )}
-          <p className="mt-3 text-sm text-aether-muted">
-            Base resume is immutable — every tailored version derives from this source of truth.
-          </p>
-        </div>
-        <div className="glass min-h-[240px] min-w-0 rounded-2xl border border-aether-coral/30 p-5" data-design-id="pane-tailored-rs05">
-          <div className="flex items-center gap-2">
-            <span className="h-2 w-2 rounded-full bg-aether-green" aria-hidden="true" />
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-aether-muted">Tailored — Latest Version</h2>
-          </div>
-          {tailoredIdentity ? (
-            <>
-              <p className="mt-3 break-words text-lg font-bold tracking-wide" data-testid="hero-tailored-name">
-                {tailoredIdentity.name}
-              </p>
-              <p className="text-xs text-aether-muted-dim">Keyword-aligned for the selected role</p>
-            </>
-          ) : (
-            <p className="mt-3 text-sm text-aether-muted-dim" data-testid="hero-tailored-empty">
-              No tailored version yet.
-            </p>
-          )}
-          <div className="mt-3 flex min-w-0 flex-wrap gap-2 text-xs">
-            {tailoredResume ? (
-              <span className="min-w-0 max-w-full break-words rounded-full border border-aether-green/30 px-2 py-0.5 text-aether-green">
-                {tailoredResume.label}
-              </span>
-            ) : (
-              <span className="rounded-full border border-white/10 px-2 py-0.5 text-aether-muted-dim">
-                No tailored version yet — run tailoring against a job
-              </span>
-            )}
-          </div>
-        </div>
-      </section>
-
-      <section className="glass rounded-2xl border border-white/10 p-5" data-design-id="integrity-strip-rs14">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-aether-muted">Format Integrity Check</h2>
-            {!selected ? (
-              <p className="mt-1 text-sm text-aether-muted-dim" data-testid="integrity-status">
-                Select a version to verify its layout against the immutable base.
-              </p>
-            ) : verifiedChangesDropped > 0 ? (
-              // Derived from the VERIFIED report for this exact version, and
-              // stated FIRST: it is the only measured fact in this panel, so it
-              // outranks both the listing's mechanism flag and the hash
-              // comparison — neither of which can see a missing rewrite.
-              <p className="mt-1 text-sm text-aether-amber" data-testid="integrity-status">
-                {verifiedChangesDropped} of {fidelityCounts?.changesRequested} tailored changes
-                could not be applied to the file you download — this version is not a complete
-                tailored resume. The full wording is in the change summary below.
-              </p>
-            ) : !formatPreservationKnown ? (
-              <p className="mt-1 text-sm text-aether-muted-dim" data-testid="integrity-status">
-                Format preservation status is unknown for this version — we can&apos;t yet
-                confirm whether download will match your original layout.
-              </p>
-            ) : formatExplicitlyUnpreserved ? (
-              <p className="mt-1 text-sm text-aether-amber" data-testid="integrity-status">
-                Format not preserved for this upload — download renders in the Aether standard
-                template, not your original layout.
-              </p>
-            ) : formatIntact ? (
-              <p className="mt-1 text-sm text-aether-green" data-testid="integrity-status">
-                Layout hash matches the base — typography, spacing, columns &amp; margins preserved.
-              </p>
-            ) : (
-              <p className="mt-1 text-sm text-aether-amber" data-testid="integrity-status">
-                Layout hash differs from the base — review formatting before using this version.
-              </p>
-            )}
-            {formatFidelity ? (
-              // U2b (R-F2/R-F4): the API's OWN per-version report, not a
-              // hard-coded string. A genuine docx-native preservation and a
-              // low-confidence PDF re-flow used to render identical copy here,
-              // which is exactly the silent claim R-F4 forbids.
-              <p
-                className="mt-1 text-xs text-aether-muted-dim"
-                data-testid="format-fidelity-detail"
-              >
-                <span className="mono uppercase tracking-wide">
-                  {formatFidelity.method}
-                </span>
-                {" · "}
-                {formatFidelity.confidence} confidence — {formatFidelity.note}
-              </p>
-            ) : null}
-            {fidelityCounts ? (
-              // The counts come from re-reading the file this version renders
-              // to — not from what the tailoring run believed it changed.
-              <p
-                className={`mt-1 text-xs ${
-                  (fidelityCounts.changesDropped ?? 0) > 0
-                    ? "text-aether-amber"
-                    : "text-aether-green"
-                }`}
-                data-testid="format-fidelity-counts"
-              >
-                {(fidelityCounts.changesDropped ?? 0) > 0
-                  ? `Verified on the produced file: ${fidelityCounts.changesApplied ?? 0} of ${fidelityCounts.changesRequested} tailored changes applied — ${fidelityCounts.changesDropped} could not be applied to this layout (the full wording is in the change summary below).`
-                  : `Verified on the produced file: all ${fidelityCounts.changesRequested} tailored changes are present in the document you download.`}
-              </p>
-            ) : null}
-            <p className="mt-1 text-xs text-aether-muted-dim">
-              {diff
-                ? `Changes Summary: ${diff.changes.filter((c) => c.before).length} rewrites · ${diff.changes.filter((c) => !c.before).length} additions${formatIntact ? " · formatHash carried from base" : ""}`
-                : "Select a tailored version to see its change summary."}
-            </p>
-          </div>
-          <div className="text-center">
-            <div className="flex gap-6 text-xs uppercase tracking-wide text-aether-muted-dim">
-              <span className="block">Modifications</span>{" "}
-              <span className="block">Additions</span>
-            </div>
-            <div className="mt-1 flex justify-around gap-6">
-              <span className="mono text-xl font-bold text-aether-amber">
-                {diff ? diff.changes.filter((c) => c.before).length : "—"}
-              </span>
-              <span className="mono text-xl font-bold text-aether-green">
-                {diff ? diff.changes.filter((c) => !c.before).length : "—"}
-              </span>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {conversion ? (
-        <section
-          className="glass rounded-2xl border border-white/10 p-5"
-          data-design-id="conversion-metrics-rs16"
-          data-testid="conversion-metrics"
-        >
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-aether-muted">
-            ATS Conversion Impact
-            {conversionDegraded ? (
-              <span
-                className="ml-1.5 rounded-full border border-white/20 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-aether-muted-dim"
-                data-testid="conversion-not-measured-badge"
-              >
-                not measured
-              </span>
-            ) : null}
-          </h2>
-          <p className="mt-2 text-sm text-aether-muted" data-testid="conversion-before-after">
-            Before:{" "}
-            <span className="mono font-semibold text-white">
-              {conversion.provenance === "degraded" ? "—" : `${conversion.baselineATSScore}%`}
-            </span>{" "}
-            → After:{" "}
-            <span className="mono font-semibold text-aether-green">
-              {conversion.provenance === "degraded" ? "—" : `${conversion.tailoredATSScore}%`}
-            </span>
-          </p>
-          <p className="mt-1 text-sm" data-testid="conversion-lift">
-            <MetricTooltip
-              label="Estimated interview conversion improvement"
-              value={
-                <span className="mono font-semibold text-aether-green">
-                  {conversion.provenance === "degraded" ? "—" : conversion.estimatedConversionLift}
-                </span>
-              }
-              tooltip={`${conversion.methodology} This is an illustrative estimate, not a measured outcome.`}
-            />
-          </p>
-          {conversionDegraded ? (
-            <p className="mt-3 text-xs text-aether-muted-dim" data-testid="conversion-degraded-note">
-              Semantic similarity could not be measured for the before/after re-score
-              — a neutral placeholder stood in instead, so this delta and the
-              conversion lift above should be treated as directional until scoring is
-              available again.
-            </p>
-          ) : null}
-        </section>
-      ) : null}
-
       {/* U2c — the failing dimensions, verbatim from this version's real
           scores. Rendered ABOVE the loop's prose warning because a user
-          scanning the page needs the checkable numbers first. */}
+          scanning the page needs the checkable numbers first.
+          UNTOUCHABLE WIRING arriving from main: B3 restyled the frame around
+          the loop's PROSE warning below it and left this component, its gate
+          source and its copy exactly as U2c shipped them. */}
       <QualityFloorNotice gate={qualityGate} testId="tailor-quality-floor" />
 
       {tailorWarning ? (
-        <p
-          data-testid="tailor-score-warning"
-          className="rounded-xl border border-aether-amber/30 bg-aether-amber/10 p-3 text-sm text-aether-amber"
-        >
-          {tailorWarning}
-        </p>
+        <div className="rounded-xl border border-state-warn/30 bg-state-warn/[0.07] p-4">
+          <p className="type-section text-state-warn">
+            <i className="fa-solid fa-triangle-exclamation mr-1.5" aria-hidden="true" />
+            Tailoring run — review before you send
+          </p>
+          <p
+            data-testid="tailor-score-warning"
+            className="mt-2 max-w-[110ch] text-[12.5px] leading-[1.6] text-state-warn"
+          >
+            {tailorWarning}
+          </p>
+        </div>
       ) : null}
 
-      <div className="grid gap-6 lg:grid-cols-[320px,1fr]">
-        <section className="space-y-3">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-aether-muted">
-            Versions
-          </h2>
+      <div className="grid gap-5 lg:grid-cols-[260px,minmax(0,1fr)] lg:items-start">
+        {/* ---------------------------------------------------------------
+            VERSION RAIL — dense, filterable, scroll-contained (§4.4 / D-ε).
+            The filter narrows the ALREADY-fetched list; no request changes.
+        ---------------------------------------------------------------- */}
+        <section
+          aria-label="Resume versions"
+          className="min-w-0 lg:sticky lg:top-20"
+          data-design-id="version-rail-rs20"
+        >
+          <div className="mb-2 flex items-baseline justify-between gap-2">
+            <h2 className="type-section">Versions</h2>
+            {resumes ? (
+              <span className="mono text-[11px] text-aether-muted-dim">{resumes.length}</span>
+            ) : null}
+          </div>
+          {resumes && resumes.length > VERSIONS_PAGE_SIZE ? (
+            <input
+              type="search"
+              value={versionFilter}
+              onChange={(e) => setVersionFilter(e.target.value)}
+              placeholder="Filter versions…"
+              aria-label="Filter versions"
+              data-testid="version-filter"
+              className="elev-1 mb-2 h-9 w-full rounded-lg border-hairline px-3 text-[13px] text-aether-text placeholder:text-aether-muted-dim focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-aether-coral/50"
+            />
+          ) : null}
+
           {resumes === null ? (
-            <div className="space-y-3" aria-busy="true">
+            <div className="space-y-2" aria-busy="true">
               {[0, 1, 2, 3, 4, 5].map((i) => (
-                <div key={i} className="glass h-16 animate-pulse rounded-xl border border-white/10" />
+                <div key={i} className="elev-1 h-[68px] animate-pulse rounded-xl" />
               ))}
             </div>
           ) : resumes.length === 0 ? (
-            <div className="glass rounded-2xl border border-white/10 p-6 text-center text-sm text-aether-muted">
+            <div className="elev-1 rounded-xl p-5 text-center text-[13px] text-aether-muted">
               No resume versions yet. Tailor against a job to create one.
             </div>
           ) : (
-            <>
-              {resumes.slice(0, visibleCount).map((resume) => (
-                <button
-                  key={resume.id}
-                  type="button"
-                  data-testid="resume-version-card"
-                  onClick={() => void openResume(resume)}
-                  className={`glass block w-full rounded-xl border p-4 text-left transition ${
-                    selected?.id === resume.id
-                      ? "border-aether-coral/60"
-                      : "border-white/10 hover:border-white/20"
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-semibold">v{resume.version}</span>
-                    <span className="text-xs text-aether-muted-dim">
-                      {new Date(resume.createdAt).toLocaleDateString("en-AU")}
-                    </span>
-                  </div>
-                  <p className="mt-1 text-xs text-aether-muted">
-                    {resume.label ?? (resume.version === 1 ? "Base resume" : "Tailored version")}
-                  </p>
-                  {resume.approvalStatus === "pending" ? (
-                    <span
-                      data-testid="version-pending-badge"
-                      className="mt-2 inline-block rounded-full border border-aether-amber/40 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-aether-amber"
+            <ul
+              role="listbox"
+              aria-label="Resume versions"
+              className="max-h-[560px] space-y-1.5 overflow-y-auto overscroll-contain pr-1"
+            >
+              {filteredResumes.slice(0, visibleCount).map((resume) => {
+                const isSelected = selected?.id === resume.id;
+                return (
+                  <li key={resume.id} role="option" aria-selected={isSelected}>
+                    <button
+                      type="button"
+                      data-testid="resume-version-card"
+                      onClick={() => void openResume(resume)}
+                      className={listCard({ selected: isSelected, class: "block" })}
                     >
-                      Pending approval
-                    </span>
-                  ) : resume.approvalStatus === "rejected" ? (
-                    <span
-                      data-testid="version-rejected-badge"
-                      className="mt-2 inline-block rounded-full border border-red-500/40 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-300"
-                    >
-                      Changes requested
-                    </span>
-                  ) : null}
-                </button>
-              ))}
-              {resumes.length > visibleCount ? (
-                <button
-                  type="button"
-                  data-testid="versions-show-more"
-                  onClick={() => setVisibleCount((n) => n + VERSIONS_PAGE_SIZE)}
-                  className="w-full rounded-xl border border-white/10 px-4 py-2 text-xs font-semibold text-aether-muted transition hover:border-white/20 hover:text-white"
-                >
-                  Show more ({resumes.length - visibleCount} older)
-                </button>
+                      {isSelected ? (
+                        <span
+                          aria-hidden="true"
+                          className="absolute inset-y-0 left-0 w-[3px] bg-aether-coral"
+                        />
+                      ) : null}
+                      <div className="flex items-baseline justify-between gap-2">
+                        <span className="mono text-[13px] font-semibold">v{resume.version}</span>
+                        <span className="mono text-[10px] text-aether-muted-dim">
+                          {new Date(resume.createdAt).toLocaleDateString("en-AU")}
+                        </span>
+                      </div>
+                      <p className="mt-1 line-clamp-2 text-[11px] leading-[1.45] text-aether-muted">
+                        {resume.label ?? (resume.version === 1 ? "Base resume" : "Tailored version")}
+                      </p>
+                      {resume.approvalStatus === "pending" ? (
+                        <span
+                          data-testid="version-pending-badge"
+                          className={chip({ tone: "warn", class: "mt-1.5" })}
+                        >
+                          Pending approval
+                        </span>
+                      ) : resume.approvalStatus === "rejected" ? (
+                        <span
+                          data-testid="version-rejected-badge"
+                          className={chip({ tone: "danger", class: "mt-1.5" })}
+                        >
+                          Changes requested
+                        </span>
+                      ) : null}
+                    </button>
+                  </li>
+                );
+              })}
+              {filteredResumes.length > visibleCount ? (
+                <li>
+                  <button
+                    type="button"
+                    data-testid="versions-show-more"
+                    onClick={() => setVisibleCount((n) => n + VERSIONS_PAGE_SIZE)}
+                    className={button({ tone: "quiet", size: "sm", class: "w-full" })}
+                  >
+                    Show more ({filteredResumes.length - visibleCount} older)
+                  </button>
+                </li>
               ) : null}
-            </>
+              {filteredResumes.length === 0 ? (
+                <li
+                  className="rounded-xl border border-dashed border-hairline p-4 text-center text-[12px] text-aether-muted-dim"
+                  data-testid="version-filter-empty"
+                >
+                  No version matches “{versionFilter}”.
+                </li>
+              ) : null}
+            </ul>
           )}
         </section>
 
-        <section className="space-y-4">
-          {selected ? (
-            <>
-              <div className="glass rounded-2xl border border-white/10 p-5">
-                <div className="flex items-start justify-between gap-3">
-                  <h2 className="font-semibold">
-                    Version {selected.version}
-                    {selected.label ? ` — ${selected.label}` : ""}
-                  </h2>
+        {/* ---------------------------------------------------------------
+            THE STUDIO COLUMN
+        ---------------------------------------------------------------- */}
+        <div className="min-w-0 space-y-5">
+          <div className="grid min-w-0 gap-5 2xl:grid-cols-[minmax(0,1fr),360px] 2xl:items-start">
+            {/* LEFT — the transformation itself: the hero, the changed
+                lines, and the version as the download draws it. */}
+            <div className="min-w-0 space-y-5">
+            {/* THE AHA MOMENT. Rendered for a version that was tailored against
+                a job — a base résumé has no before/after to state. */}
+            {selected && selected.sourceJobId ? (
+              <AhaHero
+                loading={detailLoading}
+                jobTitle={tailoringImpact?.jobTitle ?? ats?.job_title ?? null}
+                company={tailoringImpact?.company ?? ats?.company ?? null}
+                beforeAts={tailoringImpact?.before.ats ?? null}
+                afterAts={tailoringImpact?.after.ats ?? null}
+                unmeasuredReason={
+                  tailoringImpact
+                    ? tailoringImpact.before.ats === null
+                      ? tailoringImpact.before.unmeasuredReason
+                      : tailoringImpact.after.unmeasuredReason
+                    : null
+                }
+                changesRequested={fidelityCounts?.changesRequested ?? null}
+                changesApplied={fidelityCounts?.changesApplied ?? null}
+                changesDropped={fidelityCounts?.changesDropped ?? null}
+                evidenceCovered={evidenceCovered}
+                evidenceTotal={changes.length}
+                versionLabel={
+                  selected.label ?? `Version ${selected.version}`
+                }
+              />
+            ) : null}
+
+            {/* WHAT CHANGED — the diff, the page's centre of gravity. */}
+            {selected ? (
+              diff && changes.length > 0 ? (
+                <Section
+                  eyebrow="What changed"
+                  title="Every rewritten line, and the evidence behind it"
+                  testId="resume-diff"
+                  footnote="Highlighted words are the ones absent from your baseline sentence. The same lines are washed in coral in the document you download."
+                  action={
+                    <span className="mono text-[11px] text-aether-muted-dim">
+                      {counts.rewrites} rewritten · {counts.additions} added
+                    </span>
+                  }
+                >
+                  <ChangeList
+                    changes={changes}
+                    limit={CHANGES_PREVIEW}
+                    showingAll={allChanges}
+                    onShowAll={() => setAllChanges(true)}
+                  />
+                </Section>
+              ) : diff ? (
+                <Section eyebrow="What changed" testId="resume-diff-empty">
+                  <p className="text-[13px] text-aether-muted-dim">
+                    This version records no changes against its parent.
+                  </p>
+                </Section>
+              ) : null
+            ) : (
+              <Section
+                eyebrow="Before / after"
+                testId="studio-empty"
+                className="flex min-h-[220px] items-center justify-center text-center"
+              >
+                <div className="max-w-[42ch]">
+                  <div className="mx-auto mb-3 flex h-11 w-11 items-center justify-center rounded-xl border border-aether-coral/25 bg-aether-coral/[0.12]">
+                    <i className="fa-solid fa-file-lines text-aether-coral" aria-hidden="true" />
+                  </div>
+                  <p className="text-[15px] font-semibold">
+                    Select a version to preview its bullets and diff.
+                  </p>
+                  <p className="type-meta mt-1.5">
+                    Every tailored version keeps its own before/after score, its change list and the
+                    evidence behind each line.
+                  </p>
+                </div>
+              </Section>
+            )}
+
+            {/* THE VERSION ITSELF — bullets as the download draws them. */}
+            {selected ? (
+              <Section
+                eyebrow={`Version ${selected.version}`}
+                title={selected.label ?? undefined}
+                testId="version-detail"
+                action={
                   <button
                     type="button"
                     data-testid="download-resume-btn"
                     onClick={() => void download(selected)}
-                    className="shrink-0 rounded-lg border border-white/15 px-3 py-1.5 text-xs font-semibold text-aether-muted transition hover:border-white/30 hover:text-white"
+                    className={button({ tone: "neutral", size: "sm" })}
                   >
+                    <i className="fa-solid fa-arrow-down-to-line" aria-hidden="true" />
                     Download
                   </button>
-                </div>
+                }
+                footnote={
+                  renderedBullets.length > 0
+                    ? `${changedBulletCount} of ${renderedBullets.length} bullets carry tailored wording — the same lines the download washes in coral.`
+                    : undefined
+                }
+              >
                 {selected.approvalStatus === "pending" ? (
                   <p
                     data-testid="version-approval-hint"
-                    className="mt-2 rounded-lg border border-aether-amber/30 bg-aether-amber/10 p-2 text-xs text-aether-amber"
+                    className="mb-3 rounded-lg border border-state-warn/30 bg-state-warn/10 p-2.5 text-[12px] text-state-warn"
                   >
                     Pending your review —{" "}
                     <a href="/dashboard/approvals" className="font-semibold underline">
@@ -793,7 +807,7 @@ export default function ResumePage() {
                 ) : selected.approvalStatus === "rejected" ? (
                   <p
                     data-testid="version-approval-hint"
-                    className="mt-2 rounded-lg border border-red-500/30 bg-red-500/10 p-2 text-xs text-red-300"
+                    className="mb-3 rounded-lg border border-state-danger/30 bg-state-danger/10 p-2.5 text-[12px] text-state-danger"
                   >
                     You requested changes on this version — re-run tailoring to try again.
                   </p>
@@ -801,207 +815,412 @@ export default function ResumePage() {
                 {downloadNote ? (
                   <p
                     data-testid="download-note"
-                    className="mt-2 rounded-lg border border-aether-amber/30 bg-aether-amber/10 p-2 text-xs text-aether-amber"
+                    className="mb-3 rounded-lg border border-state-warn/30 bg-state-warn/10 p-2.5 text-[12px] text-state-warn"
                   >
                     {downloadNote}
                   </p>
                 ) : null}
-                <ul className="mt-3 space-y-2 text-sm text-aether-muted">
-                  {bullets(selected).map((text, i) => (
-                    <li key={i} className="flex gap-2">
-                      <span className="text-aether-coral">•</span>
-                      <span>{text}</span>
+                <ul className="max-h-[300px] space-y-1.5 overflow-y-auto overscroll-contain pr-1">
+                  {renderedBullets.map((bullet, i) => (
+                    <li
+                      key={i}
+                      data-testid={bullet.changed ? "version-bullet-changed" : "version-bullet"}
+                      className={`flex gap-2.5 rounded-lg px-2 py-1.5 text-[12.5px] leading-[1.6] ${
+                        bullet.changed
+                          ? "bg-aether-coral/[0.10] text-aether-text"
+                          : "text-aether-muted"
+                      }`}
+                    >
+                      <span
+                        className={bullet.changed ? "text-aether-coral" : "text-aether-muted-dim"}
+                        aria-hidden="true"
+                      >
+                        •
+                      </span>
+                      <span className="min-w-0">
+                        {bullet.changed ? <span className="sr-only">tailored: </span> : null}
+                        {bullet.text}
+                      </span>
                     </li>
                   ))}
-                  {bullets(selected).length === 0 ? (
-                    <li className="text-aether-muted-dim">No bullet sections stored.</li>
+                  {renderedBullets.length === 0 ? (
+                    <li className="text-[13px] text-aether-muted-dim">No bullet sections stored.</li>
                   ) : null}
                 </ul>
-              </div>
-              {diff && diff.changes.length > 0 ? (
-                <div className="glass rounded-2xl border border-white/10 p-5" data-testid="resume-diff">
-                  <h3 className="text-sm font-semibold uppercase tracking-wide text-aether-muted">
-                    Diff vs parent
-                  </h3>
-                  <ul className="mt-3 space-y-3 text-sm">
-                    {diff.changes.map((change, i) => (
-                      <li key={i} className="rounded-lg border border-white/10 p-3">
-                        <p className="text-red-300/80 line-through">{change.before}</p>
-                        {change.after ? <p className="mt-1 text-aether-green">{change.after}</p> : null}
-                        {change.evidenceRef ? (
-                          <p className="mono mt-1 text-xs text-aether-muted-dim">
-                            evidence: {change.evidenceRef}
-                          </p>
-                        ) : null}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ) : null}
-            </>
-          ) : (
-            <div className="glass rounded-2xl border border-white/10 p-10 text-center text-sm text-aether-muted">
-              Select a version to preview its bullets and diff.
-            </div>
-          )}
-        </section>
-      </div>
+              </Section>
+            ) : null}
 
-      {ats ? (
-        <section
-          className="glass rounded-2xl border border-white/10 p-5"
-          data-design-id="ats-score-rs06"
-          data-testid="ats-score-panel"
-        >
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h2 className="text-sm font-semibold uppercase tracking-wide text-aether-muted">
-                ATS Score
-              </h2>
-              <p className="mt-1 text-xs text-aether-muted-dim">
-                Deterministic keyword + semantic + experience evaluation vs{" "}
-                {ats.job_title ?? "target job"}
-                {ats.company ? ` @ ${ats.company}` : ""}
-              </p>
             </div>
-            {/* R-01 (round 3): `overall` is 0.4*keyword + 0.4*semantic +
-                0.2*experience, so a degraded semantic half makes this headline
-                40% neutral placeholder — the same value the "Semantic
-                similarity (40%)" row directly below already refuses to print.
-                A "treat as directional" footnote under a bold, colour-coded
-                number is not a caveat a reader acts on; the number itself has
-                to go. */}
-            <span
-              className={`font-mono text-2xl font-bold ${
-                !semanticTrusted
-                  ? "text-aether-muted-dim"
-                  : ats.overall >= 60
-                    ? "text-aether-green"
-                    : "text-aether-amber"
-              }`}
-              data-testid="ats-overall"
+
+            {/* RIGHT — the verdicts: what was verified, what was scored,
+                and where every line came from. Same content, same order of
+                claim, moved out of the reading column so the page ends
+                (D-ε: 3,832px -> the budget) instead of stacking to the
+                bottom of the scrollbar. */}
+            <div className="min-w-0 space-y-5">
+            {/* FORMAT INTEGRITY — always mounted: its neutral prompt is itself
+                an honesty contract when no version is open. */}
+            <Section
+              eyebrow="Format integrity check"
+              testId="integrity-strip"
+              className="min-w-0"
+              action={
+                <div className="flex items-end gap-6 text-right">
+                  <div>
+                    <p className="type-section">Modifications</p>
+                    <p className="mono mt-0.5 text-xl font-bold text-state-warn">
+                      {diff ? counts.rewrites : "—"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="type-section">Additions</p>
+                    <p className="mono mt-0.5 text-xl font-bold text-state-ok">
+                      {diff ? counts.additions : "—"}
+                    </p>
+                  </div>
+                </div>
+              }
+              footnote={
+                diff
+                  ? `Changes Summary: ${counts.rewrites} rewrites · ${counts.additions} additions${formatIntact ? " · formatHash carried from base" : ""}`
+                  : "Select a tailored version to see its change summary."
+              }
             >
-              {semanticTrusted ? ats.overall : "—"}
-            </span>
-          </div>
-          <div className="mt-3 grid gap-3 sm:grid-cols-3">
-            {[
-              { label: "Keyword match (40%)", value: ats.keyword_match, degraded: false },
-              {
-                label: "Semantic similarity (40%)",
-                value: ats.semantic_similarity,
-                degraded: !semanticTrusted,
-              },
-              { label: "Experience fit (20%)", value: ats.experience_gap, degraded: false },
-            ].map((row) => (
-              <div key={row.label}>
-                <div className="flex items-center justify-between text-xs text-aether-muted">
-                  <span>
-                    {row.label}
-                    {row.degraded ? (
+              {!selected ? (
+                <p className="text-[13px] text-aether-muted-dim" data-testid="integrity-status">
+                  Select a version to verify its layout against the immutable base.
+                </p>
+              ) : detailLoading ? (
+                // Never print an "unknown"/"not preserved" verdict while the
+                // verification call is still open — that is a claim, and we have
+                // not asked yet.
+                <p className="text-[13px] text-aether-muted-dim" data-testid="integrity-status">
+                  Verifying this version against the immutable base…
+                </p>
+              ) : verifiedChangesDropped > 0 ? (
+                // Derived from the VERIFIED report for this exact version, and
+                // stated FIRST: it is the only measured fact in this panel, so it
+                // outranks both the listing's mechanism flag and the hash
+                // comparison — neither of which can see a missing rewrite.
+                <p className="text-[13px] text-state-warn" data-testid="integrity-status">
+                  {verifiedChangesDropped} of {fidelityCounts?.changesRequested} tailored changes
+                  could not be applied to the file you download — this version is not a complete
+                  tailored resume. The full wording is in the change summary below.
+                </p>
+              ) : !formatPreservationKnown ? (
+                <p className="text-[13px] text-aether-muted-dim" data-testid="integrity-status">
+                  Format preservation status is unknown for this version — we can&apos;t yet
+                  confirm whether download will match your original layout.
+                </p>
+              ) : formatExplicitlyUnpreserved ? (
+                <p className="text-[13px] text-state-warn" data-testid="integrity-status">
+                  Format not preserved for this upload — download renders in the Aether standard
+                  template, not your original layout.
+                </p>
+              ) : formatIntact ? (
+                <p className="text-[13px] text-state-ok" data-testid="integrity-status">
+                  Layout hash matches the base — typography, spacing, columns &amp; margins preserved.
+                </p>
+              ) : (
+                <p className="text-[13px] text-state-warn" data-testid="integrity-status">
+                  Layout hash differs from the base — review formatting before using this version.
+                </p>
+              )}
+              {formatFidelity ? (
+                // U2b (R-F2/R-F4): the API's OWN per-version report, not a
+                // hard-coded string. A genuine docx-native preservation and a
+                // low-confidence PDF re-flow used to render identical copy here,
+                // which is exactly the silent claim R-F4 forbids.
+                <p className="mt-2 text-[11px] leading-[1.5] text-aether-muted-dim" data-testid="format-fidelity-detail">
+                  <span className="mono uppercase tracking-wide">{formatFidelity.method}</span>
+                  {" · "}
+                  {formatFidelity.confidence} confidence — {formatFidelity.note}
+                </p>
+              ) : null}
+              {fidelityCounts ? (
+                // The counts come from re-reading the file this version renders
+                // to — not from what the tailoring run believed it changed.
+                <p
+                  className={`mt-2 text-[11px] leading-[1.5] ${
+                    (fidelityCounts.changesDropped ?? 0) > 0 ? "text-state-warn" : "text-state-ok"
+                  }`}
+                  data-testid="format-fidelity-counts"
+                >
+                  {(fidelityCounts.changesDropped ?? 0) > 0
+                    ? `Verified on the produced file: ${fidelityCounts.changesApplied ?? 0} of ${fidelityCounts.changesRequested} tailored changes applied — ${fidelityCounts.changesDropped} could not be applied to this layout (the full wording is in the change summary below).`
+                    : `Verified on the produced file: all ${fidelityCounts.changesRequested} tailored changes are present in the document you download.`}
+                </p>
+              ) : null}
+            </Section>
+
+            {/* THE HONEST SCORECARD — 10 dimensions, before vs after. */}
+            {tailoringImpact ? (
+              <TailoringImpact
+                beforeAts={tailoringImpact.before.ats}
+                afterAts={tailoringImpact.after.ats}
+                beforeDimensions={tailoringImpact.before.dimensions}
+                afterDimensions={tailoringImpact.after.dimensions}
+                atsUnmeasuredReason={
+                  tailoringImpact.before.ats === null
+                    ? tailoringImpact.before.unmeasuredReason
+                    : tailoringImpact.after.unmeasuredReason
+                }
+              />
+            ) : null}
+
+            {ats ? (
+              <Section
+                eyebrow="ATS score"
+                subtitle={`Deterministic keyword + semantic + experience evaluation vs ${ats.job_title ?? "target job"}${ats.company ? ` @ ${ats.company}` : ""}`}
+                testId="ats-score-panel"
+                action={
+                  /* R-01 (round 3): `overall` is 0.4*keyword + 0.4*semantic +
+                     0.2*experience, so a degraded semantic half makes this headline
+                     40% neutral placeholder — the same value the "Semantic
+                     similarity (40%)" row directly below already refuses to print. */
+                  <span
+                    className={`mono text-2xl font-bold ${
+                      !semanticTrusted
+                        ? "text-state-neutral"
+                        : ats.overall >= 60
+                          ? "text-state-ok"
+                          : "text-state-warn"
+                    }`}
+                    data-testid="ats-overall"
+                  >
+                    {semanticTrusted ? ats.overall : "—"}
+                  </span>
+                }
+                footnote={
+                  ats.missing_keywords.length > 0 ? (
+                    <>
+                      Missing JD keywords:{" "}
+                      <span className="mono text-state-warn">
+                        {ats.missing_keywords.slice(0, 8).join(", ")}
+                      </span>
+                    </>
+                  ) : undefined
+                }
+              >
+                <div className="grid gap-3">
+                  {[
+                    { label: "Keyword match (40%)", value: ats.keyword_match, degraded: false },
+                    {
+                      label: "Semantic similarity (40%)",
+                      value: ats.semantic_similarity,
+                      degraded: !semanticTrusted,
+                    },
+                    { label: "Experience fit (20%)", value: ats.experience_gap, degraded: false },
+                  ].map((row) => (
+                    <div key={row.label}>
+                      <div className="flex items-center justify-between gap-2 text-[11px] text-aether-muted">
+                        <span>
+                          {row.label}
+                          {row.degraded ? (
+                            <span
+                              className={chip({ tone: "degraded", class: "ml-1.5" })}
+                              data-testid="semantic-not-measured-badge"
+                            >
+                              not measured
+                            </span>
+                          ) : null}
+                        </span>
+                        <span className="mono">{row.degraded ? "—" : row.value}</span>
+                      </div>
+                      <div className="mt-1.5 h-1.5 rounded-full bg-white/[0.07]">
+                        <div
+                          className={`h-1.5 rounded-full ${row.degraded ? "bg-state-neutral/40" : "bg-state-info"}`}
+                          style={{
+                            width: `${row.degraded ? 0 : Math.min(100, Math.max(0, row.value))}%`,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {!semanticTrusted ? (
+                  <p className="mt-3 text-[11px] leading-[1.5] text-aether-muted-dim" data-testid="semantic-degraded-note">
+                    Semantic similarity could not be measured for this score — a neutral
+                    placeholder stood in instead. The overall ATS score is 40% built
+                    from it, so it is shown as “—” rather than as a measurement until
+                    semantic scoring is available again.
+                  </p>
+                ) : null}
+              </Section>
+            ) : null}
+
+            {conversion ? (
+              <Section
+                eyebrow={
+                  <span className="inline-flex items-center gap-1.5">
+                    ATS Conversion Impact
+                    {conversionDegraded ? (
                       <span
-                        className="ml-1.5 rounded-full border border-white/20 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-aether-muted-dim"
-                        data-testid="semantic-not-measured-badge"
+                        className={chip({ tone: "degraded" })}
+                        data-testid="conversion-not-measured-badge"
                       >
                         not measured
                       </span>
                     ) : null}
                   </span>
-                  <span className="mono">{row.degraded ? "—" : row.value}</span>
-                </div>
-                <div className="mt-1 h-1.5 rounded-full bg-white/10">
-                  <div
-                    className={`h-1.5 rounded-full ${row.degraded ? "bg-white/20" : "bg-aether-indigo"}`}
-                    style={{ width: `${row.degraded ? 0 : Math.min(100, Math.max(0, row.value))}%` }}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-          {!semanticTrusted ? (
-            <p className="mt-3 text-xs text-aether-muted-dim" data-testid="semantic-degraded-note">
-              Semantic similarity could not be measured for this score — a neutral
-              placeholder stood in instead. The overall ATS score is 40% built
-              from it, so it is shown as “—” rather than as a measurement until
-              semantic scoring is available again.
-            </p>
-          ) : null}
-          {ats.missing_keywords.length > 0 ? (
-            <p className="mt-3 text-xs text-aether-muted-dim">
-              Missing JD keywords:{" "}
-              <span className="mono text-aether-amber">
-                {ats.missing_keywords.slice(0, 8).join(", ")}
-              </span>
-            </p>
-          ) : null}
-        </section>
-      ) : null}
-
-      {/* U-AX item 3: honest before(baseline)/after(tailored) ATS + all 10
-          fit-radar dimensions for this version, threshold line marked,
-          deltas never clamped or hidden. */}
-      {tailoringImpact ? (
-        <TailoringImpact
-          beforeAts={tailoringImpact.before.ats}
-          afterAts={tailoringImpact.after.ats}
-          beforeDimensions={tailoringImpact.before.dimensions}
-          afterDimensions={tailoringImpact.after.dimensions}
-          atsUnmeasuredReason={
-            tailoringImpact.before.ats === null
-              ? tailoringImpact.before.unmeasuredReason
-              : tailoringImpact.after.unmeasuredReason
-          }
-        />
-      ) : null}
-
-      <div className="grid gap-4 lg:grid-cols-2" data-design-id="evidence-voice-rs15">
-        <section className="glass min-w-0 rounded-2xl border border-white/10 p-5">
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-aether-muted">Evidence Trace</h2>
-          <p className="mt-1 text-xs text-aether-muted-dim">
-            Every rewritten line links back to evidence in the base resume.
-          </p>
-          {diff && diff.changes.length > 0 ? (
-            <ul className="mt-3 space-y-2 text-sm text-aether-muted">
-              {diff.changes.slice(0, 4).map((change, i) => (
-                <li key={i} className="flex flex-wrap items-center gap-2">
-                  <span className="truncate">
-                    {(() => {
-                      const t = change.after || change.before;
-                      return t.length > 60 ? `${t.slice(0, 60)}…` : t;
-                    })()}
-                  </span>
-                  {change.evidenceRef ? (
-                    <span className="mono rounded-full border border-aether-violet/30 px-2 py-0.5 text-xs text-aether-violet">
-                      {change.evidenceRef}
+                }
+                testId="conversion-metrics"
+                footnote={
+                  conversionDegraded ? (
+                    <span data-testid="conversion-degraded-note">
+                      Semantic similarity could not be measured for the before/after re-score
+                      — a neutral placeholder stood in instead, so this delta and the
+                      conversion lift above should be treated as directional until scoring is
+                      available again.
                     </span>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="mt-3 text-sm text-aether-muted-dim">
-              Select a tailored version to trace its changes to evidence.
-            </p>
-          )}
-        </section>
-        <section
-          className="glass min-w-0 rounded-2xl border border-white/10 p-5"
-          data-design-id="version-compare-rs18"
-        >
-          <h2 className="text-sm font-semibold uppercase tracking-wide text-aether-muted">Version History</h2>
-          {resumes && resumes.length > 0 ? (
-            <ul className="mt-3 space-y-2 text-sm text-aether-muted">
-              {resumes.slice(0, 4).map((r) => (
-                <li key={r.id} className="flex items-center justify-between gap-2">
-                  <span className="truncate">{r.label ?? `Version ${r.version}`}</span>
-                  <span className="mono shrink-0 text-xs text-aether-muted-dim">v{r.version}</span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="mt-3 text-sm text-aether-muted-dim">No versions yet.</p>
-          )}
-        </section>
+                  ) : undefined
+                }
+              >
+                <p className="text-[13px] text-aether-muted" data-testid="conversion-before-after">
+                  Before:{" "}
+                  <span className="mono font-semibold text-aether-text">
+                    {conversion.provenance === "degraded" ? "—" : `${conversion.baselineATSScore}%`}
+                  </span>{" "}
+                  → After:{" "}
+                  <span className="mono font-semibold text-state-ok">
+                    {conversion.provenance === "degraded" ? "—" : `${conversion.tailoredATSScore}%`}
+                  </span>
+                </p>
+                <p className="mt-1.5 text-[13px]" data-testid="conversion-lift">
+                  <MetricTooltip
+                    label="Estimated interview conversion improvement"
+                    value={
+                      <span className="mono font-semibold text-state-ok">
+                        {conversion.provenance === "degraded" ? "—" : conversion.estimatedConversionLift}
+                      </span>
+                    }
+                    tooltip={`${conversion.methodology} This is an illustrative estimate, not a measured outcome.`}
+                  />
+                </p>
+              </Section>
+            ) : null}
+            </div>
+          </div>
+
+          {/* PROVENANCE + TRACE — a full-width band under the two columns.
+              It sat inside the right column and pushed the page to 2,649px
+              at 1600 (D-ε budget ~2,500); nothing about the content or its
+              wording changed, only which column it lives in. */}
+          {/* PROVENANCE — base vs latest tailored identity, and the immutability
+              contract. Always mounted: these are honesty rows, not decoration. */}
+          <div
+            className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4"
+            data-design-id="panes-rs0405"
+          >
+            <Section
+              eyebrow="Original — base resume"
+              testId="pane-original"
+              className="min-w-0"
+              footnote="Base resume is immutable — every tailored version derives from this source of truth."
+            >
+              {originalIdentity ? (
+                <>
+                  <p
+                    className="break-words text-[15px] font-semibold tracking-[-0.01em]"
+                    data-testid="hero-original-name"
+                  >
+                    {originalIdentity.name}
+                  </p>
+                  <p className="break-words type-meta mt-0.5" data-testid="hero-original-title">
+                    {originalIdentity.title}
+                  </p>
+                </>
+              ) : (
+                <p className="text-[13px] text-aether-muted-dim" data-testid="hero-original-empty">
+                  No base resume yet.
+                </p>
+              )}
+            </Section>
+            <Section
+              eyebrow="Tailored — latest version"
+              testId="pane-tailored"
+              accent
+              className="min-w-0"
+            >
+              {tailoredIdentity ? (
+                <>
+                  <p
+                    className="break-words text-[15px] font-semibold tracking-[-0.01em]"
+                    data-testid="hero-tailored-name"
+                  >
+                    {tailoredIdentity.name}
+                  </p>
+                  <p className="type-meta mt-0.5">Keyword-aligned for the selected role</p>
+                </>
+              ) : (
+                <p className="text-[13px] text-aether-muted-dim" data-testid="hero-tailored-empty">
+                  No tailored version yet.
+                </p>
+              )}
+              <div className="mt-2.5 flex min-w-0 flex-wrap gap-2">
+                {tailoredResume ? (
+                  <span className={chip({ tone: "ok", class: "max-w-full break-words" })}>
+                    {tailoredResume.label}
+                  </span>
+                ) : (
+                  <span className={chip({ tone: "neutral" })}>
+                    No tailored version yet — run tailoring against a job
+                  </span>
+                )}
+              </div>
+            </Section>
+            <Section
+                eyebrow="Evidence trace"
+                testId="evidence-trace"
+                className="min-w-0"
+                footnote="Every rewritten line links back to evidence in the base resume."
+              >
+                {diff && changes.length > 0 ? (
+                  <ul className="space-y-2 text-[13px] text-aether-muted">
+                    {changes.slice(0, 4).map((change, i) => (
+                      <li key={i} className="flex flex-wrap items-center gap-2">
+                        <span className="min-w-0 truncate">
+                          {(() => {
+                            const t = change.after || change.before;
+                            return t.length > 60 ? `${t.slice(0, 60)}…` : t;
+                          })()}
+                        </span>
+                        {change.evidenceRef ? (
+                          <span className={chip({ tone: "info", mono: true })}>
+                            {change.evidenceRef}
+                          </span>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-[13px] text-aether-muted-dim">
+                    Select a tailored version to trace its changes to evidence.
+                  </p>
+                )}
+              </Section>
+              <Section
+                eyebrow="Version history"
+                testId="version-history"
+                className="min-w-0"
+              >
+                {resumes && resumes.length > 0 ? (
+                  <ul className="space-y-2 text-[13px] text-aether-muted">
+                    {resumes.slice(0, 4).map((r) => (
+                      <li key={r.id} className="flex items-center justify-between gap-2">
+                        <span className="min-w-0 truncate">{r.label ?? `Version ${r.version}`}</span>
+                        <span className="mono shrink-0 text-[11px] text-aether-muted-dim">
+                          v{r.version}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-[13px] text-aether-muted-dim">No versions yet.</p>
+                )}
+              </Section>
+          </div>
+        </div>
       </div>
     </div>
   );
