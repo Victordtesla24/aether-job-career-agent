@@ -2194,7 +2194,12 @@ def _enqueue_to_arq(job_id: str) -> str | None:
 
 
 def _enqueue_single_agent(
-    user_id: str, agent_key: str, params: dict[str, Any], *, system_run: bool = False
+    user_id: str,
+    agent_key: str,
+    params: dict[str, Any],
+    *,
+    system_run: bool = False,
+    singleton: bool = False,
 ) -> str:
     """Enqueue a metered single-agent run (tailor / coverLetter), blueprint §3.2.
 
@@ -2212,7 +2217,16 @@ def _enqueue_single_agent(
     It is not in :data:`_LLM_TIER_BY_BACKEND`, so ``_call_is_metered`` returns
     False for it and no quota is reserved or refunded — identical to what the
     synchronous ``_record_run`` path already does for scout. Nothing about the
-    metering, paywall or cooldown decision changes with the transport."""
+    metering, paywall or cooldown decision changes with the transport.
+
+    ``singleton`` (MON-020 round-2) makes the enqueue IDEMPOTENT for agents of
+    which one run per user is the whole unit of work: if a run is already in
+    flight, its job id comes back and nothing new is created or queued. It is a
+    SERVER-side guard on purpose — the browser's ``disabled`` flag is per
+    component, so it cannot cover a second tab, the three separate buttons that
+    reach this endpoint, or a direct POST. Deliberately 202-with-the-existing-id
+    rather than 409: the caller's intent ("make sure discovery is running") is
+    already satisfied, and the frontend polls the returned id either way."""
     # 1) Paywall FIRST (honest 402 before any row/reserve/enqueue) — scoped
     #    system-run exemption applies identically to the sync path.
     _require_active_subscription(user_id, agent_name=agent_key, system_run=system_run)
@@ -2232,6 +2246,22 @@ def _enqueue_single_agent(
             # upstream costs the user nothing; a real quota row keeps its 429.
             _raise_if_llm_circuit_open(provider, block)
             raise _quota_429(provider, block.get("expiresAt"))
+    repo = BackgroundJobRepository()
+    # 2b) Duplicate-run guard, part one (MON-020): hand back the run that is
+    #     already in flight instead of starting a second one. The lookup is
+    #     cheap and covers every ordinary double-submit; the same-millisecond
+    #     race is closed at the DB in step 4 (``create_singleton``), so this
+    #     read is an optimisation and a stale-job RELEASE, never the guarantee.
+    #     Applying the same lazy watchdog ``GET /agents/jobs/{id}`` applies is
+    #     what keeps a dead worker from locking the user out of syncing: a job
+    #     past the staleness window is failed (honestly, with its refund) here
+    #     and the new run proceeds.
+    if singleton:
+        active = repo.find_active(user_id, agent_key)
+        if active is not None:
+            active = _apply_stale_watchdog(active, repo)
+            if active.get("status") in ("enqueued", "processing"):
+                return str(active["id"])
     # 3) Atomic reserve AT ENQUEUE (metered calls only — ``_call_is_metered``
     #    keeps this seam in step with the sync path for opt-in-LLM backends).
     metered = _call_is_metered(agent_key, params)
@@ -2246,13 +2276,30 @@ def _enqueue_single_agent(
             raise _plan_quota_429("spend_cap_exceeded", reserved)
         reserved_flag = True
     # 4) AgentRun audit row + BackgroundJob row.
-    run = runs.start(user_id, agent_key, params)
-    _persist_billing_audit(runs, run["id"], audit)
-    repo = BackgroundJobRepository()
-    job_id = repo.create(
-        user_id, agent_key, run_id=run["id"], params=params,
-        quota_reserved=reserved_flag,
-    )
+    if singleton:
+        # Duplicate-run guard, part two: the job row is claimed FIRST, because
+        # that insert (advisory-locked + backed by the partial unique index) is
+        # the atomic claim. Only the winner then writes the AgentRun audit row,
+        # so a lost race leaves no orphan "running" run in the user's history.
+        job_id, created = repo.create_singleton(
+            user_id, agent_key, params=params, quota_reserved=reserved_flag
+        )
+        if not created:
+            # Another request claimed it between step 2b and here. We never ran
+            # anything, so anything we reserved goes straight back.
+            if reserved_flag and quota_repo is not None:
+                quota_repo.refund_run(user_id)
+            return job_id
+        run = runs.start(user_id, agent_key, params)
+        _persist_billing_audit(runs, run["id"], audit)
+        repo.set_run_id(job_id, run["id"])
+    else:
+        run = runs.start(user_id, agent_key, params)
+        _persist_billing_audit(runs, run["id"], audit)
+        job_id = repo.create(
+            user_id, agent_key, run_id=run["id"], params=params,
+            quota_reserved=reserved_flag,
+        )
     # 5) Enqueue; compensate on failure (refund + fail + honest 503).
     try:
         arq_job_id = _enqueue_to_arq(job_id)
@@ -2634,6 +2681,13 @@ def run_scout(
       Jobs screen's Sync button, Settings' "Sync All Job Boards"): those calls
       cross Cloudflare, which aborts a request at ~100s and answers with its own
       HTML error page, while a real pass measures 255-473s (968s worst case).
+      Background mode is IDEMPOTENT per user: a POST while a pass is already
+      enqueued/processing returns that pass's ``job_id`` instead of starting a
+      second one (a second pass would search the same boards for the same user,
+      double the upstream calls and race its own upserts). The guard lives on
+      the server because the three buttons that call this — Jobs "Sync Now",
+      Settings' "Sync All Job Boards", the Agents console — each only know
+      their own component's disabled flag.
 
     Both modes resolve the search target FIRST (F-02), so the AgentRun audit row
     — and, in background mode, the queued job's params — record the search that
@@ -2655,7 +2709,13 @@ def run_scout(
         # There is deliberately NO fallback to the synchronous path: silently
         # falling back would reintroduce the very 100s proxy timeout this mode
         # exists to escape, and would look to the caller like a slow success.
-        job_id = _enqueue_single_agent(user_id, "scout", params, system_run=system_run)
+        #
+        # ``singleton=True``: a user gets ONE discovery pass at a time. A second
+        # POST while one is running is answered with THAT run's job id — same
+        # 202 envelope, no second pass, no second set of upstream board calls.
+        job_id = _enqueue_single_agent(
+            user_id, "scout", params, system_run=system_run, singleton=True
+        )
         return {"status": "enqueued", "job_id": job_id}
     output = _dispatch(
         user_id, "scout", params,

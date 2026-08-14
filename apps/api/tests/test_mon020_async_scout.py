@@ -42,6 +42,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import threading
 import types
 import uuid
 
@@ -408,3 +409,308 @@ def test_background_scout_reports_queue_outage_honestly(
     assert "queue" in resp.json()["detail"].lower()
     # Never silently fell back to the synchronous 300-600s path.
     assert scout_calls == []
+
+
+# ---------------------------------------------------------------------------
+# 5) Duplicate-run guard (round-2 review FAIL-1) — SERVER-SIDE, idempotent
+#
+# The round-1 fix made the enqueue cheap (<1s) and left the browser's
+# `disabled={running}` flag as the ONLY protection against a second concurrent
+# discovery pass. That flag is per-component state: it does not survive a
+# second browser tab, and it does not cover the THREE independent buttons that
+# now hit this endpoint (Jobs "Sync Now", Settings' "Sync All Job Boards", the
+# Agents console's scout Run), let alone a direct POST or a double click landing
+# inside the pre-guard `await`.
+#
+# CONTRACT asserted here: a POST for a user who already has an ACTIVE
+# (enqueued/processing) scout job is IDEMPOTENT — 202 carrying the EXISTING
+# job_id, one BackgroundJob row, one AgentRun audit row, one queue push. Not a
+# 409: the caller's intent ("make sure discovery is running") is already
+# satisfied, and the FE polls the returned id either way. The guard releases as
+# soon as that job reaches a terminal state, and a job whose worker died is
+# released by the SAME lazy watchdog GET /agents/jobs/{id} already applies, so
+# a dead worker can never lock a user out of syncing.
+# ---------------------------------------------------------------------------
+
+
+def _count_bg_jobs(user_id: str, agent_key: str = "scout") -> int:
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT count(*) FROM "BackgroundJob" '
+                'WHERE "userId"=%s AND "agentKey"=%s',
+                (user_id, agent_key),
+            )
+            return int(cur.fetchone()[0])
+
+
+def _count_agent_runs(user_id: str, agent_name: str = "scout") -> int:
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT count(*) FROM "AgentRun" WHERE "userId"=%s AND "agentName"=%s',
+                (user_id, agent_name),
+            )
+            return int(cur.fetchone()[0])
+
+
+def _backdate_processing(job_id: str, age_secs: int) -> None:
+    """Put a job into ``processing`` started ``age_secs`` ago (dead worker)."""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'UPDATE "BackgroundJob" SET "status"=\'processing\','
+                '"startedAt"=now() - make_interval(secs => %s),'
+                '"createdAt"=now() - make_interval(secs => %s) WHERE "id"=%s',
+                (age_secs, age_secs, job_id),
+            )
+        conn.commit()
+
+
+def _second_paid_user(client) -> tuple[str, dict[str, str]]:
+    """Register a SECOND real user (own profile + paid) — the guard must be
+    scoped per user, never a global one-scout-at-a-time lock."""
+    email = f"mon020-second-{uuid.uuid4().hex[:8]}@example.com"
+    creds = {"email": email, "password": "Sup3rSecret"}
+    assert client.post("/auth/register", json=creds).status_code == 201
+    login = client.post("/auth/login", json=creds)
+    assert login.status_code == 200, login.text
+    headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+    user_id = client.get("/auth/me", headers=headers).json()["id"]
+    from app.db import ensure_user_profile_columns
+
+    ensure_user_profile_columns()
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'UPDATE "User" SET "targetRole"=%s,"location"=%s WHERE id=%s',
+                ("Delivery Lead", "Sydney, AU", user_id),
+            )
+        conn.commit()
+    _paid(user_id)
+    return user_id, headers
+
+
+def _post_background_scout(client, headers):
+    return client.post(
+        "/agents/scout/run?background=true",
+        json={"query": "Delivery Lead", "location": "Melbourne, AU"},
+        headers=headers,
+    )
+
+
+def test_double_post_background_scout_reuses_the_active_job(
+    client, auth_headers, bg_table, fake_pool, monkeypatch
+):
+    """Two POSTs while one pass is still in flight = ONE run, same job_id."""
+    user_id = seed_search_target(
+        client, auth_headers, target_role="Delivery Lead", location="Melbourne, AU"
+    )
+    _paid(user_id)
+    _stub_scout(monkeypatch, [])
+
+    first = _post_background_scout(client, auth_headers)
+    second = _post_background_scout(client, auth_headers)
+
+    assert first.status_code == 202, first.text
+    # Idempotent, NOT a 409: the caller asked for discovery to be running, and
+    # it is — hand back the id of the run that is already doing it.
+    assert second.status_code == 202, second.text
+    assert second.json()["job_id"] == first.json()["job_id"]
+    assert _count_bg_jobs(user_id) == 1, "a second BackgroundJob row was created"
+    assert _count_agent_runs(user_id) == 1, "a second AgentRun audit row was created"
+    assert fake_pool.calls == [("run_agent_job", first.json()["job_id"])]
+
+
+def test_scout_guard_releases_once_the_active_job_is_terminal(
+    client, auth_headers, bg_table, fake_pool, monkeypatch
+):
+    """The guard is about CONCURRENCY, not a cooldown: once the run finishes,
+    the very next Sync starts a genuinely new pass."""
+    user_id = seed_search_target(
+        client, auth_headers, target_role="Delivery Lead", location="Melbourne, AU"
+    )
+    _paid(user_id)
+    _stub_scout(monkeypatch, [])
+    from app.repositories.background_jobs import BackgroundJobRepository
+
+    first_id = _post_background_scout(client, auth_headers).json()["job_id"]
+    assert BackgroundJobRepository().mark_completed(first_id, dict(_SCOUT_OUTPUT))
+
+    second = _post_background_scout(client, auth_headers)
+    assert second.status_code == 202, second.text
+    assert second.json()["job_id"] != first_id
+    assert _count_bg_jobs(user_id) == 2
+
+
+def test_scout_guard_releases_a_job_whose_worker_died(
+    client, auth_headers, bg_table, fake_pool, monkeypatch
+):
+    """A job stuck in ``processing`` past the staleness window must not lock the
+    user out: the SAME lazy watchdog the poll route applies fails it (honestly)
+    and the new Sync gets its own job."""
+    user_id = seed_search_target(
+        client, auth_headers, target_role="Delivery Lead", location="Melbourne, AU"
+    )
+    _paid(user_id)
+    _stub_scout(monkeypatch, [])
+    from app.routers.agents import _job_stale_thresholds
+
+    first_id = _post_background_scout(client, auth_headers).json()["job_id"]
+    _backdate_processing(first_id, _job_stale_thresholds()[1] + 60)
+
+    second = _post_background_scout(client, auth_headers)
+    assert second.status_code == 202, second.text
+    assert second.json()["job_id"] != first_id
+    dead = _get_bg_job(first_id)
+    assert dead["status"] == "failed"
+    assert "timed out" in (dead["error"] or "")
+
+
+def test_scout_guard_is_scoped_per_user(
+    client, auth_headers, bg_table, fake_pool, monkeypatch
+):
+    """User B's Sync must never be answered with user A's job id."""
+    user_a = seed_search_target(
+        client, auth_headers, target_role="Delivery Lead", location="Melbourne, AU"
+    )
+    _paid(user_a)
+    _stub_scout(monkeypatch, [])
+    user_b, headers_b = _second_paid_user(client)
+
+    job_a = _post_background_scout(client, auth_headers).json()["job_id"]
+    resp_b = _post_background_scout(client, headers_b)
+
+    assert resp_b.status_code == 202, resp_b.text
+    assert resp_b.json()["job_id"] != job_a
+    assert _count_bg_jobs(user_a) == 1
+    assert _count_bg_jobs(user_b) == 1
+
+
+def test_active_scout_singleton_is_enforced_by_a_partial_unique_index(bg_table):
+    """The lookup-then-create window is closed at the DB, not just in Python:
+    an additive PARTIAL UNIQUE index makes a second ACTIVE scout row for the
+    same user impossible even if two API processes race."""
+    import psycopg2
+
+    from app.repositories.background_jobs import (
+        _ensure_table,
+        _reset_bg_ready_for_tests,
+    )
+
+    _reset_bg_ready_for_tests()
+    _ensure_table()
+    user_id = f"idx-user-{uuid.uuid4().hex[:8]}"
+
+    def _raw_insert(status: str, agent_key: str = "scout") -> None:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    'INSERT INTO "BackgroundJob" ("id","userId","agentKey","status") '
+                    "VALUES (%s,%s,%s,%s)",
+                    (uuid.uuid4().hex, user_id, agent_key, status),
+                )
+            conn.commit()
+
+    _raw_insert("enqueued")
+    with pytest.raises(psycopg2.errors.UniqueViolation):
+        _raw_insert("processing")
+    # …and the index is genuinely PARTIAL: it constrains only ACTIVE scout rows,
+    # so history keeps accumulating and OTHER agents (tailor/coverLetter, which
+    # legitimately run several at once) are untouched.
+    _raw_insert("completed")
+    _raw_insert("completed")
+    _raw_insert("enqueued", agent_key="tailor")
+    _raw_insert("processing", agent_key="tailor")
+    assert _count_bg_jobs(user_id, "tailor") == 2
+
+
+def test_create_singleton_survives_concurrent_callers(bg_table):
+    """Same-millisecond double click across two API workers: exactly one job."""
+    from app.repositories.background_jobs import (
+        BackgroundJobRepository,
+        _ensure_table,
+        _reset_bg_ready_for_tests,
+    )
+
+    _reset_bg_ready_for_tests()
+    _ensure_table()
+    repo = BackgroundJobRepository()
+    user_id = f"race-user-{uuid.uuid4().hex[:8]}"
+    workers = 4
+    barrier = threading.Barrier(workers)
+    results: list[tuple[str, bool]] = []
+    errors: list[BaseException] = []
+    lock = threading.Lock()
+
+    def _go() -> None:
+        try:
+            barrier.wait(timeout=20)
+            outcome = repo.create_singleton(user_id, "scout", params={"query": "x"})
+        except BaseException as exc:  # noqa: BLE001 — recorded, re-raised below
+            with lock:
+                errors.append(exc)
+            return
+        with lock:
+            results.append(outcome)
+
+    threads = [threading.Thread(target=_go) for _ in range(workers)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=30)
+
+    assert not errors, f"concurrent create_singleton raised: {errors}"
+    assert len(results) == workers
+    created = [job_id for job_id, was_created in results if was_created]
+    assert len(created) == 1, f"expected exactly one creator, got {created}"
+    assert {job_id for job_id, _ in results} == {created[0]}
+    assert _count_bg_jobs(user_id) == 1
+
+
+def test_active_background_job_never_blocks_the_synchronous_cron_path(
+    client, auth_headers, bg_table, fake_pool, monkeypatch
+):
+    """The guard is scoped to the BACKGROUND transport.
+
+    ``scripts/discovery_cron.sh`` POSTs the default (synchronous) route and
+    fit-scores on the very next line. It is a different caller with different
+    semantics — no BackgroundJob row, no queue — and refusing or deduplicating
+    it because a user happens to have a browser sync in flight would silently
+    break scheduled discovery. It must still run, in-request, to completion."""
+    user_id = seed_search_target(
+        client, auth_headers, target_role="Delivery Lead", location="Melbourne, AU"
+    )
+    _paid(user_id)
+    scout_calls: list = []
+    _stub_scout(monkeypatch, scout_calls)
+
+    assert _post_background_scout(client, auth_headers).status_code == 202
+    assert scout_calls == []
+
+    sync = client.post(
+        "/agents/scout/run",
+        json={"query": "Delivery Lead", "location": "Melbourne, AU"},
+        headers=auth_headers,
+    )
+    assert sync.status_code == 202, sync.text
+    body = sync.json()
+    assert body["status"] == "accepted", body
+    assert body["persisted"] == _SCOUT_OUTPUT["persisted"]
+    assert len(scout_calls) == 1, "the cron's synchronous pass did not run"
+    # …and it created no second BackgroundJob row either.
+    assert _count_bg_jobs(user_id) == 1
+
+
+def test_create_singleton_refuses_an_agent_the_index_does_not_cover():
+    """The Python guard and the partial unique index must cover the SAME agents.
+
+    A caller who got an advisory-lock-only singleton for, say, ``tailor`` would
+    believe in a guarantee the database is not enforcing (and would break the
+    legitimate several-at-once semantics those agents need). Refuse loudly."""
+    from app.repositories.background_jobs import BackgroundJobRepository
+
+    with pytest.raises(ValueError, match="singleton"):
+        BackgroundJobRepository().create_singleton(
+            "some-user", "tailor", params={"job_id": "j1"}
+        )

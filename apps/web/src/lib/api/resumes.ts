@@ -1,7 +1,16 @@
 /** Typed resumes API client (P2-S05). */
 import { z } from "zod";
 
-import { ApiError, apiBaseUrl, apiRequest, clearToken, getToken, type RequestOptions } from "./client";
+import {
+  ApiError,
+  apiBaseUrl,
+  apiRequest,
+  clearToken,
+  gatewayErrorMessage,
+  getToken,
+  isNonApiHtmlBody,
+  type RequestOptions,
+} from "./client";
 import { resolveRun } from "./agents";
 
 export const ResumeSchema = z.object({
@@ -132,6 +141,15 @@ export async function downloadResume(id: string, options: RequestOptions = {}): 
   }
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
+    // MON-020: this handler builds its own `fetch` (it needs the PDF blob, not
+    // JSON), so it does not get `apiRequest`'s guard for free — and its message
+    // is rendered VERBATIM in the Résumé Studio download note. An intermediary's
+    // HTML error page (the same Cloudflare 524 that started MON-020) must never
+    // get that far, so the shared predicate/sentence pair is applied here too.
+    // A JSON body from our own API keeps the exact prefixed shape it always had.
+    if (isNonApiHtmlBody(res.headers.get("Content-Type"), detail)) {
+      throw new ApiError(gatewayErrorMessage(res.status), res.status);
+    }
     throw new ApiError(`GET /resumes/${id}/download failed (${res.status}): ${detail}`, res.status);
   }
 

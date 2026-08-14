@@ -91,8 +91,14 @@ export function parseApiErrorDetail(body: string): ApiErrorDetail | undefined {
  *
  * The Content-Type header alone is not enough: some proxies label an HTML body
  * `text/plain`, so the body itself is sniffed too.
+ *
+ * EXPORTED because `apiRequest` is not the only caller that reads an error body:
+ * `lib/api/resumes.ts` (`downloadResume` needs the blob, not JSON) and
+ * `lib/realtime/transport.ts` (`openWorkspaceStream` needs the raw stream) build
+ * their own `fetch`, and both put the body in front of the user. They reuse THIS
+ * predicate and `gatewayErrorMessage` below so the three paths cannot drift.
  */
-function isNonApiHtmlBody(contentType: string | null, body: string): boolean {
+export function isNonApiHtmlBody(contentType: string | null, body: string): boolean {
   if (contentType && contentType.toLowerCase().includes("text/html")) return true;
   const head = body.trimStart().slice(0, 256).toLowerCase();
   return (
@@ -113,7 +119,7 @@ function isNonApiHtmlBody(contentType: string | null, body: string): boolean {
  * invents a retry ETA. The real status stays on `ApiError.status` for callers
  * that branch on it.
  */
-function gatewayErrorMessage(status: number): string {
+export function gatewayErrorMessage(status: number): string {
   if (status === 408 || status === 504 || status === 522 || status === 524) {
     return (
       "The server took too long to respond. Your request may still be running — " +

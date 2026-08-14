@@ -17,6 +17,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ApiError, apiRequest, describeApiError } from "../../lib/api/client";
+import { downloadResume } from "../../lib/api/resumes";
 
 const CF_524_HTML = `<!DOCTYPE html>
 <html class="no-js" lang="en-US">
@@ -155,5 +156,73 @@ describe("apiRequest — non-JSON gateway error bodies (MON-020)", () => {
 
     expect(err.detail?.code).toBe("quota_exceeded");
     expect(err.detail?.runsUsed).toBe(100);
+  });
+});
+
+/**
+ * MON-020 round-2 (review FAIL-2) — CLASS COMPLETION.
+ *
+ * The round-1 fix guarded `apiRequest`, but `downloadResume` builds its own
+ * `fetch` (it needs the blob, not JSON) and embedded the raw body into
+ * `ApiError.message`:
+ *
+ *     `GET /resumes/${id}/download failed (${res.status}): ${detail}`
+ *
+ * That message is rendered VERBATIM by the Résumé Studio download handler
+ * (`app/dashboard/resume/page.tsx`: `setDownloadNote(e instanceof Error ?
+ * e.message : "Download failed")`, shown in the `download-note` banner), so the
+ * same Cloudflare that 524s a Sync reproduces the exact MON-020 symptom —
+ * `<!DOCTYPE html>`, Ray ID and all — on the résumé-download flow. The fix
+ * reuses the SAME shared helpers, so the two paths cannot drift.
+ */
+describe("downloadResume — gateway HTML must not reach the download note (MON-020)", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("replaces an intermediary's HTML body with the honest sentence", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => htmlResponse(524)));
+
+    const err = (await downloadResume("resume-1", OPTIONS).catch(
+      (e: unknown) => e,
+    )) as ApiError;
+
+    expect(err).toBeInstanceOf(ApiError);
+    expect(err.message).not.toContain("<");
+    expect(err.message.toLowerCase()).not.toContain("doctype");
+    expect(err.message).not.toContain("Ray ID");
+    expect(err.message.toLowerCase()).toContain("too long");
+    expect(err.status).toBe(524);
+    // What the user actually reads in the download-note banner.
+    expect(describeApiError(err, "Download failed")).not.toContain("<");
+  });
+
+  it("detects the HTML page even when the proxy mislabels the Content-Type", async () => {
+    const res = {
+      ok: false,
+      status: 502,
+      headers: new Headers({ "Content-Type": "text/plain" }),
+      text: async () => CF_524_HTML,
+    } as unknown as Response;
+    vi.stubGlobal("fetch", vi.fn(async () => res));
+
+    const err = (await downloadResume("resume-1", OPTIONS).catch(
+      (e: unknown) => e,
+    )) as ApiError;
+    expect(err.message).not.toContain("<");
+    expect(err.message.toLowerCase()).toContain("temporarily unavailable");
+  });
+
+  it("still passes our own API's JSON error body through untouched", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => jsonErrorResponse(404, { detail: "Resume not found" })),
+    );
+
+    const err = (await downloadResume("missing", OPTIONS).catch(
+      (e: unknown) => e,
+    )) as ApiError;
+    expect(err.status).toBe(404);
+    expect(err.message).toContain("Resume not found");
   });
 });
