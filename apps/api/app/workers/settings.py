@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 
 from app.workers.board_sweep import board_sweep_cron, board_sweep_user
+from app.workers.queue import job_timeout_seconds
 from app.workers.tasks import (
     reconcile_abandoned_agent_runs_cron,
     run_agent_job,
@@ -82,6 +83,10 @@ class WorkerSettings:
     on_startup = _on_startup
     redis_settings = _redis_settings()
     max_jobs = 3        # 2 vCPU / ~2.5 GB free -> modest concurrency
-    job_timeout = 600   # > largest worker LLM budget so ARQ never kills mid-run
+    # > largest worker LLM budget AND > the measured worst-case discovery pass,
+    # so ARQ never kills a healthy run mid-flight. Sourced from ONE authority
+    # (workers.queue.job_timeout_seconds) that the stale-job watchdog also
+    # derives from — see that function for the measurement behind the default.
+    job_timeout = job_timeout_seconds()
     keep_result = 300   # Postgres BackgroundJob is authoritative anyway
     max_tries = 3       # applies only to re-raised transient errors

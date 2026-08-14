@@ -1135,14 +1135,26 @@ def get_settings(current_user: CurrentUser) -> dict[str, Any]:
     portfolio_row = CareerProfileRepository().get(uid, "portfolio")
     result = _build_settings(user, resume, base_resume, portfolio_row)
     result["resume"]["versions"] = version_count
+    # I4-FE-03: whether a source counts as "connected" is a backend fact —
+    # a source with historical Job rows (e.g. discovered before a compliance
+    # gate was added) must not be shown as active once that gate excludes it
+    # from the live registry. ``build_live_registry()`` re-reads the gate's
+    # env flag (AETHER_ENABLE_SEEK) on every call, so this stays correct
+    # both when the gate is off (default) and if it is ever enabled — no
+    # source name is hardcoded here.
+    from app.services.discovery.adapter_registry import build_live_registry
+
+    live_sources = build_live_registry()
     result["integrations"] = [
         {
             "name": row["source"].capitalize() if row["source"].islower() else row["source"],
-            "status": "connected",
+            "status": "connected" if row["source"] in live_sources else "not_configured",
             "detail": (
                 f"{row['cnt']} jobs discovered · last sync "
                 f"{str(row['last_seen'])[:16]} UTC"
-            ),
+            )
+            if row["source"] in live_sources
+            else "Not currently active",
         }
         for row in source_rows
     ]

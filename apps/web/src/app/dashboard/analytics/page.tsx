@@ -154,7 +154,7 @@ export default function AnalyticsPage() {
     "Jobs Found": "Roles discovered by the Scout agent and matched against your profile.",
     "Avg Fit Score": "Average ATS/AI fit score (0–100) across all scored jobs — how well your resume matches each posting.",
     "Agent Runs": "Total number of agent executions (discovery, tailoring, scoring, etc.) in this period.",
-    "Agent Spend (AUD)": "Total agent cost incurred by agent runs in this period, shown in Australian dollars.",
+    "Agent Spend (USD)": "Total agent cost incurred by agent runs in this period, shown in US dollars — LLM providers bill in USD and no currency conversion is applied.",
   };
 
   const CONVERSION_TIP: Record<string, string> = {
@@ -255,7 +255,7 @@ export default function AnalyticsPage() {
               ["Jobs Found", dashboard.jobsFound, "text-aether-amber"],
               ["Avg Fit Score", `${dashboard.avgFitScore}%`, "text-aether-coral"],
               ["Agent Runs", dashboard.agentRuns, "text-aether-violet"],
-              ["Agent Spend (AUD)", `$${dashboard.agentCostUsd.toFixed(2)}`, "text-aether-green"],
+              ["Agent Spend (USD)", `$${dashboard.agentCostUsd.toFixed(2)}`, "text-aether-green"],
             ] as const
           ).map(([label, value, color]) => (
             <div key={label} className="glass rounded-2xl border border-white/10 p-4">

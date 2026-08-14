@@ -308,6 +308,11 @@ export default function ResumePage() {
   // either way. WHITELIST the known cases instead (same precedent as
   // `semanticTrusted` below, GMV4-ats-002 round 3): a missing flag reads as
   // UNKNOWN, never as preserved.
+  // U2b: the API's own fidelity report for the SELECTED version — {method,
+  // confidence, note}. Rendered verbatim below the status line so the panel
+  // states the real mechanism (native Word editing vs an Aether-template
+  // re-render) instead of one generic sentence for every unpreserved case.
+  const formatFidelity = selected?.formatFidelity ?? null;
   const formatPreservationKnown = selected != null && selected.formatPreserved != null;
   const formatExplicitlyUnpreserved = selected != null && selected.formatPreserved === false;
   const formatIntact = selected
@@ -470,6 +475,22 @@ export default function ResumePage() {
                 Layout hash differs from the base — review formatting before using this version.
               </p>
             )}
+            {formatFidelity ? (
+              // U2b (R-F2/R-F4): the API's OWN per-version report, not a
+              // hard-coded string. A genuine docx-native preservation and a
+              // low-confidence PDF re-flow used to render identical copy here,
+              // which is exactly the silent claim R-F4 forbids.
+              <p
+                className="mt-1 text-xs text-aether-muted-dim"
+                data-testid="format-fidelity-detail"
+              >
+                <span className="mono uppercase tracking-wide">
+                  {formatFidelity.method}
+                </span>
+                {" · "}
+                {formatFidelity.confidence} confidence — {formatFidelity.note}
+              </p>
+            ) : null}
             <p className="mt-1 text-xs text-aether-muted-dim">
               {diff
                 ? `Changes Summary: ${diff.changes.filter((c) => c.before).length} rewrites · ${diff.changes.filter((c) => !c.before).length} additions${formatIntact ? " · formatHash carried from base" : ""}`

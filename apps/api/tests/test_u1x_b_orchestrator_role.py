@@ -49,7 +49,7 @@ from __future__ import annotations
 import pytest
 
 from app.services import credential_vault as vault
-from app.services.llm_client import LLMClient, _STATIC_MODEL_CATALOG, user_model_context
+from app.services.llm_client import _STATIC_MODEL_CATALOG, LLMClient, user_model_context
 
 _FLAGSHIP_ANTHROPIC_ID = next(
     m["id"] for m in _STATIC_MODEL_CATALOG["anthropic"] if m["tier"] == "premium"

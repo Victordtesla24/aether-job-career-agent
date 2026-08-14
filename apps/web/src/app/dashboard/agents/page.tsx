@@ -513,7 +513,17 @@ export default function AgentsPage() {
     startPolling("agent");
     try {
       const params = scoutParams ?? (await resolveParams(backend));
-      const output = await runAgent(AGENT_ROUTE[backend] ?? backend, params);
+      // MON-020: a scout pass really takes minutes (production discovery-cron
+      // measurement: 255-473s typical, 968s worst case) while Cloudflare aborts
+      // the request at ~100s. Run it through the endpoint's background mode —
+      // `runAgent` still awaits the real terminal result via `resolveRun`, so
+      // the success/failure notice below means exactly what it did before.
+      const output = await runAgent(
+        AGENT_ROUTE[backend] ?? backend,
+        params,
+        {},
+        { background: backend === "scout" },
+      );
       setNotice(missingResumeNotice(output) ?? agentSuccessNotice(backend, output));
     } catch (e) {
       setNotice(runErrorNotice(e, backend));
