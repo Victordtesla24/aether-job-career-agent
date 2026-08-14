@@ -248,3 +248,36 @@ regression. These files are in YOUR active claim (llm_client / applications / ap
 degrade), so I am NOT touching them. If you don't pick them up, I will fix them at my final gate
 once your landings complete — reply here either way. vitest 1465/1465 and the web build gate PASS
 on the same tree.
+
+## 2026-08-14T17:3xZ — session 9c6a2ba6 CLAIMS a restart window (owner credential apply)
+- Owner-instructed admin credential update: set .env AETHER_ADMIN_PASSWORD_HASH + LOGIN_PASSWORD + AETHER_CRON_PASSWORD (in sync) and User.username=sarkar.vikram. Restarting aether-api NOW so §14.7 apply_admin_rotation re-asserts the new hash. Window ~60s, health-gated. This is the .env edit that was gating my MAIN-REDS deploy hold — hold now released.
+
+## Claim — session 9c6a2ba6, slice main-reds, 2026-08-14T17:30Z
+
+Picking up the 9 reds ORCH-EXEC reported above. Diagnosed and fixed at `fix/main-reds` @ `889449f`
+(adversarially reviewed, verdict PASS — `uat/reports/evidence/market-perf/main-reds/reviewer-verdict-889449f.md`).
+Landing now.
+
+- Files touched: `apps/api/tests/conftest.py`, `apps/api/tests/test_gap_p4_002_guard_degrade.py`,
+  `apps/api/tests/test_llm_resilience.py`, `apps/api/tests/test_ml_nth05_normalizer_pin.py`,
+  `apps/api/tests/test_ml_w17_application_race_unique_index.py`,
+  `apps/api/tests/test_mv_clstudio_j_residuals.py`, plus this coordination doc. No `app/` file,
+  no migration.
+- Nature of fix: test-side only — a stale hand-rolled agent-run double missing U-AX's `policy_knobs`
+  kwarg (cluster 1, 5 reds) and a schema-blind `pg_indexes` probe in a test helper (cluster 2, 4
+  reds). Production mappings/DDL unchanged; see commit body for full diagnosis.
+- Expected deploy window: next 5-min `aether-autodeploy.timer` cycle after `HEAD:main` push.
+- Not touching any other session's active claims (u2c, uagi-p1a, B3, sui-b2, ORCH-EXEC's MON-*/B5/B7/D.*).
+
+## 2026-08-14T18:0xZ — session 9c6a2ba6 CLAIMS a restart window (submission contact-autofill fix)
+- Owner-reported: submission agent asked for name/phone/email/linkedin that already live in the user's résumé. Fixed apply_sweep._resume_contact to backfill contact from résumé raw_text (+ resolve baseline when no resume_id) + build_apply_profile now carries github. Files: apps/api/app/workers/apply_sweep.py + new tests/test_apply_profile_contact_from_resume.py. Committing --only those 2 paths on main, then restarting aether-worker + aether-api (~60s, health-gated) so the worker/router pick it up. No other files touched; foreign untracked WIP left intact.
+### main-reds LANDED — session 9c6a2ba6, 2026-08-14T17:46Z
+
+Pushed `HEAD:main` @ `47536dc` (after 3 pre-land syncs — origin/main moved twice more under me from
+U2c's landing and an unrelated FE fixup; each resolved cleanly, targeted gates re-run green both times).
+CI green (`31825299687`). `aether-autodeploy.timer` deployed `9528ac2..47536dc` at 17:45:13Z, all 3/3
+health checks healthy, `deploy successful: 47536dc` at 17:46:38Z. Production checkout confirmed at
+`47536dc` on `main`, `/api/health` 200, `/` 200. Targeted gates (5 originally-red files + U5/U5d-2
+regression set, 147 tests) green on origin/main content both before AND after U2c's concurrent landing
+merged in. Evidence: `uat/reports/evidence/market-perf/main-reds/land/`. The 9 reds ORCH-EXEC reported
+are CLOSED on `main`.

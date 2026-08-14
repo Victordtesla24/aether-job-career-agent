@@ -14,6 +14,11 @@ from app.middleware.auth import CurrentUser
 from app.repositories.admin import write_audit
 from app.repositories.approval import ApprovalRepository
 from app.services.approval_service import EXPIRY_HOURS, ApprovalService, _is_expired
+from app.services.quality_gate import (
+    acknowledgement_label_for,
+    failing_labels,
+    is_below_floor,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +90,12 @@ class DecisionBody(BaseModel):
 
     edited_preview: str | None = Field(default=None, max_length=20_000)
     trust_agent: bool | None = None
+    #: U2c: the human's explicit "yes, I know it is below the quality floor"
+    #: for an artifact whose gate verdict failed. Required to APPROVE such an
+    #: artifact (never to reject one — refusing is the safe direction and must
+    #: never be obstructed). Recorded on the payload so the decision stays
+    #: attributable long after the request that carried it.
+    acknowledge_below_floor: bool | None = None
 
 
 def _merge_decision_context(
@@ -106,6 +117,8 @@ def _merge_decision_context(
         extra["edited"] = True
     if body.trust_agent is not None:
         extra["trust_agent"] = body.trust_agent
+    if body.acknowledge_below_floor is not None:
+        extra["acknowledgedBelowFloor"] = body.acknowledge_below_floor
     if not extra:
         return
     with get_connection() as conn:
@@ -217,6 +230,50 @@ def delete_approval(approval_id: str, current_user: CurrentUser) -> dict[str, An
     return deleted
 
 
+def _require_below_floor_acknowledgement(
+    approval_id: str, user_id: str, body: DecisionBody | None
+) -> None:
+    """Refuse to APPROVE a below-floor artifact without an explicit yes (U2c).
+
+    The verdict is READ off the approval's own payload — the object the
+    tailoring / cover-letter agent stamped there when it produced the artifact.
+    It is never recomputed here: a second computation is a second opinion, and
+    the number the human is being asked to accept must be the number the run
+    actually produced.
+
+    An approval with no verdict (every one created before this gate existed) is
+    approved unchanged: it was never judged, and inventing a failure for it
+    would be as dishonest as hiding a real one.
+    """
+    approval = ApprovalRepository().get_by_id(approval_id, user_id)
+    if approval is None or approval.get("status") != "pending":
+        # Not this gate's business — the resolve below answers 404/409 with the
+        # existing, well-tested semantics.
+        return
+    payload = ApprovalRepository._payload_dict(approval)
+    gate = payload.get("qualityGate")
+    if not is_below_floor(gate):
+        return
+    if body is not None and body.acknowledge_below_floor:
+        return
+    labels = failing_labels(gate)
+    # ``is_below_floor`` already established ``gate`` is a dict whose ``passed``
+    # is False — this restates it for the type checker without a cast, which
+    # would assert the fact instead of checking it.
+    summary = str((gate or {}).get("summary") or "").strip()
+    raise HTTPException(
+        http_status.HTTP_409_CONFLICT,
+        (
+            f"{summary} This artifact is below the quality floor on "
+            f"{len(labels)} dimension(s) — {', '.join(labels)}. It has NOT "
+            "been withheld: you can read it, edit it and approve it. But "
+            "approving it has to be a deliberate choice, so re-send this "
+            "decision with acknowledge_below_floor=true "
+            f'("{acknowledgement_label_for(len(labels))}").'
+        ),
+    )
+
+
 @router.post("/{approval_id}/approve")
 def approve(
     approval_id: str,
@@ -225,6 +282,9 @@ def approve(
     body: DecisionBody | None = None,
 ) -> dict[str, Any]:
     user_id = current_user["id"]
+    # U2c: checked BEFORE the context merge and the resolve, so a refused
+    # approval leaves the row exactly as it was — still pending, unedited.
+    _require_below_floor_acknowledgement(approval_id, user_id, body)
     _merge_decision_context(approval_id, user_id, body)
     resolved = ApprovalService().resolve(
         approval_id, user_id, "approved", ip=_client_ip(request)

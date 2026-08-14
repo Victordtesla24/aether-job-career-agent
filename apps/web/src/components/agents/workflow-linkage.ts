@@ -234,7 +234,7 @@ const HOP = {
     kind: "reads",
     mechanism:
       "StoryRepository.list_by_user -> flattened title+tags+STAR+metrics text",
-    evidence: "apps/api/app/agents/tailor_agent.py:200,239",
+    evidence: "apps/api/app/agents/tailor_agent.py:206,245",
     discoveryEvidence: "apps/api/app/agents/tailor_agent.py:146-188",
     anchors: ["def build_story_evidence(", "stories = repo.list_by_user(user_id)"],
     status: "live",
@@ -245,7 +245,7 @@ const HOP = {
     kind: "feeds",
     mechanism:
       "story_evidence joined into evidence_extra and threaded to TailoringLoop.run",
-    evidence: "apps/api/app/agents/tailor_agent.py:666,678,694-695",
+    evidence: "apps/api/app/agents/tailor_agent.py:726,738,767",
     discoveryEvidence: "apps/api/app/agents/tailor_agent.py:546,556,573",
     anchors: [
       "story_evidence = build_story_evidence(",
@@ -260,12 +260,19 @@ const HOP = {
     kind: "feeds",
     mechanism:
       "story_evidence -> claim_evidence corpus for unsupported_claim_tokens + FabricationGuard",
-    evidence: "apps/api/app/agents/cover_letter_agent.py:1547,1583,1593-1596",
+    // U2c / U-STORY-1 ruling E3: both guard corpora are now assembled by the
+    // ONE shared `build_guard_corpora` (services/cover_letter_evidence.py),
+    // called identically from this generation path and from
+    // POST /cover-letters/{id}/refine. The old inline
+    // `[story_evidence] if story_evidence else []` / `claim_evidence = " ".join(`
+    // literals this hop used to cite were the asymmetry E3 closed — they no
+    // longer exist here by construction, not by drift.
+    evidence: "apps/api/app/agents/cover_letter_agent.py:1709,1758,1762",
     discoveryEvidence: "apps/api/app/agents/cover_letter_agent.py:1557,1558-1563",
     anchors: [
       "story_evidence = build_story_evidence(",
-      "[story_evidence] if story_evidence else []",
-      'claim_evidence = " ".join(',
+      "story_evidence=story_evidence,",
+      "claim_evidence = corpora.claim_evidence",
     ],
     status: "live",
   },
@@ -290,7 +297,7 @@ const HOP = {
     kind: "writes",
     mechanism:
       "new tailored Resume version (raw_text regenerated from tailored bullets); raises NoChangesApplied when net_changes==0 so no billed no-op version is created",
-    evidence: "apps/api/app/agents/tailor_agent.py:736-737,744,784",
+    evidence: "apps/api/app/agents/tailor_agent.py:809,816,858",
     discoveryEvidence: "apps/api/app/agents/tailor_agent.py:611-620",
     anchors: [
       "raise NoChangesApplied(",
@@ -375,7 +382,7 @@ const HOP = {
     to: "agent.jobDiscovery",
     kind: "triggers",
     mechanism: "_pipeline_core sequential _dispatch",
-    evidence: "apps/api/app/routers/agents.py:3389,3411",
+    evidence: "apps/api/app/routers/agents.py:3401,3423",
     discoveryEvidence: "apps/api/app/routers/agents.py:3380",
     anchors: ["def _pipeline_core(", 'scout_out = _dispatch(user_id, "scout", params)'],
     status: "live",
@@ -451,7 +458,7 @@ const HOP = {
     mechanism:
       "synthesis over the user's own postings; optional guard-checked LLM narrative",
     evidence:
-      "apps/api/app/agents/company_research_agent.py:53,183; narrative opt-in at apps/api/app/routers/agents.py:1538,2057",
+      "apps/api/app/agents/company_research_agent.py:53,183; narrative opt-in at apps/api/app/routers/agents.py:1550,2069",
     discoveryEvidence:
       "apps/api/app/agents/company_research_agent.py:53; narrative opt-in at apps/api/app/routers/agents.py:2020-2027",
     anchors: [

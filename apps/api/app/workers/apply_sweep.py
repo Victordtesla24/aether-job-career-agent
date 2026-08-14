@@ -62,6 +62,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import time
 from datetime import datetime, timezone
 from typing import Any
@@ -293,27 +294,99 @@ def _load_user(user_id: str) -> dict[str, Any] | None:
     return rows[0] if rows else None
 
 
+#: Contact facts we can read off the user's OWN résumé text. Strictly
+#: extractive — every value is a literal token the user themselves typed into
+#: their document (an email, a phone number, a LinkedIn/GitHub URL). Nothing is
+#: derived from the job, the employer, or a model; if a token is not physically
+#: present in the text, the key is simply absent (never guessed, never asked
+#: for when it IS present).
+_EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
+_PHONE_RE = re.compile(r"(?<!\w)(\+?\d[\d\s().-]{7,}\d)(?!\w)")
+_LINKEDIN_RE = re.compile(r"(?:https?://)?(?:www\.)?linkedin\.com/[^\s|,;]+", re.I)
+_GITHUB_RE = re.compile(r"(?:https?://)?(?:www\.)?github\.com/[^\s|,;]+", re.I)
+_URL_RE = re.compile(r"https?://[^\s|,;]+", re.I)
+
+
+def _extract_contact_from_text(raw_text: str) -> dict[str, Any]:
+    """Pull the standard contact fields out of a résumé's raw text.
+
+    PDF/DOCX and legacy text-only résumés keep contact facts as the lines of
+    their own CONTACT block, not as a pre-structured ``contact`` map — so the
+    facts the user already gave us live here and nowhere else. This reads them
+    back verbatim so a form fill never asks for what the résumé already states.
+    """
+    text = raw_text or ""
+    if not text.strip():
+        return {}
+    out: dict[str, Any] = {}
+    m = _EMAIL_RE.search(text)
+    if m:
+        out["email"] = m.group(0).strip().rstrip(".")
+    m = _PHONE_RE.search(text)
+    if m:
+        digits = re.sub(r"[^\d+]", "", m.group(1))
+        # A real phone number, not a year/postcode/section number that happens
+        # to sit near the top: require enough digits to be a phone.
+        if len(re.sub(r"\D", "", digits)) >= 8:
+            out["phone"] = m.group(1).strip()
+    m = _LINKEDIN_RE.search(text)
+    if m:
+        out["linkedin"] = m.group(0).strip().rstrip("/.")
+    m = _GITHUB_RE.search(text)
+    if m:
+        out["github"] = m.group(0).strip().rstrip("/.")
+    for url in _URL_RE.finditer(text):
+        u = url.group(0)
+        if "linkedin.com" in u.lower() or "github.com" in u.lower():
+            continue
+        out["website"] = u.strip().rstrip("/.")
+        break
+    return out
+
+
 def _resume_contact(user_id: str, resume_id: str | None) -> dict[str, Any]:
     """Contact facts the user already gave us, off their own résumé row.
 
     Read-only and strictly factual: these are values the user typed into their
     own document, which is why they are safe to put into an employer's form.
-    Nothing is derived or guessed.
+    Nothing is derived or guessed. Resolves the user's baseline résumé when no
+    id is supplied, and — because the structured ``contact`` map is empty for
+    every PDF/DOCX and legacy upload — falls back to reading the contact block
+    straight out of the résumé's own text so the agent never asks for a phone,
+    email, or profile URL that is sitting in the résumé it already holds.
     """
-    if not resume_id:
-        return {}
     with get_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                'SELECT "sections" FROM "Resume" WHERE "id" = %s AND "userId" = %s',
-                (resume_id, user_id),
-            )
+            if resume_id:
+                cur.execute(
+                    'SELECT "sections" FROM "Resume" '
+                    'WHERE "id" = %s AND "userId" = %s',
+                    (resume_id, user_id),
+                )
+            else:
+                # No résumé pinned to this application — use the candidate's
+                # baseline (or most recent) résumé; its contact facts are still
+                # the candidate's own facts.
+                cur.execute(
+                    'SELECT "sections" FROM "Resume" WHERE "userId" = %s '
+                    'ORDER BY ("parentId" IS NULL) DESC, "createdAt" DESC '
+                    'LIMIT 1',
+                    (user_id,),
+                )
             row = cur.fetchone()
     sections = row[0] if row else None
     if not isinstance(sections, dict):
         return {}
     contact = sections.get("contact")
-    return contact if isinstance(contact, dict) else {}
+    contact = dict(contact) if isinstance(contact, dict) else {}
+    # Backfill anything the structured map is missing from the résumé's own
+    # text (the usual case: PDF/DOCX/legacy résumés carry it only as text).
+    raw_text = sections.get("raw_text")
+    if isinstance(raw_text, str) and raw_text.strip():
+        for key, value in _extract_contact_from_text(raw_text).items():
+            if not contact.get(key):
+                contact[key] = value
+    return contact
 
 
 def build_apply_profile(
@@ -348,6 +421,7 @@ def build_apply_profile(
         or "",
         "country": apply_profile.get("country") or "",
         "linkedin": apply_profile.get("linkedin") or contact.get("linkedin") or "",
+        "github": apply_profile.get("github") or contact.get("github") or "",
         "website": apply_profile.get("website") or contact.get("website") or "",
     }
     for optional in ("firstName", "lastName", "preferredName"):
@@ -359,6 +433,14 @@ def build_apply_profile(
     if isinstance(per_application, dict):
         custom.update(per_application)
     profile["customAnswers"] = custom
+    # U5d-3: the per-application answers are ALSO carried unmerged, keyed by
+    # the employer's QUESTION TEXT rather than a field name. ``customAnswers``
+    # is looked up by field name, so a question-keyed entry can never match
+    # there; the Answer Bank resolver matches on the question itself, which is
+    # what makes an in-card answer usable on the very next attempt.
+    profile["screeningAnswers"] = (
+        dict(per_application) if isinstance(per_application, dict) else {}
+    )
     return profile
 
 
@@ -473,6 +555,11 @@ def _attempt_transmission(user_id: str, application_id: str, approval_id: str) -
         cover_letter_text=str(application.get("coverLetter") or ""),
         evidence_dir=evidence_root(),
         apply_url=apply_url,
+        # U5d-3: the employer and the job this attempt is for, so a
+        # company-scoped banked answer applies only where the user scoped it
+        # and every usage audit row names the job it was used on.
+        company=str(application.get("company") or "") or None,
+        job_id=str(application.get("jobId") or "") or None,
     )
 
 

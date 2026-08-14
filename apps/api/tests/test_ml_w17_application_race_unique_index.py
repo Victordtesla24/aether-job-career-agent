@@ -88,9 +88,26 @@ def _reset_index_state() -> Iterator[None]:
 
 
 def _index_exists(conn) -> bool:
+    """Does the index exist IN THE SCHEMA UNDER TEST?
+
+    Scoped by ``schemaname`` — the SAME predicate the production helper uses
+    (``app.db.ensure_application_unique_active_index``, which has always read
+    ``schemaname = ANY(current_schemas(false))``). ``pg_indexes`` is a
+    database-wide catalogue view, and this ONE database holds several schemas
+    with their own ``Application`` table (``aether``, ``aether_test``, and any
+    per-session schema a parallel worktree creates). Without the filter this
+    helper answered "does SOME schema have that index", so a sibling schema
+    that had ever created it made every "not created yet" assertion in this
+    file fail — while the two race tests, which never call this helper, kept
+    passing. Asking the question this file actually means is strictly
+    narrower: the answer can now only be produced by the schema whose state
+    these tests control.
+    """
     with conn.cursor() as cur:
         cur.execute(
-            "SELECT 1 FROM pg_indexes WHERE tablename = 'Application'"
+            "SELECT 1 FROM pg_indexes"
+            " WHERE schemaname = ANY(current_schemas(false))"
+            " AND tablename = 'Application'"
             " AND indexname = %s",
             (_INDEX_NAME,),
         )

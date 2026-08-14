@@ -101,7 +101,11 @@ def dry_run(monkeypatch):
     )
     monkeypatch.setattr(
         apply_executor, "build_form_fill_plan",
-        lambda html, *, channel, profile: [],
+        # Mirrors the real seam's signature and RETURN SHAPE (U5d-3 added the
+        # optional Answer Bank resolver and the audit list).
+        lambda html, *, channel, profile, answer_bank=None: {
+            "fields": [], "unanswerable_required": [], "answerBankAudit": [],
+        },
     )
     monkeypatch.setattr(apply_sweep, "_render_resume_pdf", lambda uid, app: b"%PDF-dry")
 

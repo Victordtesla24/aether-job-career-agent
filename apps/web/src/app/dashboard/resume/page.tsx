@@ -31,6 +31,8 @@ import { changeCounts, renderBullets } from "../../../components/resume/diff-sem
 import PageHeader from "../../../components/shell/PageHeader";
 import Section from "../../../components/ui/Section";
 import { button, chip, listCard } from "../../../components/ui/recipes";
+import { QualityFloorNotice } from "../../../components/quality/QualityFloorNotice";
+import { type QualityGate, qualityGateFrom } from "../../../lib/quality-gate";
 import { useRealtimeResources } from "../../../hooks/useRealtime";
 import { apiRequest } from "../../../lib/api/client";
 import type { Job } from "../../../lib/api/jobs";
@@ -190,6 +192,7 @@ export default function ResumePage() {
   /** Honest sub-85 warning from the score-aware TailoringLoop (§5.3.1 pt 5) —
    *  null whenever the run reached the 85 ATS target. */
   const [tailorWarning, setTailorWarning] = useState<string | null>(null);
+  const [qualityGate, setQualityGate] = useState<QualityGate | null>(null);
   const [downloadNote, setDownloadNote] = useState<string | null>(null);
   const [visibleCount, setVisibleCount] = useState(VERSIONS_PAGE_SIZE);
   /** Presentation-only rail filter — 486 identically-titled versions are
@@ -334,7 +337,10 @@ export default function ResumePage() {
     // panel rather than showing a neighbouring version's numbers.
     const stored = resume.sections as {
       conversionMetrics?: unknown;
-      tailoringSummary?: { warning?: string | null } | null;
+      tailoringSummary?: {
+        warning?: string | null;
+        qualityGate?: unknown;
+      } | null;
     };
     setConversion(
       stored.conversionMetrics
@@ -342,6 +348,12 @@ export default function ResumePage() {
         : null,
     );
     setTailorWarning(stored.tailoringSummary?.warning ?? null);
+    // U2c: the version's OWN 80%-across-all-dimensions verdict, re-hydrated
+    // from the row rather than from the transient run response, so the Studio
+    // tells the same story on a reload as it did the moment the run finished.
+    // `null` for every version tailored before the gate existed — nothing
+    // judged them, so the Studio claims nothing about them.
+    setQualityGate(qualityGateFrom(stored.tailoringSummary?.qualityGate));
     try {
       setDiff(await fetchResumeDiff(resume.id));
     } catch {
@@ -538,6 +550,14 @@ export default function ResumePage() {
           {notice}
         </p>
       ) : null}
+
+      {/* U2c — the failing dimensions, verbatim from this version's real
+          scores. Rendered ABOVE the loop's prose warning because a user
+          scanning the page needs the checkable numbers first.
+          UNTOUCHABLE WIRING arriving from main: B3 restyled the frame around
+          the loop's PROSE warning below it and left this component, its gate
+          source and its copy exactly as U2c shipped them. */}
+      <QualityFloorNotice gate={qualityGate} testId="tailor-quality-floor" />
 
       {tailorWarning ? (
         <div className="rounded-xl border border-state-warn/30 bg-state-warn/[0.07] p-4">

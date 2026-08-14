@@ -7,12 +7,21 @@ export interface DecisionContext {
   editedPreview?: string;
   /** "Trust this agent for similar decisions going forward". */
   trustAgent?: boolean;
+  /**
+   * U2c: the human's explicit "yes, I know it is below the quality floor".
+   * The API REFUSES (409) to approve a below-floor artifact without it, and
+   * records it on the payload so the decision stays attributable.
+   */
+  acknowledgeBelowFloor?: boolean;
 }
 
 function toBody(context: DecisionContext): Record<string, unknown> | undefined {
   const body: Record<string, unknown> = {};
   if (context.editedPreview !== undefined) body.edited_preview = context.editedPreview;
   if (context.trustAgent !== undefined) body.trust_agent = context.trustAgent;
+  if (context.acknowledgeBelowFloor !== undefined) {
+    body.acknowledge_below_floor = context.acknowledgeBelowFloor;
+  }
   return Object.keys(body).length > 0 ? body : undefined;
 }
 

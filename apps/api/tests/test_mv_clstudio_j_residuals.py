@@ -680,7 +680,7 @@ def test_fronted_adverbial_never_ships_e2e(client, auth_headers):
 
 
 def test_llm_failure_surfaces_honest_message_and_refunds(
-    client, auth_headers, monkeypatch
+    client, auth_headers, monkeypatch, patch_agent_run
 ):
     """A genuine LLM-unavailable failure must surface an HONEST, secret-free
     message (no raw internals) on BOTH the 503 detail and the AgentRun audit
@@ -696,10 +696,13 @@ def test_llm_failure_surfaces_honest_message_and_refunds(
         "budget of 17.1s for 'cover_letter'"
     )
 
-    def _boom(self, user_id, job_id, resume_id=None):
+    def _boom():
         raise LLMUnavailableError(raw)
 
-    monkeypatch.setattr(cl_module.CoverLetterAgent, "run", _boom)
+    # Signature-derived double (conftest ``patch_agent_run``): this suite is
+    # about what the 503 and the audit row SAY, so the stub must never be the
+    # thing that fails — only the real leak-checks below may.
+    cover_calls = patch_agent_run(cl_module.CoverLetterAgent, _boom)
 
     quota = UsageQuotaRepository()
     before = quota.get_by_user(user_id)
@@ -715,6 +718,9 @@ def test_llm_failure_surfaces_honest_message_and_refunds(
         assert leak not in low_detail, f"503 detail leaked internals: {detail!r}"
     assert detail.strip(), "503 detail must not be empty"
     assert "try again" in low_detail, f"503 detail is not user-appropriate: {detail!r}"
+    # ...and it is THIS failure's message, not an earlier refusal's: the router
+    # really reached the agent whose LLM this test made unavailable.
+    assert cover_calls, "the router never reached CoverLetterAgent.run"
 
     # The audit record surfaced via GET /agents/runs must ALSO be honest.
     runs = client.get("/agents/runs", headers=auth_headers).json()

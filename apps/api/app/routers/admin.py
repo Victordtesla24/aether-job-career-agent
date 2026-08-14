@@ -18,6 +18,7 @@ from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel, Field, StrictBool, ValidationError
 
 from app.middleware.auth import AdminUser
+from app.redaction import redact_validation_errors
 from app.repositories import admin as admin_repo
 
 router = APIRouter()
@@ -97,7 +98,12 @@ async def _parse_spend_cap_body(request: Request) -> SpendCapRequest:
         return SpendCapRequest.model_validate(raw)
     except ValidationError as exc:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY, jsonable_encoder(exc.errors())
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            # SEC-422: same redaction the app-wide RequestValidationError
+            # handler applies — these hand-rolled echoes bypass it because
+            # the body is parsed inside the handler (auth-before-body), so
+            # they must call the shared sanitizer themselves.
+            jsonable_encoder(redact_validation_errors(exc.errors())),
         ) from exc
 
 
@@ -207,7 +213,12 @@ async def _parse_settings_body(request: Request) -> SettingsRequest:
         return SettingsRequest.model_validate(raw)
     except ValidationError as exc:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY, jsonable_encoder(exc.errors())
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            # SEC-422: same redaction the app-wide RequestValidationError
+            # handler applies — these hand-rolled echoes bypass it because
+            # the body is parsed inside the handler (auth-before-body), so
+            # they must call the shared sanitizer themselves.
+            jsonable_encoder(redact_validation_errors(exc.errors())),
         ) from exc
 
 
