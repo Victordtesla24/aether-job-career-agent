@@ -58,6 +58,12 @@ body {
   background-image:
     radial-gradient(1200px 600px at 80% -10%, rgba(79, 70, 229, 0.1), transparent 60%),
     radial-gradient(1000px 500px at -5% 10%, rgba(255, 107, 53, 0.08), transparent 55%),
+    /* VIGNETTE. Linear (#08090a) and Raycast (#07080a) both read as deep
+       rather than flat because their ground is not one uniform value — it
+       falls off toward the frame, so the content column is the lit part of
+       the picture. Layered ABOVE the base ramp and BELOW the two brand
+       radials, so it deepens the ground without muddying the hue. */
+      radial-gradient(125% 95% at 50% 38%, transparent 42%, rgba(0, 0, 0, 0.45) 100%),
     linear-gradient(180deg, #0a0a0f 0%, #12121c 100%);
   background-attachment: fixed;
   min-height: 100vh;
@@ -65,6 +71,11 @@ body {
 
 .mono {
   font-family: "JetBrains Mono", ui-monospace, monospace;
+  /* D-γ — numbers are a typeface, not text. Every numeral in the product is
+     rendered through this class, so the tabular figure set belongs here once
+     rather than being re-applied per call site (which is how a column of
+     numbers ends up half-aligned). */
+  font-variant-numeric: tabular-nums;
 }
 
 .glass {
@@ -170,4 +181,244 @@ body {
   body {
     overflow-x: clip;
   }
+}
+
+/* ==========================================================================
+   S-UI-REBUILD B0 — shell chrome, motion tokens and typography roles.
+   ADDITIVE: every rule below is a NEW class. Nothing above is re-pointed, so
+   pages that have not migrated render byte-identically.
+   ========================================================================== */
+
+/*
+ * §1.1 THE GLASS DECISION — chrome may blur, content never does.
+ *
+ * `.chrome-blur` is permitted on exactly four element classes: the command
+ * bar, the rail, the mobile nav sheet / tab bar, and `.elev-3` overlays. All
+ * of them are fixed/sticky and non-scrolling, so at most ~4 blurred layers
+ * are ever composited at once — the bounded set Rule D-5 asks for. Content
+ * surfaces stay opaque (`.elev-1` / `.elev-2`).
+ *
+ * `.glass` / `.glass-raised` above are deliberately LEFT IN PLACE: eight
+ * un-migrated pages still use them, and Binding Constraint 3 only permits a
+ * deletion once a references-proof shows zero users (that is B4's job).
+ *
+ * The rail itself does NOT use this class — reference-pack rule 2 (sidebars
+ * are colour-flat against the page, differentiated by rhythm and the active
+ * indicator, never by a bounding box or a separate surface).
+ */
+.chrome-blur {
+  background: rgba(10, 10, 15, 0.72);
+  background: color-mix(in srgb, #0a0a0f 72%, transparent);
+  backdrop-filter: blur(24px) saturate(140%);
+  -webkit-backdrop-filter: blur(24px) saturate(140%);
+}
+
+/* §2.2 — typography roles. Numerals are a typeface, not text (Rule D-γ):
+   every numeric role below carries `tabular-nums`. */
+.type-page {
+  font-size: 22px;
+  line-height: 1.2;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+.type-page-sub {
+  font-size: 13px;
+  line-height: 1.5;
+  color: #a0a0b8;
+}
+.type-section {
+  font-size: 10px;
+  line-height: 1.2;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: #8b8ba3;
+}
+.type-meta {
+  font-size: 11px;
+  line-height: 1.5;
+  color: #8b8ba3;
+}
+.type-mono-micro {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 11px;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * §1.4 — status-dot motion. RULE: a non-live state NEVER animates. Motion is
+ * reserved for "it is working", so only `ok` pulses and only `warn` breathes
+ * (a connection that is actively retrying). `offline`, `idle` and
+ * `connecting` get a static dot and say what is wrong in words.
+ * The global `prefers-reduced-motion` block above clamps both to one frame.
+ */
+@keyframes pulse-ok-ring {
+  0% {
+    box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 6px rgba(52, 211, 153, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(52, 211, 153, 0);
+  }
+}
+.pulse-ok {
+  animation: pulse-ok-ring 2s infinite;
+}
+
+@keyframes breathe-warn {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+.breathe-warn {
+  animation: breathe-warn 2.6s ease-in-out infinite;
+}
+
+/* ==========================================================================
+   S-UI-REBUILD B1 — ATMOSPHERE (the aesthetics bar).
+   ADDITIVE: every rule below is a NEW class.
+
+   The reference pack's binding note is rule 3: "one saturated brand gesture
+   per screen, everywhere else desaturated". Stripe gets one gradient sweep,
+   PostHog one orange focus border, Perplexity one teal banner. So this file
+   gives a page exactly two atmospheric affordances — a radial glow behind the
+   hero band, and gradient text on the page title — and nothing else is allowed
+   to be loud. Depth everywhere else comes from luminance, not colour.
+   ========================================================================== */
+
+/*
+ * The hero glow. A wide, very low-alpha coral radial bloom behind the first
+ * band, so the top of the page has DEPTH instead of being a flat #0A0A0F
+ * expanse. It sits behind content (`z-index:0` + `isolate` on the parent) and
+ * is `pointer-events:none`, so it can never intercept a click.
+ */
+.atmos-hero {
+  position: relative;
+  /* Was `isolate: isolate` — not a CSS property, so it did nothing. The
+     property is `isolation`; with it the hero's glow composites inside its
+     own stacking context instead of against whatever happens to be beneath. */
+  isolation: isolate;
+}
+/*
+ * THE ATMOSPHERE. Scored beside `references/img/linear-01-product-shot.png`
+ * and `references/img/mercury-01-dashboard.png` — the AESTHETICS BAR asks for
+ * a visceral read, and the first pass did not have one.
+ *
+ * WHY IT READ AS A FAINT HIGHLIGHT: two gradients at 0.13/0.17 alpha spread
+ * over a 460px band and blurred 8px is a uniform wash. A wash has no light
+ * SOURCE in it. What makes Linear's and Mercury's dark grounds feel lit is
+ * high dynamic range — a small, genuinely bright core with a fast falloff,
+ * carried outward by a much wider, much fainter bloom of the same hue.
+ *
+ * So the band is now built as an actual light rig:
+ *   1. a tight coral CORE at 0.34 — the source, sitting behind the page title;
+ *   2. a wide coral BLOOM at 0.09 that carries the core across the band;
+ *   3. the AMBER half of the brand signature, offset from the core, so the
+ *      coral→amber gesture (reference rule 3) exists in the light and not
+ *      only in the title's gradient text;
+ *   4. a violet COUNTERWEIGHT on the far side, so the band is lit from two
+ *      directions and does not read as a single lamp.
+ * Blur is raised to 26px so no gradient edge is ever legible as a shape.
+ *
+ * D-ι: `left/right: 0`, never negative. These were once `-12%` to let the
+ * bloom bleed past the content column; a pseudo-element is invisible to a
+ * `querySelectorAll("*")` overflow scan, so it took a `document.scrollWidth`
+ * measurement to catch that the overhang made both pages scroll 123px
+ * sideways at 1600px. Every gradient below fades to transparent well inside
+ * the box, so the bloom reads the same width-bounded.
+ *
+ * D-β: entirely static. Nothing in this rig animates, in any state — it is
+ * atmosphere, not telemetry, and a breathing background would be a claim
+ * that something moved.
+ */
+.atmos-hero::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -240px;
+  height: 680px;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(30% 40% at 19% 55%, rgba(255, 107, 53, 0.34), transparent 62%),
+    radial-gradient(80% 86% at 13% 58%, rgba(255, 107, 53, 0.09), transparent 74%),
+    radial-gradient(26% 34% at 42% 33%, rgba(251, 191, 36, 0.17), transparent 66%),
+    radial-gradient(46% 58% at 88% 38%, rgba(139, 92, 246, 0.2), transparent 70%);
+  filter: blur(26px);
+}
+/*
+ * THE HORIZON. Light that is bounded reads as depth; light that just fades
+ * out reads as a smudge. A 1px rule brightest under the light source and
+ * gone by the far edge gives the band a base — the same device Stripe and
+ * Mercury use to end a lit section (reference rule 12: separate bands with a
+ * luminance shift, not a border).
+ */
+.atmos-hero::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 1px;
+  z-index: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 138, 92, 0.34) 0%,
+    rgba(251, 191, 36, 0.16) 34%,
+    rgba(255, 255, 255, 0.05) 62%,
+    transparent 100%
+  );
+}
+.atmos-hero > * {
+  position: relative;
+  z-index: 1;
+}
+
+/*
+ * THE one gradient moment per screen (reference rule 3). Coral → amber, on the
+ * page title only. `color: transparent` is paired with a real background clip;
+ * `@supports not` keeps the text visible if a browser lacks background-clip.
+ */
+.text-gradient-brand {
+  background-image: linear-gradient(96deg, #ff8a5c 0%, #ff6b35 42%, #fbbf24 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+@supports not ((background-clip: text) or (-webkit-background-clip: text)) {
+  .text-gradient-brand {
+    color: #ff8a5c;
+    -webkit-text-fill-color: #ff8a5c;
+  }
+}
+
+/*
+ * Section banding (reference rule 12: separate sections with a luminance shift,
+ * not a border). A few points of white lift, no hue — this is the "one ground,
+ * three elevations" ladder (D-α) seen at page scale rather than card scale.
+ */
+.band-recessed {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.014), rgba(255, 255, 255, 0.03));
+  border-top: 1px solid var(--hairline);
+  border-bottom: 1px solid var(--hairline);
+}
+
+/*
+ * A glow reserved for genuinely-live elements (§3.2: nothing moves unless
+ * something moved). Used on the ticker's dot and nowhere decorative.
+ */
+.glow-live {
+  box-shadow:
+    0 0 0 1px rgba(52, 211, 153, 0.35),
+    0 0 12px 0 rgba(52, 211, 153, 0.45);
 }

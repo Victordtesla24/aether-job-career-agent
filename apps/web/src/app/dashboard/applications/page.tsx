@@ -21,6 +21,7 @@ import type { Job } from "../../../lib/api/jobs";
 import { downloadResume } from "../../../lib/api/resumes";
 import { downloadCoverLetterPdf } from "../../../components/cover-letters/api";
 import SankeyFlow from "../../../components/applications/SankeyFlow";
+import SubmissionControl from "../../../components/applications/SubmissionControl";
 import { useRealtimeResources } from "../../../hooks/useRealtime";
 import {
   clearPipeline,
@@ -1255,6 +1256,18 @@ export default function ApplicationsPage() {
                                 card.app != null && requestingApprovalId === card.app.id
                               }
                             />
+                            {/* U5d-2 (USER MANDATE): every application-backed
+                                card carries the channel-aware submit control.
+                                Its state comes from the server's own
+                                `submissionControl` block, and it only ever
+                                reads "Submitted ✓" off a real `transmittedAt`. */}
+                            {card.app ? (
+                              <SubmissionControl
+                                application={card.app}
+                                onReconfirm={() => void reconfirm(card.app!)}
+                                onSettled={() => void load()}
+                              />
+                            ) : null}
                             <CardLink stageKey={stage.key} />
                             <div className="mt-2 flex items-center justify-between gap-2">
                               <p className="mono text-[10px] text-aether-muted-dim">

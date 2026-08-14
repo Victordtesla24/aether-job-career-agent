@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
@@ -13,6 +14,8 @@ from app.middleware.auth import CurrentUser
 from app.repositories.admin import write_audit
 from app.repositories.approval import ApprovalRepository
 from app.services.approval_service import EXPIRY_HOURS, ApprovalService, _is_expired
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -269,6 +272,16 @@ def execute_gated_action(approval_id: str, current_user: CurrentUser) -> dict[st
     """
     user_id = current_user["id"]
     approval = ApprovalService().assert_action_allowed(approval_id, user_id)
+    # U5d-2 — the SITE-APPLY channel. Routed BEFORE the claim below, on purpose:
+    # ``apply_executor.execute_site_application`` owns the execution claim
+    # end-to-end (claim -> submit -> complete, or claim -> release on any
+    # refusal), which is the same single-shot guard this router takes for the
+    # email path. Claiming here as well would make the executor's own claim lose
+    # to ours and report "already executed" for a submission that never
+    # happened — a false terminal state on the single most consequential action
+    # in the product. Exactly ONE layer claims per channel.
+    if _is_site_apply_submission(approval):
+        return _execute_site_submission(approval, current_user)
     # Idempotency guard (MV-approval-modal-010): atomically claim the approved
     # request so the side-effect (a real Gmail send) can fire AT MOST ONCE. A
     # double-submit/retry loses the claim and gets an honest 409 with no send.
@@ -330,6 +343,129 @@ def execute_gated_action(approval_id: str, current_user: CurrentUser) -> dict[st
         # underlying problem is fixed — a failed attempt never burns the approval.
         repo.release_execution(approval_id, user_id)
         raise
+
+
+def _is_site_apply_submission(approval: dict[str, Any]) -> bool:
+    """Whether this approval is a U5d-2 SITE-APPLY card (not the email one).
+
+    The discriminator is the payload's own shape, written by
+    ``application_submission.queue_submission_approval``: an email card carries
+    a ``recipient``, a site card carries a ``channel`` that is a member of
+    ``AUTOMATABLE_CHANNELS``. Both conditions are required, so neither a legacy
+    card (no ``channel`` key at all — 556 of them in production) nor a card
+    naming a channel Aether refuses to drive can ever reach the browser path.
+    """
+    if approval.get("type") != "application_submit":
+        return False
+    payload = ApprovalRepository._payload_dict(approval)
+    if payload.get("kind") != "submission" or payload.get("recipient"):
+        return False
+    from app.services.apply_channel_resolver import AUTOMATABLE_CHANNELS
+
+    return str(payload.get("channel") or "") in AUTOMATABLE_CHANNELS
+
+
+def _execute_site_submission(
+    approval: dict[str, Any], current_user: dict[str, Any]
+) -> dict[str, Any]:
+    """U5d-2 — really apply on the employer's site, behind the approved gate.
+
+    Delegates to ``apply_sweep._attempt_transmission`` — the EXISTING, tested
+    seam the sweep uses — rather than adding a second implementation of channel
+    resolution, form filling, evidence capture and manual-step recording. That
+    function raises on every non-transmitting outcome, so the three honest
+    endings are distinguishable here without inferring any of them:
+
+    * it returns -> something was attempted AND the row is re-read for proof.
+      ``transmitted: true`` is reported ONLY when ``Application."transmittedAt"``
+      is really set; a return with no proof is reported as ``transmitted:
+      false`` with an explicit reason, never as a success.
+    * :class:`ManualStepRequired` -> HTTP 200 carrying the honest, persisted
+      obstacle. Not an error: the user asked for an outcome and got a real one,
+      and the card needs the reason to render it.
+    * :class:`ApplyExecutorGuardError` -> its own 404/409. The approval is no
+      longer ours to execute (already executed, or no longer approved).
+    """
+    from app.services.apply_executor import ApplyExecutorGuardError, ManualStepRequired
+    from app.workers.apply_sweep import _attempt_transmission
+
+    user_id = current_user["id"]
+    payload = ApprovalRepository._payload_dict(approval)
+    application_id = str(
+        approval.get("applicationId") or payload.get("application_id") or ""
+    )
+    if not application_id:
+        raise HTTPException(
+            http_status.HTTP_422_UNPROCESSABLE_ENTITY,
+            (
+                "This approval names no application, so there was nothing to "
+                "submit — nothing was sent."
+            ),
+        )
+    channel = str(payload.get("channel") or "")
+    try:
+        _attempt_transmission(user_id, application_id, approval["id"])
+    except ManualStepRequired as exc:
+        return {
+            "status": "manual_step",
+            "approval_id": approval["id"],
+            "applicationId": application_id,
+            "channel": channel,
+            "transmitted": False,
+            "reason": exc.reason,
+            "detail": getattr(exc, "question", None) or exc.message,
+        }
+    except ApplyExecutorGuardError as exc:
+        raise HTTPException(exc.http_status, exc.message) from exc
+    proof = _transmission_proof(user_id, application_id)
+    if proof.get("transmittedAt") is None:
+        # Defensive and deliberately loud: the executor only returns after
+        # ``_record_site_transmission`` stamped the row, so this cannot normally
+        # happen — and if it ever does, the honest answer is "we cannot show you
+        # evidence", never a success the database does not support.
+        logger.warning(
+            "u5d2: site submission for application %s returned without "
+            "transmission proof — reporting transmitted=false",
+            application_id,
+        )
+        return {
+            "status": "unproven",
+            "approval_id": approval["id"],
+            "applicationId": application_id,
+            "channel": channel,
+            "transmitted": False,
+            "reason": "no_transmission_proof",
+            "detail": (
+                "The submission path returned but recorded no transmission "
+                "evidence, so Aether will not claim this was sent."
+            ),
+        }
+    return {
+        "status": "transmitted",
+        "approval_id": approval["id"],
+        "applicationId": application_id,
+        "channel": channel,
+        "transmitted": True,
+        "transmittedAt": proof.get("transmittedAt"),
+        "transmissionRef": proof.get("transmissionRef"),
+        "detail": "Aether submitted this application on the employer's site.",
+    }
+
+
+def _transmission_proof(user_id: str, application_id: str) -> dict[str, Any]:
+    """Re-read the evidence columns. The single source of the claim above."""
+    from app.db import ensure_application_transmission_columns, rows_to_dicts
+
+    ensure_application_transmission_columns()
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT "transmittedAt", "transmissionRef", "transmissionChannel" '
+                'FROM "Application" WHERE "id" = %s AND "userId" = %s',
+                (application_id, user_id),
+            )
+            rows = rows_to_dicts(cur)
+    return rows[0] if rows else {}
 
 
 def _execute_application_submit(

@@ -19,17 +19,26 @@ WHAT THIS IS **NOT** — read before consuming the stream
 It is NOT a step-level progress feed. The GMV4 contract names a six-step
 submission sequence (``scanning_queue`` -> ``computing_ats_deltas`` ->
 ``awaiting_approval`` -> ``submitting`` -> ``updating_kanban`` -> ``complete``).
-Four of those six steps have **no backing whatsoever** in this codebase today:
+Most of those steps still have **no backing** in this codebase, and one of them
+now has real backing but is not yet journalled:
 
 * ``scanning_queue``       -- the Submission Agent's ready-to-apply scan
   (:data:`app.agents.submission_agent._READY_TO_APPLY_SQL`) really happens, but
   nothing records that it happened; it is not observable from outside the call.
 * ``computing_ats_deltas`` -- the Submission Agent computes NO ATS delta at all
   (the ATS engine runs in tailoring/fit-scoring, a different run).
-* ``awaiting_approval``    -- ``submission`` is deliberately NOT in
-  ``app.routers.agents._APPROVAL_GATED``; a submission run has no approval gate.
-* ``submitting`` / ``updating_kanban`` -- the write really happens
-  (``submit_application_for_job``) but is not journalled as a step transition.
+* ``awaiting_approval``    -- U5d-2 made this REAL: ``submission`` is now in
+  ``app.routers.agents._APPROVAL_GATED``, a run's honest terminal state is a
+  pending ``application_submit`` ApprovalRequest, and the run record reports
+  ``submissionState = "awaiting_approval"``. It is still not emitted as a
+  step EVENT here, because the terminal state is observable only from the
+  finished run's ``output`` — which the ``complete`` event already carries —
+  and inventing a mid-run transition to it would be a scripted animation over
+  a single synchronous call.
+* ``submitting`` / ``updating_kanban`` -- transmission does not happen inside a
+  submission run at all (U5d-2): it happens later, behind
+  ``POST /approvals/{id}/execute``, on a different request. There is nothing
+  in this run to journal.
 
 Emitting those six names on a timer would be a scripted animation with no
 execution behind it (§0.5 placeholder violation), so this module does not emit

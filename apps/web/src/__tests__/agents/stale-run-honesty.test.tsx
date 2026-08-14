@@ -261,7 +261,19 @@ describe("agent-run-health — a run with no recent heartbeat is stalled, not ac
 });
 
 // ---------------------------------------------------------------------------
-// 2. Orchestration — the graph, the queue and the header
+// 2. Orchestration — the queue and the error log
+//
+// ORCH-DEDUP (2026-08-14): this section used to also cover the node-graph
+// (`workflow-node-tailoring`) and the component's own header status line
+// ("N tasks in queue" / "N stalled") — both removed from Orchestration.tsx
+// by that ruling (node-graph superseded by OrchestrationMap; header
+// superseded by the page-level stat rail in page.tsx). The two node-graph
+// tests and the one header-only test were deleted with what they covered.
+// The fifth test ("keeps counting a genuinely live run as queued work") is
+// KEPT but trimmed to drop its header-scoped assertion — its task-queue
+// progressbar assertion still covers real, un-duplicated behaviour (a
+// genuinely live run keeps its indeterminate spinner). See git history for
+// the removed/original assertions.
 // ---------------------------------------------------------------------------
 
 const AGENT_SUMMARIES: AgentSummary[] = [
@@ -269,19 +281,6 @@ const AGENT_SUMMARIES: AgentSummary[] = [
 ];
 
 describe("Orchestration — a stalled run must not read as work in progress", () => {
-  it("does not paint the Tailoring node 'running' for a run that died 8 days ago", () => {
-    render(<Orchestration agents={AGENT_SUMMARIES} runs={[DEAD_RUN]} />);
-    const node = screen.getByTestId("workflow-node-tailoring");
-    expect(node.textContent ?? "").not.toMatch(/running/i);
-    expect(node.textContent ?? "").toMatch(/stalled/i);
-  });
-
-  it("still paints a genuinely live run 'running'", () => {
-    render(<Orchestration agents={AGENT_SUMMARIES} runs={[FRESH_RUN]} />);
-    const node = screen.getByTestId("workflow-node-tailoring");
-    expect(node.textContent ?? "").toMatch(/running/i);
-  });
-
   it("never renders an indefinite spinner for a stalled run in the task queue", () => {
     render(<Orchestration agents={AGENT_SUMMARIES} runs={[DEAD_RUN]} />);
     const queue = screen.getByTestId("task-queue");
@@ -295,13 +294,6 @@ describe("Orchestration — a stalled run must not read as work in progress", ()
     expect(queue.querySelector(".animate-pulse")).toBeNull();
   });
 
-  it("excludes a stalled run from the 'tasks in queue' count and reports it as stalled instead", () => {
-    render(<Orchestration agents={AGENT_SUMMARIES} runs={[DEAD_RUN]} />);
-    const section = screen.getByTestId("agent-orchestration");
-    expect(section.textContent ?? "").toMatch(/0 tasks in queue/i);
-    expect(section.textContent ?? "").toMatch(/1 stalled/i);
-  });
-
   it("tags a stalled run in the error log as stalled, not as a run still going", () => {
     render(<Orchestration agents={AGENT_SUMMARIES} runs={[DEAD_RUN]} />);
     const log = screen.getByTestId("error-log");
@@ -309,11 +301,8 @@ describe("Orchestration — a stalled run must not read as work in progress", ()
     expect(log.querySelector(".text-aether-green")).toBeNull();
   });
 
-  it("keeps counting a genuinely live run as queued work", () => {
+  it("keeps a genuinely live run's indeterminate spinner in the task queue", () => {
     render(<Orchestration agents={AGENT_SUMMARIES} runs={[FRESH_RUN]} />);
-    const section = screen.getByTestId("agent-orchestration");
-    expect(section.textContent ?? "").toMatch(/1 task in queue/i);
-    expect(section.textContent ?? "").not.toMatch(/stalled/i);
     expect(screen.getByTestId("task-queue").querySelector('[role="progressbar"]')).not.toBeNull();
   });
 });

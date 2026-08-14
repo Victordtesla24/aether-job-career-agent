@@ -46,7 +46,11 @@ from app.services.format_verification import (
     _normalize,
     extract_artifact_text,
 )
-from app.services.resume_document import parse_resume_document
+from app.services.resume_document import (
+    _persisted_bullets,
+    merge_persisted_bullets,
+    parse_resume_document,
+)
 
 #: How much of a long item's wording must be present before it counts as
 #: rendered. Shared with the per-change verifier, and for the same reason: a PDF
@@ -123,22 +127,47 @@ def _excerpt(text: str) -> str:
     return flat if len(flat) <= _EXCERPT_CHARS else f"{flat[:_EXCERPT_CHARS - 1]}…"
 
 
+def baseline_bullets(
+    resume: dict[str, Any], parent: dict[str, Any]
+) -> list[str]:
+    """Every bullet a tailored download owes the user, in the résumé's order.
+
+    The PARENT's full inventory, with each slot the tailoring actually rewrote
+    holding the approved AFTER text and every untouched original held verbatim —
+    :func:`~app.services.resume_document.merge_persisted_bullets`, which routes
+    the before → after mapping through the same slot-claiming pass the renderer
+    and ``rebuild_raw_text`` use.
+
+    Until round 5 this was simply the CHILD's persisted list. That list is what
+    one tailoring run produced, not what the résumé holds: a bullet nobody
+    selected for rewrite could be absent from it, and then it was absent from
+    the ground truth too — invisible to :func:`verify_completeness`, to
+    ``GET /resumes/{id}/fidelity``, to the download's verification header, and
+    to the repair census that decides which stored versions are damaged.
+    """
+    return merge_persisted_bullets(
+        _persisted_bullets(parent.get("sections") or {}),
+        _persisted_bullets(resume.get("sections") or {}),
+    )
+
+
 def baseline_record(
     resume: dict[str, Any], parent: dict[str, Any]
 ) -> dict[str, Any]:
     """The PARENT's own document with THIS version's rewrites mapped into it.
 
     The parent supplies every heading, every line, every contact detail and
-    every bullet — including the ones nobody asked to rewrite. The child
-    supplies only the tailored bullet texts, which
-    :func:`~app.services.resume_document._substitute_bullets` puts back into the
-    slots they rewrote, by content. The result is the ground truth a tailored
-    download owes the user: their résumé, plus the edits they approved.
+    every bullet — including the ones nobody asked to rewrite (see
+    :func:`baseline_bullets`). The child supplies only the tailored bullet
+    texts, which :func:`~app.services.resume_document._substitute_bullets` then
+    puts back into the slots they rewrote, by content. The result is the ground
+    truth a tailored download owes the user: their résumé, plus the edits they
+    approved — never less of their résumé than they uploaded.
     """
     payload = dict(parent.get("sections") or {})
-    tailored = (resume.get("sections") or {}).get("bullets")
-    if tailored:
-        payload["bullets"] = tailored
+    payload["bullets"] = [
+        {"text": text} for text in baseline_bullets(resume, parent)
+    ]
     return {**parent, "sections": payload}
 
 

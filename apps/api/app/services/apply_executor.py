@@ -642,9 +642,20 @@ def _record_site_transmission(
     an application the user already moved past ``draft`` — and additionally
     clears any manual-step residue, because a completed submission supersedes
     the obstacle that blocked an earlier attempt.
+
+    U5d-2: it also clears a ``recorded_not_transmitted`` truth marker. That
+    marker means "recorded with no transmission evidence", and this statement
+    is the moment that stops being true. It is cleared ONLY for that exact
+    value — the retrospective ``recorded_transmission_unverified`` backfill
+    state is left alone, because a pre-fix row that later gains a real
+    transmission still has an unverifiable history behind it.
     """
+    from app.db import ensure_application_submission_truth_columns
+    from app.services.submission_truth import STATE_RECORDED_NOT_TRANSMITTED
+
     ensure_application_transmission_columns()
     ensure_application_manual_step_columns()
+    ensure_application_submission_truth_columns()
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -657,6 +668,12 @@ def _record_site_transmission(
                     "manualStepReason" = NULL,
                     "manualStepDetail" = NULL,
                     "manualStepAt" = NULL,
+                    "submissionTruthState" = CASE
+                        WHEN "submissionTruthState" = %s THEN NULL
+                        ELSE "submissionTruthState" END,
+                    "submissionTruthAt" = CASE
+                        WHEN "submissionTruthState" = %s THEN NULL
+                        ELSE "submissionTruthAt" END,
                     "status" = CASE
                         WHEN "status" = 'draft'::"ApplicationStatus"
                             THEN 'submitted'::"ApplicationStatus"
@@ -664,7 +681,11 @@ def _record_site_transmission(
                     "updatedAt" = NOW()
                 WHERE "id" = %s AND "userId" = %s
                 ''',
-                (destination, channel, ref, application_id, user_id),
+                (
+                    destination, channel, ref,
+                    STATE_RECORDED_NOT_TRANSMITTED, STATE_RECORDED_NOT_TRANSMITTED,
+                    application_id, user_id,
+                ),
             )
         conn.commit()
 

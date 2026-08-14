@@ -1,9 +1,19 @@
 "use client";
 
 /**
- * Agent Orchestration — workflow node graph, task queue, performance metrics
- * and error log (wireframe: agent-monitor.html, DEF-001..004). Statuses and
- * log rows are derived from the live run history passed in by the Agents page.
+ * Operations — task queue, performance metrics and error log (wireframe:
+ * agent-monitor.html, DEF-001..004). Statuses and log rows are derived from
+ * the live run history passed in by the Agents page.
+ *
+ * ORCH-DEDUP (2026-08-14): this used to also render its own workflow
+ * node-graph, section header ("Agent Orchestration" title + online/queue/
+ * stalled counts) and Pause All / Manual Override controls. All three
+ * duplicated content the page already renders once each — the DEFINED
+ * end-to-end workflow map(s) (`OrchestrationMap`, mounted just above this
+ * component in page.tsx) superseded the node-graph, and the page-level stat
+ * rail (page.tsx, above the maps section) already carries the online/
+ * running/stalled counts. Removed rather than kept as a second copy; see
+ * git history for the prior version.
  */
 import {
   coverLetterDegraded,
@@ -16,54 +26,6 @@ import {
 } from "../../lib/agent-run-health";
 import type { AgentRun, AgentSummary } from "../../lib/api/agents";
 import { useNow } from "../../hooks/useNow";
-
-/**
- * The REAL 7-agent topology, in pipeline order (supervisor → scout →
- * fitScorer → matcher → tailor → coverLetter, plus on-demand storyExtractor).
- * Labels and blurbs describe what each agent actually does — no phantom nodes.
- */
-const NODES: Array<{ label: string; agent: string; blurb: string }> = [
-  { label: "Supervisor", agent: "supervisor", blurb: "Plans & sequences the pipeline" },
-  { label: "Discovery", agent: "scout", blurb: "Scrapes job boards & APIs" },
-  { label: "Evaluator", agent: "fitScorer", blurb: "10-dim fit + ATS scoring" },
-  { label: "Matcher", agent: "matcher", blurb: "Selects the best-fit target job" },
-  { label: "Tailoring", agent: "tailor", blurb: "Evidence-grounded resume rewrite" },
-  { label: "Cover Letter", agent: "coverLetter", blurb: "Drafts letter · approval-gated" },
-  { label: "Stories", agent: "storyExtractor", blurb: "Mines resume into STAR+R stories" },
-  { label: "Email", agent: "emailAgent", blurb: "Triages inbox · drafts grounded replies · imports job alerts" },
-];
-
-/**
- * `live` is a PRESENTATION flag only — it is set on exactly the one condition
- * that already painted the node coral (`isInFlight && isLiveRun`), and it is
- * the sole thing that earns a node the outer bloom in `agents-console.css`.
- * A stalled run is deliberately NOT live: it stays inert and amber, because
- * motion on a dead row is the exact lie CRITICAL-2 was filed about.
- */
-function nodeStatus(agent: string, agents: AgentSummary[], runs: AgentRun[], now: number) {
-  // `runs` arrives newest-first (GET /agents/runs orders by createdAt DESC), so
-  // the node reflects this agent's CURRENT run, not any older one.
-  const newest = runs.find((r) => r.agentName === agent);
-  if (newest && isInFlight(newest)) {
-    // CRITICAL-2: only a run that could still plausibly be alive paints the
-    // node as running. A `running` row older than the staleness window has no
-    // worker behind it, and showing it as live is how a week of total
-    // inactivity got hidden behind a coral badge.
-    return isLiveRun(newest, now)
-      ? { label: "running", cls: "text-aether-coral border-aether-coral/40", live: true }
-      : {
-          label: stalledLabel(newest, now),
-          cls: "text-aether-amber border-aether-amber/40",
-          live: false,
-        };
-  }
-  const summary = agents.find((a) => a.name === agent);
-  if (summary?.status && summary.status !== "idle")
-    return { label: summary.status, cls: "text-aether-green border-aether-green/40", live: false };
-  const lastFailed = runs.find((r) => r.agentName === agent)?.status === "failed";
-  if (lastFailed) return { label: "error", cls: "text-red-300 border-red-500/40", live: false };
-  return { label: "idle", cls: "text-aether-muted-dim border-white/15", live: false };
-}
 
 /**
  * A Task Queue row. `progress` is `null` for anything still in flight — there
@@ -103,9 +65,17 @@ function logLevel(run: AgentRun, now: number): { tag: string; cls: string } {
 }
 
 export default function Orchestration({
-  agents,
   runs,
 }: {
+  // ORCH-DEDUP: `agents` stays part of the contract even though this
+  // stripped-down component no longer reads it. Its only two former
+  // consumers here — the header's "N agents online" count and the
+  // node-graph's per-node status lookup — were removed with the header and
+  // the node-graph (see the file-header note). Dropping the prop from the
+  // type would force every call site (page.tsx and both Orchestration test
+  // files) to change for no behavioural gain, which the ORCH-DEDUP ruling
+  // asks this fix to avoid ("keep page.tsx edits minimal — the mount +
+  // section ordering only"; kept-panel tests stay unmodified where possible).
   agents: AgentSummary[];
   runs: AgentRun[];
 }) {
@@ -113,13 +83,9 @@ export default function Orchestration({
   // widget re-renders on a clock as well as on realtime refetches — otherwise a
   // run that goes stale while the screen is open keeps its spinner forever.
   const now = useNow();
-  const online = agents.filter((a) => a.status !== "offline").length;
   const queueRuns = runs.filter(isInFlight);
   const liveRuns = queueRuns.filter((r) => isLiveRun(r, now));
   const stalledRuns = queueRuns.filter((r) => isStalledRun(r, now));
-  // CRITICAL-2: stalled work is NOT queued work. Counting a dead row here is
-  // what put "1 task in queue" on screen for eight days.
-  const queued = liveRuns.length;
   // QA3-F-03: a letterless coverLetter degrade is recorded status='completed'
   // (GAP-P4-002 — the guard working is not a failure), but it is NOT a
   // success — exclude it from the numerator (counted distinctly below)
@@ -179,112 +145,15 @@ export default function Orchestration({
 
   return (
     <section className="space-y-4" data-testid="agent-orchestration">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2.5">
-          <span className="h-1.5 w-1.5 rounded-full bg-aether-green live-dot" />
-          <h2 className="text-[15px] font-semibold tracking-[-0.015em]">Agent Orchestration</h2>
-          <span className="mono text-[11px] tabular-nums text-aether-muted-dim">
-            {/* ADV-agent-monitor-001: there is no real uptime signal backing
-                a percentage here (checked apps/api/app/routers/agents.py —
-                no uptime/health-history endpoint exists), so the fabricated
-                "uptime 99.8%" literal has been removed rather than grounded
-                in a fake number. */}
-            {online} agents online · {queued} task{queued === 1 ? "" : "s"} in queue
-            {stalledRuns.length > 0 ? (
-              // CRITICAL-2: stalled work is reported separately and never
-              // folded into the queue count, which would read as live work.
-              <span className="text-aether-amber" data-testid="orchestration-stalled-count">
-                {" "}
-                · {stalledRuns.length} stalled
-              </span>
-            ) : null}
-          </span>
-        </div>
-        <div className="flex gap-2">
-          {/*
-            MV-agent-monitor-001: there is no backend "pause all" or "manual
-            override" capability (checked apps/api/app/routers/agents.py —
-            only per-agent enable/disable and per-agent run trigger exist, no
-            bulk-pause or manual-override endpoint). Rather than wire these to
-            a fake action, they are honestly disabled with a tooltip so no
-            control appears live when it does nothing.
-          */}
-          <button
-            type="button"
-            disabled
-            title="Not yet available"
-            aria-disabled="true"
-            className="cursor-not-allowed rounded-md border border-hairline px-3 py-1.5 text-[12px] font-semibold text-aether-muted-dim opacity-50"
-          >
-            <i className="fa-solid fa-pause mr-1.5" aria-hidden="true" />
-            Pause All
-          </button>
-          <button
-            type="button"
-            disabled
-            title="Not yet available"
-            aria-disabled="true"
-            className="cursor-not-allowed rounded-md border border-hairline px-3 py-1.5 text-[12px] font-semibold text-aether-muted-dim opacity-50"
-          >
-            Manual Override
-          </button>
-        </div>
-      </div>
-
-      {/* Workflow graph */}
-      <div className="ag-panel relative overflow-hidden p-5" data-testid="node-graph">
-        <h3 className="ag-eyebrow mb-1.5">
-          <span>Live Run Monitor</span>
-        </h3>
-        {/* Named apart from the workflow MAP above it: that one is the DEFINED
-            22-agent topology from GET /agents/orchestration-map; this one is
-            the 7 implemented backends and what each is doing right now. */}
-        <p className="mb-4 text-[11px] leading-[1.5] text-aether-muted-dim">
-          The implemented agents and the state of each one&apos;s current run.
-        </p>
-        <div className="relative">
-          {/*
-            The connective rail behind the nodes.
-
-            It used to be a coral dashed line running an infinite
-            `stroke-dashoffset` animation — decorative movement that encoded
-            nothing (reference-pack rule 9: an agent surface should visualise a
-            real process, never imply one). It is now a still hairline that
-            fades out at both ends: the same "these are one sequence" reading,
-            with no claim of flow attached to it. The ONLY thing that moves in
-            this widget is a node with a genuinely in-flight run.
-          */}
-          <span
-            aria-hidden="true"
-            className="pointer-events-none absolute inset-x-4 top-1/2 hidden h-px -translate-y-1/2 bg-gradient-to-r from-transparent via-white/[0.09] to-transparent xl:block"
-          />
-          <div className="relative grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
-            {NODES.map((node) => {
-              const status = nodeStatus(node.agent, agents, runs, now);
-              return (
-                <article
-                  key={node.label}
-                  data-testid={`workflow-node-${node.label.toLowerCase()}`}
-                  // The bloom is claimed here and only here — `live` is true on
-                  // exactly the in-flight, non-stalled condition above.
-                  data-motion={status.live ? "pulse" : "none"}
-                  className="ag-node p-3.5"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <h4 className="truncate text-[12px] font-semibold tracking-[-0.01em]">{node.label}</h4>
-                    <span
-                      className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-[0.07em] ${status.cls}`}
-                    >
-                      {status.label}
-                    </span>
-                  </div>
-                  <p className="mt-2 text-[10px] leading-[1.45] text-aether-muted-dim">{node.blurb}</p>
-                </article>
-              );
-            })}
-          </div>
-        </div>
-      </div>
+      {/* ORCH-DEDUP: a single quiet eyebrow replaces the former "Agent
+          Orchestration" title + online/queue/stalled status line (now the
+          page-level stat rail's job, above the maps section in page.tsx) and
+          the Pause All / Manual Override controls (removed with it — see the
+          file-header note). This band is what remains: Task Queue,
+          Performance and Error Log, in their existing restyled treatment. */}
+      <h2 className="ag-eyebrow">
+        <span>Operations</span>
+      </h2>
 
       <div className="grid gap-4 xl:grid-cols-3">
         {/* Task queue */}

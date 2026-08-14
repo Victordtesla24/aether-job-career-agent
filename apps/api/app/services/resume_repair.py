@@ -28,7 +28,11 @@ from datetime import datetime, timezone
 from typing import Any
 
 from app.services.format_verification import _coverage, _normalize
-from app.services.resume_completeness import _PRESENT_COVERAGE, baseline_record
+from app.services.resume_completeness import (
+    _PRESENT_COVERAGE,
+    baseline_bullets,
+    baseline_record,
+)
 from app.services.resume_document import parse_resume_document, rebuild_raw_text
 
 
@@ -101,6 +105,17 @@ def raw_text_losses(
         where = filed.get(text)
         if where is None or where == heading:
             continue
+        if not heading:
+            # The ground truth itself files this bullet under NO heading — it is
+            # one the parent persists but never states in its own ``raw_text``
+            # (the positional PDF read; on the live artifact, 10 of 25), so the
+            # document model appends it headingless rather than invent a section
+            # for it. There is no original heading it can have been moved away
+            # from, and writing a headingless bullet back out necessarily lands
+            # it under whichever section precedes it — so reporting that as a
+            # mis-filing would be both false and, being unfixable by the very
+            # rebuild that repairs the row, a permanent FAILED census.
+            continue
         lost.append(
             f"bullet “{text}” filed under “{where or '(no heading)'}”,"
             f" not “{heading or '(no heading)'}”"
@@ -128,12 +143,15 @@ def repair_sections(
     payload = dict(resume.get("sections") or {})
     previous = str(payload.get("raw_text", "") or "")
     parent_text = str((parent.get("sections") or {}).get("raw_text", "") or "")
-    persisted = [
-        str(bullet.get("text", "")).strip()
-        for bullet in (payload.get("bullets") or [])
-        if isinstance(bullet, dict) and str(bullet.get("text", "")).strip()
-    ]
-    payload["raw_text"] = rebuild_raw_text(parent_text, persisted)
+    # The SAME inventory the census measured against (round 5): the parent's own
+    # bullets with this version's approved rewrites mapped in. Rebuilding from
+    # the child's persisted list alone would regenerate a document that still
+    # lacks every bullet the tailoring run never carried — the census would
+    # re-flag the row it had just "repaired" and the operator script would exit
+    # non-zero on a write it had made itself.
+    payload["raw_text"] = rebuild_raw_text(
+        parent_text, baseline_bullets(resume, parent)
+    )
     payload["rawTextRepair"] = {
         "repairedAt": (now or datetime.now(timezone.utc)).isoformat(),
         "reason": (

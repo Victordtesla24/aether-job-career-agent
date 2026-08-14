@@ -1,15 +1,10 @@
 // @vitest-environment jsdom
 /**
- * MV-agent-monitor-001 / 002 / 003 — Agent Orchestration widget (Orchestration.tsx).
+ * MV-agent-monitor-002 / 003 — Agent Orchestration widget (Orchestration.tsx).
  *
  * Regression coverage for the manual-verification findings on
  * `/dashboard/agents` (agent-monitor monitoring section):
  *
- *  - MV-agent-monitor-001 (HIGH): "Pause All" / "Manual Override" had no
- *    onClick — clicking did nothing, with no visual signal that they were
- *    inert. Fixed to an honest disabled state with a "not yet available"
- *    tooltip (no backend pause/override capability exists — see
- *    apps/api/app/routers/agents.py, grepped for pause/override at fix time).
  *  - MV-agent-monitor-002 (MEDIUM): Task Queue "in progress" rows rendered a
  *    fabricated `35 + i*25` percentage with no backing progress field on
  *    AgentRun. Fixed to never render a numeric percentage for a run in
@@ -19,8 +14,18 @@
  *    separate Agent Stats "Success Rate" card (windowed at 200 server-side)
  *    with no disclosure that they read different sample windows. Fixed by
  *    labelling the Performance card's own window inline.
+ *
+ * ORCH-DEDUP (2026-08-14): MV-agent-monitor-001 ("Pause All" / "Manual
+ * Override" honestly-disabled coverage) and ADV-agent-monitor-001
+ * (fabricated-uptime / header online-and-queue-count coverage) were deleted
+ * from this file WITH the header/status-strip + controls they exercised —
+ * Orchestration.tsx no longer renders a header, a status line or those two
+ * buttons at all (removed as the ORCH-DEDUP ruling's "duplicate section
+ * header/status strip", superseded by the page-level stat rail in
+ * page.tsx). There is nothing left in this component for those tests to
+ * assert against; see git history for the removed blocks.
  */
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
 // This project does not install @testing-library/jest-dom (see
@@ -69,29 +74,6 @@ function inFlightRun(overrides: Partial<AgentRun>): AgentRun {
   return run({ startedAt: now, createdAt: now, completedAt: null, ...overrides });
 }
 
-describe("Orchestration — MV-agent-monitor-001 dead buttons", () => {
-  it("renders 'Pause All' as an honestly disabled control, not a live one", () => {
-    render(<Orchestration agents={agents} runs={[]} />);
-    const btn = screen.getByRole("button", { name: /pause all/i }) as HTMLButtonElement;
-    expect(btn.disabled).toBe(true);
-    expect(btn.getAttribute("title") || btn.getAttribute("aria-label") || "").toMatch(
-      /not yet available/i,
-    );
-    // Clicking a disabled control must not throw and must not change anything.
-    fireEvent.click(btn);
-  });
-
-  it("renders 'Manual Override' as an honestly disabled control, not a live one", () => {
-    render(<Orchestration agents={agents} runs={[]} />);
-    const btn = screen.getByRole("button", { name: /manual override/i }) as HTMLButtonElement;
-    expect(btn.disabled).toBe(true);
-    expect(btn.getAttribute("title") || btn.getAttribute("aria-label") || "").toMatch(
-      /not yet available/i,
-    );
-    fireEvent.click(btn);
-  });
-});
-
 describe("Orchestration — MV-agent-monitor-002 fabricated progress %", () => {
   it("never renders a numeric percentage for an in-progress (running/queued) task", () => {
     const runs = [
@@ -124,23 +106,6 @@ describe("Orchestration — MV-agent-monitor-003 success-rate window disclosure"
     render(<Orchestration agents={agents} runs={runs} />);
     const perf = screen.getByTestId("performance-metrics");
     expect(perf.textContent).toMatch(/last 5 runs?/i);
-  });
-});
-
-describe("Orchestration — ADV-agent-monitor-001 fabricated uptime", () => {
-  it("does not render a hardcoded/fabricated uptime figure in the header — there is no real uptime signal", () => {
-    render(<Orchestration agents={agents} runs={[]} />);
-    const section = screen.getByTestId("agent-orchestration");
-    expect(section.textContent).not.toMatch(/uptime/i);
-    expect(section.textContent).not.toMatch(/99\.8\s*%/);
-  });
-
-  it("still shows the real, live agent/task counts next to where uptime used to be", () => {
-    const runs = [inFlightRun({ id: "q1", status: "queued" })];
-    render(<Orchestration agents={agents} runs={runs} />);
-    const section = screen.getByTestId("agent-orchestration");
-    expect(section.textContent).toMatch(/1 agents? online/i);
-    expect(section.textContent).toMatch(/1 tasks? in queue/i);
   });
 });
 

@@ -3,6 +3,14 @@ import { test, expect } from "@playwright/test";
 /**
  * Analytics e2e: the funnel renders live numbers from /analytics/funnel
  * (seeded canonical funnel) and the period selector switches periods.
+ *
+ * URL MAPPING (1:1, per Binding Constraint 1's selector-change carve-out;
+ * orchestrator ruling 2026-08-14, precedent: e2e/agents.spec.ts f4b6ddc):
+ * The page now presents three linkable views via ?tab=; ATS distribution and
+ * agent ROI both live on the "Quality & ROI" view. Assertions unchanged.
+ *
+ *   /dashboard/analytics              →  (default Overview view — funnel tests, unchanged)
+ *   /dashboard/analytics [ats+roi]    →  /dashboard/analytics?tab=quality
  */
 test.describe("Analytics page", () => {
   test("renders the funnel with live numbers from the API", async ({ page }) => {
@@ -39,7 +47,7 @@ test.describe("Analytics page", () => {
   });
 
   test("renders the ATS distribution and agent ROI sections", async ({ page }) => {
-    await page.goto("/dashboard/analytics");
+    await page.goto("/dashboard/analytics?tab=quality");
 
     await expect(page.getByTestId("ats-distribution")).toBeVisible();
     await expect(page.getByTestId("agent-roi")).toBeVisible();

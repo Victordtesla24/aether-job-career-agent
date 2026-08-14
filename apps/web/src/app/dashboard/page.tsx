@@ -12,10 +12,13 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import DashboardStats from "../../components/dashboard/DashboardStats";
-import MetricTooltip from "../../components/MetricTooltip";
 import { useRealtimeResources } from "../../hooks/useRealtime";
 import { useNow } from "../../hooks/useNow";
 import MarketPulse from "../../components/analytics/MarketPulse";
+import ActivityTicker from "../../components/telemetry/ActivityTicker";
+import Section from "../../components/ui/Section";
+import { Funnel as FunnelChart } from "../../components/charts";
+import { funnelSteps } from "../../lib/analytics/chart-adapters";
 import {
   agentDisplayName,
   agentTile,
@@ -39,14 +42,6 @@ type DashboardJob = Job & {
   salaryMax?: number | null;
   currency?: string | null;
 };
-
-const FUNNEL_STAGES: Array<{ key: keyof Funnel & string; label: string; color: string }> = [
-  { key: "jobs_found", label: "Jobs Found", color: "bg-aether-indigo" },
-  { key: "applied", label: "Applied", color: "bg-aether-indigo/80" },
-  { key: "screened", label: "Screened", color: "bg-aether-coral" },
-  { key: "interviewed", label: "Interviewed", color: "bg-aether-amber" },
-  { key: "offers", label: "Offers", color: "bg-aether-green" },
-];
 
 const FEED_FILTERS = ["All", "Discovered", "Tailored", "Submitted", "Waiting"] as const;
 
@@ -199,7 +194,6 @@ export default function DashboardPage() {
       ? scoredJobs.reduce((sum, j) => sum + Number(j.fitScore), 0) / scoredJobs.length
       : null;
   const topJobs = (jobs.data ?? []).slice(0, 3);
-  const maxStage = funnel.data ? Math.max(funnel.data.jobs_found, 1) : 1;
   const pending = approvals.data ?? [];
   // MV-dashboard-009: the live, independently-fetched set of genuinely
   // pending approval ids — the source of truth for whether an inline
@@ -234,7 +228,7 @@ export default function DashboardPage() {
 
   const visibleRuns = (runs.data ?? [])
     .filter((r) => feedFilter === "All" || runBadge(r).label === feedFilter)
-    .slice(0, 10);
+    .slice(0, 8);
 
   return (
     <div className="flex flex-col gap-7">
@@ -252,18 +246,51 @@ export default function DashboardPage() {
           {toast.message}
         </div>
       ) : null}
-      {/* Stats row — full width above the columns (wireframe stats-row-p7q8r9) */}
-      <DashboardStats
-        funnel={funnel.data}
-        extras={{ weeklyApplied: weekly.data?.applied ?? null, avgFit }}
-        error={funnel.error}
-      />
+      {/*
+        BAND 1 · PULSE (§5.1). The hero moment: the page title carries the
+        screen's ONE saturated brand gesture (reference rule 3) and the KPI
+        strip sits inside the atmospheric glow, so the top of the page has
+        depth instead of being a flat expanse.
+      */}
+      <section className="atmos-hero">
+        <div className="mb-4">
+          <h1 className="type-page">
+            <span className="text-gradient-brand">Your search</span>, right now
+          </h1>
+          <p className="type-page-sub mt-1">
+            Every figure below is fetched live from your workspace.
+          </p>
+        </div>
+        <DashboardStats
+          funnel={funnel.data}
+          extras={{ weeklyApplied: weekly.data?.applied ?? null, avgFit }}
+          error={funnel.error}
+        />
+      </section>
 
-      <div className="grid gap-7 xl:grid-cols-3">
-        {/* Left 2/3 */}
-        <div className="flex min-w-0 flex-col gap-7 xl:col-span-2">
+      {/*
+        BAND 2 (§5.1) — J-3 FIX, and the reason it is ONE grid rather than the
+        spec's two stacked bands.
+
+        Two stacked grids re-create the very defect J-3 names: each band's row
+        height is its tallest column, so a short left column leaves a void
+        beside a tall right one. Measured on the first build of this page: the
+        left column ran out ~380px above the right, and the gap was plainly
+        visible. One continuous 7/5 grid with `items-start` lets each column
+        flow independently, and the widgets are distributed so the two columns
+        finish near each other (left: activity + opportunities + funnel;
+        right: approvals + ticker + story bank + CRM).
+
+        The old layout was `xl:grid-cols-3` with the
+        left column stacking two tall widgets against a right column of four
+        short ones, which left a ~700px void at the bottom of one side. A 12-col
+        grid split 7/5, with `items-start` so neither column stretches to match
+        the other, and the four right-hand widgets split across two bands.
+      */}
+      <div className="grid gap-6 xl:grid-cols-12 xl:items-start">
+        <div className="flex min-w-0 flex-col gap-6 xl:col-span-7">
           {/* Agent activity feed (agent-feed-s1t2u3) */}
-          <section className="glass rounded-2xl border border-white/10 p-6" data-testid="agent-feed">
+          <section className="elev-1 rounded-2xl p-6" data-testid="agent-feed">
             <div className="mb-3 flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 {/* ML-DASH-002: this feed (and every other widget on this
@@ -390,7 +417,7 @@ export default function DashboardPage() {
           </section>
 
           {/* Today's opportunities (opportunities-v4w5x6) */}
-          <section className="glass rounded-2xl border border-white/10 p-6" data-testid="todays-opportunities">
+          <section className="elev-1 rounded-2xl p-6" data-testid="todays-opportunities">
             <div className="mb-5 flex items-center justify-between">
               <h2 className="text-[15px] font-semibold">Today&apos;s Opportunities</h2>
               <Link href="/dashboard/jobs" className="max-sm:min-h-11 max-sm:px-3 max-sm:inline-flex max-sm:items-center text-xs text-aether-muted transition hover:text-white">
@@ -402,7 +429,7 @@ export default function DashboardPage() {
             ) : jobs.data === null ? (
               <div className="grid gap-4 md:grid-cols-3" aria-busy="true" aria-label="Loading opportunities">
                 {[0, 1, 2].map((i) => (
-                  <div key={i} className="glass h-40 animate-pulse rounded-xl border border-white/10" />
+                  <div key={i} className="elev-1 h-40 animate-pulse rounded-xl" />
                 ))}
               </div>
             ) : topJobs.length === 0 ? (
@@ -415,7 +442,7 @@ export default function DashboardPage() {
                   <article
                     key={job.id}
                     data-testid="opportunity-card"
-                    className="glass group flex flex-col rounded-xl border border-white/10 p-4 transition hover:border-aether-coral/30"
+                    className="elev-2 group flex flex-col rounded-xl p-4 transition-colors duration-[--dur] hover:border-aether-coral/40"
                   >
                     <div className="mb-3 flex items-center justify-between">
                       <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-white/10 text-xs font-bold">
@@ -474,58 +501,57 @@ export default function DashboardPage() {
               </div>
             )}
           </section>
-        </div>
-
-        {/* Right 1/3 */}
-        <div className="flex min-w-0 flex-col gap-7 xl:col-span-1">
-          {/* Application funnel (funnel-q7r8s9 — data-driven per audit D11) */}
-          <section className="glass rounded-2xl border border-white/10 p-6" data-testid="funnel-widget">
-            <h2 className="mb-5 text-[15px] font-semibold">
-              Application Funnel{" "}
-              <span className="text-xs font-normal text-aether-muted-dim">(all time)</span>
-            </h2>
+          {/*
+            Application funnel (funnel-q7r8s9 — data-driven per audit D11), now
+            on the chart kit. The kit is what makes the zero stages honest: the
+            hand-rolled bars above rendered `width: 0` for a zero, i.e. NOTHING,
+            so "0 screened" and "never measured" looked identical. `<Funnel>`
+            draws a zero as a C-1 hairline tick at the origin with the numeral
+            in `state-neutral`, and states its own sample window (C-3).
+          */}
+          <section className="elev-1 rounded-2xl p-6" data-testid="funnel-widget">
             {funnel.error ? (
               <WidgetError>Couldn&apos;t load the funnel — {funnel.error}</WidgetError>
             ) : funnel.data === null ? (
               <div className="h-40 animate-pulse rounded-xl border border-white/10" aria-busy="true" aria-label="Loading funnel" />
             ) : (
-              <div className="flex flex-col gap-3">
-                {FUNNEL_STAGES.map((stage) => {
-                  const value = Number(funnel.data?.[stage.key] ?? 0);
-                  const width = value > 0 ? Math.max((value / maxStage) * 100, 4) : 0;
-                  return (
-                    <div key={stage.key}>
-                      <div className="mb-1.5 flex justify-between text-xs">
-                        {stage.key === "jobs_found" ? (
-                          // M-04/M-06: the funnel's "Jobs Found" is the cumulative
-                          // count of every job ever discovered for you (the top of
-                          // the application funnel), which is legitimately larger
-                          // than the Jobs Discovery board's live list (open, not-yet-
-                          // archived postings). Explaining it stops the two numbers
-                          // reading as a data bug.
-                          <MetricTooltip
-                            className="text-aether-muted"
-                            value={stage.label}
-                            tooltip="Total jobs discovered for you across all time — the top of your application funnel. The Jobs board shows only currently-open, un-archived postings, so its count is usually lower."
-                          />
-                        ) : (
-                          <span className="text-aether-muted">{stage.label}</span>
-                        )}
-                        <span className="mono font-medium">{value}</span>
-                      </div>
-                      <div className="h-2 rounded-full bg-white/5">
-                        <div className={`h-2 rounded-full ${stage.color}`} style={{ width: `${width}%` }} />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+              <FunnelChart
+                title="Application funnel"
+                windowLabel="all time — every stage counted since your first discovery run"
+                steps={funnelSteps(funnel.data)}
+                mode="share-of-previous"
+              />
             )}
           </section>
 
+        </div>
+
+        {/*
+          BAND 2, right — the two surfaces that are about RIGHT NOW. Needs
+          Approval moves UP out of the old fourth-from-top slot (§5.1: it is
+          the only widget on the page carrying a blocking user action), and the
+          live ticker sits beside it so the pair reads as one live organism.
+        */}
+        <div className="flex min-w-0 flex-col gap-6 xl:col-span-5">
+          <NeedsApprovalPanel
+            approvals={approvals}
+            pending={pending}
+            busyApprovalId={busyApprovalId}
+            approvalActionError={approvalActionError}
+            resolveApproval={(id, action) => void resolveApproval(id, action)}
+          />
+
+          <Section
+            testId="live-activity"
+            className="band-recessed"
+            bodyClassName="min-h-0"
+          >
+            <ActivityTicker maxRows={8} />
+          </Section>
+          <div className="grid min-w-0 gap-6 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
           {/* Story Bank quick access (story-bank-quick-db10) */}
           <section
-            className="glass rounded-2xl border border-white/10 p-6 transition hover:border-aether-indigo/30"
+            className="elev-1 min-w-0 rounded-2xl p-6 transition hover:border-aether-indigo/30"
             data-testid="story-bank-widget"
           >
             <div className="mb-4 flex items-center justify-between">
@@ -582,7 +608,7 @@ export default function DashboardPage() {
 
           {/* Recruiter CRM summary (crm-summary-db11) */}
           <section
-            className="glass rounded-2xl border border-white/10 p-6 transition hover:border-aether-coral/30"
+            className="elev-1 min-w-0 rounded-2xl p-6 transition hover:border-aether-coral/30"
             data-testid="crm-summary"
           >
             <div className="mb-4 flex items-center justify-between">
@@ -626,10 +652,39 @@ export default function DashboardPage() {
               </div>
             )}
           </section>
+          </div>
+        </div>
+      </div>
 
-          {/* Needs Approval (approvals-t1u2v3, REQ-TM-05/J4) */}
+
+      {/* Market Intelligence (market-intel-mi01) */}
+      <MarketPulse />
+    </div>
+  );
+}
+
+/**
+ * The Needs Approval queue, extracted so BAND 2 can render it beside the live
+ * ticker (§5.1: it moves UP — it is the only widget on this page carrying a
+ * blocking user action, and it used to sit fourth in a right-hand stack).
+ * Every prop it takes is state the page already owned; no fetch moved.
+ */
+function NeedsApprovalPanel({
+  approvals,
+  pending,
+  busyApprovalId,
+  approvalActionError,
+  resolveApproval,
+}: {
+  approvals: { data: Approval[] | null; error: string | null };
+  pending: Approval[];
+  busyApprovalId: string | null;
+  approvalActionError: string | null;
+  resolveApproval: (id: string, action: "approve" | "reject") => void;
+}) {
+  return (
           <section
-            className="glass flex-1 rounded-2xl border border-white/10 p-6"
+            className="elev-1 rounded-2xl p-6"
             data-testid="needs-approval-widget"
           >
             <div className="mb-4 flex items-center gap-2">
@@ -712,12 +767,6 @@ export default function DashboardPage() {
               </ul>
             )}
           </section>
-        </div>
-      </div>
-
-      {/* Market Intelligence (market-intel-mi01) */}
-      <MarketPulse />
-    </div>
   );
 }
 
