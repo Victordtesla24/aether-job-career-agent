@@ -121,6 +121,8 @@ ENTAILMENT_SYSTEM_PROMPT = (
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
 _BULLET_MARKERS = ("•", "●", "▪", "- ")
+#: Everything a marker line may carry before the bullet's own first word.
+_MARKER_CHARS = "•●▪- \t"
 
 #: Sentence-terminal punctuation that closes a reconstructed bullet.
 _TERMINAL_PUNCT = (".", "!", "?")
@@ -1806,6 +1808,158 @@ def jd_echoed_phrases(
     return sorted(" ".join(gram) for gram in lifted)
 
 
+#: A run of spaces this wide is a candidate column gutter rather than ordinary
+#: word spacing.
+_GUTTER_RE = re.compile(r"\s{3,}")
+#: An indent this deep is not paragraph indentation — it is a line that starts
+#: in the SECOND column of a two-column page.
+_MIN_COLUMN_INDENT = 12
+#: How many merged lines a page must show before its text is re-read as two
+#: columns. A single-column résumé can have one or two wide gaps (a
+#: right-aligned date); a real two-column layout merges dozens.
+_MIN_MERGED_LINES = 3
+
+
+def _column_offset(lines: list[str]) -> int | None:
+    """Character column where a second text column starts, if there is one."""
+    indents = [
+        len(line) - len(line.lstrip(" "))
+        for line in lines
+        if line.strip() and len(line) - len(line.lstrip(" ")) >= _MIN_COLUMN_INDENT
+    ]
+    return min(indents) if indents else None
+
+
+def _split_columns(line: str, offset: int) -> tuple[str, str, int] | None:
+    """``(left, right, column where right starts)`` for a merged line, else ``None``."""
+    for match in _GUTTER_RE.finditer(line):
+        if match.end() < offset:
+            continue
+        left, right = line[: match.start()].strip(), line[match.end():].strip()
+        if left and right:
+            return left, right, match.end()
+    return None
+
+
+def deinterleave_columns(raw_text: str) -> str:
+    """Re-read a two-column page as the two columns the person actually wrote.
+
+    U2b CRITICAL round 2 (2026-08-14). PyMuPDF flattens a page line by line, so
+    a two-column résumé arrives with the sidebar welded onto the body::
+
+        VIKRAM                                     CAREER OBJECTIVE
+        DESHPANDE                            15+ year Senior Technical Leader …
+             EDUCATION                         Distribution UI capabilities) …
+
+    Every line walk below — and the document model in
+    :mod:`app.services.resume_document` — reads one logical line per physical
+    line, so on the live document the surname fell into body prose (the render
+    went out as "VIKRAM"), and the ``EDUCATION``/``SKILLS``/``CERTIFICATIONS``
+    banners were swallowed mid-bullet and then dropped entirely
+    (``uat/reports/evidence/agents-uplift/u2b/critical/REVIEWER-probe-*-OUTPUT-20260814.txt``).
+
+    Nothing is invented and nothing is discarded here: each line is cut at the
+    gutter that separates the columns, and the two columns are emitted in the
+    order a person reads them — the whole sidebar, then the whole body. The
+    result is idempotent (the output has no gutters left to find).
+
+    A page is only re-read this way when it really is two columns: at least
+    :data:`_MIN_MERGED_LINES` lines carry both columns, and BOTH columns state
+    at least one section banner of their own. A single-column résumé with
+    right-aligned dates fails that test and is returned untouched.
+
+    This is the reading order as plain TEXT, which is what a reader (or a
+    diagnostic probe) wants. The line walks themselves call :func:`reading_order`
+    instead, because they need one more thing the text form cannot carry: the
+    column each line starts in, which is what says where a bullet's wrapped
+    continuation ends (U2b round 3).
+    """
+    columns = _split_page_columns(raw_text)
+    if columns is None:
+        return raw_text
+    left, right = columns
+    return "\n".join(text for text, _ in left + right)
+
+
+def _split_page_columns(
+    raw_text: str,
+) -> tuple[list[tuple[str, int]], list[tuple[str, int]]] | None:
+    """``(left, right)`` columns as ``(line, starting character column)`` pairs.
+
+    ``None`` when the page is not two columns, by the test
+    :func:`deinterleave_columns` documents. The character column is carried
+    through because it is the only thing in a flattened text layer that still
+    says which lines are a bullet's own wrapped continuation: a continuation is
+    printed inside the bullet's text column, deeper than its marker.
+    """
+    lines = raw_text.splitlines()
+    offset = _column_offset(lines)
+    if offset is None:
+        return None
+    left: list[tuple[str, int]] = []
+    right: list[tuple[str, int]] = []
+    merged = 0
+    for line in lines:
+        if not line.strip():
+            continue
+        indent = len(line) - len(line.lstrip(" "))
+        if indent >= offset:
+            right.append((line.strip(), indent))
+            continue
+        split = _split_columns(line, offset)
+        if split is None:
+            left.append((line.strip(), indent))
+            continue
+        merged += 1
+        left.append((split[0], indent))
+        right.append((split[1], split[2]))
+    if merged < _MIN_MERGED_LINES:
+        return None
+    if not any(_is_section_banner(text) for text, _ in left):
+        return None
+    if not any(_is_section_banner(text) for text, _ in right):
+        return None
+    return left, right
+
+
+def reading_order(raw_text: str) -> tuple[list[str], list[int]]:
+    """Every line of the résumé in reading order, and the column each starts in.
+
+    Two parallel lists rather than one text blob, because every line walk in
+    this module and in :mod:`app.services.resume_document` needs BOTH: the text
+    to classify, and the column to tell a bullet's wrapped continuation from
+    the next ordinary line. Columns are measured within each column of a
+    two-column page, so a body line never looks "deeply indented" merely because
+    the body starts halfway across the page.
+    """
+    columns = _split_page_columns(raw_text)
+    if columns is None:
+        lines = raw_text.splitlines()
+        return (
+            [line.strip() for line in lines],
+            [len(line) - len(line.lstrip(" ")) for line in lines],
+        )
+    left, right = columns
+    left_edge = min((indent for _, indent in left), default=0)
+    right_edge = min((indent for _, indent in right), default=0)
+    pairs = [(text, indent - left_edge) for text, indent in left]
+    pairs += [(text, indent - right_edge) for text, indent in right]
+    return [text for text, _ in pairs], [indent for _, indent in pairs]
+
+
+def marks_wrapping_by_indent(indents: Sequence[int]) -> bool:
+    """True when this text layer preserved the column each line starts in.
+
+    PyMuPDF hands back a FLAT stream for some documents — every line at column
+    0, wrapped bullet continuations included — and a column-accurate one for
+    others (the live two-column résumé). Only the second kind can say where a
+    bullet's wrapping ends, so :func:`extract_bullets`, :func:`strip_bullet_lines`
+    and the document model apply that boundary only where the document actually
+    states it, and keep their punctuation/banner/job-header boundaries elsewhere.
+    """
+    return any(indents)
+
+
 def _is_bullet_marker(line: str) -> bool:
     return line.startswith(_BULLET_MARKERS)
 
@@ -1860,6 +2014,174 @@ def _job_header_indices(lines: list[str]) -> set[int]:
     return header
 
 
+@dataclass(frozen=True)
+class LineBlock:
+    """One block of the résumé, as :func:`walk_blocks` reads it.
+
+    ``kind`` is ``"bullet"`` — a marker line together with every wrapped
+    continuation line folded into it — or ``"line"``, which is every other
+    line, section banners and job headers included. ``index`` is the block's
+    position in reading order (the marker's own line, for a bullet).
+    """
+
+    kind: str
+    text: str
+    index: int
+
+
+def _wraps_out_of(buf: list[str], line: str) -> bool:
+    """True when ``line`` can be a wrapped continuation of the open bullet.
+
+    A line wraps because the NEXT word did not fit, so the bullet it wrapped
+    out of had to have reached the width of the text column it is printed in.
+    A bullet whose every line so far stopped well short of the line now offered
+    as its continuation was ended by the document, not by the column running
+    out, and what follows it is a new block rather than this bullet's wrapping.
+
+    That is the only wrap signal a FLAT text layer offers.
+    :func:`marks_wrapping_by_indent` documents the other one: where the layer
+    records the column each line starts in, the printed column says this
+    exactly, and this length comparison is not used at all.
+
+    Calibrated against the platform's own documents rather than guessed: across
+    the 106 continuation lines the two bundled seed résumés
+    (``assets/resume/Vik_Resume_Final.pdf``, ``Vik_Resume_BA_Final.pdf``, both
+    extracted flat) actually fold into bullets, the LOWEST ratio of a
+    continuation's widest bullet line to the continuation itself is 0.83 —
+    while the live defect shape (``• Honors`` followed by ``Bachelor of
+    Information Technology``) sits at 0.18
+    (``uat/reports/evidence/agents-uplift/u2b/critical/round4-flat-boundary-probe-OUTPUT-20260814.json``,
+    section ``E_calibration``).
+
+    The widest line of the bullet SO FAR is what is measured, not just the last
+    one, because a flat stream can weld two columns onto one line: the base
+    résumé ingested through :func:`app.services.resume_parser.parse_resume_pdf`
+    arrives as ``"Monash University • Test Automation Strategy: …"``, and a
+    narrow sidebar fragment landing mid-bullet must not be read as the bullet
+    having run out of page.
+
+    Two honest limits of this signal, since a résumé is a customer's document
+    and the trade-off should be visible rather than discovered later:
+
+    * A marker printed alone on its line carries no text of its own, so the
+      line below it is the bullet's FIRST line and is always taken (both
+      bundled résumés are laid out this way).
+    * A following line SHORTER than the bullet's own widest line is still read
+      as wrapping — that is exactly what a wrapped final line looks like — so a
+      short unpunctuated bullet can still absorb a following short line (``•
+      Dean's List`` then ``2011``). Character counts also only approximate
+      rendered width in a proportional font, which is why the threshold sits
+      far below the measured floor rather than at it.
+    """
+    widest = max((len(part) for part in buf), default=0)
+    if not widest:
+        return True
+    return widest >= len(line) * _FLAT_WRAP_MIN_FILL
+
+
+#: How much of the previous line a wrapped continuation implies was filled,
+#: as a fraction of the continuation's own length. See :func:`_wraps_out_of`
+#: for the measurement this is calibrated against (real floor 0.79, live defect
+#: shape 0.18).
+_FLAT_WRAP_MIN_FILL = 0.6
+
+
+def _opens_a_new_block(
+    line: str,
+    buf: list[str],
+    indent: int,
+    marker_indent: int,
+    column_wrapped: bool,
+) -> bool:
+    """True when ``line`` starts a new block instead of continuing the bullet.
+
+    Where the text layer records columns, the layout states it outright: a
+    continuation is printed INSIDE the bullet's text column, so the first line
+    printed back out at the marker's own column is a new block (U2b round 3).
+    Where it does not — a flat PyMuPDF stream, which is what BOTH bundled seed
+    résumés and most single-column PDFs produce — the text still states its own
+    wrapping through line fill (:func:`_wraps_out_of`, U2b round 4). Before
+    round 4 the flat case had no boundary at all beyond punctuation, banners
+    and job headers, so an unpunctuated bullet swallowed every ordinary line up
+    to the next banner — an entire second degree, on the live artifact
+    (``uat/reports/evidence/agents-uplift/u2b/critical/REVIEWER-VERDICT-completeness-round3-sonnet-20260814.md``).
+    """
+    if column_wrapped:
+        return indent <= marker_indent
+    return not _wraps_out_of(buf, line)
+
+
+def walk_blocks(
+    lines: Sequence[str], indents: Sequence[int], start: int = 0
+) -> list[LineBlock]:
+    """THE bullet-boundary walk — every caller in the system reads this one.
+
+    Walks the résumé's lines in reading order and returns them as blocks: each
+    bullet reassembled from its marker line through its wrapped continuation
+    lines, and every other line on its own. A bullet closes at the first of the
+    next marker, an all-caps section banner, a job-header line, the sentence's
+    terminal punctuation, or a line that opens a new block
+    (:func:`_opens_a_new_block`). A soft hyphen at a line break
+    ("test-\\nevidence") is rejoined without a space. A bullet is emitted
+    BEFORE the line that closed it, so the blocks come back in document order.
+
+    There is one walk because there was once three. ``extract_bullets``,
+    :func:`strip_bullet_lines` and ``resume_document._parse_sections`` were
+    three independently hand-written state machines that had to agree about
+    where a bullet ends; round 3's new boundary had to be hand-copied into all
+    three, and the flat-text case was, by the same token, hand-omitted from all
+    three — the same drift that produced the round-1 and round-2 defects
+    (round-3 review, Finding 2). They now differ only in which blocks they
+    keep, so a boundary change cannot reach some call sites and miss others.
+    """
+    header = _job_header_indices(list(lines))
+    column_wrapped = marks_wrapping_by_indent(indents)
+    blocks: list[LineBlock] = []
+    buf: list[str] | None = None
+    marker_index = 0
+    marker_indent = 0
+
+    def close() -> None:
+        nonlocal buf
+        if buf is not None:
+            text = " ".join(part for part in buf if part).strip()
+            if text:
+                blocks.append(LineBlock("bullet", text, marker_index))
+        buf = None
+
+    for i in range(start, len(lines)):
+        line = lines[i]
+        if not line:
+            continue
+        if _is_bullet_marker(line):
+            close()
+            head = line.lstrip(_MARKER_CHARS).strip()
+            buf = [head] if head else []
+            marker_index, marker_indent = i, indents[i]
+            if head and _ends_bullet(head):
+                close()
+            continue
+        if buf is None:
+            blocks.append(LineBlock("line", line, i))
+            continue
+        if (
+            _is_section_banner(line)
+            or i in header
+            or _opens_a_new_block(line, buf, indents[i], marker_indent, column_wrapped)
+        ):
+            close()
+            blocks.append(LineBlock("line", line, i))
+            continue
+        if buf and buf[-1].endswith("-"):
+            buf[-1] += line
+        else:
+            buf.append(line)
+        if _ends_bullet(line):
+            close()
+    close()
+    return blocks
+
+
 def extract_bullets(raw_text: str) -> list[str]:
     """Reconstruct complete resume bullets from a flat text stream.
 
@@ -1877,51 +2199,31 @@ def extract_bullets(raw_text: str) -> list[str]:
     Bullets are returned in document order. Works uniformly across both bundled
     resumes and every ingestion path (base bootstrap, ``POST /resumes``,
     ``POST /resumes/upload``).
+
+    The stream is first put back into reading order by
+    :func:`reading_order`, so a sidebar line never lands in the middle of a body
+    bullet (U2b round 2), and the boundary itself is :func:`walk_blocks` — the
+    one bullet walk this module, the tailoring context and the document model
+    all read (U2b round 4). This function is exactly its bullet blocks.
     """
-    lines = [ln.strip() for ln in raw_text.splitlines()]
-    header = _job_header_indices(lines)
-    bullets: list[str] = []
-    buf: list[str] | None = None
-
-    def flush() -> None:
-        nonlocal buf
-        if buf is not None:
-            text = " ".join(part for part in buf if part).strip()
-            if text:
-                bullets.append(text)
-        buf = None
-
-    for i, line in enumerate(lines):
-        if not line:
-            continue
-        if _is_bullet_marker(line):
-            flush()
-            first = line.lstrip("•●▪- ").strip()
-            buf = [first] if first else []
-            if first and _ends_bullet(first):
-                flush()
-            continue
-        if buf is None:
-            continue
-        if _is_section_banner(line) or i in header:
-            flush()
-            continue
-        if buf and buf[-1].endswith("-"):
-            buf[-1] += line
-        else:
-            buf.append(line)
-        if _ends_bullet(line):
-            flush()
-    flush()
-    return bullets
+    lines, indents = reading_order(raw_text)
+    return [b.text for b in walk_blocks(lines, indents) if b.kind == "bullet"]
 
 
 def strip_bullet_lines(raw_text: str) -> str:
     """Return the resume text with bullet CONTENT removed.
 
-    Headers, the skills section, the summary and education survive; only the
-    lines that belong to experience bullets are dropped, using the same
-    line-walk state machine as :func:`extract_bullets`.
+    Every line that is not part of a bullet survives — headers, the skills
+    section, the summary, education — because this is literally the ``"line"``
+    half of :func:`walk_blocks`, whose ``"bullet"`` half is
+    :func:`extract_bullets`. The two therefore partition the document: no line
+    can be dropped by one without appearing in the other.
+
+    How far that promise reaches is set by the walk's boundary, and
+    :func:`_wraps_out_of` states its own limits for a flat text layer. Before
+    U2b round 4 this paragraph made the promise unconditionally and a flat text
+    layer did not keep it: an unpunctuated bullet swallowed every ordinary line
+    up to the next banner, education included.
 
     GAP-TAIL-001: the conversion-lift metric must score the baseline and the
     tailored resume on corpora that differ *only* by the tailored bullets.
@@ -1930,27 +2232,22 @@ def strip_bullet_lines(raw_text: str) -> str:
     a large, dishonest negative delta. Rebuilding both sides as
     ``strip_bullet_lines(resume) + <bullet set>`` keeps the shared context
     identical, so the delta reflects the rewrite alone.
+
+    U2b rounds 3 and 4 — the latch. A bullet whose text carries no terminal
+    punctuation ("• Honors") used to stay open until the next section banner or
+    job header, so every ordinary line in between was dropped as if it were
+    that bullet's wrapping. On the live résumé that deleted the ENTIRE second
+    degree — ``Bachelor of Engineering / Computer Science / University of
+    Melbourne / 2007`` — which was never part of any bullet
+    (``uat/reports/evidence/agents-uplift/u2b/critical/REVIEWER-VERDICT-completeness-rerev-round2-sonnet-20260814.md``).
+    Round 3 closed it wherever the text layer records columns; round 4 closed
+    the flat-text layers it had left open, which is what BOTH bundled seed
+    résumés and most single-column PDFs actually are.
     """
-    lines = [ln.strip() for ln in raw_text.splitlines()]
-    header = _job_header_indices(lines)
-    kept: list[str] = []
-    in_bullet = False
-    for i, line in enumerate(lines):
-        if not line:
-            continue
-        if _is_bullet_marker(line):
-            in_bullet = not _ends_bullet(line.lstrip("•●▪- ").strip())
-            continue
-        if not in_bullet:
-            kept.append(line)
-            continue
-        if _is_section_banner(line) or i in header:
-            in_bullet = False
-            kept.append(line)
-            continue
-        if _ends_bullet(line):
-            in_bullet = False
-    return "\n".join(kept)
+    lines, indents = reading_order(raw_text)
+    return "\n".join(
+        b.text for b in walk_blocks(lines, indents) if b.kind == "line"
+    )
 
 
 def render_tailored_raw_text(
@@ -1962,25 +2259,39 @@ def render_tailored_raw_text(
     verbatim, so an independent ``GET /resumes/{id}/ats`` (which scores
     ``raw_text`` preferentially) reverted to the stale BASELINE score even
     though the bullets — and the downloadable PDF — reflected the tailored
-    content. Regenerating ``raw_text`` as the shared résumé context
-    (skills/summary/headers via :func:`strip_bullet_lines`) followed by the
-    tailored bullet lines makes a re-read reflect the tailored score.
+    content. The tailored text is therefore regenerated here.
 
-    This mirrors the like-for-like corpus construction in
-    ``_compute_conversion_metrics`` (``context + tailored bullets``), so the
-    ATS engine — whose tokeniser ignores the ``•`` markers — scores the
-    regenerated text identically to the run's reported ``tailoredATSScore``.
-    Bullet markers are kept so the text round-trips through
-    :func:`strip_bullet_lines` / :func:`extract_bullets` for any later
-    re-tailoring off this version.
+    HOW it is regenerated is the U2b round-3 fix. This function used to build
+    ``strip_bullet_lines(original) + every persisted bullet``: it deleted EVERY
+    bullet in the document and re-appended only the tailoring loop's own
+    subset, as one flat trailing block with no heading. Two things followed on
+    the live artifact, and a subscriber would have sent both to an employer:
+    any bullet the loop had not tracked was gone outright (two skills bullets
+    and a certification), and the tracked ones re-parented under whichever
+    heading happened to be open last — ``WORK EXPERIENCE`` — leaving both
+    ``SKILLS`` sections and ``CERTIFICATIONS`` as bare, empty headings
+    (``uat/reports/evidence/agents-uplift/u2b/critical/REVIEWER-VERDICT-completeness-rerev-round2-sonnet-20260814.md``).
+
+    It now rebuilds the document on the SAME model the renderer draws and the
+    completeness verifier measures against
+    (:func:`app.services.resume_document.rebuild_raw_text`): each section keeps
+    its own items in place, a rewritten bullet replaces the bullet it rewrote,
+    an untouched bullet is written back unchanged, and prose stays prose. There
+    is exactly one parse and one substitution in the system, so the persisted
+    text, the download and the verification contract cannot drift apart.
+
+    The ATS engine's tokeniser ignores the ``•`` markers, so the regenerated
+    text still scores as the run's reported ``tailoredATSScore``, and the
+    markers keep it round-tripping through :func:`strip_bullet_lines` /
+    :func:`extract_bullets` for any later re-tailoring off this version.
     """
-    context = strip_bullet_lines(original_text)
-    lines: list[str] = [context] if context.strip() else []
-    for b in bullets:
-        text = (b.get("text") or "").strip()
-        if text:
-            lines.append(f"• {text}")
-    return "\n".join(lines)
+    # Imported here, not at module scope: the document model is built ON this
+    # module's line classification, so importing it at the top would be a cycle.
+    from app.services.resume_document import rebuild_raw_text
+
+    return rebuild_raw_text(
+        original_text, [(b.get("text") or "").strip() for b in bullets]
+    )
 
 
 #: Default cap on how many bullets one tailoring request rewrites

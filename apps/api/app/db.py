@@ -1605,6 +1605,75 @@ def ensure_application_manual_step_columns() -> None:
     _application_manual_step_columns_ready = True
 
 
+#: Guard so the additive ``Application`` submission-truth columns are only
+#: ensured once per worker process (see
+#: ``ensure_application_submission_truth_columns``).
+_application_submission_truth_columns_ready = False
+
+
+def ensure_application_submission_truth_columns() -> None:
+    """Idempotently add the additive ``Application`` submission-truth columns (U5d).
+
+    THE ROWS THIS EXISTS FOR (production census 2026-08-14T07:35:45Z,
+    ``uat/reports/evidence/agents-uplift/u5d/CENSUS.json``): 346 rows assert
+    ``status = 'submitted'`` while **0 of 606 rows in the whole database has
+    ever carried a ``transmittedAt``**. Those 346 are claims of a submission
+    with no transmission evidence behind them — created before U5d by a
+    bookkeeping-only path that said "Submitted your application …" over a write
+    that transmitted nothing.
+
+    * ``submissionTruthState`` (text) — an HONEST reclassification of such a
+      row (``recorded_transmission_unverified``). NULL means "never
+      reclassified", which is the correct value for every row that either
+      carries real transmission evidence or was never claimed as submitted.
+    * ``submissionTruthAt`` (timestamptz) — when the remediation stamped it,
+      so the reclassification is itself auditable.
+
+    ADDITIVE REMEDIATION, deliberately: the backfill that fills these
+    (``app.services.submission_truth.backfill_unverified_submissions``) NEVER
+    rewrites ``Application.status`` and NEVER deletes a row. ``status`` is the
+    user's own tracker data — "I applied to this" is a true statement about
+    what the USER did even when Aether transmitted nothing — so the fix is to
+    ADD the missing truth beside it, not to overwrite the user's history.
+
+    Additive only — no DROP, no ALTER TYPE, no DEFAULT rewrite, and NOT a new
+    ``ApplicationStatus`` enum member (the enum is read by every board query,
+    the sankey and the stage-transition matrix). A transaction-scoped advisory
+    lock serializes concurrent first-hit callers so the DDL cannot race;
+    ``TRUNCATE`` never drops columns, so the process-wide latch survives test
+    teardown. Lazy DDL per ADR-TR-1.
+
+    MUST be called by EVERY path that reads or writes these columns, before the
+    statement that names them.
+    """
+    global _application_submission_truth_columns_ready
+    if _application_submission_truth_columns_ready:
+        return
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT count(*) FROM information_schema.columns"
+                " WHERE table_name = 'Application'"
+                " AND table_schema = ANY(current_schemas(false))"
+                " AND column_name IN ('submissionTruthState', 'submissionTruthAt')"
+            )
+            row = cur.fetchone()
+            if row and row[0] == 2:
+                _application_submission_truth_columns_ready = True
+                return
+            cur.execute("SELECT pg_advisory_xact_lock(%s)", (7420260807,))
+            for column, coltype in (
+                ("submissionTruthState", "text"),
+                ("submissionTruthAt", "timestamptz"),
+            ):
+                cur.execute(
+                    f'ALTER TABLE "Application" '
+                    f'ADD COLUMN IF NOT EXISTS "{column}" {coltype}'
+                )
+        conn.commit()
+    _application_submission_truth_columns_ready = True
+
+
 #: Guard so the additive ``Application.coverLetterQuality`` column is only
 #: ensured once per worker process (see ``ensure_cover_letter_quality_columns``).
 _cover_letter_quality_columns_ready = False

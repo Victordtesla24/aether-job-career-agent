@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 from app.db import (
     ensure_application_apply_channel_column,
     ensure_application_manual_step_columns,
+    ensure_application_submission_truth_columns,
     ensure_application_transmission_columns,
     ensure_application_unique_active_index,
     ensure_job_apply_contact_columns,
@@ -57,7 +58,7 @@ _COLUMNS = (
     'a."transmittedAt", a."transmittedTo", a."transmissionChannel", '
     'a."transmissionRef", j."applyEmail", j."applyEmailSource", '
     'a."applyChannel", a."manualStepReason", a."manualStepDetail", '
-    'a."manualStepAt"'
+    'a."manualStepAt", a."submissionTruthState", a."submissionTruthAt"'
 )
 
 
@@ -73,6 +74,7 @@ def _ensure_read_columns() -> None:
     ensure_application_transmission_columns()
     ensure_job_apply_contact_columns()
     ensure_application_apply_channel_column()
+    ensure_application_submission_truth_columns()
     ensure_application_manual_step_columns()
 
 

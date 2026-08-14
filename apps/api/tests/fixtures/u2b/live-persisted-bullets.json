@@ -1,0 +1,102 @@
+[
+  {
+    "text": "Built AI/ML technology solutions including LLM pipelines, real-time telemetry, and full-stack applications with Python, TypeScript, React/Next.js, Kubernetes, Docker, Terraform, and cloud infrastructure.",
+    "evidenceRef": "bullet-0"
+  },
+  {
+    "text": "Provided technical leadership for the Agile Kookaburras squad, one of eight squads on the Payday Super reform program, owning sprint cadence, PI Planning (PI 47\u201348), capacity management, and executive status reporting to deliver NTP & Distribution UI capabilities.",
+    "evidenceRef": "bullet-1"
+  },
+  {
+    "text": "Test Automation Strategy: Architected the program's COBOL/mainframe test-evidence automation covering 200+ SIT/E2E scenarios across all eight squads, cutting evidence effort from ~3 hours to ~15 minutes per scenario (\u224892% reduction) with a zero-new-approvals toolchain (REXX, SMF, SDSF, PCOMM, PowerShell, VBA).",
+    "evidenceRef": "bullet-2"
+  },
+  {
+    "text": "Delivery Recovery: Converted a mathematically infeasible SIT window \u2014 75+ hours of manual evidence per team against 64 available hours \u2014 into an achievable plan through a six-day tiered harness build with a formal go/no-go gate and a four-level contingency ladder.",
+    "evidenceRef": "bullet-3"
+  },
+  {
+    "text": "Governance & Change Management: Solved the problem of insufficient test capacity by authoring an executive change request to meet the need for expanded scope, re-baselining Payday Super test capacity from 30 to up to 90 person-days, including options analysis, costed recommendation, risk assessment, and full Azure DevOps traceability across 40 scenarios and 11 data tables (AC6\u2013AC19) with STT regression scope.",
+    "evidenceRef": "bullet-4"
+  },
+  {
+    "text": "Stakeholder Leadership: Convened a cross-discipline technical war room that produced a binding automation recommendation in under three hours; unblocked stalled NTP function testing through L2 environment escalation and targeted SME enablement while steering Distribution UI delivery to 95%+ completion.",
+    "evidenceRef": "bullet-5"
+  },
+  {
+    "text": "Enterprise Architecture, Data Architecture, MLOps, CI/CD, DevOps, Systems Thinking, Business Analysis, Requirements Elicitation, Gap Analysis.",
+    "evidenceRef": "bullet-6"
+  },
+  {
+    "text": "Cross-functional Team Leadership, Servant Leadership, Coaching, Executive Communication, Vendor Management, Onsite/Offshore Model Coordination.",
+    "evidenceRef": "bullet-7"
+  },
+  {
+    "text": "AI/ML Strategy & Solutions (2022 - 2025): Led the technical delivery of AI solutions, including a real-time WebSocket telemetry feature for 10k+ device concurrency, improving user response time by reducing P95 latency to under 200 ms.",
+    "evidenceRef": "bullet-8"
+  },
+  {
+    "text": "Agile Transformation & Program Management (2017 - 2022): Orchestrated the transformation of core banking platforms from monolithic to cloud-native (.NET/Azure), cutting end-to-end delivery time by >30% and reducing infrastructure costs by >15%.",
+    "evidenceRef": "bullet-9"
+  },
+  {
+    "text": "Delivery Leadership: Directed a program portfolio valued at over $5M, leading 5+ cross-functional squads of engineers (up to 40 resources, including offshore teams) to deliver on-time, high-quality releases.",
+    "evidenceRef": "bullet-10"
+  },
+  {
+    "text": "Architecture & Governance: Defined the technical vision and owned the product backlog for major platform modernisation changes, ensuring 100% compliance with enterprise architectural standards and risk models.",
+    "evidenceRef": "bullet-11"
+  },
+  {
+    "text": "Metrics: Facilitated workshops for 40+ GMs and executives to align on strategy, improving decision-making efficiency and project clarity by >55%.",
+    "evidenceRef": "bullet-12"
+  },
+  {
+    "text": "Managed the delivery stream for a critical risk and compliance technology program, ensuring 100% regulatory adherence for major data initiatives.",
+    "evidenceRef": "bullet-13"
+  },
+  {
+    "text": "Conducted deep-dive business analysis to understand complex regulatory problems, translating requirements into actionable technical specifications for engineering teams.",
+    "evidenceRef": "bullet-14"
+  },
+  {
+    "text": "Executed a comprehensive gap analysis for Azure ML telemetry, delivering 10 key insights that drove changes to enhance system reliability by 15% and decrease incident MTTR by 10%.",
+    "evidenceRef": "bullet-15"
+  },
+  {
+    "text": "Spearheaded initiatives to align DevOps strategies with overall IT objectives, achieving 95% alignment with enterprise architecture standards.",
+    "evidenceRef": "bullet-16"
+  },
+  {
+    "text": "Cloud/Data Certifications AWS/GCP (In progress)",
+    "evidenceRef": "bullet-17"
+  },
+  {
+    "text": "Developed customer journey scorecards and streamlined JIRA requirements for core delivery teams, improving delivery efficiency by 20% and operational clarity by 15%.",
+    "evidenceRef": "bullet-18"
+  },
+  {
+    "text": "Delivered analytics technology projects, boosting customer engagement by 20% and automating regulatory reporting to 100% accuracy.",
+    "evidenceRef": "bullet-19"
+  },
+  {
+    "text": "Optimized data processing workflows through ePAL implementation, improving efficiency by 30% and reducing reporting time by 90% for financial data sets.",
+    "evidenceRef": "bullet-20"
+  },
+  {
+    "text": "JIRA Analytics Dashboard: Architected and developed a Next.js + Supabase analytics application to expose sprint velocity metrics and generate LLM-powered retrospective insights and sprint plans.",
+    "evidenceRef": "bullet-21"
+  },
+  {
+    "text": "Public-Key Server: Built a robust, production-grade Node.js/Express service for distributing PEM keys for fleet API signing, achieving 100% test coverage (Mocha/Chai).",
+    "evidenceRef": "bullet-22"
+  },
+  {
+    "text": "Relationship Timeline Visualisation: Developed a React/TypeScript visualisation tool featuring D3 event arcs for showcasing dynamic customer journey interactions.",
+    "evidenceRef": "bullet-23"
+  },
+  {
+    "text": "LLM Evaluation Stack: Stood up an end-to-end Langfuse + Phoenix evaluation stack to score hallucination, latency, and cost across high-volume daily LLM generations, reducing error budget breaches by 38% in a simulated production environment.",
+    "evidenceRef": "bullet-24"
+  }
+]

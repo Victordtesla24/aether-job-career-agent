@@ -610,35 +610,41 @@ def diff_resume(resume_id: str, current_user: CurrentUser) -> dict[str, Any]:
 
 def _branded_content(
     resume: dict[str, Any],
-) -> tuple[str, str, str, list[dict[str, Any]]]:
-    """Map a stored resume record onto the branded template's inputs.
+) -> tuple[str, str, str, list[dict[str, Any]], list[str]]:
+    """Map a stored résumé record onto the branded template's inputs — ALL of it.
 
-    Used only on the structured-rendering fallback (no bundled source PDF on
-    disk), so the resume is rebuilt from its ``sections`` payload rather than
-    edited in place. Name/title/objective come from the parsed contact block
-    when present, with the resume label and the first content line as
-    fallbacks; every bullet is grouped under a single Experience heading.
+    Used on the structured-rendering fallback (no bundled source PDF on disk, or
+    an in-document rewrite that could not complete), so the résumé is rebuilt
+    from its ``sections`` payload rather than edited in place.
+
+    CRITICAL (2026-08-14): this function used to map a résumé onto its FIRST RAW
+    LINE plus a single "Experience" heading and throw the rest away, so the
+    download a subscriber would have sent an employer carried no contact
+    details, no education, no skills and no certifications — and, because the
+    renderer also truncated at one page, only 17 of 25 bullets
+    (``uat/reports/evidence/agents-uplift/u2b/verify-final/CRITICAL-FINDING-content-loss.json``).
+    The mapping now goes through :func:`parse_resume_document`, the same whole-
+    document model the completeness verifier measures the produced file against.
     """
-    sections = resume.get("sections", {}) or {}
-    contact = sections.get("contact", {}) or {}
-    raw_lines = [
-        line.strip() for line in str(sections.get("raw_text", "")).splitlines() if line.strip()
+    from app.services.resume_document import parse_resume_document
+
+    document = parse_resume_document(resume)
+    template_sections = [
+        {
+            "heading": section.heading,
+            "items": [
+                {"kind": item.kind, "text": item.text} for item in section.items
+            ],
+        }
+        for section in document.sections
     ]
-    name = str(
-        contact.get("name")
-        or (raw_lines[0] if raw_lines else "")
-        or resume.get("label")
-        or "Resume"
+    return (
+        document.name,
+        document.title,
+        document.objective,
+        template_sections,
+        list(document.contact),
     )
-    title = str(contact.get("title") or contact.get("headline") or "")
-    objective = str(sections.get("objective") or sections.get("summary") or "")
-    bullets = [
-        str(b.get("text", ""))
-        for b in sections.get("bullets", [])
-        if str(b.get("text", "")).strip()
-    ]
-    template_sections = [{"heading": "Experience", "bullets": bullets}] if bullets else []
-    return name, title, objective, template_sections
 
 
 def _tailored_text_document(
@@ -709,6 +715,7 @@ def _render_resume(resume_id: str, user_id: str) -> _RenderedResume:
     (uat/reports/evidence/agents-uplift/u2b/verify/, 2026-08-14).
     """
     from app.services.format_verification import verify_changes
+    from app.services.resume_completeness import build_resume_content, verify_completeness
     from app.services.resume_docx import (
         DOCX_CONTENT_TYPE,
         DocxParseError,
@@ -736,6 +743,16 @@ def _render_resume(resume_id: str, user_id: str) -> _RenderedResume:
     is_tailored = parent is not None
     changes = _tailoring_changes(resume, parent)
     source = parent or resume
+    #: What this résumé OWES the user — every section heading, every bullet
+    #: (tracked or not), every line of prose and every contact detail. Each
+    #: produced artifact is measured against it before it is served, because the
+    #: per-change check cannot see content nobody asked to rewrite (U2b
+    #: CRITICAL, verify-final/). For a tailored version the ground truth is the
+    #: PARENT's document with the approved rewrites mapped in, never the child's
+    #: own parse: a child whose stored text has already lost a section has
+    #: nothing left to report missing, which is exactly how the live loss
+    #: passed verification (U2b round-2 review, critical/).
+    content = build_resume_content(resume, parent)
 
     original = resolve_original_pdf(source.get("formatHash") or resume.get("formatHash"))
     data: bytes | None = None
@@ -778,14 +795,19 @@ def _render_resume(resume_id: str, user_id: str) -> _RenderedResume:
                     )
                 rendered, _applied = render_tailored_docx_report(data, changes)
                 verification = verify_changes(rendered, DOCX_CONTENT_TYPE, changes)
-                if verification.complete:
+                completeness = verify_completeness(rendered, DOCX_CONTENT_TYPE, content)
+                if verification.complete and completeness.complete:
                     return _RenderedResume(
                         content=rendered,
                         media_type=DOCX_CONTENT_TYPE,
                         filename=f"resume-{resume_id[:8]}.docx",
-                        fidelity=verified_fidelity(native_report, verification),
+                        fidelity=verified_fidelity(
+                            native_report, verification, completeness=completeness
+                        ),
                     )
-                fallback_report = native_fallback_fidelity()
+                fallback_report = native_fallback_fidelity(
+                    content_incomplete=verification.complete
+                )
             except DocxParseError:
                 # Stored bytes that no longer open as a package (they passed the
                 # upload gate, so this is corruption we did not cause): the user
@@ -807,14 +829,19 @@ def _render_resume(resume_id: str, user_id: str) -> _RenderedResume:
                     )
                 rewritten, _applied_count = _tailored_text_document(data, changes)
                 verification = verify_changes(rewritten, media_type, changes)
-                if verification.complete:
+                completeness = verify_completeness(rewritten, media_type, content)
+                if verification.complete and completeness.complete:
                     return _RenderedResume(
                         content=rewritten,
                         media_type=media_type,
                         filename=f"resume-{resume_id[:8]}.{suffix}",
-                        fidelity=verified_fidelity(native_report, verification),
+                        fidelity=verified_fidelity(
+                            native_report, verification, completeness=completeness
+                        ),
                     )
-                fallback_report = native_fallback_fidelity()
+                fallback_report = native_fallback_fidelity(
+                    content_incomplete=verification.complete
+                )
             except UnicodeDecodeError:
                 fallback_report = native_fallback_fidelity(unreadable=True)
 
@@ -843,22 +870,27 @@ def _render_resume(resume_id: str, user_id: str) -> _RenderedResume:
         # 2026-08-14). A partial splice is neither the user's baseline nor their
         # tailored résumé; the honest alternative is the branded render below,
         # which is built from this version's own tailored text.
-        if verification.complete:
+        completeness = verify_completeness(spliced, _PDF_CONTENT_TYPE, content)
+        if verification.complete and completeness.complete:
             return _RenderedResume(
                 content=spliced,
                 media_type=_PDF_CONTENT_TYPE,
                 filename=f"resume-{resume_id[:8]}.pdf",
-                fidelity=verified_fidelity(splice_report, verification),
+                fidelity=verified_fidelity(
+                    splice_report, verification, completeness=completeness
+                ),
             )
-        fallback_report = native_fallback_fidelity(stored_original=False)
+        fallback_report = native_fallback_fidelity(
+            stored_original=False, content_incomplete=verification.complete
+        )
 
     # No bundled source PDF for this résumé — a user-authored upload/ingest
     # (NF-final-B-005) — or a native/in-place rewrite that could not be
     # completed → render from the résumé's OWN structured content with the
     # branded template; never serve the operator's bundled PDF bytes.
-    name, title, objective, sections = _branded_content(resume)
+    name, title, objective, sections, contact = _branded_content(resume)
     pdf_bytes = create_branded_resume_pdf(
-        name, title, objective, sections, changes or None
+        name, title, objective, sections, changes or None, contact=contact
     )
     reflow_report = fallback_report or describe_fidelity(
         bundled_match=False,
@@ -866,12 +898,19 @@ def _render_resume(resume_id: str, user_id: str) -> _RenderedResume:
         content_type=content_type,
         is_tailored=is_tailored,
     )
+    # There is no further fallback beneath this render, so its completeness is
+    # REPORTED rather than routed around: a loss here degrades the fidelity
+    # claim and names what is missing, instead of being passed off as the
+    # 9-of-10-changes success live production reported over a document with no
+    # contact details in it.
     return _RenderedResume(
         content=pdf_bytes,
         media_type=_PDF_CONTENT_TYPE,
         filename=f"resume-{resume_id[:8]}.pdf",
         fidelity=verified_fidelity(
-            reflow_report, verify_changes(pdf_bytes, _PDF_CONTENT_TYPE, changes)
+            reflow_report,
+            verify_changes(pdf_bytes, _PDF_CONTENT_TYPE, changes),
+            completeness=verify_completeness(pdf_bytes, _PDF_CONTENT_TYPE, content),
         ),
     )
 
@@ -892,6 +931,14 @@ def _fidelity_headers(fidelity: Any) -> dict[str, str]:
         "X-Aether-Changes-Requested": str(fidelity.changes_requested or 0),
         "X-Aether-Changes-Applied": str(fidelity.changes_applied or 0),
         "X-Aether-Changes-Dropped": str(fidelity.changes_dropped or 0),
+        # Whole-document completeness, so an operator verifying a production
+        # download sees content loss without a second call (U2b CRITICAL).
+        "X-Aether-Content-Complete": (
+            "unverified"
+            if fidelity.content_complete is None
+            else str(fidelity.content_complete).lower()
+        ),
+        "X-Aether-Content-Missing": str(len(fidelity.missing_content)),
     }
 
 
