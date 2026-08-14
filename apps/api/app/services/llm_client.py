@@ -43,20 +43,41 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_FIXTURE_DIR = Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "llm"
 
-#: Last-resort model retried once when the primary model 404s / 429s (D-0014).
+#: Last-resort model retried once when a SYSTEM-DEFAULT primary 404s / 429s
+#: (D-0014). Also the ultimate tier default for an unknown/unset tier.
 #:
-#: This was ``openai/gpt-oss-20b:free`` until a live probe
-#: (``uat/reports/evidence/free-model-fallback/PROBE-REPORT.json``, 2026-07-29)
-#: showed that id emits GARBLED, never-terminating output on realistic prompt
-#: lengths (65 s, corrupted multilingual tokens, no clean stop) even though it
-#: passes a trivial "reply OK" smoke test. Same mechanism, working model: the
-#: id below was verified live on the same probe (clean 119-word draft, 3.0 s,
-#: ``finish_reason=stop``).
-FALLBACK_MODEL = "nvidia/nemotron-3-super-120b-a12b:free"
+#: OWNER DIRECTIVE (MODEL-DEFAULT, 2026-08-14): the system default is the
+#: operator's Anthropic Pro subscription, NEVER OpenRouter. So this is a bare
+#: ``claude-*`` id (``resolve_provider`` -> ``"anthropic"``) — the cheapest,
+#: always-served tier, which bounds a runaway retry and keeps the un-chosen
+#: system-default one-retry on the SAME provider as its primary (opus -> haiku).
+#: OpenRouter is reached ONLY via an explicit per-agent slash-model pick, never
+#: as a default or automatic fallback.
+#:
+#: NOTE — this is DISTINCT from the ADMIN-ONLY OpenRouter free-model rescue
+#: (:data:`_DEFAULT_ADMIN_FREE_FALLBACK_MODELS`, the nvidia ``:free`` pair): that
+#: rescue is env-gated, admin-scoped, and engages only on an HTTP 402
+#: insufficient-credits signal — it does NOT read this constant.
+FALLBACK_MODEL = "claude-haiku-4-5"
+
+#: Per-tier system-default model ids, applied when ``AETHER_MODEL_<TIER>`` is
+#: unset so behaviour is correct WITHOUT env too (the served ``.env`` flip is a
+#: documented config edit applied at land time; these code defaults must agree
+#: with it). Every id is a bare ``claude-*`` the operator's Anthropic
+#: subscription serves (MODEL-DEFAULT-SCOUT D1, == the app's static anthropic
+#: catalog): reasoning/heavy -> opus-class, structured -> sonnet-class,
+#: fast/light -> haiku-class. No tier default is ever an OpenRouter id.
+_DEFAULT_MODEL_BY_TIER = {
+    "REASONING": "claude-opus-4-8",
+    "HEAVY": "claude-opus-4-8",
+    "STRUCTURED": "claude-sonnet-4-6",
+    "FAST": "claude-haiku-4-5",
+    "LIGHT": "claude-haiku-4-5",
+}
 
 
 def get_fallback_model() -> str:
-    """Fallback model id, overridable so non-OpenRouter providers can set one."""
+    """Fallback model id (bare ``claude-*`` by default), env-overridable."""
     return os.environ.get("AETHER_MODEL_FALLBACK", FALLBACK_MODEL)
 
 
@@ -640,6 +661,26 @@ _accumulated_usage: contextvars.ContextVar[dict[str, int] | None] = contextvars.
     "aether_llm_accumulated_usage", default=None
 )
 
+#: WHY the run moved off its primary model, when it did — the third sibling of
+#: ``_last_served_model`` / ``_accumulated_usage``, on the same lifecycle.
+#:
+#: Why it exists (R-5): a served-model substitution is already recorded and
+#: correctly costed, and is invisible to the user. Rendering "served by fallback"
+#: without a reason would just move the mystery, so the reason is PUBLISHED BY
+#: THE MECHANISM THAT ENGAGED — never inferred later from a model id, which
+#: could not tell an admin credit rescue from a timeout.
+#:
+#: Two-phase on purpose. ``_staged`` holds the reason the moment an attempt
+#: fails; it is PROMOTED to ``_last_fallback_reason`` only when a LATER model
+#: actually succeeds. A chain that fails outright therefore publishes nothing —
+#: there was no fallback, only a failure, and the caller already reports that.
+_staged_fallback_reason: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "aether_llm_staged_fallback_reason", default=None
+)
+_last_fallback_reason: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "aether_llm_last_fallback_reason", default=None
+)
+
 
 @contextmanager
 def served_model_capture() -> Iterator[None]:
@@ -668,11 +709,15 @@ def served_model_capture() -> Iterator[None]:
     """
     model_token = _last_served_model.set(None)
     usage_token = _accumulated_usage.set(None)
+    staged_token = _staged_fallback_reason.set(None)
+    reason_token = _last_fallback_reason.set(None)
     try:
         yield
     finally:
         _last_served_model.reset(model_token)
         _accumulated_usage.reset(usage_token)
+        _staged_fallback_reason.reset(staged_token)
+        _last_fallback_reason.reset(reason_token)
 
 
 def _accumulate_usage(chars_in: int, chars_out: int) -> None:
@@ -696,6 +741,41 @@ def get_last_served_model() -> str | None:
     successful live call in the active :func:`served_model_capture` scope, or
     ``None`` when nothing was observed (see that function's contract)."""
     return _last_served_model.get()
+
+
+def _stage_fallback_reason(failed_model: str, exc: BaseException) -> None:
+    """Note WHY ``failed_model`` was abandoned, pending a later success.
+
+    The text names the model that failed and the CLASS the failure was already
+    classified as by ``classify_llm_failure`` — no new taxonomy, no provider
+    payload (which could carry account detail), no secret. It becomes a
+    user-visible chip, so it says what happened and nothing more.
+    """
+    try:
+        failure_class = classify_llm_failure(exc)
+    except Exception:  # noqa: BLE001 — classification must never break a run
+        failure_class = "unknown"
+    _staged_fallback_reason.set(
+        f"primary model {failed_model} was unavailable ({failure_class})"
+    )
+
+
+def _promote_fallback_reason() -> None:
+    """A later model succeeded: the staged reason is now a real fallback."""
+    staged = _staged_fallback_reason.get()
+    if staged:
+        _last_fallback_reason.set(staged)
+
+
+def get_last_fallback_reason() -> str | None:
+    """Why the active :func:`served_model_capture` scope ended up on a model
+    other than its primary, or ``None`` when no fallback engaged.
+
+    ``None`` also covers "the whole chain failed" — nothing was served, so
+    nothing fell back. Callers MUST treat ``None`` as "no reason observed" and
+    never invent one (R-5: the fields exist to remove a mystery, not to move it).
+    """
+    return _last_fallback_reason.get()
 
 
 def get_accumulated_usage() -> dict[str, int] | None:
@@ -745,11 +825,15 @@ def get_model(tier: str = "REASONING") -> str:
     derived purely from the resolved model id (:func:`resolve_provider`), so the
     user's choice can never cross the anthropic/openrouter billing boundary.
     """
-    if tier.upper() in _USER_OVERRIDABLE_TIERS:
+    tier_key = tier.upper()
+    if tier_key in _USER_OVERRIDABLE_TIERS:
         override = _user_model_context.get()
         if override:
             return override
-    return os.environ.get(f"AETHER_MODEL_{tier.upper()}", FALLBACK_MODEL)
+    return os.environ.get(
+        f"AETHER_MODEL_{tier_key}",
+        _DEFAULT_MODEL_BY_TIER.get(tier_key, FALLBACK_MODEL),
+    )
 
 
 #: Env vars ``_call_live`` checks for a usable API key, in the exact
@@ -870,11 +954,54 @@ class ProviderCredentialResolution:
     source: str             # 'database' | 'environment'
 
 
-def resolve_credential(provider: str) -> "ProviderCredentialResolution | None":
+#: OPERATOR-SCOPED agent keys (ADR-AGI-3 Decision 3 / U-AGI F7). An agent named
+#: here is the OPERATOR's own role — today the in-app Supervisor — not a
+#: subscriber's content generation. Its credential resolution is deliberately
+#: DIFFERENT in both directions, and both are enforced in
+#: :func:`resolve_user_credential`:
+#:
+#: * it consumes ONLY the operator-scoped slot (the deployment-wide
+#:   ``ProviderCredential`` row, then provider-scoped env). A subscriber's own
+#:   key is never reachable from it — that would bill the wrong party for the
+#:   operator's planning.
+#: * it is the ONE role permitted to consume the operator's SUBSCRIPTION row
+#:   (the owner's Anthropic Max/Pro session connected through the admin-gated
+#:   PKCE flow), because that binding is the operator mandate itself.
+#:
+#: Kept as DATA next to the resolver so the enforcement point and the rule are
+#: one thing. Pinned equal to ``routers.agents._ROLE_MODEL_BACKENDS`` by a test,
+#: so a new role cannot be assigned a model without also being scoped here.
+OPERATOR_SCOPED_AGENT_KEYS = frozenset({"supervisor"})
+
+#: Auth modes that identify a CONSUMER-SUBSCRIPTION credential rather than a
+#: metered API key. ``oauth_token`` is the live one (a pasted Claude Code token
+#: or the admin PKCE session); ``subscription_oauth`` is the legacy, already
+#: unusable form. These name the credentials the ``allow_operator_subscription``
+#: wall can scope OFF (:func:`resolve_credential`).
+#:
+#: MODEL-DEFAULT reconciliation (OWNER DIRECTIVE, 2026-08-14): the wall is
+#: RETAINED as a general capability, but user-content generation is NO LONGER
+#: walled off from the operator's subscription row — that subscription IS the
+#: intended system default ("the system default must be anthropic pro subs
+#: quota"). A single subscriber can no longer drain it because every metered run
+#: is bounded per-user by the EXISTING quota + spend cap (agents._record_run),
+#: not by a credential wall. Only OpenRouter stays user-choice-only.
+_SUBSCRIPTION_AUTH_MODES = frozenset({"oauth_token", "subscription_oauth"})
+
+
+def resolve_credential(
+    provider: str, *, allow_operator_subscription: bool = True
+) -> "ProviderCredentialResolution | None":
     """Resolve ``provider``'s credential: DB row FIRST, then legacy env fallback.
 
     Returns ``None`` when neither exists — the caller must then raise an honest,
     provider-named error and must NOT reroute to the other provider.
+
+    ``allow_operator_subscription`` (default True — every pre-existing caller is
+    unchanged) is the F8 wall: pass ``False`` and a deployment-wide row holding a
+    CONSUMER SUBSCRIPTION token is skipped, falling through to the env fallback
+    and then to an honest ``None``. A deployment-wide API KEY is untouched by
+    this: that is metered API billing and stays exactly as it shipped.
     """
     # 1. Encrypted DB credential (the in-UI configured path) wins.
     try:
@@ -889,9 +1016,16 @@ def resolve_credential(provider: str) -> "ProviderCredentialResolution | None":
         row = None
     if row and row.get("secret"):
         auth_mode = row.get("authMode") or "api_key"
+        if not allow_operator_subscription and auth_mode in _SUBSCRIPTION_AUTH_MODES:
+            logger.info(
+                "operator subscription credential for '%s' is not available to "
+                "user-content generation; falling through to a provider-scoped "
+                "source", provider,
+            )
+            row = None
         # A pre-existing subscription_oauth row is no longer usable (GAP-AUTH-001):
         # skip it and fall through to the env fallback / honest no-credential.
-        if _resolution_is_supported(provider, auth_mode):
+        elif _resolution_is_supported(provider, auth_mode):
             return ProviderCredentialResolution(
                 provider=provider,
                 auth_mode=auth_mode,
@@ -1063,7 +1197,31 @@ def resolve_user_credential(
     Steps 3–4 are delegated to :func:`resolve_credential` so the legacy path is
     unchanged; passing ``user_id=None`` makes this function behave EXACTLY like
     ``resolve_credential`` (backward compatibility).
+
+    STRUCTURAL SEPARATION (U-AGI F7/F8, ADR-AGI-3 Decision 3). Two rules are
+    enforced here, and here only, because this is the one seam every live call
+    passes through:
+
+    * **F7** — an OPERATOR-SCOPED role (:data:`OPERATOR_SCOPED_AGENT_KEYS`)
+      resolves ONLY the operator slot: steps 1 and 2 are skipped entirely, so a
+      subscriber's own key can never fund the operator's planning, and an empty
+      operator slot is an honest ``None`` rather than a silent substitution.
+    * **F8** — everything else is USER-CONTENT generation. It resolves the user's
+      OWN credential first (steps 1-2); with none, it reaches the deployment-wide
+      row (step 3). MODEL-DEFAULT reconciliation (OWNER DIRECTIVE, 2026-08-14):
+      that row — the operator's Anthropic Pro subscription — IS the intended
+      system default for user-content ("the system default must be anthropic pro
+      subs quota"), so the P1-A hard wall that returned ``None`` here is lifted.
+      No single subscriber can drain it: every metered run is bounded per-user by
+      the EXISTING quota + spend cap (``agents._record_run``), which fires BEFORE
+      the model call regardless of which provider serves it. OpenRouter is NOT
+      reachable from this path — it is per-agent user-choice only.
+
+    Both rules are one-directional and neither introduces a new provider path:
+    the no-cross-provider invariant is untouched.
     """
+    if agent_key in OPERATOR_SCOPED_AGENT_KEYS:
+        return resolve_credential(provider)
     if user_id:
         # Refresh-before-expiry hook (ML-agents-cred-002, ADR-ML-2a DECISION-1b).
         # When a deployment-wide Anthropic subscription OAuth session exists and
@@ -1122,8 +1280,48 @@ def resolve_user_credential(
                 provider, got["authMode"], got["secret"],
                 got.get("baseUrl"), "user_credential",
             )
-    # 3 + 4. Deployment-wide DB row, then legacy env (unchanged legacy path).
+    # 3 + 4. Deployment-wide DB row, then legacy env. This branch is USER-CONTENT
+    # generation by definition (an operator role returned above). MODEL-DEFAULT
+    # reconciliation (OWNER DIRECTIVE, 2026-08-14): the operator's Anthropic
+    # subscription IS the intended system default here — the P1-A wall that
+    # scoped it OFF is lifted, and a runaway is bounded per-user by the quota +
+    # spend cap in ``agents._record_run`` (which fires before the model call),
+    # not by withholding the credential. OpenRouter is never reached from here.
     return resolve_credential(provider)
+
+
+def _is_operator_scoped_run() -> bool:
+    """Whether the ACTIVE run belongs to an operator-scoped role (F7).
+
+    Read from the same ``user_credential_context`` the credential resolver
+    reads, so the model chain and the credential can never disagree about whose
+    run this is.
+    """
+    ctx = _user_cred_context.get()
+    if ctx is None:
+        return False
+    return ctx[1] in OPERATOR_SCOPED_AGENT_KEYS
+
+
+def operator_fallback_chain() -> tuple[str, ...]:
+    """The operator role's ordered fallback models, from configuration.
+
+    ADR-AGI-3 Decision 3 binds the Supervisor to the operator's Anthropic
+    credential and allows a fallback chain (OpenRouter → Abacus → Google) ONLY
+    on quota/credit exhaustion. The ORDER is an operator decision, so it lives in
+    ``AETHER_OPERATOR_FALLBACK_MODELS`` (comma-separated model ids, in order)
+    rather than in source — and each id routes through the unchanged
+    :func:`resolve_provider`, so the billing separation the chain crosses is the
+    same one every other model id crosses.
+
+    Empty by default. An unconfigured chain means the operator role fails
+    honestly on its primary rather than being rerouted onto a payer nobody
+    chose, and an empty string is the kill switch.
+    """
+    raw = os.environ.get("AETHER_OPERATOR_FALLBACK_MODELS")
+    if not raw:
+        return ()
+    return tuple(part.strip() for part in raw.split(",") if part.strip())
 
 
 #: How long a subscription-quota cooldown lasts after a 429 (env-overridable).
@@ -2559,12 +2757,29 @@ class LLMClient:
                         system, user, model=attempt_model, temperature=temperature,
                         max_seconds=attempt_seconds, **shaping,
                     )
-                except QuotaExhaustedError:
+                except QuotaExhaustedError as exc:
                     # Subscription quota is exhausted — NEVER fall back to a
                     # fixture or another model/credential (that would fake
                     # success or shift the bill). Propagate so the router
                     # returns an honest 429.
-                    raise
+                    #
+                    # ONE exception, and it shifts no user's bill: an
+                    # OPERATOR-SCOPED run (ADR-AGI-3 Decision 3) is spending the
+                    # operator's OWN credential, and exhausting it is precisely
+                    # the signal its configured chain exists for. The next entry
+                    # is still resolved through the same operator slot, still
+                    # billed to the operator, and still recorded as a served-model
+                    # substitution — never silent.
+                    if not (_is_operator_scoped_run() and idx + 1 < len(chain)):
+                        raise
+                    last_error = exc
+                    _stage_fallback_reason(attempt_model, exc)
+                    logger.info(
+                        "operator chain: %s is out of quota (prompt=%s) — "
+                        "continuing with the configured next model",
+                        attempt_model, prompt_name,
+                    )
+                    break
                 except LLMCircuitOpenError:
                     # CRITICAL-3: the breaker is already open for this
                     # user+provider. Walking the rest of the chain would just
@@ -2577,6 +2792,19 @@ class LLMClient:
                         "LLM live call failed (model=%s, prompt=%s): %s",
                         attempt_model, prompt_name, exc,
                     )
+                    # ADR-AGI-3 Decision 3: the OPERATOR chain advances on
+                    # EXHAUSTION SIGNALS ONLY. A 404/5xx/timeout is a failure OF
+                    # the operator's chosen model, and walking to the next
+                    # provider for it would be exactly the silent substitution
+                    # ADR-ML-3 forbids — so the chain ends here and the honest
+                    # error is raised. Reachable only for an operator-scoped
+                    # run; every user run's behaviour is byte-for-byte unchanged.
+                    if _is_operator_scoped_run() and classify_llm_failure(exc) != (
+                        LLM_FAILURE_INSUFFICIENT_CREDITS
+                    ):
+                        chain = chain[: idx + 1]
+                        break
+                    _stage_fallback_reason(attempt_model, exc)
                     if isinstance(exc, InsufficientCreditsError):
                         free_chain_models.update(
                             self._extend_chain_with_admin_free_models(
@@ -2616,6 +2844,12 @@ class LLMClient:
                             "%s — retrying", attempt_model, prompt_name, exc,
                         )
                         continue  # bounded same-model re-draft, then next model
+                # A LATER model served this call, so the staged reason is now a
+                # real fallback engagement rather than one more failed attempt
+                # (R-5). Published here, at the only point that knows both that
+                # the primary was abandoned AND that something else worked.
+                if idx > 0:
+                    _promote_fallback_reason()
                 # Record only if missing so curated replay fixtures are
                 # never clobbered by variable live output.
                 if not self._fixture_path(prompt_name, fixture_key).is_file():
@@ -2729,10 +2963,25 @@ class LLMClient:
         reserved quota refunded by the router) instead of a fake success built
         from the hardcoded fallback the user never picked. The un-chosen
         SYSTEM-DEFAULT path keeps its existing one-retry resilience.
+
+        OPERATOR ROLE (ADR-AGI-3 Decision 3): a run bound to an operator-scoped
+        role gets the CONFIGURED operator chain appended after its primary —
+        configuration of this same machinery, not a new provider layer. Two
+        properties fall straight out of building the chain per call: the primary
+        (the operator's Anthropic binding) leads EVERY invocation, so the
+        auto-return the ADR requires is structural rather than a timer; and an
+        unconfigured chain is empty, so the default behaviour is an honest
+        failure rather than a reroute onto a payer nobody chose.
         """
         user_chosen = _user_model_context.get()
         if user_chosen is not None and primary == user_chosen:
             return [primary]
+        if _is_operator_scoped_run():
+            chain = [primary]
+            for model in operator_fallback_chain():
+                if model not in chain:
+                    chain.append(model)
+            return chain
         fallback = get_fallback_model()
         return [primary] if primary == fallback else [primary, fallback]
 
