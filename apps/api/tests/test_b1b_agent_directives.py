@@ -442,12 +442,24 @@ class TestInjectionSeam:
         )
         params = _with_quality_policy(test_user_id, {}, agent_key="tailor")
         run = AgentRunRepository().start(test_user_id, "tailor", params)
-        assert run["metricSnapshot"] is not None
-        assert "directives" in run["metricSnapshot"], (
+        # AgentRunRepository.start()'s own RETURNING clause is the legacy
+        # ``_COLUMNS`` projection (deliberately NOT widened — see
+        # ``last_policy_run_by_agent``'s docstring) — read the policy columns
+        # back with a direct query, the same way a reader that needs them
+        # already does.
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    'SELECT "metricSnapshot" FROM "AgentRun" WHERE "id" = %s',
+                    (run["id"],),
+                )
+                metric_snapshot = cur.fetchone()[0]
+        assert metric_snapshot is not None
+        assert "directives" in metric_snapshot, (
             "AgentRun.metricSnapshot['directives'] missing — the "
             "run_policy_fields trap (§2.4) is not fixed"
         )
-        assert directive_id in run["metricSnapshot"]["directives"]["appliedIds"]
+        assert directive_id in metric_snapshot["directives"]["appliedIds"]
 
     def test_a_directive_store_failure_degrades_to_the_baseline_policy(
         self, client, test_user_id, monkeypatch  # noqa: ARG002
@@ -601,6 +613,7 @@ class TestSupervisorRulesStage:
                 test_user_id, proposal.agent_key, directive=proposal.directive,
                 rationale=proposal.rationale, metrics_cited=proposal.metrics_cited,
             )
+        assert proposals, "fixture metrics must trigger at least one proposal"
         active_after_first = {
             row["agentKey"]: row for row in repo.list_active(test_user_id)
         }
@@ -610,9 +623,9 @@ class TestSupervisorRulesStage:
         )
         assert proposals_again == []
         assert retired_again == []
-        # History unchanged — no new rows.
-        for agent_key in ("tailor", "coverLetter", "storyExtractor"):
-            assert len(repo.list_history(test_user_id, agent_key)) == 1
+        # History unchanged — no new rows for any agent that WAS proposed.
+        for proposal in proposals:
+            assert len(repo.list_history(test_user_id, proposal.agent_key)) == 1
 
     def test_a_recovered_tier_retires_the_directive_it_does_not_invert_it(self):
         from app.services.supervisor_rules import evaluate
@@ -667,6 +680,12 @@ def _seed_submitted_applications(user_id: str, *, count: int, interviews: int) -
     live DB read has a genuine signal to compute a tier from."""
     with get_connection() as conn:
         with conn.cursor() as cur:
+            cur.execute(
+                '''INSERT INTO "Resume" ("id","userId","sections","formatHash","updatedAt")
+                   VALUES (%s,%s,'{}','seedhash',NOW()) RETURNING "id"''',
+                (new_id(), user_id),
+            )
+            resume_id = cur.fetchone()[0]
             for i in range(count):
                 job_id = new_id()
                 cur.execute(
@@ -685,9 +704,9 @@ def _seed_submitted_applications(user_id: str, *, count: int, interviews: int) -
                 status = "interview" if i < interviews else "submitted"
                 cur.execute(
                     '''INSERT INTO "Application"
-                       ("id","userId","jobId","status","createdAt","updatedAt")
-                       VALUES (%s,%s,%s,%s::"ApplicationStatus",NOW(),NOW())''',
-                    (app_id, user_id, job_id, status),
+                       ("id","userId","jobId","resumeId","status","createdAt","updatedAt")
+                       VALUES (%s,%s,%s,%s,%s::"ApplicationStatus",NOW(),NOW())''',
+                    (app_id, user_id, job_id, resume_id, status),
                 )
         conn.commit()
 

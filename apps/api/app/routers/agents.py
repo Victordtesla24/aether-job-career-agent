@@ -988,7 +988,10 @@ def _record_run(
     # U-AX: idempotent — ``_dispatch`` has normally stamped the policy already;
     # this covers the direct ``_record_run`` callers (the pipeline's supervisor
     # and matcher nodes) so EVERY AgentRun row carries the tier it ran under.
-    params = _with_quality_policy(user_id, params)
+    # ``agent_name`` is already canonical here (every caller passes a real
+    # backend key, never an alias), so it doubles directly as the B1b
+    # directive-resolution key.
+    params = _with_quality_policy(user_id, params, agent_key=agent_name)
     runs = AgentRunRepository()
     audit, provider = _billing_audit(user_id, agent_name)
     if system_run or skip_quota:
@@ -2193,7 +2196,50 @@ _RUNNABLE_BACKENDS = frozenset(
 )
 
 
-def _with_quality_policy(user_id: str, params: dict[str, Any]) -> dict[str, Any]:
+#: Alternate/legacy spellings ``_agent_callable`` accepts for a canonical
+#: backend name (B1b, ORCH-B1-BLUEPRINT-2026-08-14.md §4.2). The directive
+#: seam needs the CANONICAL agent key BEFORE ``_agent_callable`` runs —
+#: ``_dispatch`` resolves the policy first so tailor/coverLetter's knobs are
+#: computed from the ALREADY-amended policy (the U-AX ordering this module
+#: has always relied on), so canonicalizing name->key cannot itself call
+#: ``_agent_callable``. This is a plain lookup table, kept in sync BY HAND
+#: with the ``if name in (...)`` aliases below it — an unrecognized alias
+#: falls through to ``name`` unchanged, which simply resolves zero directives
+#: (the same honest degrade an unset ``agent_key`` already produces), never a
+#: wrong dispatch: ``_agent_callable`` remains the sole source of truth for
+#: WHICH agent actually runs.
+_AGENT_ALIASES: dict[str, str] = {
+    "fit-scorer": "fitScorer",
+    "cover-letter": "coverLetter",
+    "story-extractor": "storyExtractor",
+    "job-matching": "matcher",
+    "jobMatching": "matcher",
+    "email-agent": "emailAgent",
+    "email": "emailAgent",
+    "compliance-agent": "compliance",
+    "salary-intelligence": "salaryIntelligence",
+    "market-trends": "marketTrends",
+    "learning-feedback": "learningFeedback",
+    "company-research": "companyResearch",
+    "interview-prep": "interviewPrep",
+    "recruiter-outreach": "recruiterOutreach",
+    "reference-agent": "reference",
+    "sentiment-analysis": "sentimentAnalysis",
+    "scheduling-agent": "scheduling",
+    "notification-agent": "notification",
+    "submission-agent": "submission",
+}
+
+
+def _canonical_agent_key(name: str) -> str:
+    """Best-effort canonical backend key for a possibly-aliased ``name`` —
+    used ONLY to resolve which agent's directives apply, never for dispatch."""
+    return _AGENT_ALIASES.get(name, name)
+
+
+def _with_quality_policy(
+    user_id: str, params: dict[str, Any], *, agent_key: str | None = None
+) -> dict[str, Any]:
     """The SINGLE rigor-policy enforcement seam (U-AX build spec items 2-3).
 
     Resolves this user's deterministic rigor tier once and merges it into the
@@ -2215,6 +2261,14 @@ def _with_quality_policy(user_id: str, params: dict[str, Any]) -> dict[str, Any]
     residual (import/programming) case by leaving params untouched, which
     persists NULL columns — "no policy recorded" — rather than a fabricated
     tier.
+
+    B1b (ORCH-B1-BLUEPRINT-2026-08-14.md §4.2): after resolving the baseline
+    policy, any ACTIVE ``AgentDirective`` for ``agent_key`` amends it via
+    ``app.services.agent_directives.effective_policy`` — inside the SAME
+    try/except, so a directive-store failure degrades to the baseline policy
+    exactly as a policy-resolution failure does. ``agent_key=None`` resolves
+    NO directives (never "all of them") — the honest degrade for a caller
+    that cannot yet name the agent.
     """
     if isinstance(params.get("qualityPolicy"), dict):
         return params
@@ -2225,6 +2279,19 @@ def _with_quality_policy(user_id: str, params: dict[str, Any]) -> dict[str, Any]
     except Exception:  # noqa: BLE001
         logger.warning("rigor policy unresolved for user %s", user_id, exc_info=True)
         return params
+    if agent_key and agent_directives_enabled():
+        try:
+            from app.repositories.agent_directive import AgentDirectiveRepository
+            from app.services.agent_directives import effective_policy
+
+            directives = AgentDirectiveRepository().list_active(user_id, agent_key)
+            policy = effective_policy(policy, directives)
+        except Exception:  # noqa: BLE001
+            logger.warning(
+                "directive resolution failed for user %s agent %s — running on "
+                "the baseline policy",
+                user_id, agent_key, exc_info=True,
+            )
     return {**params, "qualityPolicy": policy}
 
 
@@ -2260,7 +2327,14 @@ def _dispatch(
     carries the caller's (``_pipeline_core``'s)."""
     # U-AX: resolve the rigor tier BEFORE binding the callable, so the agent
     # receives the knobs and the AgentRun row records the very same policy.
-    params = _with_quality_policy(user_id, params)
+    # B1b: the CANONICAL agent key is needed for directive resolution here —
+    # ``name`` may be an alias (e.g. "cover-letter"), and canonicalizing it
+    # cannot itself call ``_agent_callable`` (that would compute tailor/
+    # coverLetter's knobs from the policy BEFORE directives amend it, exactly
+    # the ordering bug this seam exists to prevent) — see ``_canonical_agent_key``.
+    params = _with_quality_policy(
+        user_id, params, agent_key=_canonical_agent_key(name)
+    )
     canonical, fn = _agent_callable(user_id, name, params)
     return _record_run(
         user_id, canonical, params, fn,
@@ -2342,6 +2416,31 @@ def async_generation_enabled() -> bool:
     ).strip().lower() not in _ASYNC_OFF
 
 
+#: B1b reversibility (ORCH-B1-BLUEPRINT-2026-08-14.md §9.1, ADR-AGI-2's
+#: "Reversibility" clause): the global directive-issuance/application kill
+#: switch. Code default OFF, same convention as ``_ASYNC_OFF`` above.
+_DIRECTIVES_OFF = frozenset({"false", "0", "no", "off", ""})
+
+
+def agent_directives_enabled() -> bool:
+    """Whether B1b directives currently AMEND agent policy.
+
+    Code default OFF; a deployer flips ``AETHER_AGI_DIRECTIVES_ENABLED=true``
+    in ``.env`` to turn amendment on. When OFF, ``_with_quality_policy`` never
+    calls ``effective_policy`` — every run gets the baseline tier policy
+    unchanged — but this does NOT stop the Supervisor's rules stage from
+    evaluating and recording directives (``POST /agents/directives/evaluate``
+    still writes history): ADR-AGI-2's reversibility clause pauses
+    APPLICATION ("agents then run on charter defaults"); history stays
+    readable and displayed the whole time, which is what lets a deployer
+    re-enable amendment later without having lost the audit trail. Read via
+    ``os.environ`` on every call so a hot env change takes effect immediately.
+    """
+    return os.environ.get(
+        "AETHER_AGI_DIRECTIVES_ENABLED", "false"
+    ).strip().lower() not in _DIRECTIVES_OFF
+
+
 def _get_arq_pool():
     """Seam for the ARQ enqueue pool (patched to a FakeArqPool in tests)."""
     from app.workers.queue import get_arq_pool
@@ -2400,8 +2499,11 @@ def _enqueue_single_agent(
     # U-AX: stamp the rigor policy onto the params BEFORE they are persisted to
     # both the AgentRun row and the BackgroundJob payload, so the ARQ worker
     # replays the exact policy this enqueue resolved (never a fresh one that
-    # could differ by the time the job is picked up).
-    params = _with_quality_policy(user_id, params)
+    # could differ by the time the job is picked up). ``agent_key`` here is
+    # already canonical (every caller passes a real backend key, and D.524's
+    # generic-route caller resolves ``canonical`` via ``_agent_callable``
+    # before reaching this function — see ``run_named_agent``).
+    params = _with_quality_policy(user_id, params, agent_key=agent_key)
     runs = AgentRunRepository()
     audit, provider = _billing_audit(user_id, agent_key)
     if system_run:

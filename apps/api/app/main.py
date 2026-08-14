@@ -29,6 +29,7 @@ from app.rate_limit import (
 from app.redaction import redact_validation_errors
 from app.routers import (
     admin,
+    agent_directives,
     agents,
     analytics,
     answer_bank,
@@ -420,6 +421,16 @@ def create_app() -> FastAPI:
         max_calls=_env_int("AETHER_SCOUT_SYNC_MAX_RUNS", 3),
         window_seconds=float(_env_int("AETHER_SCOUT_SYNC_WINDOW_SECONDS", 600)),
     )
+    # B1b (ORCH-B1-BLUEPRINT-2026-08-14.md §5.2): POST /agents/directives/
+    # evaluate is $0 and deterministic, but still does real DB reads/writes
+    # per call — a per-user cooldown caps a button-mash from doing needless
+    # work, mirroring the scout-sync limiter's shape immediately above.
+    app.state.agent_directives_evaluate_rate_limiter = SlidingWindowRateLimiter(
+        max_calls=_env_int("AETHER_AGI_DIRECTIVES_EVALUATE_MAX_RUNS", 6),
+        window_seconds=float(
+            _env_int("AETHER_AGI_DIRECTIVES_EVALUATE_WINDOW_SECONDS", 300)
+        ),
+    )
     # Concurrent-SSE-stream admission control (GMV4-sse-005, governance §5e).
     # Same per-app ownership rationale as the limiters above. Each open
     # agent-run stream re-reads its row on its own short-lived connection, so
@@ -476,6 +487,12 @@ def create_app() -> FastAPI:
     app.include_router(google_oauth.router, prefix="/auth", tags=["auth"])
     app.include_router(jobs.router, prefix="/jobs", tags=["jobs"])
     app.include_router(agents.router, prefix="/agents", tags=["agents"])
+    # B1b (ORCH-B1-BLUEPRINT-2026-08-14.md §5.2): a SEPARATE small router at
+    # the SAME "/agents" prefix, deliberately not added into agents.router —
+    # see agent_directives.py's module docstring for why.
+    app.include_router(
+        agent_directives.router, prefix="/agents", tags=["agents", "directives"]
+    )
     app.include_router(resumes.router, prefix="/resumes", tags=["resumes"])
     app.include_router(approvals.router, prefix="/approvals", tags=["approvals"])
     app.include_router(cover_letters.router, prefix="/cover-letters", tags=["cover-letters"])

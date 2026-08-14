@@ -303,6 +303,14 @@ def run_policy_fields(
     and async dispatch paths, so whatever governed the run is exactly what is
     persisted here — never a second, independently recomputed verdict that
     could disagree with the one the agent actually obeyed.
+
+    B1b (ORCH-B1-BLUEPRINT-2026-08-14.md §2.4): ``directives`` is the SIXTH
+    key, added to this otherwise-unchanged five-key whitelist. Without it, an
+    active ``AgentDirective``'s trace (which directive(s) applied, what was
+    clamped, what was rejected — all stamped onto ``policy["directives"]`` by
+    ``app.services.agent_directives.effective_policy``) would be silently
+    dropped on its way to the database: the run would OBEY the directive but
+    record no trace of it, which is the single highest-risk detail in B1b.
     """
     policy = (input_ or {}).get("qualityPolicy")
     if not isinstance(policy, dict):
@@ -314,6 +322,7 @@ def run_policy_fields(
         "knobs": policy.get("knobs"),
         "metrics": policy.get("metrics"),
         "thresholds": policy.get("thresholds"),
+        "directives": policy.get("directives"),
     }
     return (str(tier) if tier else None), snapshot
 
