@@ -19,6 +19,9 @@ from pydantic import BaseModel, Field, StrictBool, ValidationError
 
 from app.middleware.auth import AdminUser
 from app.repositories import admin as admin_repo
+from app.repositories.user import UserRepository, validate_password_policy
+from app.security import hash_password
+from app.services import entitlements
 
 router = APIRouter()
 
@@ -155,6 +158,251 @@ def admin_unsuspend_user(
         ip=_client_ip(request),
     )
     return {"userId": user_id, "suspended": suspended}
+
+
+# --------------------------------------------------------------------------- #
+# User management (ADMIN-FULL) — entitlement, credentials, Stripe-linked actions
+#
+# USER MANDATE (2026-08-14): "admin users can change plans, subscriptions,
+# username/password of ANY user". Every route below is ``AdminUser``-gated and
+# every mutation appends an ``AdminAuditLog`` row with actor, target, action and
+# before->after for NON-SECRET fields. A password change logs the EVENT and never
+# any value — audit is universal, secrets are not audit material.
+#
+# BILLING INVARIANTS (sacred): a plan change here is an in-app ENTITLEMENT
+# override (immediate, Stripe-independent, and VISIBLY an override in this
+# response + the audit row). Where a real Stripe subscription exists, cancel and
+# refund route through the EXISTING billing service paths — this router never
+# hand-mutates billing state, so no-double-billing / refund-revoke / dunning
+# grace stay exactly as they were.
+# --------------------------------------------------------------------------- #
+
+
+async def _parse_json_object(request: Request) -> dict[str, Any]:
+    """Decode a JSON object body AFTER ``AdminUser`` has resolved.
+
+    Same body-before-auth hazard (and the same fix) as ``_parse_settings_body``:
+    a Pydantic body parameter would make FastAPI decode the body BEFORE
+    dependencies, so an anonymous caller could see a 422 instead of a 401.
+    """
+    try:
+        raw = await request.json()
+    except Exception:  # noqa: BLE001 — malformed / non-JSON / empty body
+        return {}
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY, "Request body must be an object."
+        )
+    return raw
+
+
+def _require_user(user_id: str) -> None:
+    if not admin_repo.user_exists(user_id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
+
+
+@router.post("/users/{user_id}/entitlement")
+async def admin_set_entitlement(
+    admin: AdminUser, user_id: str, request: Request
+) -> dict[str, Any]:
+    """Grant / replace / clear a user's in-app entitlement override.
+
+    Body ``{"kind": "comp"|"tier"|"unlimited"|"none", "planId"?, "note"?}``.
+    ``none`` clears the override. ``comp``/``tier`` require a real plan id and
+    apply that plan's ceiling to ``UsageQuota`` IMMEDIATELY — while leaving the
+    ``Subscription`` row (the Stripe truth) untouched, so a paying customer's
+    billing record is never silently contradicted.
+    """
+    body = await _parse_json_object(request)
+    _require_user(user_id)
+    kind = str(body.get("kind") or "").strip().lower()
+    before = entitlements.resolve(user_id).as_dict()
+
+    if kind in ("none", "clear", ""):
+        entitlements.clear_override(user_id)
+        after = entitlements.resolve(user_id).as_dict()
+        admin_repo.write_audit(
+            admin["id"],
+            "clear_entitlement_override",
+            target_type="user",
+            target_id=user_id,
+            detail={"before": before, "after": after},
+            ip=_client_ip(request),
+        )
+        return {"userId": user_id, "entitlement": after}
+
+    plan_id = body.get("planId")
+    note = body.get("note")
+    try:
+        entitlements.set_override(
+            user_id,
+            kind=kind,
+            plan_id=str(plan_id) if plan_id else None,
+            note=str(note) if note else None,
+            actor_id=admin["id"],
+        )
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+
+    after = entitlements.resolve(user_id).as_dict()
+    admin_repo.write_audit(
+        admin["id"],
+        "set_entitlement_override",
+        target_type="user",
+        target_id=user_id,
+        detail={"before": before, "after": after},
+        ip=_client_ip(request),
+    )
+    return {"userId": user_id, "entitlement": after}
+
+
+@router.post("/users/{user_id}/password")
+async def admin_set_password(
+    admin: AdminUser, user_id: str, request: Request
+) -> dict[str, Any]:
+    """Set a user's password on their behalf.
+
+    The value is validated against the SAME policy self-service registration
+    uses, hashed with the SAME hasher (``app.security.hash_password``), and
+    written through ``UserRepository.set_password`` — which stamps
+    ``passwordChangedAt`` and therefore invalidates every session token minted
+    before this moment (O-4). The plaintext is never logged, never echoed back,
+    and never written to the audit row: the audit records that the event
+    happened, not what it was.
+    """
+    body = await _parse_json_object(request)
+    _require_user(user_id)
+    new_password = body.get("newPassword")
+    if not isinstance(new_password, str) or not new_password:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY, "newPassword is required."
+        )
+    problems = validate_password_policy(new_password)
+    if problems:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "; ".join(problems))
+
+    UserRepository().set_password(user_id, hash_password(new_password))
+    admin_repo.write_audit(
+        admin["id"],
+        "set_user_password",
+        target_type="user",
+        target_id=user_id,
+        # NEVER the value — not the password, not the hash, not a prefix.
+        detail={"sessionsInvalidated": True},
+        ip=_client_ip(request),
+    )
+    return {"userId": user_id, "passwordChanged": True, "sessionsInvalidated": True}
+
+
+@router.post("/users/{user_id}/identity")
+async def admin_update_identity(
+    admin: AdminUser, user_id: str, request: Request
+) -> dict[str, Any]:
+    """Change a user's email / username / display name.
+
+    Both login identities are UNIQUE, so a collision is an honest 409 rather than
+    a silently-ignored write. The audit row carries the full before->after pair.
+    """
+    body = await _parse_json_object(request)
+    _require_user(user_id)
+    email = body.get("email")
+    username = body.get("username")
+    name = body.get("name")
+    if email is None and username is None and name is None:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "Provide at least one of email, username or name.",
+        )
+    if email is not None:
+        email = str(email).strip()
+        if "@" not in email or " " in email or len(email) < 3:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY, "email is not a valid address."
+            )
+    if username is not None:
+        username = str(username).strip()
+    if name is not None:
+        name = str(name).strip()
+
+    try:
+        before, after = admin_repo.update_user_identity(
+            user_id, email=email, username=username, name=name
+        )
+    except admin_repo.IdentityConflictError as exc:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, f"That {exc} is already taken."
+        ) from exc
+    except LookupError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found") from exc
+
+    admin_repo.write_audit(
+        admin["id"],
+        "update_user_identity",
+        target_type="user",
+        target_id=user_id,
+        detail={"before": before, "after": after},
+        ip=_client_ip(request),
+    )
+    return {"userId": user_id, "before": before, "after": after}
+
+
+@router.post("/users/{user_id}/subscription/cancel")
+async def admin_cancel_subscription(
+    admin: AdminUser, user_id: str, request: Request
+) -> dict[str, Any]:
+    """Cancel a user's REAL Stripe subscription through the billing service.
+
+    Body ``{"atPeriodEnd": true}`` (default) schedules cancellation at the end of
+    the paid period; ``false`` revokes immediately via the shared
+    ``_revoke_to_free`` handler. A user with no Stripe subscription gets an
+    honest 409 — the lever for that case is an entitlement override.
+    """
+    body = await _parse_json_object(request)
+    _require_user(user_id)
+    from app.routers.billing import perform_admin_cancel
+
+    at_period_end = body.get("atPeriodEnd", True)
+    if not isinstance(at_period_end, bool):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY, "atPeriodEnd must be a boolean."
+        )
+    return perform_admin_cancel(
+        actor_user_id=admin["id"],
+        target_user_id=user_id,
+        at_period_end=at_period_end,
+        ip=_client_ip(request),
+    )
+
+
+@router.post("/users/{user_id}/subscription/refund")
+async def admin_refund_subscription(
+    admin: AdminUser, user_id: str, request: Request
+) -> dict[str, Any]:
+    """Refund this user's latest paid charge via the EXISTING admin-refund path
+    (``billing.perform_admin_refund``) — same gateway calls, same
+    ``_revoke_to_free``, same audit action as ``POST /billing/admin/refund``."""
+    await _parse_json_object(request)
+    _require_user(user_id)
+    from app.routers.billing import perform_admin_refund
+
+    return perform_admin_refund(
+        actor_user_id=admin["id"], target_user_id=user_id, ip=_client_ip(request)
+    )
+
+
+@router.get("/users/{user_id}/audit")
+def admin_user_audit(
+    _admin: AdminUser,
+    user_id: str,
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+) -> dict[str, Any]:
+    """The append-only audit trail for ONE user (newest first)."""
+    return admin_repo.list_audit(
+        limit=limit, offset=offset, target_type="user", target_id=user_id
+    )
 
 
 # --------------------------------------------------------------------------- #

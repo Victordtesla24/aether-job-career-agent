@@ -63,12 +63,14 @@ export default function AdminUsersPage() {
           void load();
         }}
       >
+        {/* ADMIN-FULL: the backend's `q` filter also matches `username` (a real
+            login identity), so the hint below names all three fields it searches. */}
         <label className="flex flex-col text-xs text-aether-muted">
           Search
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="email or name"
+            placeholder="email, username or name"
             className="mt-1 w-56 rounded-md border border-white/10 bg-aether-bg px-3 py-2 text-sm text-aether-text placeholder:text-aether-muted-dim"
           />
         </label>

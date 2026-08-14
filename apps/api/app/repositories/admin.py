@@ -24,6 +24,8 @@ import os
 import sys
 from typing import Any, Optional
 
+from psycopg2.errors import UniqueViolation
+
 from app.db import (
     ensure_admin_user_columns,
     ensure_user_profile_columns,
@@ -433,14 +435,36 @@ def write_audit(
         conn.commit()
 
 
-def list_audit(limit: int = 50, offset: int = 0) -> dict[str, Any]:
-    """Paginated append-only audit log, newest first."""
+def list_audit(
+    limit: int = 50,
+    offset: int = 0,
+    *,
+    target_type: Optional[str] = None,
+    target_id: Optional[str] = None,
+) -> dict[str, Any]:
+    """Paginated append-only audit log, newest first.
+
+    ``target_type``/``target_id`` narrow the log to ONE subject (ADMIN-FULL: the
+    per-user audit trail the admin user panel renders). Both default to None, so
+    the existing platform-wide call is byte-identical to before.
+    """
     _ensure_admin_schema()
     limit = max(1, min(int(limit), 200))
     offset = max(0, int(offset))
+    where: list[str] = []
+    filter_params: list[Any] = []
+    if target_type:
+        where.append('a."targetType" = %s')
+        filter_params.append(target_type)
+    if target_id:
+        where.append('a."targetId" = %s')
+        filter_params.append(target_id)
+    where_sql = (" WHERE " + " AND ".join(where)) if where else ""
     with get_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute('SELECT count(*) FROM "AdminAuditLog"')
+            cur.execute(
+                f'SELECT count(*) FROM "AdminAuditLog" a{where_sql}', filter_params
+            )
             total = int(cur.fetchone()[0])
             # QA M-05: join the actor's display name/email so the UI can show
             # a human-readable actor instead of a raw CUID. LEFT JOIN keeps
@@ -449,9 +473,10 @@ def list_audit(limit: int = 50, offset: int = 0) -> dict[str, Any]:
                 'SELECT a."id",a."actorUserId",a."action",a."targetType",a."targetId",'
                 'a."detailJson",a."ip",a."createdAt",u."name" AS "actorName",'
                 'u."email" AS "actorEmail" FROM "AdminAuditLog" a '
-                'LEFT JOIN "User" u ON u."id" = a."actorUserId" '
+                'LEFT JOIN "User" u ON u."id" = a."actorUserId"'
+                f"{where_sql} "
                 'ORDER BY a."createdAt" DESC, a."id" DESC LIMIT %s OFFSET %s',
-                (limit, offset),
+                [*filter_params, limit, offset],
             )
             rows = rows_to_dicts(cur)
     entries = [
@@ -540,8 +565,14 @@ def list_users(
     where: list[str] = []
     params: list[Any] = []
     if query:
-        where.append('(u."email" ILIKE %s OR u."name" ILIKE %s)')
-        params.extend([f"%{query}%", f"%{query}%"])
+        # ADMIN-FULL: username is a real login identity (``get_by_username_or_email``),
+        # so an admin searching for the credential a user actually types must find
+        # them. ``ensure_user_profile_columns`` (called by ``_ensure_admin_schema``)
+        # guarantees the column exists on the older test schema.
+        where.append(
+            '(u."email" ILIKE %s OR u."name" ILIKE %s OR u."username" ILIKE %s)'
+        )
+        params.extend([f"%{query}%", f"%{query}%", f"%{query}%"])
     if plan:
         where.append('s."planId" = %s')
         params.append(plan)
@@ -560,7 +591,7 @@ def list_users(
     )
 
     sql = f'''
-        SELECT u."id", u."email", u."name", u."isAdmin", u."suspended",
+        SELECT u."id", u."email", u."name", u."username", u."isAdmin", u."suspended",
                u."createdAt", u."lastLoginAt",
                COALESCE(s."planId", 'free') AS plan, s."status" AS "subStatus",
                COALESCE(sp.spend, 0) AS spend, COALESCE(sp.runs, 0) AS runs
@@ -585,6 +616,7 @@ def _user_row(r: dict[str, Any]) -> dict[str, Any]:
         "id": r["id"],
         "email": r["email"],
         "name": r.get("name"),
+        "username": r.get("username"),
         "isAdmin": bool(r.get("isAdmin")),
         "suspended": bool(r.get("suspended")),
         "plan": r.get("plan"),
@@ -603,8 +635,8 @@ def get_user_detail(user_id: str) -> Optional[dict[str, Any]]:
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                'SELECT u."id", u."email", u."name", u."isAdmin", u."suspended",'
-                ' u."createdAt", u."lastLoginAt",'
+                'SELECT u."id", u."email", u."name", u."username", u."isAdmin",'
+                ' u."suspended", u."createdAt", u."lastLoginAt",'
                 ' COALESCE(s."planId", \'free\') AS plan, s."status" AS "subStatus",'
                 ' COALESCE(sp.spend,0) AS spend, COALESCE(sp.runs,0) AS runs'
                 ' FROM "User" u'
@@ -678,7 +710,112 @@ def get_user_detail(user_id: str) -> Optional[dict[str, Any]]:
         "spendUsd": round(float(r.get("spend") or 0), 6),
         "runCount": int(r.get("runs") or 0),
         "currency": "USD",
+        # ADMIN-FULL: the ONE resolver's verdict for THIS user, so the panel
+        # shows why they are (or are not) restricted — including an admin grant
+        # sitting VISIBLY on top of whatever the Subscription row says. Detail
+        # only, never the list: one resolve per page, not per row.
+        "entitlement": _entitlement_view(user_id),
     }
+
+
+def _entitlement_view(user_id: str) -> dict[str, Any]:
+    """The ONE resolver's verdict, in the admin panel's wire shape."""
+    from app.services import entitlements
+
+    return entitlements.resolve(user_id).as_dict()
+
+
+class IdentityConflictError(Exception):
+    """Raised when an admin identity change would collide with another account."""
+
+
+def update_user_identity(
+    user_id: str,
+    *,
+    email: Optional[str] = None,
+    username: Optional[str] = None,
+    name: Optional[str] = None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Change a user's login/display identity; return ``(before, after)``.
+
+    Uniqueness is enforced BEFORE the write (and again by the ``User_email_key`` /
+    ``User_username_key`` unique indexes, which turn a lost race into a
+    ``IdentityConflictError`` rather than a duplicate account). ``username`` is
+    matched case-insensitively because ``get_by_username_or_email`` resolves it
+    that way — otherwise "Bob" and "bob" would be two logins for one name.
+
+    Only the fields the caller passed are touched; ``None`` means "leave alone".
+    The returned pair is exactly what the audit row records (before -> after).
+    """
+    _ensure_admin_schema()
+    fields: dict[str, Any] = {}
+    if email is not None:
+        fields["email"] = email
+    if username is not None:
+        fields["username"] = username or None
+    if name is not None:
+        fields["name"] = name or None
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT "id","email","username","name" FROM "User" WHERE "id"=%s',
+                (user_id,),
+            )
+            rows = rows_to_dicts(cur)
+            if not rows:
+                raise LookupError(user_id)
+            before = {
+                "email": rows[0]["email"],
+                "username": rows[0].get("username"),
+                "name": rows[0].get("name"),
+            }
+            if "email" in fields:
+                cur.execute(
+                    'SELECT 1 FROM "User" WHERE "email"=%s AND "id"<>%s',
+                    (fields["email"], user_id),
+                )
+                if cur.fetchone():
+                    raise IdentityConflictError("email")
+            if fields.get("username"):
+                cur.execute(
+                    'SELECT 1 FROM "User" WHERE lower("username")=lower(%s)'
+                    ' AND "id"<>%s',
+                    (fields["username"], user_id),
+                )
+                if cur.fetchone():
+                    raise IdentityConflictError("username")
+            if fields:
+                assignments = ", ".join(f'"{col}"=%s' for col in fields)
+                try:
+                    cur.execute(
+                        f'UPDATE "User" SET {assignments}, "updatedAt"=now()'
+                        ' WHERE "id"=%s',
+                        (*fields.values(), user_id),
+                    )
+                except UniqueViolation as exc:  # lost race against a concurrent write
+                    # Name the FIELD, not the index: the message is shown to an
+                    # admin. ``constraint_name`` can be absent on some servers,
+                    # so fall back to the honest generic rather than "None".
+                    constraint = (exc.diag.constraint_name or "").lower()
+                    if "username" in constraint:
+                        field = "username"
+                    elif "email" in constraint:
+                        field = "email"
+                    else:
+                        field = "identity"
+                    raise IdentityConflictError(field) from exc
+            cur.execute(
+                'SELECT "email","username","name" FROM "User" WHERE "id"=%s',
+                (user_id,),
+            )
+            after_rows = rows_to_dicts(cur)
+        conn.commit()
+    after = {
+        "email": after_rows[0]["email"],
+        "username": after_rows[0].get("username"),
+        "name": after_rows[0].get("name"),
+    }
+    return before, after
 
 
 def spend_overview() -> dict[str, Any]:

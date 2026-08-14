@@ -790,7 +790,14 @@ def _spend_cap_breach(user_id: str) -> dict[str, Any] | None:
     "probably fine" here is exactly the silent bypass this fix removes.
     """
     from app.repositories.billing import UsageQuotaRepository
+    from app.services import entitlements
 
+    # ADMIN-FULL: the ONE resolver decides who has a ceiling at all. An admin
+    # (or an admin-granted unlimited entitlement) has none, so autopilot is never
+    # halted here for them — matching ``_record_run``, which would not raise the
+    # 429 this pre-check exists to anticipate.
+    if entitlements.unlimited(user_id):
+        return None
     quota = UsageQuotaRepository().get_or_create(user_id)
     if quota is None:
         return None

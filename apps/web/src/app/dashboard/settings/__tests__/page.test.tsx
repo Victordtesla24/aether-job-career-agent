@@ -477,6 +477,53 @@ describe("Settings billing reachable through the SubscriptionGate for a FREE acc
   });
 });
 
+describe("ADMIN-FULL — the Dashboard billing card for an owner/admin", () => {
+  // USER MANDATE (2026-08-14): "admins/owners have NO subscriptions or plans
+  // themselves". The server enforces no quota, cap or paywall against them
+  // (app/services/entitlements.py), so rendering "Pro 15/100" here would be a
+  // number nothing can ever enforce. `entitlement.unlimited` is that ONE
+  // server-side verdict echoed onto GET /billing/subscription — the UI mirrors
+  // it and never invents an exemption of its own.
+  const OWNER_SUBSCRIPTION = {
+    ...SUBSCRIPTION,
+    entitlement: { unlimited: true, entitled: true, source: "admin", isAdmin: true },
+  };
+
+  it("shows 'Owner — unlimited' with no quota counter, no price and no billing CTA", async () => {
+    fetchSettingsMock.mockResolvedValue(SETTINGS);
+    fetchCareerDataMock.mockResolvedValue(CAREER_DATA);
+    fetchSubscriptionMock.mockResolvedValue(OWNER_SUBSCRIPTION);
+    fetchPlansMock.mockResolvedValue(PLANS_RESPONSE);
+    render(<SettingsPage />);
+
+    await waitFor(() => screen.getByTestId("billing-owner-unlimited"));
+    expect(screen.getByTestId("billing-plan-name").textContent).toContain("Owner — unlimited");
+    // Nothing metered, nothing billed, nothing to upsell.
+    expect(screen.queryByTestId("billing-quota-runs")).toBeNull();
+    expect(screen.queryByTestId("billing-quota-spend")).toBeNull();
+    expect(screen.queryByTestId("billing-plan-price")).toBeNull();
+    expect(screen.queryByTestId("manage-subscription-btn")).toBeNull();
+    expect(screen.getByTestId("settings-billing").textContent).not.toMatch(/upgrade/i);
+  });
+
+  it("leaves a NON-admin's billing card exactly as it was (plan, quota, manage button)", async () => {
+    fetchSettingsMock.mockResolvedValue(SETTINGS);
+    fetchCareerDataMock.mockResolvedValue(CAREER_DATA);
+    fetchSubscriptionMock.mockResolvedValue({
+      ...SUBSCRIPTION,
+      entitlement: { unlimited: false, entitled: true, source: "plan", isAdmin: false },
+    });
+    fetchPlansMock.mockResolvedValue(PLANS_RESPONSE);
+    render(<SettingsPage />);
+
+    await waitFor(() => screen.getByTestId("billing-plan-name"));
+    expect(screen.getByTestId("billing-plan-name").textContent).toContain("Pro");
+    expect(screen.getByTestId("billing-quota-runs").textContent).toContain("100");
+    expect(screen.getByTestId("manage-subscription-btn")).toBeTruthy();
+    expect(screen.queryByTestId("billing-owner-unlimited")).toBeNull();
+  });
+});
+
 describe("SettingsPage — post-checkout success banner (PAY-R3-05)", () => {
   it("shows an 'activating' banner (never a fabricated success) when the subscription hasn't confirmed the upgrade yet, then flips to a real success message once it does", async () => {
     window.history.replaceState(null, "", "/dashboard/settings?checkout=success");
