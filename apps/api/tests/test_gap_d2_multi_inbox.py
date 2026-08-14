@@ -28,7 +28,6 @@ from typing import Any
 
 from app.db import get_connection, new_id
 from app.repositories.gmail_account import GmailAccountRepository
-from app.repositories.google_credential import GoogleCredentialRepository
 from app.services import google_oauth
 from app.services.gmail_service import ensure_email_thread_gmail_columns
 
@@ -393,9 +392,40 @@ def test_google_credential_untouched_after_gmailaccount_ensure(client):
     an altered ``GoogleCredential`` from an earlier (rejected) branch's run. What
     matters — and what production correctness depends on — is that THIS code path
     changes nothing about ``GoogleCredential``.
+
+    The legacy ``app.repositories.google_credential.GoogleCredentialRepository``
+    that used to own this table's DDL was deleted as dead code in MON-008 (0
+    production callers — the table already carried 0 rows in prod). This test
+    still needs the table to exist to exercise the invariant, so its DDL is
+    reproduced inline below, verbatim from the deleted module's
+    ``_ensure_table``.
     """
-    # Materialize the legacy table first (its own repo owns its DDL).
-    GoogleCredentialRepository()._ensure_table()
+    # Materialize the legacy table first (inline — see docstring above).
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT count(*) FROM information_schema.tables"
+                " WHERE table_name = 'GoogleCredential'"
+                " AND table_schema = ANY(current_schemas(false))"
+            )
+            row = cur.fetchone()
+            if not row or row[0] != 1:
+                cur.execute("SELECT pg_advisory_xact_lock(%s)", (7420240715,))
+                cur.execute(
+                    '''
+                    CREATE TABLE IF NOT EXISTS "GoogleCredential" (
+                        "userId"                text PRIMARY KEY,
+                        "googleEmail"           text,
+                        "refreshToken"          text NOT NULL,
+                        "accessToken"           text,
+                        "accessTokenExpiresAt"  timestamptz,
+                        "scopes"                text,
+                        "connectedAt"           timestamptz NOT NULL DEFAULT now(),
+                        "updatedAt"             timestamptz NOT NULL DEFAULT now()
+                    )
+                    '''
+                )
+        conn.commit()
 
     def _snapshot() -> tuple[list[str], list[tuple[str, str, str]]]:
         with get_connection() as conn:
