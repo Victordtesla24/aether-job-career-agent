@@ -125,6 +125,50 @@ function payloadKind(approval: Approval): string | undefined {
   return (approval.payload as { kind?: string }).kind;
 }
 
+/**
+ * True when APPROVING this request is itself the send — the queue must fire
+ * `POST /approvals/{id}/execute` for it, and until it does the request is
+ * "prepared only".
+ *
+ * MUST-FIX 1 (round-4 re-review): the gate used to be `type === "email_send"`
+ * alone, which routed by approval TYPE instead of by the application's
+ * resolved apply CHANNEL. An application whose posting publishes a genuine
+ * application address is queued as `application_submit` with
+ * `payload.kind = "submission"` (apps/api/app/services/application_submission.py
+ * `queue_submission_approval`, which returns `None` — no card at all — when no
+ * real recipient exists), and the SAME execute endpoint really transmits it
+ * (apps/api/app/routers/approvals.py `execute_gated_action` dispatches
+ * `application_submit` + `kind="submission"` to `_execute_application_submit`
+ * -> `transmit_application`). Approving one and never executing left the
+ * application flipped to `submitted` with nothing sent — the exact
+ * "prepared only" failure U5 exists to eliminate.
+ *
+ * The other `application_submit` kinds (`resume_tailor`, `cover_letter`)
+ * approve an ARTIFACT; the backend transmits nothing for them and says so
+ * (`transmitted: false`), so they must never be executed from here.
+ */
+export function sendsOnApprove(approval: Approval): boolean {
+  if (approval.type === "email_send") return true;
+  return approval.type === "application_submit" && payloadKind(approval) === "submission";
+}
+
+/**
+ * True for an approved request whose send never happened — the state a FAILED
+ * send leaves behind: the server releases its execution claim on any failure
+ * (`release_execution`), so `executionState` is back to `null` while the row
+ * stays `approved`.
+ *
+ * Deliberately excludes `running` (a send is in flight) and `interrupted` (a
+ * claim outlived its ceiling — the outcome is genuinely UNKNOWN, and the
+ * server answers 409 rather than risk a second send). Only the provably
+ * nothing-was-sent case gets a retry offered.
+ */
+export function needsSendRetry(approval: Approval): boolean {
+  return (
+    approval.status === "approved" && sendsOnApprove(approval) && !approval.executionState
+  );
+}
+
 /** One-line description for a queue card, e.g. "Application for Senior ML Engineer @ Canva". */
 export function summarize(approval: Approval): string {
   const details = parseApprovalPayload(approval);

@@ -12,6 +12,17 @@ export const ApprovalSchema = z.object({
   payload: z.record(z.unknown()),
   createdAt: z.string(),
   resolvedAt: z.string().nullish(),
+  /** Derived server-side from the two execution stamps (see
+   *  apps/api/app/repositories/approval.py `execution_state`):
+   *  `null` — no side-effect was ever recorded against this approval (never
+   *  claimed, or the claim was RELEASED because the send failed, which is
+   *  exactly the approved-but-unsent state the queue offers `Retry send` for);
+   *  `running` — a claim is in flight; `interrupted` — a claim outlived its
+   *  ceiling with no completion, so the outcome is genuinely unknown;
+   *  `executed` — the side-effect provably returned.
+   *  Parsed as a plain string, not an enum, so a state added server-side can
+   *  never take the whole approvals list down with a parse error. */
+  executionState: z.string().nullish(),
 });
 
 export type Approval = z.infer<typeof ApprovalSchema>;

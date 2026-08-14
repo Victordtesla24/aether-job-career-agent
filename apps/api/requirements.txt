@@ -59,6 +59,15 @@ stripe>=13.2,<14
 # the engine now raises/degrades honestly instead of substituting a fake
 # number — see ats_engine.SemanticScoringUnavailableError.
 sentence-transformers>=3.0
+# Real-browser application submission (U5b apply-executor). Headless Chromium
+# fills the employer's OWN application form with the user's stored profile
+# data + the tailored résumé PDF and screenshots the result as evidence —
+# there is no HTTP-level form forgery anywhere in that path. Imported lazily
+# (app/services/apply_executor.py) so an environment without the browser
+# degrades to an honest ApplyExecutorTransportError instead of failing at
+# import time. 1.61.0 is what is installed and verified on this VM, with the
+# chromium + chromium_headless_shell builds already in ~/.cache/ms-playwright.
+playwright>=1.49
 # DOCX resume ingestion (U2a / R-F3): real text extraction for .docx uploads
 # via python-docx's paragraph/table model, replacing the undecodable-garbage
 # UTF-8 fallback (MON-012). 1.1.2 is installed and verified on this VM.

@@ -381,6 +381,27 @@ def _isolate_model_catalog_cache() -> Iterator[None]:
     llm_client._MODEL_CATALOG_CACHE.clear()
 
 
+@pytest.fixture(autouse=True)
+def _isolate_apply_channel_resolver_cache() -> Iterator[None]:
+    """Per-test isolation of the process-global apply-channel redirector cache.
+
+    ``apply_channel_resolver`` deliberately caches every Adzuna redirector
+    resolution — success AND failure — for hours, so a rate-limited window is
+    never hammered again (the scout measured a live ``429 Retry-After: 3600``
+    from Adzuna/CloudFront against this VM's IP). That process-global TTL cache
+    is exactly the behaviour under test, but it must not leak BETWEEN tests: a
+    URL resolved to ``ashby`` in one test would otherwise be served from cache
+    to the next test's rate-limit scenario. Mirrors
+    ``_isolate_model_catalog_cache`` above; within-test caching behaviour is
+    unaffected.
+    """
+    from app.services import apply_channel_resolver
+
+    apply_channel_resolver.reset_resolution_cache()
+    yield
+    apply_channel_resolver.reset_resolution_cache()
+
+
 @pytest.fixture()
 def db_session() -> Iterator:
     """A raw psycopg2 connection to the TEST database.

@@ -21,7 +21,9 @@ import {
 import {
   canRemove,
   isExpired,
+  needsSendRetry,
   parseApprovalPayload,
+  sendsOnApprove,
   substantiveExcerpt,
   summarize,
 } from "../../../components/approvals/lib";
@@ -31,6 +33,8 @@ import {
   purgeExpiredApprovals,
   type Approval,
 } from "../../../lib/api/approvals";
+import { fetchApplySweepStatus } from "../../../lib/api/applications";
+import { automaticSubmissionDisclaimer } from "../../../components/applications/tracker-lib";
 
 type StatusFilter = "pending" | "approved" | "rejected" | "all";
 
@@ -43,25 +47,52 @@ function syncReviewParam(id: string | null) {
 }
 
 /**
- * Approving an email_send request only flips its status — the Gmail send
- * itself is the separate POST /approvals/{id}/execute call, the endpoint's
- * one real side effect (MV-approval-modal-008). Fire it immediately so the
- * wireframed "Approve" action actually sends the email end-to-end; a send
- * failure is reported honestly without hiding that the approval itself went
- * through (returns the message to show, or null when nothing went wrong).
+ * Approving a request only flips its status — the send itself is the separate
+ * POST /approvals/{id}/execute call, the endpoint's one real side effect
+ * (MV-approval-modal-008). Fire it immediately so the wireframed "Approve"
+ * action actually sends end-to-end; a send failure is reported honestly
+ * without hiding that the approval itself went through (returns the message
+ * to show, or null when nothing went wrong).
+ *
+ * MUST-FIX 1 (round-4 re-review): which requests this covers is decided by
+ * `sendsOnApprove` — an outreach `email_send` AND an application whose
+ * resolved apply channel is EMAIL (`application_submit` with
+ * `payload.kind = "submission"`), which the same endpoint really transmits.
+ * Gating on the approval TYPE alone left every email-channel application
+ * approved-and-unsent, with `notTransmittedReason` telling the user that
+ * approving it would email the employer.
  */
-async function sendIfEmailApproval(
+async function sendIfSendable(
   resolved: Approval,
   decision: "approve" | "reject",
 ): Promise<string | null> {
-  if (decision !== "approve" || resolved.type !== "email_send") return null;
+  if (decision !== "approve" || !sendsOnApprove(resolved)) return null;
   try {
     await executeApproval(resolved.id);
     return null;
   } catch (e) {
-    return `Approved, but sending the email failed: ${
-      e instanceof Error ? e.message : "please retry from the approval."
-    }`;
+    return `Approved, but sending it failed: ${
+      e instanceof Error ? e.message : "unknown error"
+    }. Nothing was sent — use "Retry send" on the request below to try again.`;
+  }
+}
+
+/**
+ * The approved requests whose send never happened (MUST-FIX 2, round-4
+ * re-review). A failed send releases the server's execution claim, leaving the
+ * approval `approved` with nothing sent — invisible under the default
+ * `pending` filter, which is where every failed send used to disappear to
+ * while the error copy pointed at a retry the UI did not have.
+ *
+ * Best-effort by design: this is a SECOND list request layered on the one the
+ * user asked for, so its failure must never take the queue down — an empty
+ * result under-promises (no retry offered) rather than inventing state.
+ */
+async function fetchStrandedSends(): Promise<Approval[]> {
+  try {
+    return (await fetchApprovals("approved")).filter(needsSendRetry);
+  } catch {
+    return [];
   }
 }
 
@@ -76,6 +107,19 @@ export default function ApprovalsPage() {
   const [deepLinkError, setDeepLinkError] = useState<string | null>(null);
   const error = deepLinkError ?? listError;
   const [reviewing, setReviewing] = useState<Approval | null>(null);
+  // SHOULD-FIX 6 (round-3 re-review): live read of the operator's apply-sweep
+  // kill-switch, for the bulk-approve confirm copy (`automaticSubmissionDisclaimer`).
+  // Defaults false — the code default, and the honest choice while this fetch
+  // is still in flight — so a slow/failed status fetch can only ever
+  // under-promise, never claim automation that is not actually configured.
+  const [sweepEnabled, setSweepEnabled] = useState(false);
+  useEffect(() => {
+    fetchApplySweepStatus()
+      .then(setSweepEnabled)
+      .catch(() => {
+        /* best-effort: keep the honest false default on failure */
+      });
+  }, []);
   // Monotonic guard: a stale (slow) response must never overwrite a newer one.
   const fetchSeq = useRef(0);
 
@@ -83,8 +127,14 @@ export default function ApprovalsPage() {
     const seq = ++fetchSeq.current;
     try {
       const rows = await fetchApprovals(filter);
+      // Approved-but-unsent requests are not `pending`, so the default filter
+      // hides exactly the rows that need a human the most. Merge them in (by
+      // id, never duplicating a row the filter already returned) so the
+      // "Retry send" affordance the failure copy names is actually on screen.
+      const stranded = filter === "pending" ? await fetchStrandedSends() : [];
       if (seq !== fetchSeq.current) return;
-      setApprovals(rows);
+      const seen = new Set(rows.map((r) => r.id));
+      setApprovals([...rows, ...stranded.filter((s) => !seen.has(s.id))]);
       setListError(null);
     } catch (e) {
       if (seq !== fetchSeq.current) return;
@@ -178,12 +228,24 @@ export default function ApprovalsPage() {
     [filter],
   );
 
+  /** Report a send failure AFTER reconciling the list, never before: `load`
+   *  clears `listError` on success, so setting the message first would wipe it
+   *  off screen the moment the refresh landed — and that refresh is what puts
+   *  the retryable row (the message's own remediation) in front of the user. */
+  const reportSendFailure = useCallback(
+    async (sendError: string | null) => {
+      if (sendError) await load();
+      setListError(sendError);
+    },
+    [load],
+  );
+
   const decideFromCard = async (id: string, decision: "approve" | "reject") => {
     setBusy(id);
     try {
       const resolved = await decideApproval(id, decision);
       applyResolved(resolved);
-      setListError(await sendIfEmailApproval(resolved, decision));
+      await reportSendFailure(await sendIfSendable(resolved, decision));
     } catch (e) {
       setListError(e instanceof Error ? e.message : "Decision failed");
     } finally {
@@ -196,8 +258,32 @@ export default function ApprovalsPage() {
     const resolved = await decideApproval(reviewing.id, decision, context);
     applyResolved(resolved);
     closeReview();
-    const sendError = await sendIfEmailApproval(resolved, decision);
-    if (sendError) setListError(sendError);
+    await reportSendFailure(await sendIfSendable(resolved, decision));
+  };
+
+  /**
+   * Re-invoke the send behind an approved-but-unsent request (MUST-FIX 2).
+   * The SAME POST /approvals/{id}/execute the approve path fires — idempotent
+   * server-side: the execution claim is single-shot, so a request that did
+   * send answers 409 and sends nothing again, and a request that did not is
+   * transmitted for real (pinned by apps/api/tests/test_u5_email_retry.py).
+   * The list is reconciled either way, so the row's state after this click is
+   * the server's, not a guess.
+   */
+  const retrySend = async (approval: Approval) => {
+    setBusy(approval.id);
+    try {
+      await executeApproval(approval.id);
+      await load();
+      setListError(null);
+    } catch (e) {
+      await load();
+      setListError(
+        `Retry failed — nothing was sent: ${e instanceof Error ? e.message : "unknown error"}`,
+      );
+    } finally {
+      setBusy(null);
+    }
   };
 
   /** Remove one stale (expired/resolved) card — server enforces the 409 guard. */
@@ -244,12 +330,37 @@ export default function ApprovalsPage() {
   };
 
   /**
-   * QA-2026-08-13 H-02: bulk decision over every currently-listed pending
-   * request. The backend has no bulk endpoint, so this loops the existing
-   * POST /approvals/{id}/approve|reject sequentially (server remains the
-   * only authority on each transition). Deliberately does NOT auto-send
-   * email_send approvals — bulk approval only records the decision; sending
-   * still happens per-item so a mass action can never mass-email.
+   * QA-2026-08-13 H-02, behavior fixed 2026-08-14 (C2, round-3 re-review):
+   * bulk decision over every currently-listed pending request. The backend
+   * has no bulk endpoint, so this loops the existing POST
+   * /approvals/{id}/approve|reject sequentially (server remains the only
+   * authority on each transition).
+   *
+   * Every request Aether can send by email IS sent here — for each approved
+   * item this fires the SAME `sendIfSendable` a single-card approve does,
+   * right after its own decision lands (sequential, per-item, honest partial
+   * failure). That covers an outreach `email_send` AND an application whose
+   * resolved apply channel is EMAIL (`application_submit` +
+   * `payload.kind = "submission"`); `sendsOnApprove` is the single definition,
+   * shared with the card and modal paths. Before this fix, `bulkDecide` only
+   * ever called `decideApproval`, so a bulk-approved request was left
+   * `approved` with nothing to ever send it — permanently "prepared only".
+   * A send failure never hides inside the decision-failure count below: the
+   * decision succeeded even when the send did not, the two are reported
+   * separately, and a failed send leaves a row that surfaces in this queue
+   * with a working "Retry send" (`needsSendRetry`).
+   *
+   * The OTHER `application_submit` approvals — the artifact cards
+   * (`kind = "resume_tailor"` / `"cover_letter"`) and any application whose
+   * channel is an employer FORM — are not driven further by this action;
+   * approving one only records the decision. For a form channel, whether
+   * anything happens next depends entirely on the operator's
+   * `AETHER_APPLY_SWEEP_ENABLED` sweep (apps/api/app/workers/apply_sweep.py,
+   * `sweepEnabled` above reads its live state via GET
+   * /applications/apply-sweep-status): OFF by default, in which case the
+   * application stays honestly "ready to submit" until a human acts on it;
+   * ON, the sweep drives the submission on its OWN schedule, not on this
+   * click. `automaticSubmissionDisclaimer` states exactly that split.
    */
   const bulkDecide = async (decision: "approve" | "reject") => {
     const targets = (approvals ?? []).filter((a) => a.status === "pending" && !isExpired(a));
@@ -259,26 +370,48 @@ export default function ApprovalsPage() {
       !window.confirm(
         `${verb} all ${targets.length} pending request${targets.length === 1 ? "" : "s"}? ` +
           (decision === "approve"
-            ? "Approved emails are NOT sent automatically — send each from its card."
+            ? automaticSubmissionDisclaimer(sweepEnabled)
             : "Rejected requests can be re-created by the agents on their next run."),
       )
     ) {
       return;
     }
     setBusy(`bulk-${decision}`);
-    let failed = 0;
+    let decisionFailed = 0;
+    let sendFailed = 0;
     for (const approval of targets) {
+      let resolved: Approval;
       try {
-        await decideApproval(approval.id, decision);
+        resolved = await decideApproval(approval.id, decision);
       } catch {
-        failed += 1;
+        decisionFailed += 1;
+        continue;
       }
+      // C2: a bulk-approved sendable request must be sent exactly like a
+      // single-card approve — otherwise it is left "prepared only" with no
+      // send affordance anywhere else in the product. No-op for a reject
+      // decision or a non-sendable type (sendIfSendable's own gate).
+      const sendError = await sendIfSendable(resolved, decision);
+      if (sendError) sendFailed += 1;
     }
-    setListError(
-      failed > 0 ? `${failed} of ${targets.length} bulk ${decision} decisions failed — the rest were applied.` : null,
-    );
-    // Reconcile from server truth — list, badges and counters together.
+    const parts: string[] = [];
+    if (decisionFailed > 0) {
+      parts.push(
+        `${decisionFailed} of ${targets.length} bulk ${decision} decisions failed — the rest were applied`,
+      );
+    }
+    if (sendFailed > 0) {
+      parts.push(
+        `${sendFailed} approved request${sendFailed === 1 ? "" : "s"} failed to send — ` +
+          `nothing was sent for ${sendFailed === 1 ? "it" : "them"}; use "Retry send" on the ` +
+          `affected request${sendFailed === 1 ? "" : "s"} below`,
+      );
+    }
+    // Reconcile from server truth FIRST — list, badges and counters together —
+    // then report, because `load` clears `listError` on success and the
+    // refreshed list is what puts the "Retry send" rows named above on screen.
     await load();
+    if (parts.length > 0) setListError(`${parts.join("; ")}.`);
     setBusy(null);
   };
 
@@ -411,6 +544,15 @@ export default function ApprovalsPage() {
                           {details.confidence}%
                         </span>
                       ) : null}
+                      {needsSendRetry(approval) ? (
+                        <span
+                          data-testid="unsent-badge"
+                          className="rounded-full border border-aether-amber/40 bg-aether-amber/10 px-2 py-0.5 text-xs text-aether-amber"
+                          title="Approved, but the send did not go through — nothing has been sent yet"
+                        >
+                          not sent
+                        </span>
+                      ) : null}
                       {expired ? (
                         <span
                           data-testid="expired-badge"
@@ -463,6 +605,17 @@ export default function ApprovalsPage() {
                           Reject
                         </button>
                       </>
+                    ) : null}
+                    {needsSendRetry(approval) ? (
+                      <button
+                        type="button"
+                        data-testid="retry-send-btn"
+                        onClick={() => void retrySend(approval)}
+                        disabled={busy === approval.id}
+                        className="min-h-[44px] rounded-xl border border-aether-amber/40 px-4 text-sm font-semibold text-aether-amber hover:bg-aether-amber/10 disabled:opacity-50 sm:min-h-0 sm:py-2"
+                      >
+                        Retry send
+                      </button>
                     ) : null}
                     {canRemove(approval) ? (
                       <button

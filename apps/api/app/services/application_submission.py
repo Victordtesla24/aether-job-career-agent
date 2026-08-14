@@ -680,6 +680,16 @@ def submission_view(row: dict[str, Any]) -> dict[str, Any]:
       own Gmail Sent folder).
     * ``autoSubmittable`` — whether the posting publishes an address Aether
       could send to at all.
+    * ``applyChannel`` / ``manualStepReason`` / ``manualStepDetail`` /
+      ``manualStepAt`` — U5's other half of the NO-PREPARED-ONLY invariant
+      (written by ``apply_channel_resolver`` / ``apply_executor.record_
+      manual_step``). Named here EXPLICITLY, not left to ride through on
+      ``row`` untouched by this function's own return dict: a caller that
+      ever rebuilds its response from ``submission_view()``'s return value
+      alone (instead of ``dict.update``-ing it onto the raw SELECT row, as
+      ``applications._with_submission`` does today) must not silently drop
+      them the way the pre-refix ``_COLUMNS`` gap did for the whole read
+      path (see ``applications.py`` ``_ensure_read_columns`` docstring).
     """
     transmitted_at = row.get("transmittedAt")
     transmitted = transmitted_at is not None
@@ -691,6 +701,10 @@ def submission_view(row: dict[str, Any]) -> dict[str, Any]:
         "transmissionChannel": row.get("transmissionChannel"),
         "transmissionRef": row.get("transmissionRef"),
         "autoSubmittable": bool(row.get("applyEmail")),
+        "applyChannel": row.get("applyChannel"),
+        "manualStepReason": row.get("manualStepReason"),
+        "manualStepDetail": row.get("manualStepDetail"),
+        "manualStepAt": row.get("manualStepAt"),
         "applyEmail": row.get("applyEmail"),
         "applyEmailSource": row.get("applyEmailSource"),
     }

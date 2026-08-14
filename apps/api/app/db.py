@@ -1149,6 +1149,123 @@ def ensure_application_transmission_columns() -> None:
     _application_transmission_columns_ready = True
 
 
+#: Guard so the additive ``Application.applyChannel`` column is only ensured
+#: once per worker process (see ``ensure_application_apply_channel_column``).
+_application_apply_channel_column_ready = False
+
+
+def ensure_application_apply_channel_column() -> None:
+    """Idempotently add the additive ``Application.applyChannel`` column (U5a).
+
+    ``applyChannel`` (text, nullable) records HOW this application can actually
+    be submitted — ``ashby``/``greenhouse``/``lever``/``smartrecruiters``
+    (a first-class ATS form), ``email`` (the existing W-SUB Gmail path),
+    ``generic`` (a best-effort employer form), ``seek-manual`` (never
+    automated — ADR-SEEK-V3) or ``unknown``.
+
+    NULL is the CORRECT, honest value for every pre-existing row: nothing had
+    ever resolved a channel for them, so no backfill UPDATE is performed here
+    — the metadata-only ``ADD COLUMN`` already gives each historical row its
+    true value, and the resolver fills it in the first time it actually looks
+    at that posting. Writing a guessed channel into history would be exactly
+    the fabrication this project refuses.
+
+    Additive only — no DROP, no ALTER TYPE, no DEFAULT rewrite. A
+    transaction-scoped advisory lock serializes concurrent first-hit callers so
+    the DDL cannot race; ``TRUNCATE`` never drops columns, so the process-wide
+    latch survives test teardown. Lazy DDL per ADR-TR-1.
+
+    MUST be called by EVERY path that reads or writes this column, before the
+    statement that names it.
+    """
+    global _application_apply_channel_column_ready
+    if _application_apply_channel_column_ready:
+        return
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT count(*) FROM information_schema.columns"
+                " WHERE table_name = 'Application'"
+                " AND table_schema = ANY(current_schemas(false))"
+                " AND column_name = 'applyChannel'"
+            )
+            row = cur.fetchone()
+            if row and row[0] == 1:
+                _application_apply_channel_column_ready = True
+                return
+            cur.execute("SELECT pg_advisory_xact_lock(%s)", (7420260805,))
+            cur.execute(
+                'ALTER TABLE "Application" '
+                'ADD COLUMN IF NOT EXISTS "applyChannel" text'
+            )
+        conn.commit()
+    _application_apply_channel_column_ready = True
+
+
+#: Guard so the additive ``Application`` manual-step columns are only ensured
+#: once per worker process (see ``ensure_application_manual_step_columns``).
+_application_manual_step_columns_ready = False
+
+
+def ensure_application_manual_step_columns() -> None:
+    """Idempotently add the additive ``Application`` manual-step columns (U5b).
+
+    The NO-PREPARED-ONLY invariant says an approved application must end up
+    either TRANSMITTED or in an HONEST, ACTIONABLE state. These columns are
+    that second outcome, recorded on the row so the UI can show the user the
+    real obstacle instead of leaving the application silently "prepared":
+
+    * ``manualStepReason`` (text) — machine code: ``unknown_required_question``
+      (a required question no stored profile answer can honestly answer),
+      ``captcha``, ``login_wall``, ``no_automatable_channel`` …
+    * ``manualStepDetail`` (text) — the REAL question text / obstacle copied
+      verbatim off the employer's page, so the user reads the actual words
+      they need to answer rather than a paraphrase.
+    * ``manualStepAt`` (timestamptz) — when the attempt hit the obstacle.
+
+    NULL everywhere is the correct value for every pre-existing row (no
+    attempt was ever made against them), so no backfill UPDATE is performed.
+    A manual step NEVER writes ``transmittedAt``: the two states are mutually
+    exclusive and a manual step means nothing was sent.
+
+    Additive only — no DROP, no ALTER TYPE, no DEFAULT rewrite. A
+    transaction-scoped advisory lock serializes concurrent first-hit callers so
+    the DDL cannot race; ``TRUNCATE`` never drops columns, so the process-wide
+    latch survives test teardown. Lazy DDL per ADR-TR-1.
+
+    MUST be called by EVERY path that reads or writes these columns, before the
+    statement that names them.
+    """
+    global _application_manual_step_columns_ready
+    if _application_manual_step_columns_ready:
+        return
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT count(*) FROM information_schema.columns"
+                " WHERE table_name = 'Application'"
+                " AND table_schema = ANY(current_schemas(false))"
+                " AND column_name IN ('manualStepReason', 'manualStepDetail',"
+                " 'manualStepAt')"
+            )
+            row = cur.fetchone()
+            if row and row[0] == 3:
+                _application_manual_step_columns_ready = True
+                return
+            cur.execute("SELECT pg_advisory_xact_lock(%s)", (7420260806,))
+            for column, coltype in (
+                ("manualStepReason", "text"),
+                ("manualStepDetail", "text"),
+                ("manualStepAt", "timestamptz"),
+            ):
+                cur.execute(
+                    f'ALTER TABLE "Application" '
+                    f'ADD COLUMN IF NOT EXISTS "{column}" {coltype}'
+                )
+        conn.commit()
+    _application_manual_step_columns_ready = True
+
+
 #: Guard so the additive ``Application.coverLetterQuality`` column is only
 #: ensured once per worker process (see ``ensure_cover_letter_quality_columns``).
 _cover_letter_quality_columns_ready = False
