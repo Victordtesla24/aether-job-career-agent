@@ -33,12 +33,18 @@ WEAK_SENTINEL = "zqxsecsentinelweak"
 def _assert_absent(body_text: str, secret: str, context: str) -> None:
     """Assert *secret* is absent WITHOUT ever putting it in the failure text.
 
-    The containment test is collapsed to a bool BEFORE the assert on purpose:
-    ``assert secret not in body_text`` would let pytest's assertion rewriting
-    print both operands — i.e. the credential — into the CI log, which is one
-    of the sinks this whole fix exists to keep credentials out of. Asserting on
-    a plain bool gives pytest nothing to introspect but ``True``.
+    Two deliberate precautions, because a CI log is exactly the kind of sink
+    this whole fix exists to keep credentials out of:
+
+    * ``__tracebackhide__`` drops this frame from the failure traceback, so
+      pytest never renders its arguments (``body_text``, ``secret``) in the
+      locals table.
+    * the containment test is collapsed to a bool BEFORE the assert;
+      ``assert secret not in body_text`` would let pytest's assertion
+      rewriting print both operands. Asserting a plain bool gives it nothing
+      to introspect but ``True``.
     """
+    __tracebackhide__ = True  # noqa: F841 — read by pytest, not by this code
     leaked = secret in body_text
     assert not leaked, (
         f"{context}: response body contained the submitted credential "
