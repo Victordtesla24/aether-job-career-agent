@@ -31,6 +31,16 @@ restarts (16:23:08, 16:33:33 — GOV-019 class, flagged to the owning session).
    write-war with the app. Change `AETHER_ADMIN_PASSWORD_HASH` in `.env` + restart (claimed window).
 2. Every restart of a prod service must be claimed in `SESSION-COORDINATION.md` first.
 
+## Update 16:38–17:0xZ — restored again, but only boot-to-boot
+
+Session 9c0's QA agent re-wrote `User.passwordHash` to bcrypt(AetherDemo1) at 16:38:23Z; it reads
+as "stable" only because no service has restarted since 16:33:26Z. **The next aether-api boot
+(any deploy, including that session's pending 9-reds fix landing) re-asserts the `.env` hash and
+kills AetherDemo1 again.** Both sessions have been told; the durable fix is to align
+`AETHER_ADMIN_PASSWORD_HASH` in `.env` with the operator's chosen password in a claimed window
+(choosing AetherDemo1 there would partially undo the 04:01Z BLOCKER-001 strong-hash remediation —
+operator tradeoff to decide).
+
 ## Operator action required (§8 ledger item)
 
 - The owner login password is now whatever plaintext corresponds to the current
