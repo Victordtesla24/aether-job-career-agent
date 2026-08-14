@@ -22,11 +22,14 @@ a human-readable explanation, and contributes nothing to the evidence corpus.
 """
 from __future__ import annotations
 
+import csv
 import html as _html
+import io
 import json
 import re
 import urllib.error
 import urllib.request
+import zipfile
 from html.parser import HTMLParser
 from typing import Any, Callable, Optional
 
@@ -34,6 +37,15 @@ from app.repositories.career_profile import CAREER_SOURCES, CareerProfileReposit
 from app.services.portfolio_scraper import scrape_github_profile
 
 _USER_AGENT = "aether-career-data/1.0"
+#: Hard cap on a LinkedIn "Download your data" export upload (B7) — the same
+#: ceiling ``routers/resumes.py`` uses for résumé uploads.
+MAX_LINKEDIN_EXPORT_BYTES = 10 * 1024 * 1024
+#: The only files B7 reads out of a LinkedIn export zip. LinkedIn's export
+#: bundles dozens of CSVs (ads, messages, connections, …) the candidate never
+#: asked to share with a career-tailoring tool — everything else in the
+#: archive is ignored, unopened.
+LINKEDIN_EXPORT_FILES = ("Profile.csv", "Positions.csv", "Education.csv", "Skills.csv")
+_LINKEDIN_EXPORT_BASENAME_MAP = {name.lower(): name for name in LINKEDIN_EXPORT_FILES}
 #: Cap the portfolio download so a hostile/huge page can't exhaust memory.
 _MAX_HTML_BYTES = 2_000_000
 #: Cap the extracted portfolio text folded into the evidence corpus.
@@ -367,6 +379,152 @@ def ingest_linkedin(summary_text: Optional[str]) -> dict[str, Any]:
         "summary": f"LinkedIn summary (provided by the candidate):\n{text}",
         "error": None,
     }
+
+
+# ---------------------------------------------------------------------------
+# LinkedIn data-export upload (B7) — compliant, upload-based, NEVER scraped.
+#
+# LinkedIn's official "Download your data" export is a zip of CSVs. This is a
+# second *input* path only — it makes no network call of any kind (no
+# ``urllib``/``requests``/``httpx``, nothing touches linkedin.com) and it
+# produces the exact same free-text shape the candidate-paste path produces,
+# then hands that text to the SAME ``ingest_linkedin`` above. There is
+# deliberately no second ingestion pipeline: everything downstream (storage
+# shape, corpus assembly, empty/error semantics) is inherited for free.
+# ---------------------------------------------------------------------------
+
+
+def _parse_csv_rows(text: str) -> list[dict[str, str]]:
+    """Rows of one export CSV, or ``[]`` for an absent/blank file."""
+    if not text.strip():
+        return []
+    reader = csv.DictReader(io.StringIO(text))
+    return [{k: (v or "") for k, v in row.items() if k} for row in reader]
+
+
+def normalize_linkedin_export(csv_texts: dict[str, str]) -> tuple[str, dict[str, int]]:
+    """Turn LinkedIn export CSVs into the same free-text shape a candidate
+    would type into the paste box, plus an honest per-section ingested count.
+
+    ``csv_texts`` maps a subset of :data:`LINKEDIN_EXPORT_FILES` to decoded
+    CSV text; a missing key means "not present in this export/upload" and is
+    never an error — a partial export (e.g. only ``Positions.csv``) still
+    normalizes whatever sections it has.
+    """
+    counts = {"profile": 0, "positions": 0, "education": 0, "skills": 0}
+    lines: list[str] = []
+
+    profile_rows = _parse_csv_rows(csv_texts.get("Profile.csv", ""))
+    if profile_rows:
+        row = profile_rows[0]
+        name = " ".join(
+            p for p in (row.get("First Name", "").strip(), row.get("Last Name", "").strip()) if p
+        )
+        headline = row.get("Headline", "").strip()
+        summary = row.get("Summary", "").strip()
+        header = f"{name} — {headline}" if name and headline else (name or headline)
+        if header:
+            lines.append(header)
+            counts["profile"] = 1
+        if summary:
+            lines.append(summary)
+            counts["profile"] = 1
+
+    position_rows = [
+        r for r in _parse_csv_rows(csv_texts.get("Positions.csv", "")) if any(r.values())
+    ]
+    if position_rows:
+        lines += ["", "Experience:"]
+        for row in position_rows:
+            title = row.get("Title", "").strip()
+            company = row.get("Company Name", "").strip()
+            head = " at ".join(p for p in (title, company) if p)
+            started = row.get("Started On", "").strip()
+            finished = row.get("Finished On", "").strip()
+            span = " – ".join(p for p in (started, finished) if p)
+            entry = f"- {head}" if head else "-"
+            if span:
+                entry += f" ({span})"
+            desc = row.get("Description", "").strip()
+            if desc:
+                entry += f": {desc}"
+            lines.append(entry)
+        counts["positions"] = len(position_rows)
+
+    education_rows = [
+        r for r in _parse_csv_rows(csv_texts.get("Education.csv", "")) if any(r.values())
+    ]
+    if education_rows:
+        lines += ["", "Education:"]
+        for row in education_rows:
+            degree = row.get("Degree Name", "").strip()
+            field = row.get("Field Of Study", "").strip()
+            head = f"{degree}, {field}" if degree and field else (degree or field)
+            entry = f"- {head}" if head else "-"
+            school = row.get("School Name", "").strip()
+            if school:
+                entry += f" — {school}"
+            start = row.get("Start Date", "").strip()
+            end = row.get("End Date", "").strip()
+            span = " – ".join(p for p in (start, end) if p)
+            if span:
+                entry += f" ({span})"
+            lines.append(entry)
+        counts["education"] = len(education_rows)
+
+    skill_names = [
+        row.get("Name", "").strip()
+        for row in _parse_csv_rows(csv_texts.get("Skills.csv", ""))
+        if row.get("Name", "").strip()
+    ]
+    if skill_names:
+        lines += ["", "Skills: " + ", ".join(skill_names) + "."]
+        counts["skills"] = len(skill_names)
+
+    return "\n".join(lines).strip(), counts
+
+
+def ingest_linkedin_export(csv_texts: dict[str, str]) -> dict[str, Any]:
+    """Ingest a parsed LinkedIn data-export (B7).
+
+    Normalizes ``csv_texts`` into the paste-equivalent text and feeds it to
+    the SAME :func:`ingest_linkedin` the candidate-paste path uses — no
+    second ingest pipeline. Adds ``ingestedCounts`` so the caller can report
+    honestly which sections actually contributed (a partial export, e.g. only
+    ``Positions.csv``, still ingests — see B7 test 3).
+    """
+    text, counts = normalize_linkedin_export(csv_texts)
+    result = dict(ingest_linkedin(text))
+    result["ingestedCounts"] = counts
+    if result["status"] == "empty":
+        result["error"] = (
+            "None of the uploaded file(s) contained usable LinkedIn export "
+            "data. Expected one or more of: " + ", ".join(LINKEDIN_EXPORT_FILES) + "."
+        )
+    return result
+
+
+def parse_linkedin_export_zip(data: bytes) -> dict[str, str]:
+    """Extract ONLY the four known LinkedIn export CSVs out of a zip archive.
+
+    Every other entry — other CSVs, media, LinkedIn's nested export folder —
+    is skipped unread. Matches on basename (case-insensitive) so the export's
+    usual top-level folder doesn't matter. Raises ``zipfile.BadZipFile`` for a
+    payload that isn't actually a zip; the caller (the upload router) turns
+    that into an honest 422. Pure in-memory parsing — no filesystem, no
+    network.
+    """
+    found: dict[str, str] = {}
+    with zipfile.ZipFile(io.BytesIO(data)) as archive:
+        for info in archive.infolist():
+            if info.is_dir():
+                continue
+            basename = info.filename.rsplit("/", 1)[-1]
+            canonical = _LINKEDIN_EXPORT_BASENAME_MAP.get(basename.lower())
+            if canonical is None or canonical in found:
+                continue
+            found[canonical] = archive.read(info).decode("utf-8", errors="replace")
+    return found
 
 
 # ---------------------------------------------------------------------------
