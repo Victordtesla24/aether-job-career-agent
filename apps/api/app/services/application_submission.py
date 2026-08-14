@@ -351,22 +351,76 @@ def build_submission_message(
     return subject, "\n\n".join(parts)
 
 
+def is_site_apply_payload(payload: dict[str, Any]) -> bool:
+    """Whether an approval payload is a U5d-2 SITE-APPLY card.
+
+    ONE definition, imported by every consumer (the execute router's dispatch
+    and the repository's tracker-promotion guard), because the two must agree
+    exactly: a card the router will drive through a browser is precisely the
+    card whose approval must NOT pre-stamp the tracker as submitted.
+
+    Both conditions are required — ``kind == "submission"`` with no
+    ``recipient``, AND a ``channel`` Aether actually drives — so neither a
+    legacy card (no ``channel`` key at all; that is all 556 production rows)
+    nor a card naming a channel we refuse to drive can ever match.
+    """
+    from app.services.apply_channel_resolver import AUTOMATABLE_CHANNELS
+
+    if payload.get("kind") != "submission" or payload.get("recipient"):
+        return False
+    return str(payload.get("channel") or "") in AUTOMATABLE_CHANNELS
+
+
 def queue_submission_approval(
     user_id: str,
     job_id: str,
     application_id: str,
     resume_id: str | None = None,
+    *,
+    channel: str | None = None,
+    apply_url: str | None = None,
 ) -> dict[str, Any] | None:
-    """Queue an approval to EMAIL this application, or ``None`` if impossible.
+    """Queue an approval to SUBMIT this application, or ``None`` if impossible.
 
-    ``None`` (no card, no promise) when the job has no genuine published
-    recipient — the honest outcome, and the one every production job currently
-    takes. The returned row is ``pending``: it transmits nothing on its own.
-    Executing it is a separate, explicitly-approved step
+    ``None`` (no card, no promise) whenever there is no destination Aether can
+    honestly act on. The returned row is ``pending``: it transmits nothing on
+    its own. Executing it is a separate, explicitly-approved step
     (``POST /approvals/{id}/execute``).
+
+    U5d-2 — CHANNEL AWARENESS. Until this slice the only approval this function
+    could raise was an EMAIL one, and ``applyEmail`` is set on 0 of 9 954
+    production jobs (``FORENSICS.md`` §4.2), so the gate could never fire and
+    the U5 browser engine had no way to be reached from anywhere but the OFF
+    sweep worker. ``channel`` (resolved by
+    ``apply_channel_resolver.resolve_apply_channel``, never guessed here) now
+    selects the payload shape:
+
+    * ``None`` / ``"email"`` — the EXISTING W-SUB email path, byte-for-byte
+      unchanged, including its refusal when no address was published. Every
+      pre-U5d-2 caller passes no ``channel`` and is therefore unaffected.
+    * a member of ``AUTOMATABLE_CHANNELS`` (``ashby``/``greenhouse`` — the only
+      two with a dedicated, tested form parser, ORCHESTRATOR RULING U5-F3) — a
+      SITE payload carrying the channel and the real apply URL, which
+      ``POST /approvals/{id}/execute`` routes into the U5 apply engine.
+    * anything else — ``None``. A channel Aether will not drive must never get
+      an approval card, because a card implies a submission the product would
+      then refuse to make.
+
+    The two payload shapes are distinguished by ``recipient``: present means
+    email, absent means site. That is the discriminator the execute router
+    reads, so a site card can never be mistaken for an email one.
     """
-    recipient = resolve_job_apply_recipient(user_id, job_id)
-    if recipient is None:
+    from app.services.apply_channel_resolver import AUTOMATABLE_CHANNELS
+
+    resolved_channel = (channel or "email").strip() or "email"
+    if resolved_channel != "email" and resolved_channel not in AUTOMATABLE_CHANNELS:
+        return None
+    recipient = (
+        resolve_job_apply_recipient(user_id, job_id)
+        if resolved_channel == "email"
+        else None
+    )
+    if resolved_channel == "email" and recipient is None:
         return None
     application = _load_application(user_id, application_id)
     if application is None:
@@ -374,12 +428,10 @@ def queue_submission_approval(
     from app.repositories.approval import ApprovalRepository
 
     autonomous = is_autonomous_submission_enabled(user_id)
-    payload = {
+    payload: dict[str, Any] = {
         "kind": "submission",
         "job_id": job_id,
         "application_id": application_id,
-        "recipient": recipient["email"],
-        "recipient_source": recipient["source"],
         "attach_resume_id": resume_id or application.get("resumeId"),
         "attach_cover_letter_id": application_id,
         "job_title": application.get("jobTitle"),
@@ -387,6 +439,13 @@ def queue_submission_approval(
         "autonomous": autonomous,
         "preview": (application.get("coverLetter") or "")[:4000],
     }
+    if recipient is not None:
+        payload["recipient"] = recipient["email"]
+        payload["recipient_source"] = recipient["source"]
+        payload["channel"] = "email"
+    else:
+        payload["channel"] = resolved_channel
+        payload["apply_url"] = apply_url
     return ApprovalRepository().create(
         user_id, "application_submit", payload, application_id=application_id
     )
@@ -616,7 +675,11 @@ def record_transmission(
     could read 'draft', lose a race, and then record a transition that another
     writer had already made.
     """
+    from app.db import ensure_application_submission_truth_columns
+    from app.services.submission_truth import STATE_RECORDED_NOT_TRANSMITTED
+
     ensure_application_transmission_columns()
+    ensure_application_submission_truth_columns()
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -626,6 +689,16 @@ def record_transmission(
                     "transmittedTo" = %s,
                     "transmissionChannel" = %s,
                     "transmissionRef" = %s,
+                    -- U5d-2: the write-time "recorded, no evidence" marker
+                    -- stops being true at this exact statement. Cleared only
+                    -- for that value; the retrospective pre-fix backfill state
+                    -- is left intact.
+                    "submissionTruthState" = CASE
+                        WHEN a."submissionTruthState" = %s THEN NULL
+                        ELSE a."submissionTruthState" END,
+                    "submissionTruthAt" = CASE
+                        WHEN a."submissionTruthState" = %s THEN NULL
+                        ELSE a."submissionTruthAt" END,
                     "status" = CASE
                         WHEN a."status" = 'draft'::"ApplicationStatus"
                             THEN 'submitted'::"ApplicationStatus"
@@ -640,7 +713,11 @@ def record_transmission(
                 WHERE a."id" = prev."id" AND a."userId" = %s
                 RETURNING a."jobId", a."resumeId", prev."prevStatus"
                 ''',
-                (recipient, channel, ref, application_id, user_id, user_id),
+                (
+                    recipient, channel, ref,
+                    STATE_RECORDED_NOT_TRANSMITTED, STATE_RECORDED_NOT_TRANSMITTED,
+                    application_id, user_id, user_id,
+                ),
             )
             stamped = cur.fetchone()
         conn.commit()

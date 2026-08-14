@@ -25,6 +25,7 @@ from app.repositories.application_status_event import record_status_event_best_e
 from app.routers.analytics import get_application_counts
 from app.services.stage_transitions import move_application_stage, move_job_stage
 from app.services.submission_snapshot import record_submission_snapshot
+from app.services.submission_truth import mark_recorded_not_transmitted
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +59,14 @@ _COLUMNS = (
     'a."transmittedAt", a."transmittedTo", a."transmissionChannel", '
     'a."transmissionRef", j."applyEmail", j."applyEmailSource", '
     'a."applyChannel", a."manualStepReason", a."manualStepDetail", '
-    'a."manualStepAt", a."submissionTruthState", a."submissionTruthAt"'
+    'a."manualStepAt", a."submissionTruthState", a."submissionTruthAt", '
+    # U5d-2: does a JOB-TAILORED résumé exist for this application's job? The
+    # per-card submit control must promise exactly what the write path will
+    # accept (``jobs._resume_for_apply``), so it reads the same fact rather
+    # than trusting ``a."resumeId"`` — the only producer of these drafts
+    # attaches the BASE résumé, so that column answers a different question.
+    'EXISTS (SELECT 1 FROM "Resume" r WHERE r."userId" = a."userId" '
+    'AND r."sourceJobId" = a."jobId") AS "hasTailoredResume"'
 )
 
 
@@ -88,9 +96,14 @@ def _with_submission(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     ``transmitted: false``.
     """
     from app.services.application_submission import submission_view
+    from app.services.submission_control import describe_submission_control
 
     for row in rows:
         row.update(submission_view(row))
+        # U5d-2: the per-card control, computed ONCE on the server from the
+        # same persisted columns, so no surface can invent a state the row
+        # does not support (see app/services/submission_control.py).
+        row["submissionControl"] = describe_submission_control(row)
     return rows
 
 router = APIRouter()
@@ -407,6 +420,132 @@ def reconfirm_submission(application_id: str, current_user: CurrentUser) -> dict
         "detail": (
             "Approval refreshed. Nothing has been submitted yet — this "
             "re-arms the submission gate with today's confirmation."
+        ),
+    }
+
+
+@router.post("/{application_id}/request-submission")
+def request_submission(application_id: str, current_user: CurrentUser) -> dict[str, Any]:
+    """U5d-2 — the per-card Submit control: THIS click IS the user's approval.
+
+    USER MANDATE (2026-08-14): "the click IS the user's approval for THAT
+    application". This endpoint therefore creates AND approves an
+    ``application_submit`` ApprovalRequest — through the EXISTING repository
+    (``create`` then ``approve``, the same compare-and-set the Approvals screen
+    uses, the same audit trail), scoped to this one application.
+
+    It is NOT a bypass, and it transmits NOTHING. The single place a real
+    submission can happen is still ``POST /approvals/{id}/execute`` and its
+    single-shot ``claim_execution`` guard; this endpoint hands the caller the
+    approval id to execute next, and says so in its response
+    (``transmitted: false``).
+
+    It refuses, honestly and specifically, rather than approving something the
+    product would then decline to do:
+
+    * 404 — not the caller's own application;
+    * 409 — a channel Aether will not drive (an ASSISTED platform, Seek, or a
+      destination that would not resolve). The user gets the direct link
+      instead, which is what the card already shows;
+    * 409 — the application is already transmitted, already recorded, or
+      blocked by a manual step that a submission cannot fix;
+    * 422 — the gate artifacts are missing, with the same wording the Apply
+      button uses.
+    """
+    from app.repositories.approval import ApprovalRepository
+    from app.services.application_submission import (
+        queue_submission_approval,
+        resolve_job_apply_recipient,
+    )
+    from app.services.apply_channel_resolver import (
+        AUTOMATABLE_CHANNELS,
+        resolve_and_persist_apply_channel,
+    )
+    from app.services.submission_control import describe_submission_control
+
+    user_id = current_user["id"]
+    row = get_application(application_id, current_user)
+    if not (row.get("applyEmail") or "").strip():
+        # Derive + cache the address the EMPLOYER published in the posting body.
+        # The board's read path is deliberately offline (no outbound request per
+        # rendered card), so a posting whose address has never been derived
+        # reads as its URL's channel. Deriving it HERE — once, on the click that
+        # authorises a submission — is what stops an assisted-looking card from
+        # refusing a submission the W-SUB email path could actually make.
+        if resolve_job_apply_recipient(user_id, str(row["jobId"])) is not None:
+            row = get_application(application_id, current_user)
+    control = row.get("submissionControl") or describe_submission_control(row)
+    if control["state"] != "ready":
+        if control["action"] == "fix_artifacts":
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY, control["detail"]
+            )
+        raise HTTPException(status.HTTP_409_CONFLICT, control["detail"])
+
+    # The channel is RESOLVED here (one network hop at most, for an Adzuna
+    # redirector) rather than reused from the read path's offline
+    # classification: this is the moment a real submission is being authorised,
+    # so it is worth learning the true destination, and the answer is persisted
+    # for every later read.
+    resolved = resolve_and_persist_apply_channel(
+        user_id,
+        application_id,
+        {"sourceUrl": row.get("applyUrl"), "applyEmail": row.get("applyEmail")},
+    )
+    channel = str(resolved["channel"])
+    apply_url = str(resolved.get("applyUrl") or row.get("applyUrl") or "")
+    if channel != "email" and channel not in AUTOMATABLE_CHANNELS:
+        # The offline classification and the resolved one disagreed (an
+        # unresolved redirector, most often). Say so; never approve a card for
+        # a channel that would be refused at execute time.
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            (
+                "Aether does not auto-submit on this platform, so nothing was "
+                "approved. Open the posting and apply yourself"
+                + (f": {apply_url}" if apply_url else ".")
+            ),
+        )
+    approval = queue_submission_approval(
+        user_id,
+        str(row["jobId"]),
+        application_id,
+        row.get("resumeId"),
+        channel=channel,
+        apply_url=apply_url,
+    )
+    if approval is None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            (
+                "Aether could not prepare a submission for this posting, so "
+                "nothing was approved and nothing was sent."
+            ),
+        )
+    repo = ApprovalRepository()
+    approved = repo.approve(approval["id"], user_id)
+    if approved is None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Could not record your approval — please try again. Nothing was sent.",
+        )
+    from app.repositories.admin import write_audit
+
+    write_audit(
+        user_id,
+        "approval.card_submit_click",
+        target_type="approval",
+        target_id=approved["id"],
+        detail={"applicationId": application_id, "channel": channel},
+    )
+    return {
+        "approvalId": approved["id"],
+        "applicationId": application_id,
+        "channel": channel,
+        "transmitted": False,
+        "detail": (
+            "Your approval is recorded. Nothing has been sent yet — executing "
+            "this approval is what submits the application."
         ),
     }
 
@@ -771,6 +910,13 @@ def submit_application(
         record_submission_snapshot(
             current_user["id"], application_id, submitted_job_id, tailored_resume_id
         )
+        # U5d-2 WRITE-TIME TRUTH MARKER. This endpoint records that the USER
+        # applied on the company's site themselves; Aether transmitted nothing.
+        # Stamping that AT WRITE TIME (rather than leaving a later census to
+        # infer it) is what turns "claimed submitted with no proof" from an
+        # open question into a self-evident state — after this slice, an
+        # UNMARKED claimed-submitted row is a bug, not an ambiguity.
+        mark_recorded_not_transmitted(current_user["id"], application_id)
     # Phase 4: advance the parent job to 'applied' so the card flushes from
     # the active board. Guarded forward-only via advance_status — an
     # already-applied job is left untouched (idempotent).

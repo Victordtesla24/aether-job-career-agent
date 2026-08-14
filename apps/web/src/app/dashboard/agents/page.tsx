@@ -503,48 +503,71 @@ export default function AgentsPage() {
   /**
    * F-02 — Scout runs the SIGNED-IN user's own search, or it does not run.
    *
-   * Returns the params, or `null` after posting an honest refusal notice. The
-   * profile is re-read per run (rather than reused from the mount-time
+   * Returns the params, or the honest REFUSAL notice explaining why there are
+   * none. The profile is re-read per run (rather than reused from the mount-time
    * `isAdmin` lookup) so a target role just saved in Settings takes effect
    * immediately. Nothing here manufactures a query: a user who has told us
    * nothing gets a message pointing at Settings, never someone else's search.
+   *
+   * ORCH-RUN: the refusal is RETURNED rather than only posted to the banner, so
+   * `trigger` can hand it back to whichever surface asked for the run — the
+   * workflow map quotes it on the node it refused, verbatim, instead of showing
+   * a node that silently did nothing.
    */
-  const resolveScoutParams = async (): Promise<Record<string, unknown> | null> => {
+  const resolveScoutParams = async (): Promise<
+    { params: Record<string, unknown> } | { refusal: Notice }
+  > => {
     let profile: DiscoveryProfile | null = null;
     try {
       const me = await fetchMe();
       profile = { targetRole: me.targetRole, location: me.location };
     } catch {
-      setNotice({
-        kind: "error",
-        text: "Scout could not read your profile, so it has no target role to search for. Reload and try again — it will not run a guessed search.",
-      });
-      return null;
+      return {
+        refusal: {
+          kind: "error",
+          text: "Scout could not read your profile, so it has no target role to search for. Reload and try again — it will not run a guessed search.",
+        },
+      };
     }
     const target = deriveSearchTarget(profile);
     if (target.status !== "ready") {
-      setNotice({
-        kind: "error",
-        text: `Scout has nothing to search for — your profile has no ${missingTargetLabel(target.missing)} set. Add it in Settings and Scout will search for exactly that.`,
-        href: "/dashboard/settings",
-        hrefLabel: "open Settings →",
-      });
-      return null;
+      return {
+        refusal: {
+          kind: "error",
+          text: `Scout has nothing to search for — your profile has no ${missingTargetLabel(target.missing)} set. Add it in Settings and Scout will search for exactly that.`,
+          href: "/dashboard/settings",
+          hrefLabel: "open Settings →",
+        },
+      };
     }
-    return { query: target.query, location: target.location };
+    return { params: { query: target.query, location: target.location } };
   };
 
-  const trigger = async (backend: string) => {
+  /**
+   * Dispatch ONE agent, and return the truthful notice that describes how it
+   * ended — the same object that goes into the banner.
+   *
+   * The return value is what makes the orchestration map's per-node / selection
+   * / whole-map run controls possible without a second run path: they await
+   * this, quote its text on the node, and (for a batch) stop on the first
+   * `kind: "error"` exactly as `_pipeline_core` stops on the first exception.
+   */
+  const trigger = async (backend: string): Promise<Notice> => {
     // Resolved BEFORE the "started" notice so a refusal never follows a claim
     // that the run began.
     let scoutParams: Record<string, unknown> | null = null;
     if (backend === "scout") {
-      scoutParams = await resolveScoutParams();
-      if (scoutParams === null) return;
+      const resolved = await resolveScoutParams();
+      if ("refusal" in resolved) {
+        setNotice(resolved.refusal);
+        return resolved.refusal;
+      }
+      scoutParams = resolved.params;
     }
     setBusy(backend);
     setNotice({ kind: "info", text: `${backend} started — running now…` });
     startPolling("agent");
+    let outcome: Notice;
     try {
       const params = scoutParams ?? (await resolveParams(backend));
       // MON-020: a scout pass really takes minutes (production discovery-cron
@@ -558,14 +581,20 @@ export default function AgentsPage() {
         {},
         { background: backend === "scout" },
       );
-      setNotice(missingResumeNotice(output) ?? agentSuccessNotice(backend, output));
+      outcome = missingResumeNotice(output) ?? agentSuccessNotice(backend, output);
+      setNotice(outcome);
     } catch (e) {
-      setNotice(runErrorNotice(e, backend));
+      outcome = runErrorNotice(e, backend);
+      setNotice(outcome);
     } finally {
+      // Unchanged ordering: the outcome notice is posted BEFORE the refresh, so
+      // a refresh that itself fails still gets to replace it with its own
+      // honest "Loading agents failed" message rather than being overwritten.
       stopPolling();
       setBusy(null);
       await load();
     }
+    return outcome;
   };
 
   /**
@@ -1108,10 +1137,22 @@ export default function AgentsPage() {
               <p className="mt-2 max-w-[86ch] text-[13px] leading-[1.6] text-aether-muted">
                 Every agent in the catalog, placed in the workflow it actually plays a part in —
                 real agents show what they consume and improve on; planned agents are labelled
-                roadmap stages, never shown as running.
+                roadmap stages, never shown as running. Run one agent, select several, or run a
+                whole map in its stage order; results appear on each node and in the banner above.
               </p>
             </div>
-            <OrchestrationMap data={orchestrationMap} runs={runs} />
+            {/* ORCH-RUN: the map's run controls dispatch through THIS page's
+                existing `trigger(backend)` — the same call the per-agent Run
+                button on the Agents tab makes, with the same quota checks, the
+                same polling and the same truthful banner. `busy` is handed over
+                so the map refuses a second run while the console is already
+                running something (Run All included), exactly as Run All does. */}
+            <OrchestrationMap
+              data={orchestrationMap}
+              runs={runs}
+              onRunAgent={trigger}
+              busyBackend={busy}
+            />
           </section>
         ) : null}
 

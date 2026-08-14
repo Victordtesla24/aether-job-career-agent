@@ -861,6 +861,18 @@ def submit_application_for_job(
 
     updated = job if job.get("status") == "applied" else repository.update_status(job_id, "applied")
     assert updated is not None
+    if inserted or promoted:
+        # U5d-2 WRITE-TIME TRUTH MARKER. This function's write is BOOKKEEPING:
+        # it records that the user applied, and transmits nothing (transmission
+        # lives behind the ApprovalRequest gate and the U5 apply engine). Say so
+        # on the row in the same request that writes 'submitted', so a
+        # claimed-submitted row with no proof and no marker becomes a bug rather
+        # than an ambiguity the U5d census has to interpret after the fact. The
+        # stamp is guarded on ``transmittedAt IS NULL``, so a row that later
+        # gains real evidence is never mislabelled.
+        from app.services.submission_truth import mark_recorded_not_transmitted
+
+        mark_recorded_not_transmitted(user_id, application_id)
     submission = _queue_or_report_submission(user_id, job_id, application_id, resume_id)
     return {
         "job": updated,

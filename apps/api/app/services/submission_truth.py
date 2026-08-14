@@ -48,15 +48,30 @@ logger = logging.getLogger(__name__)
 #: records that Aether cannot show any evidence it transmitted anything.
 STATE_UNVERIFIED = "recorded_transmission_unverified"
 
+#: U5d-2 — the WRITE-TIME marker. :data:`STATE_UNVERIFIED` is retrospective
+#: ("we cannot tell, after the fact, what this pre-fix row meant"); this one is
+#: stamped by the bookkeeping writer ITSELF, in the same request that records
+#: ``status='submitted'`` without transmission proof. The distinction is the
+#: whole point: after this slice, an unmarked claimed-submitted row is a BUG
+#: rather than an ambiguity, so the census predicate stops being an
+#: investigation and becomes a self-evident invariant.
+STATE_RECORDED_NOT_TRANSMITTED = "recorded_not_transmitted"
+
 #: User-facing wording for :data:`STATE_UNVERIFIED`, served by
 #: ``application_submission.submission_view`` so every surface says the same
 #: sentence rather than inventing its own.
 NOTE_UNVERIFIED = "recorded — transmission unverified (pre-fix)"
 
+#: User-facing wording for :data:`STATE_RECORDED_NOT_TRANSMITTED`.
+NOTE_RECORDED_NOT_TRANSMITTED = "recorded in your tracker — Aether transmitted nothing"
+
 #: Human-readable note per state. A state with no note here is a programming
 #: error, not a silent blank: ``submission_note_for`` returns ``None`` only for
 #: an unstamped (NULL) row.
-_NOTES = {STATE_UNVERIFIED: NOTE_UNVERIFIED}
+_NOTES = {
+    STATE_UNVERIFIED: NOTE_UNVERIFIED,
+    STATE_RECORDED_NOT_TRANSMITTED: NOTE_RECORDED_NOT_TRANSMITTED,
+}
 
 #: The columns the predicate names that are ADDITIVE — created lazily by the
 #: ``ensure_*`` DDL (ADR-TR-1) rather than present in the base Prisma schema, so
@@ -193,6 +208,59 @@ def backfill_unverified_submissions(user_id: str | None = None) -> dict[str, Any
         "state": STATE_UNVERIFIED,
         "note": NOTE_UNVERIFIED,
     }
+
+
+def mark_recorded_not_transmitted(user_id: str, application_id: str) -> bool:
+    """Stamp the WRITE-TIME marker on one row. Returns whether it was stamped.
+
+    U5d-2. Called by every path that records ``status='submitted'`` WITHOUT
+    transmission proof — the Jobs board's Apply button
+    (``jobs.submit_application_for_job``) and the tracker's own "mark as
+    submitted" control (``applications.submit_application``). Those writes are
+    honest bookkeeping of something the USER did elsewhere; what was missing is
+    that the row said so at the moment it was written, instead of only after a
+    later census sweep guessed at it.
+
+    A ONE-WAY DOOR, enforced in SQL rather than by convention:
+
+    * ``"transmittedAt" IS NULL`` — a row carrying real transmission evidence
+      can never be re-labelled "not transmitted". This function cannot write a
+      falsehood in the dangerous direction even if a caller misuses it.
+    * ``"submissionTruthState" IS NULL`` — idempotent. A second call stamps
+      nothing and preserves the ORIGINAL ``submissionTruthAt``, so the marker's
+      timestamp keeps meaning "when this was first recorded without proof".
+    * it never touches ``status`` — the user's own tracker history, exactly as
+      the backfill refuses to (see this module's docstring).
+
+    Best-effort by design: bookkeeping the user asked for must not fail because
+    an additive truth column could not be stamped. The failure is logged, and
+    the pre-existing census/backfill still catches such a row.
+    """
+    try:
+        _ensure_columns()
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    '''
+                    UPDATE "Application"
+                    SET "submissionTruthState" = %s, "submissionTruthAt" = NOW()
+                    WHERE "id" = %s AND "userId" = %s
+                      AND "transmittedAt" IS NULL
+                      AND "submissionTruthState" IS NULL
+                    ''',
+                    (STATE_RECORDED_NOT_TRANSMITTED, application_id, user_id),
+                )
+                stamped = cur.rowcount > 0
+            conn.commit()
+    except Exception as exc:  # noqa: BLE001 — an additive marker is never fatal
+        logger.warning(
+            "u5d2.submission_truth.mark_recorded_not_transmitted failed for "
+            "application %s (%s) — the row is unmarked and stays visible to the "
+            "existing census",
+            application_id, type(exc).__name__,
+        )
+        return False
+    return stamped
 
 
 def unverified_submission_ids(
