@@ -45,6 +45,11 @@ MAX_LINKEDIN_EXPORT_BYTES = 10 * 1024 * 1024
 #: asked to share with a career-tailoring tool — everything else in the
 #: archive is ignored, unopened.
 LINKEDIN_EXPORT_FILES = ("Profile.csv", "Positions.csv", "Education.csv", "Skills.csv")
+#: Chunk size used to stream-decompress each matched export CSV out of the
+#: zip (B7 zip-bomb guard). Small and fixed so a hostile entry's stated
+#: ``file_size`` metadata (attacker-controlled, never trusted) can't matter —
+#: the running total below is measured from actual bytes read.
+_LINKEDIN_EXPORT_READ_CHUNK_BYTES = 64 * 1024
 _LINKEDIN_EXPORT_BASENAME_MAP = {name.lower(): name for name in LINKEDIN_EXPORT_FILES}
 #: Cap the portfolio download so a hostile/huge page can't exhaust memory.
 _MAX_HTML_BYTES = 2_000_000
@@ -510,9 +515,14 @@ def parse_linkedin_export_zip(data: bytes) -> dict[str, str]:
     Every other entry — other CSVs, media, LinkedIn's nested export folder —
     is skipped unread. Matches on basename (case-insensitive) so the export's
     usual top-level folder doesn't matter. Raises ``zipfile.BadZipFile`` for a
-    payload that isn't actually a zip; the caller (the upload router) turns
-    that into an honest 422. Pure in-memory parsing — no filesystem, no
-    network.
+    payload that isn't actually a zip, OR for a matched entry whose
+    decompressed size exceeds ``MAX_LINKEDIN_EXPORT_BYTES`` (a zip-bomb
+    guard: DEFLATE lets a compressed payload well under the raw-upload cap
+    explode to hundreds of MB on read, so each entry is streamed in bounded
+    chunks with a running total rather than read whole — ``info.file_size``
+    is attacker-controlled metadata and is never trusted for this decision).
+    Either case, the caller (the upload router) turns it into an honest 422.
+    Pure in-memory parsing — no filesystem, no network.
     """
     found: dict[str, str] = {}
     with zipfile.ZipFile(io.BytesIO(data)) as archive:
@@ -523,7 +533,22 @@ def parse_linkedin_export_zip(data: bytes) -> dict[str, str]:
             canonical = _LINKEDIN_EXPORT_BASENAME_MAP.get(basename.lower())
             if canonical is None or canonical in found:
                 continue
-            found[canonical] = archive.read(info).decode("utf-8", errors="replace")
+            chunks: list[bytes] = []
+            total_bytes = 0
+            with archive.open(info) as member:
+                while True:
+                    chunk = member.read(_LINKEDIN_EXPORT_READ_CHUNK_BYTES)
+                    if not chunk:
+                        break
+                    total_bytes += len(chunk)
+                    if total_bytes > MAX_LINKEDIN_EXPORT_BYTES:
+                        raise zipfile.BadZipFile(
+                            f"{canonical} export entry too large when "
+                            "decompressed (exceeds "
+                            f"{MAX_LINKEDIN_EXPORT_BYTES // (1024 * 1024)}MB)."
+                        )
+                    chunks.append(chunk)
+            found[canonical] = b"".join(chunks).decode("utf-8", errors="replace")
     return found
 
 
