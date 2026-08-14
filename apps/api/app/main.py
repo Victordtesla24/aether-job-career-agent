@@ -48,6 +48,19 @@ from app.services.llm_client import get_mode
 from app.services.resume_grounding import MissingResumeError
 
 
+def _env_int(name: str, default: int) -> int:
+    """Positive int from the environment; malformed/absent -> ``default``.
+
+    A non-positive value falls back too: "0 means unlimited" would silently
+    disable a guard that exists to protect a shared external budget.
+    """
+    try:
+        value = int(os.environ.get(name, default))
+    except (TypeError, ValueError):
+        return default
+    return value if value > 0 else default
+
+
 def apply_email_domain_allowlist() -> frozenset[str]:
     """§15.2 (GAP-P7-DEF-B) — REVISED after adversarial review cycle 1
     (uat/reports/evidence/phase7/review-def-b.json, verdict FAIL).
@@ -383,6 +396,19 @@ def create_app() -> FastAPI:
     )
     app.state.portal_rate_limiter = SlidingWindowRateLimiter(
         max_calls=10, window_seconds=60 * 60.0
+    )
+    # Manual-Sync cooldown, keyed by user id (S-FIX-A / S-7). Scout is
+    # deterministic and unmetered, so NOTHING in the quota/spend-cap machinery
+    # slows a user click-spamming the Sync button — and every uncached run
+    # spends from the ONE shared Adzuna daily budget (see
+    # app.services.discovery.adzuna_adapter). 3 runs / 10 min per user is
+    # generous for a human refreshing their board (the scheduled sweep already
+    # refreshes every 30 min) while capping any single user's share of the
+    # shared budget. Scheduled/system runs are exempt — they are the platform's
+    # own paced automation, not a click.
+    app.state.scout_rate_limiter = SlidingWindowRateLimiter(
+        max_calls=_env_int("AETHER_SCOUT_SYNC_MAX_RUNS", 3),
+        window_seconds=float(_env_int("AETHER_SCOUT_SYNC_WINDOW_SECONDS", 600)),
     )
     # Concurrent-SSE-stream admission control (GMV4-sse-005, governance §5e).
     # Same per-app ownership rationale as the limiters above. Each open

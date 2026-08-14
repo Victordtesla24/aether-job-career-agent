@@ -20,6 +20,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
+  ApiError,
   apiBaseUrl,
   apiRequest,
   describeApiError,
@@ -738,7 +739,17 @@ export default function JobsPage() {
       setSyncResult(discoverySummary(out));
     } catch (e) {
       setSyncPhase(null);
-      setError(describeApiError(e, "Discovery run failed"));
+      // A structured backend refusal (the Sync cooldown 429 from
+      // /agents/scout/run, S-FIX-A/S-7) already says exactly what happened and
+      // when to retry. Show THAT sentence rather than the transport-level
+      // "POST /agents/scout/run failed (429): {…}" wrapper, which buries the
+      // honest message inside raw JSON. Anything else keeps the shared
+      // describeApiError rendering.
+      const detailMessage =
+        e instanceof ApiError && typeof e.detail?.message === "string"
+          ? e.detail.message
+          : null;
+      setError(detailMessage ?? describeApiError(e, "Discovery run failed"));
     } finally {
       setRunning(false);
     }
