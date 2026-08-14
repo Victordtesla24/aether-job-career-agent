@@ -17,9 +17,25 @@
  * STRUCTURAL (this file). "Story Bank feeds Resume Tailoring." True of the
  * system as built, sourced from a read of the API, and drawable now. Every
  * entry below carries the hop-by-hop `file:line` provenance it was derived
- * from, copied verbatim out of the AGENT-GRAPH discovery artefact. Structural
- * edges are drawn as system WIRING: quiet, labelled, and never animated —
- * nothing is flowing along them, so nothing may move along them.
+ * from. Structural edges are drawn as system WIRING: quiet, labelled, and never
+ * animated — nothing is flowing along them, so nothing may move along them.
+ *
+ * A LINE NUMBER IS NOT PROVENANCE — THE CODE AT THAT LINE IS
+ * ------------------------------------------------------------------------
+ * The first cut took its citations verbatim from the AGENT-GRAPH discovery
+ * artefact and never re-opened the files. The artefact had been frozen hours
+ * before that same day's commits pushed the code it pointed at down the file,
+ * so the flagship "banked stories → tailoring evidence" wire cited three lines
+ * of unrelated resume-PDF-healing code, one of them a bare `)`. Nothing was
+ * invented — the wire is real — but the receipt led nowhere.
+ *
+ * So each hop now carries `anchors`: the verbatim code fragment each citation
+ * was taken for. `workflow-linkage-provenance.test.ts` opens every cited span
+ * in the LIVE tree and fails if its anchor is not inside it, which turns the
+ * next line-drift into a red CI run instead of a quietly wrong receipt. Where
+ * HEAD and the discovery now disagree, `discoveryEvidence` keeps the artefact's
+ * original citation so the frozen snapshot still byte-matches this table and
+ * the drift stays on the record rather than being overwritten.
  *
  * CAUSAL, run-level. "This tailoring run consumed stories X and Y at 10:42."
  * That needs a parent run id the API does not record yet. It is NOT in this
@@ -71,9 +87,61 @@ export interface LinkageHop {
   kind: "writes" | "reads" | "feeds" | "triggers" | "feeds_ui";
   /** How the hop happens, in the discovery's words. */
   mechanism: string;
-  /** `apps/api/app/agents/story_extractor.py:96` — a line, never prose. */
+  /**
+   * `apps/api/app/agents/story_extractor.py:338` — a line, never prose, and
+   * re-derived against HEAD rather than trusted from the discovery: see
+   * `discoveryEvidence`.
+   */
   evidence: string;
+  /**
+   * The discovery's ORIGINAL citation, kept verbatim on the hops where HEAD has
+   * since moved the code — so the frozen AGENT-GRAPH snapshot still byte-matches
+   * this table (nothing is laundered) while `evidence` points a reader at code
+   * that is really there. Absent when the discovery's citation still holds.
+   */
+  discoveryEvidence?: string;
+  /**
+   * One verbatim code fragment per citation in `evidence`, in the same order —
+   * the thing that citation was taken FOR. `workflow-linkage-provenance.test.ts`
+   * opens each cited span and fails if its anchor is not inside it, so code
+   * moving under a frozen line number breaks CI instead of shipping a citation
+   * that resolves to something unrelated (which is exactly what happened:
+   * `tailor_agent.py:546,556,573` pointed at PDF-healing code and a bare `)`).
+   */
+  anchors: readonly string[];
   status: LinkageHopStatus;
+}
+
+/** One resolved `file:line` / `file:start-end` out of an `evidence` string. */
+export interface Citation {
+  file: string;
+  start: number;
+  /** Same as `start` for a single-line citation. */
+  end: number;
+}
+
+/**
+ * Split an `evidence` string into the citations it makes.
+ *
+ * One path may carry several spans (`tailor_agent.py:666,678,694-695`) and one
+ * evidence string may name several files (`…scout_agent.py:256; upsert
+ * …repositories/job.py:312,417,428-430`); each span is its own citation, so
+ * each is separately anchored and separately checked.
+ */
+const CITATION_SCAN =
+  /(apps\/[\w./-]+\.(?:py|ts|tsx|prisma)):(\d+(?:-\d+)?(?:,\d+(?:-\d+)?)*)/g;
+
+export function citationsOf(evidence: string): Citation[] {
+  const out: Citation[] = [];
+  for (const match of evidence.matchAll(CITATION_SCAN)) {
+    const file = match[1];
+    match[2].split(",").forEach((span) => {
+      const [first, last] = span.split("-");
+      const start = Number(first);
+      out.push({ file, start, end: last ? Number(last) : start });
+    });
+  }
+  return out;
 }
 
 export interface WorkflowLinkage {
@@ -126,6 +194,285 @@ export const LINKAGE_STROKE_DIM = "rgba(255,255,255,0.09)";
 export const LINKAGE_STROKE_FOCUS = "rgba(255,255,255,0.62)";
 export const LINKAGE_DASH = "1 4";
 
+/**
+ * THE HOPS, NAMED ONCE AND SHARED.
+ *
+ * The first cut wrote each hop out inline, per linkage. That is how one wrong
+ * scout citation came to sit on four rendered edges at once: it had been
+ * copy-pasted four times, so there were four places to be wrong and four places
+ * to fix. A hop is ONE claim about the code, so it gets one object — every wire
+ * that rests on it points at the same literal, and one correction corrects them
+ * all. `workflow-linkage-provenance.test.ts` pins that: two separate literals
+ * making the same claim fail the suite.
+ *
+ * `evidence` is re-derived against HEAD and content-checked by `anchors`.
+ * `discoveryEvidence` keeps the AGENT-GRAPH artefact's original citation
+ * wherever the two now disagree, so the frozen snapshot still byte-matches this
+ * table and the drift is on the record rather than quietly overwritten.
+ */
+const HOP = {
+  storyExtractionWritesStory: {
+    from: "agent.storyExtraction",
+    to: "store.StoryEntry",
+    kind: "writes",
+    mechanism:
+      "StoryRepository.create keyed by achievementKey (upsert-in-place on re-run)",
+    evidence:
+      "apps/api/app/agents/story_extractor.py:327,338; dedup index apps/api/app/db.py:1159",
+    discoveryEvidence:
+      "apps/api/app/agents/story_extractor.py:96; dedup index apps/api/app/db.py:1159",
+    anchors: [
+      'key = achievement_key(user_id, bullet["text"])',
+      "created = self._stories.create(",
+      "StoryEntry_userId_achievementKey_live_key",
+    ],
+    status: "live",
+  },
+  storyFeedsStoryEvidence: {
+    from: "store.StoryEntry",
+    to: "svc.build_story_evidence",
+    kind: "reads",
+    mechanism:
+      "StoryRepository.list_by_user -> flattened title+tags+STAR+metrics text",
+    evidence: "apps/api/app/agents/tailor_agent.py:200,239",
+    discoveryEvidence: "apps/api/app/agents/tailor_agent.py:146-188",
+    anchors: ["def build_story_evidence(", "stories = repo.list_by_user(user_id)"],
+    status: "live",
+  },
+  storyEvidenceFeedsTailoring: {
+    from: "svc.build_story_evidence",
+    to: "agent.resumeTailoring",
+    kind: "feeds",
+    mechanism:
+      "story_evidence joined into evidence_extra and threaded to TailoringLoop.run",
+    evidence: "apps/api/app/agents/tailor_agent.py:666,678,694-695",
+    discoveryEvidence: "apps/api/app/agents/tailor_agent.py:546,556,573",
+    anchors: [
+      "story_evidence = build_story_evidence(",
+      "evidence_extra = join_evidence_units(",
+      "evidence_extra=evidence_extra",
+    ],
+    status: "live",
+  },
+  storyEvidenceFeedsCoverLetter: {
+    from: "svc.build_story_evidence",
+    to: "agent.coverLetter",
+    kind: "feeds",
+    mechanism:
+      "story_evidence -> claim_evidence corpus for unsupported_claim_tokens + FabricationGuard",
+    evidence: "apps/api/app/agents/cover_letter_agent.py:1547,1583,1593-1596",
+    discoveryEvidence: "apps/api/app/agents/cover_letter_agent.py:1557,1558-1563",
+    anchors: [
+      "story_evidence = build_story_evidence(",
+      "[story_evidence] if story_evidence else []",
+      'claim_evidence = " ".join(',
+    ],
+    status: "live",
+  },
+  storyFeedsInterviewPrep: {
+    from: "store.StoryEntry",
+    to: "agent.interviewPrep",
+    kind: "reads",
+    mechanism:
+      "StoryRepository; each answer sketch grounded ONLY in the one cited story",
+    evidence: "apps/api/app/agents/interview_prep_agent.py:67,223-226,292",
+    discoveryEvidence: "apps/api/app/agents/interview_prep_agent.py:67,223-226",
+    anchors: [
+      "from app.repositories.story import StoryRepository",
+      "def _story_text(",
+      "all_stories = self._stories.list_by_user(user_id)",
+    ],
+    status: "live",
+  },
+  tailoringWritesResume: {
+    from: "agent.resumeTailoring",
+    to: "store.Resume",
+    kind: "writes",
+    mechanism:
+      "new tailored Resume version (raw_text regenerated from tailored bullets); raises NoChangesApplied when net_changes==0 so no billed no-op version is created",
+    evidence: "apps/api/app/agents/tailor_agent.py:736-737,744,784",
+    discoveryEvidence: "apps/api/app/agents/tailor_agent.py:611-620",
+    anchors: [
+      "raise NoChangesApplied(",
+      "render_tailored_raw_text(",
+      "tailored = self._resumes.create(",
+    ],
+    status: "live",
+  },
+  resumeFeedsStoryExtraction: {
+    from: "store.Resume",
+    to: "agent.storyExtraction",
+    kind: "reads",
+    mechanism: "resolve_user_resume_text -> extract_resume_bullets",
+    evidence: "apps/api/app/agents/story_extractor.py:118,206,567",
+    discoveryEvidence: "apps/api/app/agents/story_extractor.py:118,204-205",
+    anchors: [
+      "from app.services.resume_grounding import resolve_user_resume_text",
+      "bullets = extract_resume_bullets(resume_text)",
+      "return resolve_user_resume_text(user_id",
+    ],
+    status: "live",
+  },
+  submissionWritesApplication: {
+    from: "agent.submission",
+    to: "store.Application",
+    kind: "writes",
+    mechanism:
+      "reuses routers.jobs.submit_application_for_job VERBATIM — the same gate and write the Jobs board Apply button performs",
+    evidence: "apps/api/app/agents/submission_agent.py:73,231",
+    discoveryEvidence: "apps/api/app/agents/submission_agent.py:42,87",
+    anchors: [
+      "from app.routers.jobs import submit_application_for_job",
+      "outcome = submit_application_for_job(",
+    ],
+    status: "live",
+  },
+  applicationFeedsLearning: {
+    from: "store.Application",
+    to: "agent.learningFeedback",
+    kind: "reads",
+    mechanism:
+      "raw SQL join: status x fitScore x resumeSourceJobId (tailored?) x hasLetter; read-only, never re-weights anything",
+    evidence: "apps/api/app/agents/learning_feedback_agent.py:106-113,181",
+    discoveryEvidence: "apps/api/app/agents/learning_feedback_agent.py:37,139-165",
+    anchors: ['JOIN "Job" j ON j."id" = a."jobId"', "with get_connection() as conn:"],
+    status: "live",
+  },
+  emailWritesThread: {
+    from: "agent.emailAgent",
+    to: "store.EmailThread",
+    kind: "writes",
+    mechanism:
+      "triage mode: UPDATE EmailThread SET classification, aiScore (NULL when the model gave no real score)",
+    evidence: "apps/api/app/agents/email_agent.py:365-382",
+    anchors: ['UPDATE "EmailThread" SET "classification" = %s,'],
+    status: "live",
+  },
+  threadFeedsSentiment: {
+    from: "store.EmailThread",
+    to: "agent.sentimentAnalysis",
+    kind: "reads",
+    mechanism:
+      "one synced thread per run; never mutates the Email Agent's triage labels",
+    evidence:
+      "apps/api/app/agents/sentiment_analysis_agent.py:13,113; catalog copy apps/api/app/routers/agents.py:348",
+    discoveryEvidence:
+      "apps/api/app/agents/sentiment_analysis_agent.py:51; catalog copy agents.py:343",
+    anchors: [
+      "it writes nothing",
+      "thread = load_thread(user_id, requested)",
+      '"key": "sentimentAnalysis"',
+    ],
+    status: "live",
+  },
+  pipelineTriggersDiscovery: {
+    from: "agent.orchestration",
+    to: "agent.jobDiscovery",
+    kind: "triggers",
+    mechanism: "_pipeline_core sequential _dispatch",
+    evidence: "apps/api/app/routers/agents.py:3372,3394",
+    discoveryEvidence: "apps/api/app/routers/agents.py:3380",
+    anchors: ["def _pipeline_core(", 'scout_out = _dispatch(user_id, "scout", params)'],
+    status: "live",
+  },
+  discoveryWritesJob: {
+    from: "agent.jobDiscovery",
+    to: "store.Job",
+    kind: "writes",
+    mechanism:
+      "JobRepository.create upsert on (userId, sourceUrl) with dedupHash/contentHash/lastSeenAt",
+    // The upsert the mechanism describes is not in the agent at all — the agent
+    // calls it, the repository implements it. Both ends are cited so the claim
+    // can be read end to end.
+    evidence:
+      "apps/api/app/agents/scout_agent.py:256; upsert apps/api/app/repositories/job.py:312,417,428-430",
+    discoveryEvidence: "apps/api/app/agents/scout_agent.py:23,98",
+    anchors: [
+      "row = self._repository.create(user_id, job)",
+      "def create(self, user_id: str, job_raw: JobRaw)",
+      'ON CONFLICT ("userId", "sourceUrl") DO UPDATE SET',
+      '"lastSeenAt" = NOW()',
+    ],
+    status: "live",
+  },
+  emailWritesJob: {
+    from: "agent.emailAgent",
+    to: "store.Job",
+    kind: "writes",
+    mechanism:
+      "job_alerts mode: detect_alert_platform -> parse_job_alert -> JobRepository.create(posting.to_job_raw()) through the SAME upsert path as a board adapter; counts jobsCreated vs jobsUpdated from wasInserted",
+    evidence: "apps/api/app/agents/email_agent.py:410,480,495,509,515-519",
+    discoveryEvidence: "apps/api/app/agents/email_agent.py:410-420,505-518",
+    anchors: [
+      "def _job_alerts(",
+      "platform = detect_alert_platform(",
+      "parsed = parse_job_alert(",
+      "row = jobs.create(user_id, posting.to_job_raw())",
+      'summary["jobsCreated"] += 1',
+    ],
+    status: "live",
+  },
+  jobFeedsMarketTrends: {
+    from: "store.Job",
+    to: "agent.marketTrends",
+    kind: "reads",
+    mechanism:
+      "trends WITHIN this user's own discovery feed; no external market feed",
+    evidence: "apps/api/app/agents/market_trends_agent.py:36,138",
+    discoveryEvidence: "apps/api/app/agents/market_trends_agent.py:36",
+    anchors: [
+      "from app.repositories.job import JobRepository",
+      "self._jobs.list_by_user(user_id)",
+    ],
+    status: "live",
+  },
+  jobFeedsSalary: {
+    from: "store.Job",
+    to: "agent.salaryIntelligence",
+    kind: "reads",
+    mechanism: "aggregates only the pay the user's OWN postings disclosed",
+    evidence: "apps/api/app/agents/salary_intelligence_agent.py:70,167",
+    discoveryEvidence: "apps/api/app/agents/salary_intelligence_agent.py:70",
+    anchors: [
+      "from app.repositories.job import JobRepository",
+      "postings = self._jobs.list_by_user(user_id)",
+    ],
+    status: "live",
+  },
+  jobFeedsCompanyResearch: {
+    from: "store.Job",
+    to: "agent.companyResearch",
+    kind: "reads",
+    mechanism:
+      "synthesis over the user's own postings; optional guard-checked LLM narrative",
+    evidence:
+      "apps/api/app/agents/company_research_agent.py:53,183; narrative opt-in at apps/api/app/routers/agents.py:1521,2040-2045",
+    discoveryEvidence:
+      "apps/api/app/agents/company_research_agent.py:53; narrative opt-in at apps/api/app/routers/agents.py:2020-2027",
+    anchors: [
+      "from app.repositories.job import JobRepository",
+      "postings = self._jobs.list_by_user(user_id)",
+      "def _company_research_wants_narrative(",
+      "narrative = _company_research_wants_narrative(params)",
+    ],
+    status: "live",
+  },
+  jobFeedsInterviewPrep: {
+    from: "store.Job",
+    to: "agent.interviewPrep",
+    kind: "reads",
+    mechanism: "questions predicted from the real posting + requirements",
+    evidence: "apps/api/app/agents/interview_prep_agent.py:66,256,362",
+    discoveryEvidence: "apps/api/app/agents/interview_prep_agent.py:66",
+    anchors: [
+      "from app.repositories.job import JobRepository",
+      "_requirements(job)",
+      "job = self._jobs.get_by_id(requested, user_id)",
+    ],
+    status: "live",
+  },
+} satisfies Record<string, LinkageHop>;
+
 export const WORKFLOW_LINKAGES: readonly WorkflowLinkage[] = [
   {
     id: "storyExtraction->resumeTailoring",
@@ -135,36 +482,9 @@ export const WORKFLOW_LINKAGES: readonly WorkflowLinkage[] = [
     label: "banked stories → tailoring evidence",
     meaning: "Stories the extractor banks become the evidence resume tailoring is allowed to draw on.",
     provenance: [
-      {
-        from: "agent.storyExtraction",
-        to: "store.StoryEntry",
-        kind: "writes",
-        mechanism:
-          "StoryRepository.create keyed by achievementKey (upsert-in-place on re-run)",
-        evidence:
-          "apps/api/app/agents/story_extractor.py:96; dedup index apps/api/app/db.py:1159",
-        status: "live",
-      },
-      {
-        from: "store.StoryEntry",
-        to: "svc.build_story_evidence",
-        kind: "reads",
-        mechanism:
-          "StoryRepository.list_by_user -> flattened title+tags+STAR+metrics text",
-        evidence:
-          "apps/api/app/agents/tailor_agent.py:146-188",
-        status: "live",
-      },
-      {
-        from: "svc.build_story_evidence",
-        to: "agent.resumeTailoring",
-        kind: "feeds",
-        mechanism:
-          "story_evidence joined into evidence_extra and threaded to TailoringLoop.run",
-        evidence:
-          "apps/api/app/agents/tailor_agent.py:546,556,573",
-        status: "live",
-      },
+      HOP.storyExtractionWritesStory,
+      HOP.storyFeedsStoryEvidence,
+      HOP.storyEvidenceFeedsTailoring,
     ],
   },
   {
@@ -175,36 +495,9 @@ export const WORKFLOW_LINKAGES: readonly WorkflowLinkage[] = [
     label: "banked stories → cover-letter evidence",
     meaning: "The same banked stories become the claim evidence the cover letter has to stay inside.",
     provenance: [
-      {
-        from: "agent.storyExtraction",
-        to: "store.StoryEntry",
-        kind: "writes",
-        mechanism:
-          "StoryRepository.create keyed by achievementKey (upsert-in-place on re-run)",
-        evidence:
-          "apps/api/app/agents/story_extractor.py:96; dedup index apps/api/app/db.py:1159",
-        status: "live",
-      },
-      {
-        from: "store.StoryEntry",
-        to: "svc.build_story_evidence",
-        kind: "reads",
-        mechanism:
-          "StoryRepository.list_by_user -> flattened title+tags+STAR+metrics text",
-        evidence:
-          "apps/api/app/agents/tailor_agent.py:146-188",
-        status: "live",
-      },
-      {
-        from: "svc.build_story_evidence",
-        to: "agent.coverLetter",
-        kind: "feeds",
-        mechanism:
-          "story_evidence -> claim_evidence corpus for unsupported_claim_tokens + FabricationGuard",
-        evidence:
-          "apps/api/app/agents/cover_letter_agent.py:1557,1558-1563",
-        status: "live",
-      },
+      HOP.storyExtractionWritesStory,
+      HOP.storyFeedsStoryEvidence,
+      HOP.storyEvidenceFeedsCoverLetter,
     ],
   },
   {
@@ -214,28 +507,7 @@ export const WORKFLOW_LINKAGES: readonly WorkflowLinkage[] = [
     via: "Story Bank",
     label: "banked stories → answer sketches",
     meaning: "Every interview answer sketch is grounded in one banked story and cites it.",
-    provenance: [
-      {
-        from: "agent.storyExtraction",
-        to: "store.StoryEntry",
-        kind: "writes",
-        mechanism:
-          "StoryRepository.create keyed by achievementKey (upsert-in-place on re-run)",
-        evidence:
-          "apps/api/app/agents/story_extractor.py:96; dedup index apps/api/app/db.py:1159",
-        status: "live",
-      },
-      {
-        from: "store.StoryEntry",
-        to: "agent.interviewPrep",
-        kind: "reads",
-        mechanism:
-          "StoryRepository; each answer sketch grounded ONLY in the one cited story",
-        evidence:
-          "apps/api/app/agents/interview_prep_agent.py:67,223-226",
-        status: "live",
-      },
-    ],
+    provenance: [HOP.storyExtractionWritesStory, HOP.storyFeedsInterviewPrep],
   },
   {
     id: "resumeTailoring->storyExtraction",
@@ -244,28 +516,7 @@ export const WORKFLOW_LINKAGES: readonly WorkflowLinkage[] = [
     via: "Resume",
     label: "tailored resume → extraction input",
     meaning: "The resume tailoring writes is the document story extraction reads its bullets from.",
-    provenance: [
-      {
-        from: "agent.resumeTailoring",
-        to: "store.Resume",
-        kind: "writes",
-        mechanism:
-          "new tailored Resume version (raw_text regenerated from tailored bullets); raises NoChangesApplied when net_changes==0 so no billed no-op version is created",
-        evidence:
-          "apps/api/app/agents/tailor_agent.py:611-620",
-        status: "live",
-      },
-      {
-        from: "store.Resume",
-        to: "agent.storyExtraction",
-        kind: "reads",
-        mechanism:
-          "resolve_user_resume_text -> extract_resume_bullets",
-        evidence:
-          "apps/api/app/agents/story_extractor.py:118,204-205",
-        status: "live",
-      },
-    ],
+    provenance: [HOP.tailoringWritesResume, HOP.resumeFeedsStoryExtraction],
   },
   {
     id: "submission->learningFeedback",
@@ -274,28 +525,7 @@ export const WORKFLOW_LINKAGES: readonly WorkflowLinkage[] = [
     via: "Applications",
     label: "applications → conversion measurement",
     meaning: "The applications submission records are what the learning loop measures conversion from.",
-    provenance: [
-      {
-        from: "agent.submission",
-        to: "store.Application",
-        kind: "writes",
-        mechanism:
-          "reuses routers.jobs.submit_application_for_job VERBATIM — the same gate and write the Jobs board Apply button performs",
-        evidence:
-          "apps/api/app/agents/submission_agent.py:42,87",
-        status: "live",
-      },
-      {
-        from: "store.Application",
-        to: "agent.learningFeedback",
-        kind: "reads",
-        mechanism:
-          "raw SQL join: status x fitScore x resumeSourceJobId (tailored?) x hasLetter; read-only, never re-weights anything",
-        evidence:
-          "apps/api/app/agents/learning_feedback_agent.py:37,139-165",
-        status: "live",
-      },
-    ],
+    provenance: [HOP.submissionWritesApplication, HOP.applicationFeedsLearning],
   },
   {
     id: "emailAgent->sentimentAnalysis",
@@ -304,28 +534,7 @@ export const WORKFLOW_LINKAGES: readonly WorkflowLinkage[] = [
     via: "Email threads",
     label: "email threads → reply sentiment",
     meaning: "Threads the email agent files are where sentiment analysis reads employer replies.",
-    provenance: [
-      {
-        from: "agent.emailAgent",
-        to: "store.EmailThread",
-        kind: "writes",
-        mechanism:
-          "triage mode: UPDATE EmailThread SET classification, aiScore (NULL when the model gave no real score)",
-        evidence:
-          "apps/api/app/agents/email_agent.py:365-382",
-        status: "live",
-      },
-      {
-        from: "store.EmailThread",
-        to: "agent.sentimentAnalysis",
-        kind: "reads",
-        mechanism:
-          "one synced thread per run; never mutates the Email Agent's triage labels",
-        evidence:
-          "apps/api/app/agents/sentiment_analysis_agent.py:51; catalog copy agents.py:343",
-        status: "live",
-      },
-    ],
+    provenance: [HOP.emailWritesThread, HOP.threadFeedsSentiment],
   },
   {
     id: "orchestration->jobDiscovery",
@@ -334,18 +543,7 @@ export const WORKFLOW_LINKAGES: readonly WorkflowLinkage[] = [
     via: null,
     label: "pipeline run → discovery",
     meaning: "Running the whole pipeline dispatches job discovery as its first step.",
-    provenance: [
-      {
-        from: "agent.orchestration",
-        to: "agent.jobDiscovery",
-        kind: "triggers",
-        mechanism:
-          "_pipeline_core sequential _dispatch",
-        evidence:
-          "apps/api/app/routers/agents.py:3380",
-        status: "live",
-      },
-    ],
+    provenance: [HOP.pipelineTriggersDiscovery],
   },
   {
     id: "jobDiscovery->marketTrends",
@@ -354,28 +552,7 @@ export const WORKFLOW_LINKAGES: readonly WorkflowLinkage[] = [
     via: "Jobs",
     label: "discovered postings → market volumes",
     meaning: "Market trends are counted from the postings discovery banked on your board.",
-    provenance: [
-      {
-        from: "agent.jobDiscovery",
-        to: "store.Job",
-        kind: "writes",
-        mechanism:
-          "JobRepository.create upsert on (userId, sourceUrl) with dedupHash/contentHash/lastSeenAt",
-        evidence:
-          "apps/api/app/agents/scout_agent.py:23,98",
-        status: "live",
-      },
-      {
-        from: "store.Job",
-        to: "agent.marketTrends",
-        kind: "reads",
-        mechanism:
-          "trends WITHIN this user's own discovery feed; no external market feed",
-        evidence:
-          "apps/api/app/agents/market_trends_agent.py:36",
-        status: "live",
-      },
-    ],
+    provenance: [HOP.discoveryWritesJob, HOP.jobFeedsMarketTrends],
   },
   {
     id: "jobDiscovery->salaryIntelligence",
@@ -384,28 +561,7 @@ export const WORKFLOW_LINKAGES: readonly WorkflowLinkage[] = [
     via: "Jobs",
     label: "discovered postings → salary benchmarks",
     meaning: "Salary benchmarks are computed from the advertised pay on those same postings.",
-    provenance: [
-      {
-        from: "agent.jobDiscovery",
-        to: "store.Job",
-        kind: "writes",
-        mechanism:
-          "JobRepository.create upsert on (userId, sourceUrl) with dedupHash/contentHash/lastSeenAt",
-        evidence:
-          "apps/api/app/agents/scout_agent.py:23,98",
-        status: "live",
-      },
-      {
-        from: "store.Job",
-        to: "agent.salaryIntelligence",
-        kind: "reads",
-        mechanism:
-          "aggregates only the pay the user's OWN postings disclosed",
-        evidence:
-          "apps/api/app/agents/salary_intelligence_agent.py:70",
-        status: "live",
-      },
-    ],
+    provenance: [HOP.discoveryWritesJob, HOP.jobFeedsSalary],
   },
   {
     id: "jobDiscovery->companyResearch",
@@ -414,28 +570,7 @@ export const WORKFLOW_LINKAGES: readonly WorkflowLinkage[] = [
     via: "Jobs",
     label: "discovered postings → employer research",
     meaning: "Employer research starts from the company on the posting discovery banked.",
-    provenance: [
-      {
-        from: "agent.jobDiscovery",
-        to: "store.Job",
-        kind: "writes",
-        mechanism:
-          "JobRepository.create upsert on (userId, sourceUrl) with dedupHash/contentHash/lastSeenAt",
-        evidence:
-          "apps/api/app/agents/scout_agent.py:23,98",
-        status: "live",
-      },
-      {
-        from: "store.Job",
-        to: "agent.companyResearch",
-        kind: "reads",
-        mechanism:
-          "synthesis over the user's own postings; optional guard-checked LLM narrative",
-        evidence:
-          "apps/api/app/agents/company_research_agent.py:53; narrative opt-in at apps/api/app/routers/agents.py:2020-2027",
-        status: "live",
-      },
-    ],
+    provenance: [HOP.discoveryWritesJob, HOP.jobFeedsCompanyResearch],
   },
   {
     id: "jobDiscovery->interviewPrep",
@@ -444,28 +579,7 @@ export const WORKFLOW_LINKAGES: readonly WorkflowLinkage[] = [
     via: "Jobs",
     label: "discovered postings → prep pack",
     meaning: "Interview prep reads the posting itself, as discovery banked it.",
-    provenance: [
-      {
-        from: "agent.jobDiscovery",
-        to: "store.Job",
-        kind: "writes",
-        mechanism:
-          "JobRepository.create upsert on (userId, sourceUrl) with dedupHash/contentHash/lastSeenAt",
-        evidence:
-          "apps/api/app/agents/scout_agent.py:23,98",
-        status: "live",
-      },
-      {
-        from: "store.Job",
-        to: "agent.interviewPrep",
-        kind: "reads",
-        mechanism:
-          "questions predicted from the real posting + requirements",
-        evidence:
-          "apps/api/app/agents/interview_prep_agent.py:66",
-        status: "live",
-      },
-    ],
+    provenance: [HOP.discoveryWritesJob, HOP.jobFeedsInterviewPrep],
   },
   {
     id: "emailAgent->marketTrends",
@@ -474,28 +588,7 @@ export const WORKFLOW_LINKAGES: readonly WorkflowLinkage[] = [
     via: "Jobs",
     label: "job-alert postings → market volumes",
     meaning: "Postings parsed out of job-alert emails join the same board rows market trends counts.",
-    provenance: [
-      {
-        from: "agent.emailAgent",
-        to: "store.Job",
-        kind: "writes",
-        mechanism:
-          "job_alerts mode: detect_alert_platform -> parse_job_alert -> JobRepository.create(posting.to_job_raw()) through the SAME upsert path as a board adapter; counts jobsCreated vs jobsUpdated from wasInserted",
-        evidence:
-          "apps/api/app/agents/email_agent.py:410-420,505-518",
-        status: "live",
-      },
-      {
-        from: "store.Job",
-        to: "agent.marketTrends",
-        kind: "reads",
-        mechanism:
-          "trends WITHIN this user's own discovery feed; no external market feed",
-        evidence:
-          "apps/api/app/agents/market_trends_agent.py:36",
-        status: "live",
-      },
-    ],
+    provenance: [HOP.emailWritesJob, HOP.jobFeedsMarketTrends],
   },
   {
     id: "emailAgent->salaryIntelligence",
@@ -504,28 +597,7 @@ export const WORKFLOW_LINKAGES: readonly WorkflowLinkage[] = [
     via: "Jobs",
     label: "job-alert postings → salary benchmarks",
     meaning: "Salaries advertised in job-alert postings are benchmarked with every other posting.",
-    provenance: [
-      {
-        from: "agent.emailAgent",
-        to: "store.Job",
-        kind: "writes",
-        mechanism:
-          "job_alerts mode: detect_alert_platform -> parse_job_alert -> JobRepository.create(posting.to_job_raw()) through the SAME upsert path as a board adapter; counts jobsCreated vs jobsUpdated from wasInserted",
-        evidence:
-          "apps/api/app/agents/email_agent.py:410-420,505-518",
-        status: "live",
-      },
-      {
-        from: "store.Job",
-        to: "agent.salaryIntelligence",
-        kind: "reads",
-        mechanism:
-          "aggregates only the pay the user's OWN postings disclosed",
-        evidence:
-          "apps/api/app/agents/salary_intelligence_agent.py:70",
-        status: "live",
-      },
-    ],
+    provenance: [HOP.emailWritesJob, HOP.jobFeedsSalary],
   },
   {
     id: "emailAgent->companyResearch",
@@ -534,28 +606,7 @@ export const WORKFLOW_LINKAGES: readonly WorkflowLinkage[] = [
     via: "Jobs",
     label: "job-alert postings → employer research",
     meaning: "Employers named in job-alert postings are researched from the same job rows.",
-    provenance: [
-      {
-        from: "agent.emailAgent",
-        to: "store.Job",
-        kind: "writes",
-        mechanism:
-          "job_alerts mode: detect_alert_platform -> parse_job_alert -> JobRepository.create(posting.to_job_raw()) through the SAME upsert path as a board adapter; counts jobsCreated vs jobsUpdated from wasInserted",
-        evidence:
-          "apps/api/app/agents/email_agent.py:410-420,505-518",
-        status: "live",
-      },
-      {
-        from: "store.Job",
-        to: "agent.companyResearch",
-        kind: "reads",
-        mechanism:
-          "synthesis over the user's own postings; optional guard-checked LLM narrative",
-        evidence:
-          "apps/api/app/agents/company_research_agent.py:53; narrative opt-in at apps/api/app/routers/agents.py:2020-2027",
-        status: "live",
-      },
-    ],
+    provenance: [HOP.emailWritesJob, HOP.jobFeedsCompanyResearch],
   },
   {
     id: "emailAgent->interviewPrep",
@@ -564,28 +615,7 @@ export const WORKFLOW_LINKAGES: readonly WorkflowLinkage[] = [
     via: "Jobs",
     label: "job-alert postings → prep pack",
     meaning: "Interview prep reads a job-alert posting exactly as it reads a discovered one.",
-    provenance: [
-      {
-        from: "agent.emailAgent",
-        to: "store.Job",
-        kind: "writes",
-        mechanism:
-          "job_alerts mode: detect_alert_platform -> parse_job_alert -> JobRepository.create(posting.to_job_raw()) through the SAME upsert path as a board adapter; counts jobsCreated vs jobsUpdated from wasInserted",
-        evidence:
-          "apps/api/app/agents/email_agent.py:410-420,505-518",
-        status: "live",
-      },
-      {
-        from: "store.Job",
-        to: "agent.interviewPrep",
-        kind: "reads",
-        mechanism:
-          "questions predicted from the real posting + requirements",
-        evidence:
-          "apps/api/app/agents/interview_prep_agent.py:66",
-        status: "live",
-      },
-    ],
+    provenance: [HOP.emailWritesJob, HOP.jobFeedsInterviewPrep],
   },
 ];
 
@@ -605,11 +635,15 @@ const CITATION = /(?:^|\s)apps\/[\w./-]+\.(?:py|ts|tsx|prisma):\d+/;
  * table, so an entry that loses its provenance — or is added without any —
  * silently stops being drawn instead of quietly becoming a claim.
  *
- * Four ways an entry fails, all of them ways a wire could be invented:
+ * Five ways an entry fails, all of them ways a wire could be invented:
  *   1. no provenance at all;
  *   2. a hop that is not `live` (the discovery found it absent or gated);
  *   3. a hop whose citation is not a file:line;
- *   4. a chain that does not run, joined end to end, from `agent.<from>` to
+ *   4. a hop that does not anchor every one of its citations — the browser
+ *      cannot open the API source, but it CAN tell that a citation was added
+ *      without the code fragment that makes it checkable, and an unanchored
+ *      citation is the one the provenance suite could not have verified;
+ *   5. a chain that does not run, joined end to end, from `agent.<from>` to
  *      `agent.<to>` — i.e. the path does not actually reach the agent it
  *      claims to feed.
  */
@@ -620,10 +654,19 @@ export function drawableLinkages(
     const hops = link.provenance;
     if (!hops || hops.length === 0) return false;
     if (!hops.every((h) => h.status === "live" && CITATION.test(h.evidence))) return false;
+    if (!hops.every(isAnchored)) return false;
     if (hops[0].from !== `agent.${link.from}`) return false;
     if (hops[hops.length - 1].to !== `agent.${link.to}`) return false;
     return hops.every((hop, i) => i === 0 || hops[i - 1].to === hop.from);
   });
+}
+
+/** One anchor per citation, and none of them a bracket or a stray word. */
+function isAnchored(hop: LinkageHop): boolean {
+  const anchors = hop.anchors;
+  if (!Array.isArray(anchors)) return false;
+  if (anchors.length !== citationsOf(hop.evidence).length) return false;
+  return anchors.every((a) => a.trim().length >= 6 && /[A-Za-z_]{3}/.test(a));
 }
 
 // ---------------------------------------------------------------------------

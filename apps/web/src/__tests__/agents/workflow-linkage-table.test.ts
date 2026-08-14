@@ -143,10 +143,17 @@ describe("U-STORY-3a linkage table — provenance or it does not exist", () => {
     WORKFLOW_LINKAGES.forEach((link) => {
       link.provenance.forEach((hop) => {
         const candidates = graphEdges.get(`${hop.from}|${hop.to}`) ?? [];
+        // `discoveryEvidence` is the artefact's ORIGINAL citation, kept
+        // verbatim on the hops whose code HEAD has since moved. Matching on it
+        // keeps this byte-check against the frozen snapshot exactly as strict
+        // as it was, while `evidence` is free to point at where the code
+        // actually lives now (and is checked THERE, against the live tree, by
+        // workflow-linkage-provenance.test.ts).
+        const cited = hop.discoveryEvidence ?? hop.evidence;
         const match = candidates.find(
           (e) =>
             e.kind === hop.kind &&
-            e.evidence === hop.evidence &&
+            e.evidence === cited &&
             e.mechanism === hop.mechanism &&
             e.status === hop.status,
         );
@@ -154,6 +161,20 @@ describe("U-STORY-3a linkage table — provenance or it does not exist", () => {
           match,
           `${link.id}: ${hop.from} -> ${hop.to} is not in ${LINKAGE_SOURCE.snapshotPath}`,
         ).toBeTruthy();
+      });
+    });
+  });
+
+  it("carries a discovery citation only where HEAD has really drifted from it", () => {
+    // A `discoveryEvidence` equal to `evidence` would be a dead field that
+    // quietly turns the byte-check above into a self-comparison.
+    WORKFLOW_LINKAGES.forEach((link) => {
+      link.provenance.forEach((hop) => {
+        if (hop.discoveryEvidence === undefined) return;
+        expect(
+          hop.discoveryEvidence,
+          `${link.id}: ${hop.from} -> ${hop.to} keeps a discoveryEvidence identical to evidence`,
+        ).not.toBe(hop.evidence);
       });
     });
   });
