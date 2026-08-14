@@ -66,4 +66,13 @@ describe("AgentPolicyPanel — honest tier + trigger disclosure", () => {
     expect(tier).toMatch(/insufficient/i);
     expect(tier).not.toMatch(/standard|healthy/i);
   });
+
+  // F-UAX-04: this panel's metrics are computed ALL-TIME
+  // (quality_policy.resolve_policy_for_user has no period filter) while the
+  // page's own conversion figures honour the selected period — the window
+  // must be labelled so the two are never read as the same measurement.
+  it("labels its metric window as all-time", () => {
+    render(<AgentPolicyPanel policy={policy()} />);
+    expect(screen.getByTestId("agent-policy-window").textContent).toMatch(/all-time/i);
+  });
 });

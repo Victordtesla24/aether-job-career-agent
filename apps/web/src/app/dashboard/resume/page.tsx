@@ -50,7 +50,7 @@ type AtsScore = {
  * (`resolve_user_resume_text`, never a tailored version) — the honest
  * "before" snapshot for any tailored version of the same job.
  */
-interface JobInsightsDimension {
+export interface JobInsightsDimension {
   label: string;
   score: number;
   degraded: boolean;
@@ -98,7 +98,11 @@ const DIMENSION_ORDER = [
  *   algebraically, so "after" is the measured baseline plus the resume-
  *   dependent overall movement, exact to backend rounding.
  */
-function deriveTailoredDimensions(
+// F-UAX-03: exported (alongside the page's default export, which Next.js
+// permits for non-reserved names) so a parity test can call the EXACT
+// function the page renders from, rather than reimplementing its formulas —
+// `deriveTailoredDimensions` previously had zero test coverage.
+export function deriveTailoredDimensions(
   baseline: JobInsightsDimension[],
   baselineOverall: number,
   tailored: {
@@ -106,35 +110,71 @@ function deriveTailoredDimensions(
     keyword_match: number;
     semantic_similarity: number;
     experience_gap: number;
+    /** GMV4-ats-002 sentinel — "local"/"hf_api" is a genuine measurement,
+     *  anything else (incl. missing) is untrusted. Drives `degraded` below
+     *  with the SAME whitelist the badge at `semanticTrusted` uses. */
+    semantic_path?: string | null;
   },
 ): TailoringDimension[] {
-  const baselineScore = new Map(baseline.map((d) => [d.label, d.score]));
-  const round1 = (n: number) => Math.round(n * 10) / 10;
+  // F-UAX-03: keyed on the FULL baseline entry (score + degraded), never
+  // just the score — a label the backend ever stops sending is now an
+  // honestly-dropped row (filtered out below), not a fabricated 0 that
+  // would read as a catastrophic delta.
+  const baselineByLabel = new Map(baseline.map((d) => [d.label, d]));
+  // F-UAX-03: clamp to [0,100] and round to the SAME integer granularity as
+  // the backend's `_round` (jobs.py) — the table must never mix an integer
+  // baseline figure with a 1-decimal tailored one, and Career Growth's
+  // additive blend must never be allowed to drift past 100.
+  const round = (n: number) => Math.max(0, Math.min(100, Math.round(n)));
   const overallDelta = tailored.overall - baselineOverall;
-  return DIMENSION_ORDER.map((label): TailoringDimension => {
-    switch (label) {
-      case "Technical Skills":
-        return { label, score: round1(tailored.keyword_match) };
-      case "Experience Level":
-        return { label, score: round1(tailored.experience_gap) };
-      case "Industry Match":
-        return { label, score: round1(tailored.semantic_similarity) };
-      case "Role Alignment":
-        return { label, score: round1(tailored.overall) };
-      case "Culture Fit":
-        return {
-          label,
-          score: round1(0.5 * tailored.semantic_similarity + 0.5 * tailored.experience_gap),
-        };
-      case "North Star Align":
-        return { label, score: round1(0.6 * tailored.overall + 0.4 * tailored.semantic_similarity) };
-      case "Career Growth":
-        return { label, score: round1((baselineScore.get(label) ?? 0) + 0.4 * overallDelta) };
-      default:
-        // Salary Fit / Location Match / Company Stability — job-only.
-        return { label, score: round1(baselineScore.get(label) ?? 0) };
-    }
-  });
+  // F-UAX-02: mirrors jobs.py's own `sem_trusted` whitelist exactly, so a
+  // dimension whose backend counterpart would be flagged `degraded` is
+  // flagged degraded here too — a placeholder can never present as a
+  // measurement on either side of the before/after comparison.
+  const semanticTrusted =
+    tailored.semantic_path === "local" || tailored.semantic_path === "hf_api";
+  return DIMENSION_ORDER.filter((label) => baselineByLabel.has(label)).map(
+    (label): TailoringDimension => {
+      const base = baselineByLabel.get(label)!;
+      switch (label) {
+        case "Technical Skills":
+          return { label, score: round(tailored.keyword_match), degraded: false };
+        case "Experience Level":
+          return { label, score: round(tailored.experience_gap), degraded: false };
+        case "Industry Match":
+          return { label, score: round(tailored.semantic_similarity), degraded: !semanticTrusted };
+        case "Role Alignment":
+          return { label, score: round(tailored.overall), degraded: !semanticTrusted };
+        case "Culture Fit":
+          return {
+            label,
+            score: round(0.5 * tailored.semantic_similarity + 0.5 * tailored.experience_gap),
+            degraded: !semanticTrusted,
+          };
+        case "North Star Align":
+          return {
+            label,
+            score: round(0.6 * tailored.overall + 0.4 * tailored.semantic_similarity),
+            degraded: !semanticTrusted,
+          };
+        case "Career Growth":
+          // Blends the baseline's own seniority-derived score with the
+          // resume-dependent overall movement — the movement term is
+          // contaminated whenever the tailored `overall` was itself built
+          // from an untrusted semantic component.
+          return {
+            label,
+            score: round(base.score + 0.4 * overallDelta),
+            degraded: !semanticTrusted,
+          };
+        default:
+          // Salary Fit / Location Match / Company Stability — job-only;
+          // tailoring the resume's WORDS cannot move them, so "after" is
+          // the same measured baseline value and provenance.
+          return { label, score: round(base.score), degraded: base.degraded };
+      }
+    },
+  );
 }
 
 /** How many version cards to show before "Show more" (MV-resume-studio-005). */
@@ -350,12 +390,19 @@ export default function ResumePage() {
             setTailoringImpact({
               beforeAts: insights.overall,
               afterAts: tailoredAts.overall,
-              beforeDimensions: insights.dimensions.map((d) => ({ label: d.label, score: d.score })),
+              // F-UAX-02: carry `degraded` through — dropping it here is what
+              // let a placeholder render as a measured score in the panel.
+              beforeDimensions: insights.dimensions.map((d) => ({
+                label: d.label,
+                score: d.score,
+                degraded: d.degraded,
+              })),
               afterDimensions: deriveTailoredDimensions(insights.dimensions, insights.overall, {
                 overall: tailoredAts.overall,
                 keyword_match: tailoredAts.keyword_match,
                 semantic_similarity: tailoredAts.semantic_similarity,
                 experience_gap: tailoredAts.experience_gap,
+                semantic_path: tailoredAts.semantic_path,
               }),
             });
           }

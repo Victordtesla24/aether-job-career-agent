@@ -412,8 +412,15 @@ def ats_score(
             status.HTTP_422_UNPROCESSABLE_ENTITY, "Resume has no scoreable text"
         )
     from app.services.ats_engine import ATSEngine
+    from app.services.fit_evidence import job_evidence_text
 
-    score = ATSEngine().score(text, job.get("description") or "")
+    # F-UAX-01: score against the SAME JD text `GET /jobs/{id}/insights` uses
+    # (title + description + requirements, `job_evidence_text`) — not the
+    # description alone. Both endpoints feed the Resume Studio before/after
+    # panel for the same job, so a JD-corpus mismatch here would leak into
+    # every displayed ATS and dimension delta as a spurious term that has
+    # nothing to do with the tailoring itself.
+    score = ATSEngine().score(text, job_evidence_text(job))
     return {
         "resume_id": resume_id,
         "job_id": target_job_id,

@@ -251,3 +251,188 @@ class TestAgentRunPolicyPersistence:
             "AgentRun.metricSnapshot was not populated — per-run 'policy "
             "inputs consumed' cannot be reconstructed without it"
         )
+
+
+# ---------------------------------------------------------------------------
+# F-UAX-06 — the resolved knobs must reach the pipeline, not merely persist a
+# tier string. TestAgentRunPolicyPersistence above proves persistence only;
+# these prove the tailor loop, cover-letter retries and _agent_trend.
+# ---------------------------------------------------------------------------
+
+
+class TestTailorPolicyKnobsReachTheLoop:
+    """`TailoringAgent.run` must construct its `TailoringLoop` from the
+    resolved policy's knobs, not merely accept them as a dead parameter."""
+
+    def test_resolve_loop_knobs_defaults_when_no_policy_given(self):
+        from app.agents.tailor_agent import resolve_loop_knobs
+        from app.services.tailoring_loop import (
+            DEFAULT_MAX_ITERATIONS,
+            DEFAULT_TARGET_SCORE,
+        )
+
+        max_iterations, target_score = resolve_loop_knobs(None)
+        assert max_iterations == DEFAULT_MAX_ITERATIONS
+        assert target_score == DEFAULT_TARGET_SCORE
+
+    def test_resolve_loop_knobs_threads_heightened_tier_verbatim(self):
+        """The exact numbers the scout cited (max_iterations=7,
+        target_score=88) come from `knobs_for_tier`, not hand-picked here."""
+        from app.agents.tailor_agent import resolve_loop_knobs
+        from app.services.quality_policy import knobs_for_tier
+
+        heightened = knobs_for_tier("heightened")
+        max_iterations, target_score = resolve_loop_knobs(heightened)
+        assert max_iterations == heightened["maxIterations"]
+        assert target_score == heightened["targetScore"]
+        assert max_iterations > 5  # strictly above the shipped default of 5
+
+    def test_resolve_loop_knobs_never_relaxes_below_shipped_defaults(self):
+        from app.agents.tailor_agent import resolve_loop_knobs
+        from app.services.tailoring_loop import (
+            DEFAULT_MAX_ITERATIONS,
+            DEFAULT_TARGET_SCORE,
+        )
+
+        max_iterations, target_score = resolve_loop_knobs(
+            {"maxIterations": 1, "targetScore": 10.0}
+        )
+        assert max_iterations == DEFAULT_MAX_ITERATIONS
+        assert target_score == DEFAULT_TARGET_SCORE
+
+    def test_run_constructs_tailoring_loop_with_the_resolved_knobs(self, monkeypatch):
+        """End-to-end proof at the ACTUAL call site (`TailoringAgent.run`):
+        a `TailoringLoop` substitute captures its constructor kwargs, so no
+        LLM call or DB fixture is needed to observe that the numbers a
+        resolved policy carries really reach the object the loop runs on."""
+        from app.agents import tailor_agent as tailor_agent_module
+
+        captured = {}
+
+        class _CaptureLoop:
+            def __init__(self, **kwargs):
+                captured.update(kwargs)
+
+            def run(self, *a, **k):
+                raise RuntimeError("stop-before-llm")
+
+        monkeypatch.setattr(tailor_agent_module, "TailoringLoop", _CaptureLoop)
+        monkeypatch.setattr(tailor_agent_module, "build_career_corpus", lambda *a, **k: "")
+        monkeypatch.setattr(tailor_agent_module, "build_story_evidence", lambda *a, **k: "")
+
+        agent = tailor_agent_module.TailoringAgent.__new__(tailor_agent_module.TailoringAgent)
+        agent._service = object()
+        agent._ats_engine = object()
+        agent._stories = None
+        agent._jobs = type(
+            "J",
+            (),
+            {
+                "get_by_id": staticmethod(
+                    lambda *a, **k: {
+                        "id": "j1",
+                        "title": "Backend Engineer",
+                        "company": "Acme",
+                        "description": "Own the platform.",
+                    }
+                )
+            },
+        )()
+        agent.ensure_base_resume = lambda user_id: {  # noqa: ARG005
+            "sections": {"raw_text": "Experienced engineer.", "bullets": []}
+        }
+
+        with pytest.raises(RuntimeError, match="stop-before-llm"):
+            agent.run("u1", "j1", policy_knobs={"maxIterations": 9, "targetScore": 91.0})
+
+        assert captured.get("max_iterations") == 9
+        assert captured.get("target_score") == 91.0
+
+
+class TestCoverLetterRetriesRespectPolicyKnobs:
+    """`_corrective_retry_labels` (the actual generator the retry loop
+    iterates over) must respect a resolved policy's `coverLetterRetries`."""
+
+    def test_default_labels_are_the_shipped_two_retries(self):
+        from app.agents.cover_letter_agent import _corrective_retry_labels
+
+        assert _corrective_retry_labels(None) == ("retry", "retry2")
+
+    def test_heightened_tier_extends_the_retry_sequence(self):
+        from app.agents.cover_letter_agent import _corrective_retry_labels
+        from app.services.quality_policy import knobs_for_tier
+
+        heightened = knobs_for_tier("heightened")
+        labels = _corrective_retry_labels(heightened)
+        assert len(labels) == heightened["coverLetterRetries"]
+        assert len(labels) > len(_corrective_retry_labels(None))
+        # The first two fixture-key labels are byte-for-byte preserved —
+        # renaming them would silently invalidate the recorded LLM corpus.
+        assert labels[:2] == ("retry", "retry2")
+
+    def test_retry_count_is_capped_and_floored_regardless_of_input(self):
+        from app.agents.cover_letter_agent import (
+            _MAX_CORRECTIVE_RETRIES,
+            _MIN_CORRECTIVE_RETRIES,
+            _corrective_retry_labels,
+        )
+
+        assert len(_corrective_retry_labels({"coverLetterRetries": 0})) == _MIN_CORRECTIVE_RETRIES
+        assert (
+            len(_corrective_retry_labels({"coverLetterRetries": 999}))
+            == _MAX_CORRECTIVE_RETRIES
+        )
+
+
+class TestAgentTrend:
+    """`_agent_trend` (agents.py:3466-3520) — untested before this file per
+    F-UAX-06's audit."""
+
+    def test_no_runs_yields_null_direction_with_honest_basis(self):
+        from app.routers.agents import _agent_trend
+
+        result = _agent_trend("tailor", [])
+        assert result["direction"] is None
+        assert result["runs"] == 0
+        assert result["basis"] == "no scored run recorded yet"
+
+    def test_unknown_backend_reports_no_comparable_metric(self):
+        from app.routers.agents import _agent_trend
+
+        result = _agent_trend("scout", [{"output": {}}])
+        assert result["metric"] is None
+        assert result["direction"] is None
+
+    def test_improving_direction_from_two_scored_tailor_runs(self):
+        from app.routers.agents import _agent_trend
+
+        # newest-first, matching `recent_runs_by_agent`'s ordering.
+        runs = [
+            {"output": {"tailoringSummary": {"bestScore": 80.0}}},
+            {"output": {"tailoringSummary": {"bestScore": 60.0}}},
+        ]
+        result = _agent_trend("tailor", runs)
+        assert result["direction"] == "improving"
+        assert result["latest"] == 80.0
+        assert result["previous"] == 60.0
+        assert result["delta"] == 20.0
+
+    def test_declining_direction_from_two_scored_cover_letter_runs(self):
+        from app.routers.agents import _agent_trend
+
+        runs = [
+            {"output": {"quality": {"overall": 55.0}}},
+            {"output": {"quality": {"overall": 75.0}}},
+        ]
+        result = _agent_trend("coverLetter", runs)
+        assert result["direction"] == "declining"
+        assert result["delta"] == -20.0
+
+    def test_single_scored_run_has_no_comparison_yet(self):
+        from app.routers.agents import _agent_trend
+
+        runs = [{"output": {"tailoringSummary": {"bestScore": 80.0}}}]
+        result = _agent_trend("tailor", runs)
+        assert result["latest"] == 80.0
+        assert result["previous"] is None
+        assert result["direction"] is None

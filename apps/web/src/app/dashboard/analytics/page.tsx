@@ -339,7 +339,21 @@ export default function AnalyticsPage() {
               >
                 {conversion.interview_conversion_rate >= 20
                   ? "At or above the 1-in-5 (20%) interview-conversion target."
-                  : `${(20 - conversion.interview_conversion_rate).toFixed(1)} points below the 1-in-5 (20%) target — the agent policy escalates its rigor tier until this closes.`}
+                  : // F-UAX-04: this figure honours the selected period, while
+                    // the Agent Performance Policy tier below is computed
+                    // ALL-TIME (quality_policy.resolve_policy_for_user) — the
+                    // two can legitimately disagree, so the claim about what
+                    // the policy is DOING must be sourced from the policy's
+                    // own tier, never asserted unconditionally. `heightened`
+                    // is the only tier that actually escalates rigor;
+                    // `insufficient_data` explicitly does not (quality_policy.py
+                    // rule 2) and must say so, not claim an escalation that
+                    // isn't happening.
+                    policy?.tier === "heightened"
+                    ? `${(20 - conversion.interview_conversion_rate).toFixed(1)} points below the 1-in-5 (20%) target — the agent policy has escalated to heightened rigor (see below) until this closes.`
+                    : policy?.tier === "insufficient_data"
+                      ? `${(20 - conversion.interview_conversion_rate).toFixed(1)} points below the 1-in-5 (20%) target this period — not enough submitted applications yet, all-time, for the policy to honestly decide whether to escalate (see Agent Performance Policy below).`
+                      : `${(20 - conversion.interview_conversion_rate).toFixed(1)} points below the 1-in-5 (20%) target this period — the agent policy escalates rigor automatically once its own all-time metrics cross a threshold (see Agent Performance Policy below).`}
               </p>
             ) : null}
           </>

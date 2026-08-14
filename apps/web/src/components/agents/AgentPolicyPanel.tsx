@@ -58,6 +58,17 @@ export default function AgentPolicyPanel({ policy }: { policy: AgentPolicy }) {
         <div>
           <h2 className="text-sm font-semibold uppercase tracking-wide text-aether-muted-dim">
             Agent Performance Policy
+            {/* F-UAX-04: this panel's metrics are computed ALL-TIME
+                (quality_policy.resolve_policy_for_user has no period filter),
+                which can legitimately disagree with any period-filtered
+                figure shown elsewhere on the page — label the window so the
+                two are never read as the same measurement. */}
+            <span
+              className="ml-1.5 align-middle text-[10px] font-normal normal-case text-aether-muted-dim"
+              data-testid="agent-policy-window"
+            >
+              (all-time)
+            </span>
           </h2>
           <p className="mt-0.5 text-xs text-aether-muted-dim">
             The rigor tier every real agent is currently obeying — one computation,

@@ -341,6 +341,29 @@ class TailorRunResult:
     tailoringSummary: dict[str, Any] = field(default_factory=dict)
 
 
+def resolve_loop_knobs(policy_knobs: "Mapping[str, Any] | None") -> tuple[int, float]:
+    """The clamped ``(max_iterations, target_score)`` a ``TailoringLoop`` run
+    actually uses (F-UAX-06).
+
+    Extracted out of ``TailoringAgent.run`` so this EXACT clamping logic —
+    not a reimplementation of it — is directly unit-testable without driving
+    a full tailoring pipeline (LLM calls, resume/job fixtures, etc.) end to
+    end. Clamped to the shipped defaults as a FLOOR: even a malformed or
+    downgraded knob cannot make the product try less than it does today
+    (``quality_policy`` rule 3 — rigor only ever escalates).
+    """
+    knobs = dict(policy_knobs or {})
+    max_iterations = max(
+        int(knobs.get("maxIterations") or DEFAULT_MAX_ITERATIONS),
+        DEFAULT_MAX_ITERATIONS,
+    )
+    target_score = max(
+        float(knobs.get("targetScore") or DEFAULT_TARGET_SCORE),
+        DEFAULT_TARGET_SCORE,
+    )
+    return max_iterations, target_score
+
+
 class TailoringAgent:
     def __init__(
         self,
@@ -479,22 +502,12 @@ class TailoringAgent:
         # score gap and the clean gap keywords. The anti-fabrication guard
         # inside ``self._service`` runs unmodified on every iteration; closing
         # a keyword gap never means inventing experience the candidate lacks.
-        knobs = dict(policy_knobs or {})
+        max_iterations, target_score = resolve_loop_knobs(policy_knobs)
         loop = TailoringLoop(
             service=self._service,
             ats_engine=self._ats_engine,
-            # Clamped to the shipped defaults as a FLOOR: even a malformed or
-            # downgraded knob cannot make the product try less than it does
-            # today (quality_policy rule 3, enforced here too so the invariant
-            # holds regardless of who calls this agent).
-            max_iterations=max(
-                int(knobs.get("maxIterations") or DEFAULT_MAX_ITERATIONS),
-                DEFAULT_MAX_ITERATIONS,
-            ),
-            target_score=max(
-                float(knobs.get("targetScore") or DEFAULT_TARGET_SCORE),
-                DEFAULT_TARGET_SCORE,
-            ),
+            max_iterations=max_iterations,
+            target_score=target_score,
         )
         loop_result = loop.run(
             resume_text, jd, originals=parent_bullets, evidence_extra=evidence_extra

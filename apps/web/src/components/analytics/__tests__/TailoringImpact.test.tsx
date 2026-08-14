@@ -26,6 +26,7 @@ afterEach(cleanup);
 interface Dimension {
   label: string;
   score: number;
+  degraded?: boolean;
 }
 
 const TEN_DIMENSION_LABELS = [
@@ -95,5 +96,64 @@ describe("TailoringImpact — honest before/after ATS + 10-dimension display", (
       .find((r) => /career growth/i.test(r.textContent ?? ""));
     expect(row).toBeTruthy();
     expect(row!.textContent).toMatch(/-9|−9/); // negative delta rendered, not suppressed
+  });
+
+  // F-UAX-02: a degraded dimension is a placeholder, not a measurement — it
+  // must render as "—", never as a number that could satisfy or trip the
+  // >80% floor.
+  it("renders a degraded dimension as '—' with no fabricated delta, not a number", () => {
+    const before = dims([60, 55, 50, 62, 58, 70, 80, 45, 76, 61]).map((d) =>
+      d.label === "Culture Fit" ? { ...d, degraded: true } : d,
+    );
+    const after = dims([72, 60, 55, 70, 61, 74, 82, 50, 78, 68]).map((d) =>
+      d.label === "Culture Fit" ? { ...d, degraded: true } : d,
+    );
+    render(
+      <TailoringImpact beforeAts={57.3} afterAts={69.5} beforeDimensions={before} afterDimensions={after} />,
+    );
+    const row = screen
+      .getAllByTestId("dimension-row")
+      .find((r) => /culture fit/i.test(r.textContent ?? ""));
+    expect(row).toBeTruthy();
+    expect(row!.querySelector('[data-testid="dimension-before"]')!.textContent).toBe("—");
+    expect(row!.querySelector('[data-testid="dimension-after"]')!.textContent).toBe("—");
+    expect(row!.querySelector('[data-testid="dimension-delta"]')!.textContent).toBe("n/a");
+    expect(row!.textContent).not.toMatch(/\b58\b|\b61\b/); // the real numbers never leak through
+  });
+
+  // F-UAX-05: pairing must be by LABEL, never by array index — a genuinely
+  // missing counterpart (arrays out of sync) must read as "not available",
+  // never a fabricated "±0, no change".
+  it("shows 'n/a' instead of a fabricated ±0 delta when a dimension has no after counterpart", () => {
+    const before = dims([60, 55, 50, 62, 58, 70, 80, 45, 76, 61]);
+    const after = dims([72, 60, 55, 70, 61, 74, 82, 50, 78, 68]).filter(
+      (d) => d.label !== "Culture Fit",
+    );
+    render(
+      <TailoringImpact beforeAts={57.3} afterAts={69.5} beforeDimensions={before} afterDimensions={after} />,
+    );
+    const row = screen
+      .getAllByTestId("dimension-row")
+      .find((r) => /culture fit/i.test(r.textContent ?? ""));
+    expect(row).toBeTruthy();
+    expect(row!.querySelector('[data-testid="dimension-delta"]')!.textContent).toBe("n/a");
+    expect(row!.textContent).not.toMatch(/±0/);
+  });
+
+  // F-UAX-05: reordering `afterDimensions` must not scramble the pairing —
+  // an index-based fallback would silently mismatch here.
+  it("pairs correctly by label even when afterDimensions is reordered", () => {
+    const before = dims([60, 55, 50, 62, 58, 70, 80, 45, 76, 61]);
+    const after = [...dims([72, 60, 55, 70, 61, 74, 82, 50, 78, 68])].reverse();
+    render(
+      <TailoringImpact beforeAts={57.3} afterAts={69.5} beforeDimensions={before} afterDimensions={after} />,
+    );
+    const row = screen
+      .getAllByTestId("dimension-row")
+      .find((r) => /^technical skills/i.test(r.textContent ?? ""));
+    expect(row).toBeTruthy();
+    // Technical Skills: before=60, after=72 (from the un-reversed source) — a
+    // correct label pairing finds 72 regardless of array order.
+    expect(row!.querySelector('[data-testid="dimension-after"]')!.textContent).toBe("72");
   });
 });

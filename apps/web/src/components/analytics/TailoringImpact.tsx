@@ -17,6 +17,11 @@
 export interface TailoringDimension {
   label: string;
   score: number;
+  /** F-UAX-02: true when this measurement is a neutral placeholder (the
+   *  semantic engine was untrusted for this run), not a genuine score. A
+   *  degraded dimension renders as "—" (not measured) — never as a number,
+   *  which would let a placeholder silently satisfy or trip the >80% floor. */
+  degraded?: boolean;
 }
 
 export interface TailoringImpactProps {
@@ -85,10 +90,18 @@ export default function TailoringImpact({
       </div>
 
       <div className="mt-2 space-y-1.5">
-        {beforeDimensions.map((dim, i) => {
-          const after = afterDimensions[i];
-          const afterScore = after?.score ?? dim.score;
-          const delta = afterScore - dim.score;
+        {beforeDimensions.map((dim) => {
+          // F-UAX-05: pair by LABEL, never by array index — an index pairing
+          // silently mismatches two dimensions the moment either list is
+          // reordered, filtered or grows, and previously fell back to
+          // `dim.score` (a fabricated "±0, no change" the moment the arrays
+          // ever misaligned). A genuinely missing counterpart now reads as
+          // "not available", never as a manufactured zero delta.
+          const after = afterDimensions.find((d) => d.label === dim.label);
+          const beforeUnknown = dim.degraded === true;
+          const afterUnknown = after == null || after.degraded === true;
+          const known = !beforeUnknown && !afterUnknown;
+          const delta = known ? after!.score - dim.score : null;
           return (
             <div
               key={dim.label}
@@ -96,16 +109,28 @@ export default function TailoringImpact({
               className="grid grid-cols-[1fr,auto,auto,auto,auto] items-center gap-2 rounded-lg border border-white/10 p-2 text-xs"
             >
               <span className="truncate font-medium text-aether-muted">{dim.label}</span>
-              <span className="mono text-aether-muted-dim">{dim.score}</span>
+              <span className="mono text-aether-muted-dim" data-testid="dimension-before">
+                {beforeUnknown ? "—" : dim.score}
+              </span>
               <span className="text-aether-muted-dim">→</span>
               <span
                 className={`mono font-semibold ${
-                  afterScore > DIMENSION_THRESHOLD ? "text-aether-green" : "text-aether-amber"
+                  afterUnknown
+                    ? "text-aether-muted-dim"
+                    : after!.score > DIMENSION_THRESHOLD
+                      ? "text-aether-green"
+                      : "text-aether-amber"
                 }`}
+                data-testid="dimension-after"
               >
-                {afterScore}
+                {afterUnknown ? "—" : after!.score}
               </span>
-              <span className={`mono ${deltaTone(delta)}`}>{formatDelta(delta)}</span>
+              <span
+                className={`mono ${delta === null ? "text-aether-muted-dim" : deltaTone(delta)}`}
+                data-testid="dimension-delta"
+              >
+                {delta === null ? "n/a" : formatDelta(delta)}
+              </span>
             </div>
           );
         })}
