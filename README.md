@@ -2,234 +2,246 @@
 
 # 🔮 AETHER
 
-### Autonomous AI Career Agent Platform
+### The career agent that never lies on your behalf
 
-[![Production](https://img.shields.io/badge/Production-Live-10B981?style=for-the-badge&logo=vercel&logoColor=white)](https://5cb5f0620.abacusai.cloud)
-[![Design](https://img.shields.io/badge/Design_System-17_Screens-4F46E5?style=for-the-badge&logo=figma&logoColor=white)](design/DESIGN.md)
+[![Production](https://img.shields.io/badge/Production-Live_v0.2.0-10B981?style=for-the-badge&logo=vercel&logoColor=white)](https://5cb5f0620.abacusai.cloud)
+[![Agents](https://img.shields.io/badge/Agents-22_on_3_maps-4F46E5?style=for-the-badge&logo=probot&logoColor=white)](#-the-22-agent-orchestration-map)
+[![Honesty](https://img.shields.io/badge/Fabrication_guard-Measured,_not_claimed-FF6B35?style=for-the-badge&logo=shieldsdotio&logoColor=white)](#-why-honesty-is-the-product)
 [![Billing](https://img.shields.io/badge/Billing-Stripe_(4_tiers,_AUD)-635BFF?style=for-the-badge&logo=stripe&logoColor=white)](docs/subscription/billing-architecture.md)
 [![License](https://img.shields.io/badge/License-Private-EF4444?style=for-the-badge&logo=lock&logoColor=white)]()
 
 <br/>
 
-*An AI career agent that discovers jobs, scores fit, tailors résumés and cover letters from your own evidence, and routes everything through a human approval gate — running as a subscription web app.*
+*Aether discovers jobs, scores fit, tailors résumés and cover letters from your own evidence, and routes every outbound action through your approval — as a subscription web app. What makes it different is not that it writes: it's that it refuses to write anything your history doesn't support, and it can show you what it refused.*
 
 <br/>
 
-[Production Status](#-production-status) · [Features](#-what-aether-does) · [Architecture](#️-architecture-as-deployed) · [AI Agents](#-ai-agents-runtime) · [Local Dev](#-local-development) · [Delivery History](#-delivery-history)
+[Why honesty](#-why-honesty-is-the-product) · [Agent map](#-the-22-agent-orchestration-map) · [Production](#-production-status) · [Architecture](#️-architecture-as-deployed) · [Model choice](#-model-choice-per-agent-live-catalog) · [Roadmap](#️-roadmap--in-progress) · [Local dev](#-local-development)
 
 ---
 
 </div>
 
-## 🎯 Vision
+## 🎯 Why honesty is the product
 
-Aether is an **AI career assistant** that automates the repetitive, high-friction parts of a job search while keeping a human in control of anything that leaves the building:
+Every AI career tool promises to make you look better. Aether's premise is the opposite one: **the only durable advantage is that nothing it sends on your behalf can be contradicted.** An embellished bullet is not a small win — it is a landmine you carry into an interview you were not prepared to defend.
 
-- 🔍 **Discovers** jobs from ToS-compliant sources (licensed aggregator + official ATS APIs)
-- 📊 **Evaluates** opportunities with a multi-dimensional fit-scoring engine
-- 📝 **Tailors** résumés with content-only edits and an anti-fabrication entailment guard
-- ✉️ **Generates** evidence-grounded cover letters in business-letter format
-- ✅ **Gates** every outbound action (applications, emails) behind explicit human approval
-- 🛡️ **Never fabricates** — every claim must trace to the user's résumé / story bank; if the LLM can't complete, the app returns an honest error, never canned content
+So the guarantee is not a policy paragraph. It is four mechanisms you can watch working:
+
+**1. A fabrication guard that visibly refuses.** Résumé tailoring is content-only, and every proposed rewrite must be entailed by your own résumé and story bank. Anything unsupported is reverted rather than shipped, and the guard's verdicts are a reported metric — the compliance agent answers for a "zero unverifiable claims shipped" threshold on the orchestration map. On a real production run the guard **rejected 7 of 11 proposed rewrites**: the mechanism firing on live user data, not in a test fixture. A guard that strict means many runs show only a small ATS lift, or none. That is the honest shape of the tradeoff, and Aether states it in-product rather than burying it in an average.
+
+**2. Résumé fidelity measured from the artifact, never asserted.** After a tailored résumé is rendered, Aether re-extracts the produced file and verifies each intended change actually survived into it. Every résumé carries a `formatFidelity` report — method, confidence, and the changes it can prove landed. A change the renderer dropped is named as dropped. The approval screen reasons from that measured report; when the report is still in flight or unavailable, it says so instead of claiming "layout preserved". *(Completeness hardening is in progress — see [Roadmap](#️-roadmap--in-progress).)*
+
+**3. Market data cross-checked against its own source.** The Analytics "Market vs. You" rows quote live Adzuna Australia figures and cite exactly what was measured. An independent audit re-queried Adzuna directly, outside the app: the app showed **3,901 postings** (as-of 01:27:10Z) against **3,907** on a fresh independent pull ~57 minutes later — 0.15% drift, explained by a moving market inside the cache TTL — and a mean advertised salary of **A$119,711** against **A$119,668** live. The one row with no honest source stays permanently disconnected: no external interview-conversion benchmark provider exists for any market, so that row says so rather than inventing a comparison. A failed refetch is cached as *nothing*, never as the old numbers behind a fresh timestamp.
+
+**4. A policy loop that escalates rigor when your results lag — and shows the escalation.** Aether reads your real conversion rate and fit-dimension scores and resolves a rigor tier. `heightened` is not a mood: it is **+2 tailoring iterations, +3 points of ATS target, +1 cover-letter corrective retry**, with the truthfulness guards unchanged — more effort never means looser evidence rules. The Agents console shows the current tier, the triggers that forced it, the tiers your past runs actually obeyed (read from each run's own record, not recomputed), and the interview conversion of each tier's cohort. If heightened rigor works, its cohort converts better; if it does not, that is visible too. With too few submissions to measure anything, the tier reads `insufficient_data` and runs at full standard rigor — never less.
+
+**No outcome promises anywhere.** Aether does not predict interviews or offers, and its progress score says so in its own methodology text: it measures your submitted volume, your interview conversion and your average fit score — and a signal with no data reads "not measured" rather than counting as a zero.
+
+## 🤖 The 22-agent orchestration map
+
+The fleet is the product's signature, and it is deliberately **not** a black box. `/dashboard/agents` opens on an Orchestration view that draws all **22 catalog agents across three maps** — because one dense graph would misrepresent what they are:
+
+| Map | Stages | Agents |
+|---|---|---|
+| **Application Pipeline** | Discovery → Fit Scoring → Tailoring → Cover Letter → Quality Gates → Submission → Tracking | 12 — the linear path one job posting travels |
+| **Learning Loop** | Orchestration → Signal Capture → Learning | 4 — a *cycle* over the pipeline's outcomes; drawing it as a stage would misrepresent feedback as a step |
+| **Context & Enrichment** | Market Intelligence · Employer Research · Outreach · Interview Readiness | 6 — context providers that advance no application on their own |
+
+Each node carries its real state: last run time, a live pulse while running, the policy tier it obeyed, an honest `Last run failed` badge, and an explicit **"Planned — roadmap"** marker for catalog agents not yet wired to orchestration. The maps ship with an honesty legend naming that distinction, so a planned agent can never be mistaken for a running one.
+
+The map renders as a semantic DOM/SVG graph **first**; a lazily-loaded three.js layer sits on top as pure enhancement (accessibility is the base, not the fallback, and the WebGL bundle is on none of the app's other routes until you open this one). Beside the maps: a live run monitor, per-agent performance panels, provider connections, and the per-agent model picker below.
 
 ## 🚦 Production Status
 
-Aether is **live in production** at **https://5cb5f0620.abacusai.cloud** (`{"status":"ok","version":"0.2.0"}`), delivered through Phases 1–7, a per-wireframe MANUAL-VERIFICATION pass, and a subsequent **MODELS-LIVE** pass (per-agent live model choice + an in-app "Connect with Anthropic (subscription)" OAuth flow) — with gate-verified, evidence-backed QA throughout. All MODELS-LIVE code fixes are live in production as of commit `51f1ec8`; the run's own QA gates (`docs/delivery/MODELS-LIVE-GAPS.json`, `docs/delivery/MODELS-LIVE-GOVERNANCE-AUDIT.md`) track a small number of remaining LOW-severity, non-blocking documentation/UI-polish items (e.g. this SCREEN-MATRIX/runbook correction). The authoritative pre-MODELS-LIVE delivery record is [`docs/delivery/MANUAL-VERIFICATION-FINAL-REPORT.md`](docs/delivery/MANUAL-VERIFICATION-FINAL-REPORT.md) (2026-07-20); Phase-7 detail remains in [`EXECUTION-REPORT.md`](docs/delivery/EXECUTION-REPORT.md) §10 and the machine ledger [`phase7-gap-analysis.json`](docs/delivery/phase7-gap-analysis.json); Phase-6 detail remains in [`PHASE6-EXECUTION-SUMMARY.md`](docs/delivery/PHASE6-EXECUTION-SUMMARY.md).
+Live at **https://5cb5f0620.abacusai.cloud** — `{"status":"ok","version":"0.2.0"}`, verified this session. `main` is at `fab6d75` with CI green.
 
-**Latest verification (2026-07-20, MANUAL-VERIFICATION run, commit `54c28e5`):** full regression suite green — backend **967 passed / 0 failed** (serialized, `-p no:xdist`) and frontend **477 passed / 0 failed** (vitest). Production DB holds exactly the **2 legitimate accounts** (`admin@aether.local`, demoted, `isAdmin:false`; and the owner/demo account) — both were restored via the app's own seed path after a since-remediated test-suite incident wiped production data (`docs/delivery/INCIDENT-PROD-DB-WIPE-2026-07-18.md`). `aether-discovery.timer` fires every 30 minutes with honest ISO-timestamped logging (scout succeeds; fit-scorer honestly refuses with HTTP 422 until the demo account has a résumé — never a fabricated result). Full record, including a closed cross-account PII-leak class and a "UI facade" defect sweep across all 29 screens: [`docs/delivery/MANUAL-VERIFICATION-FINAL-REPORT.md`](docs/delivery/MANUAL-VERIFICATION-FINAL-REPORT.md) — 168 findings filed, 129 VERIFIED-CLOSED on production, 28 accepted-deviations, 8 blocked on operator action, 0 open.
+Since 2026-08-13 the project has run a continuous launch program: a monitoring loop over dev + production logs with every finding fixed through a thin-slice delivery pipeline, plus a day-one readiness audit whose six blockers are now closed. The ledger of record is [`uat/reports/evidence/market-perf/MONITORING-LEDGER.md`](uat/reports/evidence/market-perf/MONITORING-LEDGER.md) — every finding, its evidence, and who closed it.
 
-**Shipped and verified on production:**
+**Shipped and live:**
 
 | Capability | State | Evidence |
 |---|---|---|
-| **Subscription billing** — 4 tiers (Free/Starter/Pro/Power), GST-inclusive AUD pricing, Stripe Checkout + transaction-safe idempotent webhook + customer portal, `/pricing` page | Built + unit-tested (mocked Stripe); live payment round-trip **pending operator Stripe keys** | `docs/subscription/billing-architecture.md`, `uat/reports/evidence/phase6/review-billing.json` |
-| **Admin panel (Tier 1)** — users + USD spend, per-user spend-cap, suspend/unsuspend, signup toggle, append-only audit log, health | Built + production-flow-verified (spend-cap-before-LLM proven live via a temporary admin, then removed); **formal closure pending operator admin credential** | `docs/subscription/admin-guide.md`, `uat/reports/evidence/phase6/qa-prod-console-admin.json` |
-| **Quota / spend-cap enforcement** — atomic reserve-before-run (sync) / reserve-at-enqueue (async), refund-on-failure, honest HTTP 429 | Live | `uat/reports/evidence/phase6/review-billing.json`, `uat/reports/evidence/phase7/journey-j3-quota-refund.json` |
-| **ToS-compliant job sourcing** — Seek scraping removed; volume from Adzuna AU (licensed API) + Greenhouse/Lever/Ashby/Workable + Remotive/RemoteOK, per-source honest status, freshness + dedup | Live: 33 jobs / 5 sources (3 sources ≥5 each), 0% stale (>30d), 0 Seek, 0 duplicate `sourceUrl`s | `uat/reports/evidence/phase7/journey-j5-sourcing.json`, `step10-cluster2-gates.json` |
-| **Evidence-grounded tailoring + cover letters** — entailment verification, zero fabrication survivors, content-only edits; business-format cover letters with approval gate | Live-verified, zero fabrication survivors across all sampled completions. A genuine ATS-score lift (30.81→32.97) was captured once live; **honest note:** the conservative entailment guard rejects most proposed rewrites when they lack evidence, so ≈14/19 recently sampled live tailoring runs show +0.0% lift and 2/19 show the +0.2% lift — the lift figure is a real, non-fabricated, one-time proof of the mechanism working, not the typical outcome of every run | `uat/reports/evidence/phase6/qa-prod-craft5.json`, `uat/reports/evidence/phase7/probe-p7-07a-ats-metrics.json` |
-| **Multi-Gmail inbox** — per-account tokens, `prompt=select_account`, unified + filtered views | Built + code-verified; full 2-account round-trip **pending a 2nd Gmail consent** | `uat/reports/evidence/phase6/qa-E-verification.json` |
-| **Dual-mode Anthropic credential** — Console API key or a pasted Claude Code OAuth token (`claude setup-token` output) as the platform's/a user's own Anthropic credential | Live-verified: real `sk-ant-oat01-` token round-tripped through a genuine Anthropic API call; billing audit records `authMode=oauth_token` on a live run | `docs/subscription/billing-architecture.md`, `uat/reports/evidence/phase7/step10-cluster1-gates.json` |
-| **Connect with Anthropic (subscription)** — in-app OAuth: click a button, Anthropic's own authorize page opens in a new tab, paste back the one-time code, the server exchanges it (PKCE) and stores the access + refresh token encrypted; auto-refreshes before expiry; an honest `needs_reauth` state + "Renew now" / "Connect with Anthropic" affordance on refresh failure (never a stale token, never a silent fallback). A manual API-key / OAuth-token paste remains as a fallback. | Live: real authorize URL + code/state exchange/refresh cycle verified against production | `apps/api/app/services/anthropic_oauth.py`, `docs/delivery/MODELS-LIVE-GOVERNANCE-AUDIT.md` (ADR-ML-1/2/2a/5), `uat/reports/evidence/models-live/catalog/ML-agents-cred-002-live-mechanics.md` |
-| **Per-agent live model catalog** — every LLM-backed agent card on `/dashboard/agents` has its own searchable, budget-tier-grouped picker over OpenRouter's live catalog (hundreds of models, count varies with upstream churn); the picked model persists per-agent and is honoured at run time for the REASONING-tier agents (`resumeTailoring`/`tailor`, `coverLetter`, `emailAgent`); the STRUCTURED-tier `storyExtraction` agent and all deterministic agents (scout/fitScorer/matcher/supervisor) show an honest "fixed model — not user-selectable" lock instead of a picker that would silently no-op | Live: fresh pull returned 333 models (2026-07-24, launch-ready adversarial re-sample; upstream 343 minus 5 proven-broken denylist ids + 5 unpriced sentinels); prior sweeps recorded 357/337/335 — the count moves with OpenRouter's own catalog, by design | `uat/reports/evidence/models-live/models/CATALOG-SWEEP.md`, `STAGE3-CATALOG-RESAMPLE.md`, `RUN-SWEEP.md`, `NO-SUBSTITUTION-PROOF.md`, `docs/subscription/model-catalog.md` |
-| **Async background generation** — `tailor`/`coverLetter`/pipeline runs enqueue (202) and poll (`GET /api/agents/jobs/{job_id}`) via an ARQ/Redis worker instead of blocking the HTTP request | Live: `AETHER_ASYNC_GENERATION=true` in production; 20/20-run soak, 0 HTTP 503s | `uat/reports/evidence/phase7/journey-j3-soak-20.json` |
+| **Agents console with 3 orchestration maps** — tabbed IA, live run monitor, policy panel, honesty legend, lazily-loaded WebGL layer over an always-present semantic map | Live @ `fab6d75` (deployed 2026-08-14 06:08Z); full frontend suite 1,125 tests green with zero existing test files modified | `uat/reports/evidence/market-perf/s-ui/slice1/` |
+| **Rigor-policy loop** — tier resolution from real conversion + fit metrics, named triggers, tier history from each run's own record, per-tier cohort conversion | Live; the panel's `heightened` tier matched an independent SQL recompute exactly (0% conversion over 290 submissions) | `apps/api/app/services/quality_policy.py`, `uat/reports/evidence/market-perf/mon-batch-ax/` |
+| **Real submission architecture (U5)** — parser-backed auto-submit for Ashby + Greenhouse; honest **assisted** click-to-send for Lever, SmartRecruiters and generic boards; terminal channels (email, Seek-manual, unknown) named as such; approval-gated throughout; approvals older than 7 days never auto-execute and require a one-click reconfirm; sweeps bounded to 10 oldest-first with an honest remaining count | Live; production DRY-RUN verified with **zero** real submissions | `apps/api/app/services/apply_channel_resolver.py`, `apps/api/app/workers/apply_sweep.py` |
+| **Multi-user scheduled discovery** — every subscriber's board refreshes on the timer (not just one account), with a shared Adzuna cache, a daily API budget, and a Sync cooldown; honest degradation when the budget is spent | Live; `aether-discovery.timer` fires every 30 min | `uat/reports/evidence/market-perf/s-fix/A/` |
+| **Automated DB backups with a proven restore** | Live; every 6h, first *autonomous* scheduled fire succeeded 2026-08-14 06:00:10Z. Restore drill into a scratch schema: 33/33 tables, `User` 6/6, `Application` 585/585, `Job` 9,500/9,500 — then dropped, production untouched | `uat/reports/evidence/market-perf/s-fix/C-final/RESTORE-DRILL-output.log` |
+| **Pull-based auto-deploy pipeline** — polls every 5 min, health-gated with a retry deadline, refuses loudly on unexpected working-tree state, canary-verified | Live; a real timer-driven deploy passed the health gate on the exact race an earlier round exposed | `deploy/auto-deploy.sh`, `uat/reports/evidence/market-perf/u-cd/` |
+| **Password reset with real email delivery** | Live; a real reset email was delivered through the configured provider (HTTP 200 from the send API), with anti-enumeration responses and rate limiting | `uat/reports/evidence/market-perf/s-fix/D/` |
+| **Measured résumé fidelity** | Live — fidelity derived from the produced file and surfaced to every consumer, including the approval screen's reasoning | `apps/api/app/services/resume_format.py`, `apps/api/app/services/format_verification.py` |
+| **Live market data in Analytics** — Adzuna AU postings + mean advertised salary, per-row provenance, 6h never-stale cache, fail-closed per row | Live; independently cross-checked (above) | `uat/reports/evidence/market-perf/i4/audit-d/` |
+| **Async generation, quota + spend caps** — `tailor`/`coverLetter`/pipeline enqueue (202) and poll via an ARQ worker; atomic reserve-before-run, refund on failure, honest 429; mid-job cap-crossing stops honestly | Live; bounded DB pool held under a 40-request burst with zero 5xx | `docs/subscription/billing-architecture.md`, `uat/reports/evidence/market-perf/s-fix/` |
+| **Per-agent live model catalog** — searchable, budget-tier-grouped picker over OpenRouter's live catalog, honest locks where an override would no-op | Live — see [Model choice](#-model-choice-per-agent-live-catalog) | `docs/subscription/model-catalog.md` |
+| **Subscription billing** — 4 tiers (Free/Starter/Pro/Power) in AUD, Stripe Checkout + customer portal, transaction-safe idempotent webhook | Live and audited: Managed Payments with automatic tax, an active AU registration, all 6 prices exact to the cent across Stripe ↔ database ↔ pricing page, and an exact 8-event match between the webhook endpoint and its handler | `uat/reports/evidence/market-perf/s-pay/` |
 
-**Pending operator action** (human-gated — code is built and tested, but the live round-trip requires secrets/consents an agent must not fake). Full checklist: [`docs/delivery/PHASE7-BLOCKED-ON-HUMAN.md`](docs/delivery/PHASE7-BLOCKED-ON-HUMAN.md) (supersedes the Phase-6 checklist):
+**Test suites.** Frontend: **1,125 passed / 154 files** at the current `main` tip (2026-08-14). Backend: the closing-gate full run recorded **2,784 passed / 1 skipped** with 2 failures, which were resolved by a reviewed test-only reconciliation and a 35-test targeted proof; the gate was certified green by composition rather than by re-running an unchanged production tree. Both figures carry their date because they move every day.
 
-1. **Stripe** test-mode keys (`STRIPE_SECRET_KEY`, webhook signing secret, 6 Price IDs) + ABN/Stripe Tax → live checkout → webhook → entitlement.
-2. **Admin credential rotation** (`AETHER_ADMIN_EMAIL` + bcrypt `AETHER_ADMIN_PASSWORD_HASH`) → formally closes the admin gate. **Do this before the next deploy.** A GOLD-MASTER-V2 phase-0 security audit (BLOCKER-001) found that the configured production hash was a bcrypt of a publicly-known weak password, and that the bare identifier `admin` resolved to the owner account carrying `isAdmin: true` — reaching `GET /admin/users` and other users' email addresses. An earlier revision of this line claimed that account carried "zero admin privilege in production"; **that claim was false** and has been withdrawn. The *code* defects are fixed (the reserved `admin` username is reclaimed from non-demo accounts on every boot, the demote/regrant pair can no longer self-cancel, and a known-weak `AETHER_ADMIN_PASSWORD_HASH` now aborts a production boot instead of silently granting admin) — but rotating the secret itself is the operator's action, and until it happens the old value remains valid. No login credential is published in this repository.
-3. **Second Gmail OAuth consent** → exercises multi-inbox end-to-end.
-4. **Adzuna AU API credentials** (`ADZUNA_APP_ID`/`ADZUNA_APP_KEY`) — optional; the sourcing floor is already met without them.
+**What still needs a human.** These are deliberately not automated — an agent must not fake a payment, a consent, or a legal registration:
 
-The operator's own Claude Code OAuth token (`sk-ant-oat01-…`) is **already configured and live** — no action needed for that item.
+1. **A real end-to-end purchase.** The Stripe integration is audited and coherent, but the live account has recorded **zero completed Checkouts** to date — the subscribe path (Checkout → webhook → entitlement → invoice) is unproven with real money. A dress rehearsal with the operator's card is a hard gate before wide onboarding.
+2. **Stripe Dashboard branding** — logo/icon upload and brand colours; the API forbids writing an account's own branding, so this is a two-minute manual step (assets are prepared in-repo).
+3. **GST/ABN representation** — the ABN is configured; the final tax-display adjudication is deferred to the real invoice produced by that first live purchase.
+4. **A second Gmail consent** — exercises the multi-inbox path end-to-end.
 
-**Known non-blocking residual (Phase 6) — RESOLVED in Phase 7:** LLM generation used to be synchronous under a ~100s HTTP edge, surfacing an honest HTTP 503 in roughly 20% of attempts (`BACKLOG-P6-02`). Async background generation (above) eliminates this: generation now runs on a separate `aether-worker` process and the HTTP request only enqueues + polls.
-
-## ✨ What Aether Does
+## ✨ What Aether does
 
 | Area | Live behaviour |
 |---|---|
-| **Job discovery** | Profile-driven sourcing across licensed/ATS APIs; per-source sync status; freshness ≤30d; fingerprint de-duplication; honest "why zero" surfacing |
-| **Fit scoring** | Deterministic multi-dimensional scoring per job (non-LLM, zero-token by design) |
-| **Résumé tailoring** | Content-only edits to the top-relevance bullets; JD-keyword integration only where the user's own evidence supports it; an entailment pass reverts any unsupported claim; before/after ATS scores shown with a methodology tooltip |
-| **Cover letters** | Business-letter format (sender/date/recipient/salutation/3 paragraphs/CTA/sign-off); evidence-grounded; clean PDF export; approval-gated before send |
-| **Applications & email** | Application tracker; Gmail-connected email triage with draft-and-approve; every outbound action passes an explicit approval item in `/dashboard/approvals` |
-| **Billing & quota** | Monthly agent-run quota per tier; atomic reserve-before-run; USD spend cap; honest 429 + upgrade CTA at exhaustion |
-| **Admin** | User/spend visibility (USD), spend caps, suspend, signup toggle, append-only audit log |
-| **Sales Agent** (`/admin/sales-agent`) | Admin-only view of signups/paid-conversion/estimated-MRR re-projected from the existing `/api/admin/users` data, plus links to the external autonomous growth engine's system of record (Google Sheet CRM + LinkedIn content/messaging Docs). The growth engine itself runs outside this codebase on a 6x/day schedule (Gmail-signal-driven outreach with a compliance footer, suppression list and idempotency keys, draft-only LinkedIn content, daily summary email); see `docs/growth/README.md` |
+| **Job discovery** | Profile-driven sourcing across licensed and official ATS APIs (Adzuna AU, Greenhouse/Lever/Ashby/Workable/SmartRecruiters, Remotive/RemoteOK); per-source honest status; freshness windows; fingerprint de-duplication; an explicit "why zero" when a source returns nothing |
+| **Fit scoring** | Deterministic multi-dimensional scoring per job — no LLM tokens, zero cost by design |
+| **Résumé tailoring** | Content-only edits to the top-relevance bullets; JD keywords integrated only where your own evidence supports them; an entailment pass reverts anything unsupported; before/after ATS scores with a methodology tooltip; fidelity verified against the rendered file |
+| **Cover letters** | Business-letter format, evidence-grounded, PDF export, approval-gated before send |
+| **Applications & submission** | Parser-backed auto-submit where a real parser exists; honest assisted mode elsewhere; stale approvals expire into a reconfirm rather than firing late; every outbound action passes an explicit gate in `/dashboard/approvals` |
+| **Email** | Gmail-connected triage with draft-and-approve; approving an email-channel application really sends it, and a failed send is retryable |
+| **Analytics** | Melbourne-timezone bucketing on an AU-branded page; every delta declares what kind of comparison it is; live market rows with per-row provenance; unmeasured signals read "—", never 0 |
+| **Billing & quota** | Monthly run quota per tier, atomic reserve-before-run, USD spend cap, honest 429 with an upgrade path |
+| **Admin** | User and spend visibility, per-user spend caps, suspend, signup toggle, append-only audit log |
 
 ## 🏗️ Architecture (as deployed)
 
-Aether runs as a **pnpm + Turborepo monorepo** on a single VM behind nginx — not the Kubernetes/multi-cloud topology in the original enterprise design PDFs (those remain in `docs/architecture/` as design-time reference, not a description of the live system).
+A **pnpm + Turborepo monorepo** on a single VM behind nginx — not the Kubernetes/multi-cloud topology in the original design PDFs, which remain in `docs/architecture/` as design-time reference only.
 
 ```
 Browser ──▶ nginx (per-host vhost)
               ├─ /            ──▶ aether-web    (Next.js 14 App Router, systemd, :3000)
               └─ /api/*       ──▶ aether-api    (FastAPI + Uvicorn, systemd, :8000)
                                     ├─ PostgreSQL (hosted, schema "aether")
-                                    ├─ LLM via OpenRouter (OpenAI-compatible; deepseek / qwen)
-                                    │  or a dual-mode Anthropic credential (Console API key / Claude Code OAuth token)
-                                    ├─ aether-worker  (ARQ worker, systemd; async tailor/coverLetter/pipeline)
-                                    ├─ Redis          (loopback-only, requirepass, logical DB 3 — ARQ queue backend)
-                                    └─ aether-discovery.timer (scheduled sourcing, every 30 min; paywall-exempt via X-Aether-System-Run)
+                                    ├─ aether-worker (ARQ worker, systemd — async tailor/coverLetter/pipeline/apply-sweep)
+                                    ├─ Redis        (loopback-only, requirepass, logical DB 3 — ARQ queue)
+                                    └─ LLM: OpenRouter (OpenAI-compatible) or a direct Anthropic credential
+
+systemd timers
+  ├─ aether-discovery.timer   every 30 min  — multi-user sourcing + fit scoring (paywall-exempt via X-Aether-System-Run)
+  ├─ aether-backup.timer      every 6 h     — pg_dump → local + S3, restore-drilled
+  └─ aether-autodeploy.timer  every 5 min   — pull, gate on CI + health, deploy or refuse loudly
 ```
 
-- **Web:** `apps/web` — Next.js 14 (App Router, RSC), TypeScript, Tailwind. Routes: `/login`, `/signup`, `/pricing`, `/privacy-policy`, `/terms`, `/admin/*`, and `/dashboard/*` (jobs, applications, resume, cover-letters, email, interviews, networking, offers, analytics, agents, stories, approvals, settings).
-- **API:** `apps/api` — FastAPI (Python 3.11+). Raw-psycopg2 data layer; additive **lazy idempotent DDL** (`_ensure_*_tables` + advisory locks) — no destructive migrations; `.sql` files under `apps/api/migrations/` are documentation mirrors.
-- **Worker:** `apps/api/app/workers/` — an ARQ task runner (`aether-worker.service`, `Requires=redis-server.service`) that executes `tailor`/`coverLetter`/pipeline generation off the HTTP request path when `AETHER_ASYNC_GENERATION=true` (production default since Phase 7). Jobs live in the additive `BackgroundJob` table; quota is reserved atomically at enqueue and refunded on enqueue failure, worker failure, or a stale-job watchdog trip. See `docs/subscription/billing-architecture.md` §4.4.
-- **LLM:** OpenAI-compatible transport to OpenRouter (`AETHER_LLM_MODE=auto`) is the default production routing for plan-tier billing. On top of that, every LLM-backed agent (`tailor`, `coverLetter`, `emailAgent`) has a **per-agent live model picker** (§ AI Agents below) drawing on OpenRouter's full catalog. Separately, the Anthropic provider-credential endpoints accept a **dual-mode manual credential**: a Claude Console API key (`sk-ant-api…`) or a pasted Claude Code OAuth token (`sk-ant-oat01-…`, the output of running `claude setup-token`; `ADR-P7-01`). **In addition**, an in-app **"Connect with Anthropic (subscription)" OAuth flow** is now built and live (`ML-agents-cred-002`, `ADR-ML-1/2/2a/5` in `docs/delivery/MODELS-LIVE-GOVERNANCE-AUDIT.md`) — a compliant re-authoring, distinct from the interactive-consent flow Phase 6 found ToS-prohibited (`ADR-P6-OAUTH`) and removed: clicking "Connect with Anthropic" opens **Anthropic's own** authorize page in a new tab; the operator approves and pastes back a one-time `code#state`; the server exchanges it (PKCE, `platform.claude.com/v1/oauth/token`) and stores the access + refresh token encrypted; the access token auto-refreshes ~5 minutes before expiry; a failed refresh marks the credential `needs_reauth` and the UI shows an honest "Renew now" / reconnect affordance rather than silently reusing a stale token. The manual API-key/OAuth-token paste stays available as a fallback. On any LLM call failure the client raises an honest error and refunds quota — it never serves a fixture as real output, and a user-chosen model that fails is never silently substituted with a different one (`ADR-ML-3`).
-- **Secrets:** all via environment variables; OAuth/credential material encrypted at rest (Fernet); a saved `oauth_token`-mode Anthropic credential is additionally synced (atomic, 0600, never logged) to the repo-root `.env` as `CLAUDE_CODE_OAUTH_TOKEN` so the worker process can read it too.
+- **Web:** `apps/web` — Next.js 14 (App Router, RSC), TypeScript, Tailwind. 34 routes under `/login`, `/signup`, `/pricing`, `/privacy-policy`, `/terms`, `/admin/*` and `/dashboard/*`.
+- **API:** `apps/api` — FastAPI (Python 3.11+). Raw-psycopg2 data layer with a bounded pool; additive **lazy idempotent DDL** (`_ensure_*_tables` + advisory locks) — no destructive migrations. The `.sql` files under `apps/api/migrations/` are documentation mirrors.
+- **Worker:** `apps/api/app/workers/` — ARQ task runner (`aether-worker.service`, `Requires=redis-server.service`) executing generation and the bounded apply sweep off the HTTP path. Quota is reserved atomically at enqueue and refunded on enqueue failure, worker failure, or a stale-job watchdog trip.
+- **LLM:** OpenAI-compatible transport to OpenRouter is the default production routing; a direct Anthropic credential (Console API key, a pasted Claude Code OAuth token, or the in-app "Connect with Anthropic" PKCE OAuth flow with encrypted storage and pre-expiry refresh) is supported alongside it. Six providers can hold credentials (`anthropic`, `openrouter`, `openai`, `gemini`, `bedrock`, `groq`); a provider is reported connected only when its credential is genuinely present. **On any LLM failure the client raises an honest error and refunds quota — it never serves a fixture as real output, and a user-chosen model that fails is never silently swapped for another.**
+- **Secrets:** environment variables only; credential material encrypted at rest (Fernet); nothing sensitive in process argv or logs.
+- **Deploy:** unit files, the backup and auto-deploy scripts, and the nginx vhost live in-repo under `deploy/`; the newer units (`aether-backup`, `aether-autodeploy`) and the vhost are symlinked from `/etc` so their runtime setup is version-controlled, while the original `aether-api` / `aether-web` / `aether-worker` / `aether-discovery` units remain copies installed under `/etc/systemd/system`. Procedure and rollback: [`docs/delivery/DEPLOYMENT-RUNBOOK.md`](docs/delivery/DEPLOYMENT-RUNBOOK.md).
 
-## 🤖 AI Agents (runtime)
+## 🧠 Model choice (per-agent, live catalog)
 
-**8 agents actually execute in production** (confirmed via `GET /api/agents`; `uat/reports/evidence/phase6/probe-16-agent-keys.json`):
+Every LLM-backed agent card on `/dashboard/agents` carries its own searchable, budget-tier-grouped model picker over OpenRouter's live catalog. The choice is saved **per agent**, not as one global default, and is what that agent actually runs on next time.
 
-| Agent | Kind | Role |
-|---|---|---|
-| `supervisor` | orchestration | Plans and sequences a pipeline run |
-| `scout` | deterministic | Multi-source job discovery (no LLM tokens by design) |
-| `matcher` | deterministic | Job↔profile matching |
-| `fitScorer` | deterministic | Multi-dimensional fit scoring |
-| `tailor` | LLM | Content-only résumé tailoring + entailment anti-fabrication |
-| `coverLetter` | LLM | Business-format, evidence-grounded cover letters |
-| `storyExtractor` | LLM | STAR+R story/achievement extraction |
-| `emailAgent` | LLM | Gmail triage + draft-and-approve |
-
-The `AgentConfig` table holds **22 configured agent keys** — a superset of the 8 runtime agents plus disabled/catalog entries reserved for future enablement without a schema change. Only the 8 above are wired to orchestration and run today. (LLM agents record real token counts and USD cost; deterministic agents are correctly zero-cost.)
-
-### Model choice (per-agent, live OpenRouter catalog)
-
-Every LLM-backed agent card on `/dashboard/agents` (`resumeTailoring`→`tailor`, `coverLetter`, `emailAgent`) carries its own searchable, budget-tier-grouped model picker (`AgentModelPicker.tsx`) over `GET /api/agents/providers/openrouter/models`. The choice is saved per-agent (`PUT /api/agents/config/{agentKey}`), not as one global default, and is what the agent actually runs on the next time it executes.
-
-- **Overridable vs. fixed:** the picker is only rendered as a functional search+select for agents on the `REASONING` LLM tier (`tailor`, `coverLetter`, `emailAgent`) — the only tier the run-time model resolver (`_model_overridable` / `_USER_OVERRIDABLE_TIERS`) honours a per-agent override for. `storyExtraction` runs on the `STRUCTURED` tier and deterministic agents (`scout`/`fitScorer`/`matcher`/`supervisor`) make no LLM call at all — both show an honest **"Fixed model — not user-selectable"** lock instead of a picker that would silently no-op.
-- **Freshness + refresh:** the OpenRouter catalog is fetched live and cached for up to 1 hour (`_MODEL_CATALOG_TTL`); every catalog response carries `lastRefreshedAt` (ISO-8601) and `stale` (true only once the cache has aged past the TTL and a background refresh attempt has failed). `POST /api/agents/providers/{provider}/models/refresh` forces an immediate upstream re-fetch; on an upstream failure it still serves the last-good cached list (flagged `stale: true`) rather than blocking the UI or fabricating a catalog.
-- **Curation (proven-broken denylist):** 5 exact model ids proven — via a live 82-model run sweep, `uat/reports/evidence/models-live/models/RUN-SWEEP.md` — to be permanently unable to serve a chat completion for this deployment's key (2× no-endpoint 404, 3× structurally non-chat apply/diff/deep-research endpoints) are filtered out of the picker by exact-id match (`_OPENROUTER_PROVEN_BROKEN_IDS`, `ADR-ML-4`). This is a maintained denylist seeded from evidence, not a heuristic filter — OpenRouter's `/models` payload carries no availability signal, and a heuristic (e.g. "no `temperature` param") would also hide 50+ working Anthropic-via-OpenRouter models. Transient failures (rate-limits, timeouts) are deliberately **not** denylisted.
-- **Validation:** `PUT /api/agents/config/{agentKey}` rejects a model id that isn't in the live OpenRouter catalog with an honest `HTTP 422` (`model '<id>' is not in the live openrouter catalog — choose one from the catalog.`); a cold/unwarmed cache accepts the id rather than blocking on a slow upstream call (it then fails honestly at run time if wrong — never a silent substitution).
-- **Provider / billing routing:** a model id containing a `/` (e.g. `deepseek/deepseek-v4-flash`, or OpenRouter's own `anthropic/claude-3-haiku`) is OpenRouter-namespaced and **always bills through OpenRouter** — including the `anthropic/*` ids OpenRouter itself serves, which do **not** route to the direct Anthropic API. A bare id starting with `claude-` or `anthropic` (no slash) routes to the **direct Anthropic API** instead (`resolve_provider`, `apps/api/app/services/llm_client.py`). The picker states this routing implication in-UI next to every agent's model list.
-- **No silent substitution:** when a user-chosen model fails at run time, the run fails honestly (quota refunded) — it is never silently replaced with a different model and reported as success (`ADR-ML-3`, proven live in `uat/reports/evidence/models-live/models/NO-SUBSTITUTION-PROOF.md`).
+- **Overridable vs. fixed.** The picker renders as a functional search-and-select only for agents whose runtime resolver honours a per-agent override. Agents that make no LLM call, or run on a fixed structured tier, show an honest **"Fixed model — not user-selectable"** lock instead of a control that would silently no-op.
+- **Freshness + refresh.** The catalog is fetched live and cached; every response carries `lastRefreshedAt` and a `stale` flag (true only once the cache has aged past its TTL *and* a background refresh has failed). A manual refresh endpoint forces an immediate upstream re-fetch; on upstream failure it serves the last-good list flagged `stale` rather than blocking the UI or inventing a catalog.
+- **Curation.** A small, evidence-seeded denylist filters model ids proven — by a live run sweep — permanently unable to serve a chat completion for this deployment. It is a maintained list, not a heuristic: transient failures are deliberately never denylisted.
+- **Validation.** Saving a model id that isn't in the live catalog returns an honest `HTTP 422` naming the problem; a cold cache accepts the id rather than blocking on a slow upstream call, and then fails honestly at run time if it was wrong.
+- **Provider / billing routing.** A model id containing `/` is OpenRouter-namespaced and **always bills through OpenRouter** — including the `anthropic/*` ids OpenRouter itself serves, which do **not** reach the direct Anthropic account. A bare `claude-…` id (no slash) routes to the direct Anthropic API. The picker states this in-UI next to every model list.
+- **Served-model observation.** When an upstream provider routes a request to a different model than requested, that is recorded on the run and costed against the model actually served — surfaced, never hidden.
 
 Full behavioural reference: [`docs/subscription/model-catalog.md`](docs/subscription/model-catalog.md).
 
-## 🛠️ Technology Stack (deployed)
+## 🛠️ Technology stack (deployed)
 
 | Layer | Technology |
 |---|---|
-| **Frontend** | Next.js 14 (App Router, RSC), TypeScript, Tailwind CSS |
+| **Frontend** | Next.js 14 (App Router, RSC), TypeScript, Tailwind CSS, three.js (lazily loaded, Agents console only) |
 | **Backend** | FastAPI (Python 3.11+), Uvicorn |
-| **Monorepo** | pnpm workspaces + Turborepo (`tasks` config, Turborepo 2.x) |
-| **Database** | PostgreSQL (hosted), schema `aether`; pgvector-style embeddings stored in-table |
-| **LLM** | OpenRouter (OpenAI-compatible), `auto` mode with model fallback + honest failure; per-agent live model catalog picker (hundreds of curated OpenRouter models, 1h cache + manual refresh); Anthropic via a manual dual-mode credential (Console API key or Claude Code OAuth token) **or** the in-app "Connect with Anthropic (subscription)" OAuth flow — both available via the agent-provider settings |
-| **Async jobs** | ARQ (task runner) + Redis (loopback-only, `requirepass`, logical DB 3) — background `tailor`/`coverLetter`/pipeline generation |
-| **Billing** | Stripe (Checkout, webhooks, customer portal), Stripe Tax optional |
-| **Auth / crypto** | Session JWT, bcrypt password hashing, Fernet-encrypted credentials, per-endpoint rate limiting |
-| **Sourcing** | Adzuna AU API + Greenhouse/Lever/Ashby/Workable board APIs + Remotive/RemoteOK |
-| **Serving** | nginx reverse proxy, systemd units (`aether-api`, `aether-web`, `aether-worker`, `aether-discovery.timer`) on a single VM |
-| **PDF** | Server-side résumé/cover-letter PDF generation |
+| **Monorepo** | pnpm workspaces + Turborepo 2.x |
+| **Database** | PostgreSQL (hosted), schema `aether`; embeddings stored in-table |
+| **LLM** | OpenRouter (OpenAI-compatible) with a per-agent live catalog picker; direct Anthropic via API key, pasted OAuth token, or in-app PKCE OAuth |
+| **Async jobs** | ARQ + Redis (loopback-only, `requirepass`, logical DB 3) |
+| **Billing** | Stripe — Checkout, webhooks, customer portal, Managed Payments with automatic tax |
+| **Auth / crypto** | Session JWT, bcrypt password hashing, Fernet-encrypted credentials, per-endpoint rate limiting, tokenless reset flow with anti-enumeration |
+| **Sourcing** | Adzuna AU + Greenhouse/Lever/Ashby/Workable/SmartRecruiters board APIs + Remotive/RemoteOK |
+| **Ops** | nginx, systemd services (`aether-api`, `aether-web`, `aether-worker`) and timers (`aether-discovery`, `aether-backup`, `aether-autodeploy`), S3 backup storage |
 
-> The original enterprise design (LangGraph, Pinecone/Weaviate, Redis/BullMQ, AWS EKS, Terraform, Langfuse/Grafana) lives in the architecture PDFs as reference; it is **not** the deployed stack.
+> The original enterprise design (LangGraph, Pinecone/Weaviate, BullMQ, EKS, Terraform, Langfuse/Grafana) lives in the architecture PDFs as reference. It is **not** the deployed stack.
 
-## 🎨 Design System — 17 Screens
+## 🗺️ Roadmap — in progress
 
-**17 high-fidelity screens** (dark mode, glassmorphism, coral accent `#FF6B35`), all built and live under `/dashboard/*`, `/admin`, and `/pricing`. The source wireframes are in [`design/screens/`](design/screens/) (open any `.html` in a browser); the design language spec is [`design/DESIGN.md`](design/DESIGN.md). This "17" counts the **design wireframes** (`design/screens/*.html`, verified: 17 files) — a distinct, smaller number from the **28 live app routes** (`apps/web/src/app/**/page.tsx`) in `uat/reports/evidence/models-live/SCREEN-MATRIX.md`, since several routes (e.g. every `/admin/*` sub-page, `/login`, `/signup`) were built directly without a dedicated wireframe.
+Named honestly: these are **not shipped**, and nothing above depends on them.
 
-Dashboard, Job Discovery, Résumé Studio, Story Bank, Application Tracker, Interview Center, Networking & CRM, Email Center, Manage Agents, Agent Monitor, Analytics, Offer Comparison, Settings, Approval Modal, Cover Letter Studio, Mobile Dashboard, Mobile Approval.
+- **Full-app UI recreation.** The Agents console (above) was slice 1 and is live. In flight: the application shell (pinned rail, ⌘K command bar over the existing search index, system-status popover) and a Dashboard + Analytics recreation built on a hand-written SVG chart kit whose honesty laws are enforced in code — a chart that cannot distinguish a measured zero from missing data throws in development rather than rendering an ambiguous mark. Design specs and reference captures: `uat/reports/evidence/market-perf/s-ui/`.
+- **Agentic runtime.** Today's agents are scripted: exactly half (10 of 20 distinct backends) make no LLM call at all, and the other half make a single fully-scripted call. The design direction on record is **one thin shared kernel** (reasoning loop, tool registry, and all guardrail enforcement — spend caps, approval gates, anti-fabrication, honesty traces) with **per-agent declarative charters** (goal, allowed tools, constraints, autonomy tier) as *data*, not code — each phase deleting the scripted path it supersedes. A blueprint exists (`uat/reports/evidence/market-perf/u-agi/`) and is explicitly design-only: no implementation has been approved or written.
+- **Résumé completeness hardening.** Fidelity is measured today, but a live verification on a real baseline caught the reflow renderer dropping whole sections while the fidelity checks tracked only edits. The fix — renderer completeness plus whole-document verification — is in flight and gates closure of the résumé path.
+- **Monitoring residuals.** Open, low-severity items stay listed in the ledger with their severity rather than being quietly dropped.
 
-## 🧑‍💻 Local Development
+## 🎨 Design system
+
+17 high-fidelity wireframes (dark, glassmorphism, coral accent `#FF6B35`) in [`design/screens/`](design/screens/) — open any `.html` in a browser — with the language spec in [`design/DESIGN.md`](design/DESIGN.md). That count is **wireframes**, deliberately smaller than the 34 live app routes: several routes (every `/admin/*` sub-page, `/login`, `/signup`) were built without a dedicated wireframe. The in-flight UI recreation above supersedes parts of this system; where they disagree, the live app is the truth.
+
+## 🧑‍💻 Local development
 
 ```bash
-# Install dependencies (Node 20+, pnpm)
+# Node 20+, pnpm 11
 pnpm install
 
-# Copy and fill in environment variables (see .env for the full name list —
-# DATABASE_URL, OPENROUTER_API_KEY, AETHER_LLM_MODE, AETHER_CREDENTIAL_KEY, Stripe keys, etc.)
-cp .env.example .env   # if present; otherwise seed from the DEPLOYMENT-RUNBOOK reference
+# Environment: DATABASE_URL, OPENROUTER_API_KEY, AETHER_CREDENTIAL_KEY, Stripe keys, etc.
+# .env.example documents most of these names; a few operational ones (e.g.
+# AETHER_CREDENTIAL_KEY, AETHER_APPROVAL_MAX_AGE_DAYS) are set via the runbook instead.
+cp .env.example .env
 
-# Run API (FastAPI), web (Next.js), and the async worker — production-style:
-./start-api.sh    # loads .env, uvicorn on 127.0.0.1:8000
-./start-web.sh    # loads .env, Next.js production build for apps/web
-./start-worker.sh # loads .env, arq app.workers.settings.WorkerSettings (needs Redis running)
+# Run the three processes production-style (each loads .env):
+./start-api.sh      # uvicorn on 127.0.0.1:8000
+./start-web.sh      # Next.js production build for apps/web
+./start-worker.sh   # arq app.workers.settings.WorkerSettings (needs Redis)
 
-# Iterative development across the monorepo:
-pnpm dev · pnpm test · pnpm lint · pnpm type-check   # (turbo)
+# Monorepo tasks (turbo):
+pnpm dev · pnpm build · pnpm test · pnpm lint · pnpm type-check
+pnpm validate:openrouter   # sanity-check the live model catalog wiring
 ```
 
-Billing and admin degrade **honestly** without secrets — an unconfigured `STRIPE_SECRET_KEY` returns a clean HTTP 503 on checkout (never a fabricated payment URL); with no admin credential set, the panel simply has no admin. Full env reference and the exact production deploy/rollback procedure: [`docs/delivery/DEPLOYMENT-RUNBOOK.md`](docs/delivery/DEPLOYMENT-RUNBOOK.md).
+Everything degrades **honestly** without secrets: an unconfigured `STRIPE_SECRET_KEY` returns a clean 503 on checkout rather than a fabricated payment URL; with no admin credential, the panel simply has no admin; with no email provider key, password reset reports itself degraded instead of pretending to send. Reference: [`docs/delivery/DEPLOYMENT-RUNBOOK.md`](docs/delivery/DEPLOYMENT-RUNBOOK.md) and [`docs/delivery/EMAIL-SETUP.md`](docs/delivery/EMAIL-SETUP.md).
 
-**Phase-7 environment variables** (in addition to the Phase-6 set — DB/LLM/Stripe/admin/Gmail — documented in the runbook):
+Selected environment variables beyond the core DB/LLM/Stripe/admin/Gmail set:
 
-| Var | Purpose | Default |
-|---|---|---|
-| `CLAUDE_CODE_OAUTH_TOKEN` | Anthropic `oauth_token`-mode credential (`sk-ant-oat01-…`), auto-synced when saved via the agent-provider settings — do not hand-edit | (none) |
-| `AETHER_ALLOWED_INTERNAL_EMAIL_DOMAINS` | Comma-separated exact-domain allowlist for the settings-email validator (subdomains are still rejected) | `aether.local` |
-| `AETHER_REDIS_URL` | ARQ/Redis connection string for the async worker queue | `redis://127.0.0.1:6379/3` |
-| `AETHER_REDIS_PASSWORD` | Redis `requirepass` value (loopback-only bind) | (none) |
-| `AETHER_ASYNC_GENERATION` | Enables 202-enqueue + poll for `tailor`/`coverLetter`/pipeline instead of synchronous 200 | `false` (`true` in production) |
-| `AETHER_LLM_WORKER_BUDGET_SECONDS` / `AETHER_LLM_WORKER_COVER_BUDGET_SECONDS` / `AETHER_LLM_WORKER_PIPELINE_BUDGET_SECONDS` | Per-call LLM time budgets inside the worker (no HTTP-edge timeout to respect there) | `300` |
-| `AETHER_SYSTEM_RUN_SECRET` | Shared secret for the `X-Aether-System-Run` header that lets `aether-discovery.timer` bypass the paywall for `scout`/`fitScorer` only | (none — disabled when unset) |
-| `AETHER_JOB_STALE_SECONDS` | Staleness window before a polled, non-terminal `BackgroundJob` is watchdog-failed + refunded | `900` |
+| Var | Purpose |
+|---|---|
+| `AETHER_ASYNC_GENERATION` | 202-enqueue + poll for `tailor`/`coverLetter`/pipeline instead of a blocking 200 (`true` in production) |
+| `AETHER_REDIS_URL` / `AETHER_REDIS_PASSWORD` | ARQ queue backend (loopback-only) |
+| `AETHER_SYSTEM_RUN_SECRET` | Shared secret for the header that lets the discovery timer bypass the paywall for `scout`/`fitScorer` only |
+| `AETHER_APPROVAL_MAX_AGE_DAYS` | Age past which an approved application will not auto-submit and must be reconfirmed (default 7) |
+| `AETHER_EMAIL_API_KEY` | Outbound email provider key (password reset); absent ⇒ honest degraded state |
+| `ADZUNA_APP_ID` / `ADZUNA_APP_KEY` | Live market benchmarks; absent ⇒ every market row reports `connected: false` |
+| `AETHER_JOB_STALE_SECONDS` | Staleness window before a polled non-terminal background job is watchdog-failed and refunded |
 
-## 📂 Repository Structure
+## 📂 Repository structure
 
 ```
 aether-job-career-agent/
 ├── apps/
 │   ├── api/        # FastAPI backend (routers, agents, services, repositories, middleware, migrations/)
-│   │   └── app/workers/  # ARQ async task runner (tasks.py, queue.py, settings.py) — aether-worker.service
+│   │   └── app/workers/    # ARQ task runner + bounded apply sweep — aether-worker.service
 │   └── web/        # Next.js 14 frontend (app/, components/, lib/)
-├── packages/db/    # schema-of-record only (src/schema.prisma); orphan TS packages removed 2026-07-24 (dedup wave 3)
-├── design/         # DESIGN.md + 17 screen wireframes (design/screens/)
+├── packages/db/    # schema of record (src/schema.prisma)
+├── design/         # DESIGN.md + 17 screen wireframes
+├── deploy/         # systemd units, timers, nginx vhost, backup + auto-deploy scripts (symlinked into /etc)
 ├── docs/
-│   ├── delivery/       # gate-verified delivery record (PHASE*-*, gap ledgers, runbook, governance audit)
-│   ├── subscription/   # billing-architecture, admin-guide, model-catalog, privacy-policy, terms-of-service
+│   ├── delivery/       # gate-verified delivery record, ADRs, runbook, email setup
+│   ├── subscription/   # billing architecture, admin guide, model catalog, privacy policy, terms
 │   ├── architecture/   # original enterprise design PDFs (reference, not the deployed topology)
-│   └── research/        # market/competitive research (historical)
-├── assets/resume/  # canonical résumé PDF (read-only)
+│   └── growth/         # external growth-engine notes
+├── assets/         # canonical résumé PDF (read-only)
 ├── ci/             # CI configuration
 ├── scripts/        # operational scripts
-├── uat/            # UAT runner + reports/evidence
-├── start-api.sh · start-web.sh · start-worker.sh   # systemd entrypoints
-├── turbo.json · pnpm-workspace.yaml
-└── docs/delivery/EXECUTION-REPORT.md   # authoritative delivery record (root pointer stub removed)
+├── uat/            # UAT runner + reports/evidence (the evidence trees cited throughout this README)
+├── start-api.sh · start-web.sh · start-worker.sh
+└── turbo.json · pnpm-workspace.yaml
 ```
 
-## 📜 Delivery History
+## 📜 Delivery history
 
-The full, gate-verified delivery history lives in [`docs/delivery/`](docs/delivery/):
-- **LAUNCH-READY** (`LAUNCH-READY-STATE.json`, `LAUNCH-READY-FINAL-REPORT.md`, `LAUNCH-READY-GOVERNANCE-AUDIT.md`) — latest run (2026-07-24): six-workstream launch-readiness pass — models-live ledger closure, approvals purge + pipeline stage-move features, ~3,670-LOC dedup, repo/home cleanup (1.6G→<1G), top-paid-app quality sweep (Lighthouse a11y/BP 100), and a final adversarial review + observation window. Human-gated residuals: `LAUNCH-READY-BLOCKED-ON-HUMAN.md`. Evidence root: `uat/reports/evidence/launch-ready/`.
-- **MODELS-LIVE** (`MODELS-LIVE-GAPS.json`, `archive/MODELS-LIVE-GOVERNANCE-AUDIT.md`) — latest run (2026-07-22, all code fixes live @ commit `51f1ec8`): per-agent live OpenRouter model catalog picker (searchable, budget-tier grouped, freshness + manual refresh, proven-broken denylist, 422 validation, no-silent-substitution); the in-app "Connect with Anthropic (subscription)" OAuth flow (`ML-agents-cred-002`); billing/provider-routing correctness (`resolve_provider`); 46 findings tracked (36 VERIFIED-CLOSED, 4 OPEN — all LOW severity: 3 documentation-accuracy items addressed by this refresh — `ML-runbook-001`, `ML-admindetail-002`, `ML-forgotpw-001` — plus 1 known-environmental shared-test-DB flakiness note, `ML-env-001`, not a code defect). Evidence root: `uat/reports/evidence/models-live/`.
-- **[`MANUAL-VERIFICATION-FINAL-REPORT.md`](docs/delivery/MANUAL-VERIFICATION-FINAL-REPORT.md)** — prior run (2026-07-20): per-wireframe human-grade manual testing across all 29 screens → fix → adversarial re-verify. 168 findings (129 VERIFIED-CLOSED / 28 accepted-deviation / 8 blocked-on-human / 3 other, 0 open); closed a cross-account PII-leak class (9 agent paths grounded on the caller's own résumé, not a fixed operator résumé); survived and remediated a production-DB-wipe incident (`INCIDENT-PROD-DB-WIPE-2026-07-18.md`) including seed-account + discovery-cron restoration; eliminated dead buttons/client-only fakes/false-success notices across the UI. Governance: `MANUAL-VERIFICATION-GOVERNANCE-AUDIT.md` (14 entries, 0 self-approvals). Claim ledger: `MANUAL-VERIFICATION-CLAIM-LEDGER.md`.
-- **[`EXECUTION-REPORT.md`](docs/delivery/EXECUTION-REPORT.md) §10** — prior run (Phase 7): dual-mode Anthropic credential, settings-email allowlist + persistence fix, async background generation, discovery paywall bypass.
-- **[`PHASE7-GAP-ANALYSIS.md`](docs/delivery/PHASE7-GAP-ANALYSIS.md)** + `phase7-gap-analysis.json` — per-gap records with production evidence.
-- **[`PHASE7-CLAIM-LEDGER.md`](docs/delivery/PHASE7-CLAIM-LEDGER.md)** — independent adversarial audit of every Phase-6 closure claim against fresh Phase-7 evidence.
-- **[`PHASE7-BLOCKED-ON-HUMAN.md`](docs/delivery/PHASE7-BLOCKED-ON-HUMAN.md)** — current operator steps to go fully live (supersedes the Phase-6 checklist).
-- **[`PHASE6-EXECUTION-SUMMARY.md`](docs/delivery/PHASE6-EXECUTION-SUMMARY.md)** — prior run: subscription/billing, admin panel, ToS-compliant sourcing, evidence-grounded quality; 34-gate adjudication.
-- **[`DECISIONS.md`](docs/delivery/DECISIONS.md)** — architecture decision records (ADRs) through Phase 6 (e.g. `ADR-P6-OAUTH`, `ADR-P6-PRICING`); Phase-7 rulings (`ADR-P7-01` dual-mode Anthropic credential override, `ADR-P7-05` discovery paywall bypass) are recorded in the **Rulings** table of [`PHASE7-GAP-ANALYSIS.md`](docs/delivery/PHASE7-GAP-ANALYSIS.md), not yet folded into `DECISIONS.md`.
-- Per-phase reports for Phases 0–6 are retained as dated historical records.
+Full, gate-verified history in [`docs/delivery/`](docs/delivery/) and the evidence trees under `uat/reports/evidence/`:
+
+- **Launch program (2026-08-13 → 2026-08-14)** — continuous dev + production monitoring with every finding fixed through a thin-slice pipeline; a day-one readiness audit and the closure of all six blockers (multi-user discovery, Adzuna budget guards, DB pool, spend-cap enforcement, backups, password reset); live market data in Analytics; the real-submission architecture; the auto-deploy pipeline; the rebuilt Agents console. The record of record is the ledger: [`uat/reports/evidence/market-perf/MONITORING-LEDGER.md`](uat/reports/evidence/market-perf/MONITORING-LEDGER.md).
+- **LAUNCH-READY** (2026-07-24) — [`LAUNCH-READY-FINAL-REPORT.md`](docs/delivery/LAUNCH-READY-FINAL-REPORT.md), [`LAUNCH-READY-GOVERNANCE-AUDIT.md`](docs/delivery/LAUNCH-READY-GOVERNANCE-AUDIT.md): six-workstream readiness pass, dedup, repo cleanup, quality sweep, adversarial review.
+- **MODELS-LIVE** (2026-07-22) — [`MODELS-LIVE-GAPS.json`](docs/delivery/MODELS-LIVE-GAPS.json): the per-agent live model catalog, the in-app Anthropic OAuth flow, and the provider/billing-routing correctness work described above. Evidence: [`uat/reports/evidence/models-live/`](uat/reports/evidence/models-live/).
+- **[`MANUAL-VERIFICATION-FINAL-REPORT.md`](docs/delivery/archive/MANUAL-VERIFICATION-FINAL-REPORT.md)** (2026-07-20) — per-wireframe human-grade testing across every screen, then adversarial re-verification: 168 findings, a closed cross-account PII-leak class, and the remediation of a production-DB-wipe incident ([`INCIDENT-PROD-DB-WIPE-2026-07-18.md`](docs/delivery/INCIDENT-PROD-DB-WIPE-2026-07-18.md) — the reason automated backups are now a shipped feature rather than a plan).
+- **[`EXECUTION-REPORT.md`](docs/delivery/archive/EXECUTION-REPORT.md) §10**, **[`PHASE7-GAP-ANALYSIS.md`](docs/delivery/archive/PHASE7-GAP-ANALYSIS.md)**, **[`PHASE7-CLAIM-LEDGER.md`](docs/delivery/archive/PHASE7-CLAIM-LEDGER.md)**, **[`PHASE6-EXECUTION-SUMMARY.md`](docs/delivery/archive/PHASE6-EXECUTION-SUMMARY.md)** — prior phases, each with its own gap ledger and independent adversarial audit of the previous phase's closure claims.
+- **[`DECISIONS.md`](docs/delivery/DECISIONS.md)** and the `ADR-*.md` files — architecture decision records, including the reasoning behind each honesty rule cited in this README.
 
 <div align="center">
 
 ---
 
-**Aether** — an AI career agent with a human approval gate and an anti-fabrication guarantee.
+**Aether** — agents you can watch, a guard that refuses in public, and no claim it cannot show you the evidence for.
 
 Built by [Vikram Deshpande](https://forgotten-mistory.web.app/)
 
