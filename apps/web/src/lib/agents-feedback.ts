@@ -117,6 +117,34 @@ export function pipelineCompletionNotice(response: Record<string, unknown>): Not
   };
 }
 
+/**
+ * Success notice for the "Stop All Agents" bulk pause (ML-STOPALL-001).
+ *
+ * Enforcement now lives server-side — every dispatch path (the sync run
+ * routes, the pipeline, the generic `/agents/{name}/run` route, the async
+ * ARQ worker, and the board-sweep autopilot) refuses a paused agent's runs
+ * with an honest 409 before they start — so this can truthfully say "New
+ * runs are blocked" instead of the old "on hold" wording nothing enforced.
+ *
+ * `runningCount` is the SAME `isInFlight && isLiveRun` count the RUN HEALTH
+ * strip already shows: pausing an agent does NOT force-kill a run already in
+ * progress (no cancel/abort endpoint exists), so a user watching a run keep
+ * going after "Stop All" must be told that plainly rather than left assuming
+ * the pause silently failed.
+ */
+export function stopAllAgentsNotice(pausedCount: number, runningCount: number): Notice {
+  const base = `Paused ${pausedCount} agent${pausedCount === 1 ? "" : "s"}. New runs are blocked.`;
+  if (runningCount > 0) {
+    return {
+      kind: "success",
+      text: `${base} ${runningCount} run${
+        runningCount === 1 ? "" : "s"
+      } already in progress will finish — there is no force-kill.`,
+    };
+  }
+  return { kind: "success", text: base };
+}
+
 /** Per-agent success feedback pointing at where the data landed. */
 export function agentSuccessNotice(agent: string, output: Record<string, unknown>): Notice {
   switch (agent) {

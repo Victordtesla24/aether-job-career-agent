@@ -919,6 +919,11 @@ def sweep_user_stretch(
         # because it aborted on an upstream refusal. Always present so a caller
         # never has to guess whether an abort left work behind.
         "suppressed": 0,
+        # ML-STOPALL-001: jobs skipped honestly because the dispatched agent
+        # (tailor/coverLetter) is paused by the user's own AgentConfig — a
+        # distinct bucket from "failures" (nothing went wrong) and from
+        # "skipped_failures" (unrelated to cover-failure saturation).
+        "skipped_paused": 0,
     }
     llm_outages = 0
 
@@ -1021,6 +1026,25 @@ def sweep_user_stretch(
             logger.info("board-sweep %s: quota exhausted: %s", user_id, exc)
             break
         except HTTPException as exc:
+            if exc.status_code == 409:
+                detail_409: dict[str, Any] = (
+                    exc.detail if isinstance(exc.detail, dict) else {}
+                )
+                if detail_409.get("code") == "agent_paused":
+                    # ML-STOPALL-001: the user paused this agent (its own
+                    # AgentConfig.enabled=false) — an HONEST SKIP of this one
+                    # job, not a sweep failure and not an abort. Mirrors the
+                    # per-job skip/blocked log idiom used throughout this loop
+                    # (e.g. the cover-degrade / guard-rejection branches
+                    # below) and continues to the next eligible job so a
+                    # paused tailor/coverLetter never stalls the rest of the
+                    # board.
+                    summary["skipped_paused"] += 1
+                    logger.info(
+                        "board-sweep %s job %s: skipped — %s paused by user",
+                        user_id, job_id, detail_409.get("agentKey", "agent"),
+                    )
+                    continue
             if exc.status_code == 429:
                 detail: dict[str, Any] = exc.detail if isinstance(exc.detail, dict) else {}
                 if detail.get("code") == "spend_cap_exceeded":

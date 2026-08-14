@@ -58,11 +58,19 @@ def _honest_message(exc: BaseException) -> str:
     deliberately chose (e.g. the honest LLM-unavailable message of
     MV-cover-letter-studio-005) — surface that verbatim rather than prefixing it
     with the exception class + status code (which would re-expose
-    'HTTPException: 503: …' on the polled BackgroundJob.error)."""
+    'HTTPException: 503: …' on the polled BackgroundJob.error).
+
+    ML-STOPALL-001: a coded ``detail`` dict (e.g. the paused-agent 409's
+    ``{"code": "agent_paused", "message": "..."}}``, mirroring the existing
+    ``_plan_quota_429`` shape) surfaces its ``message`` field, never a raw
+    Python dict repr — the same honesty bar as the plain-string case."""
     from fastapi import HTTPException
 
     if isinstance(exc, HTTPException):
-        detail = str(exc.detail).strip()
+        raw_detail = exc.detail
+        if isinstance(raw_detail, dict):
+            raw_detail = raw_detail.get("message") or raw_detail
+        detail = str(raw_detail).strip()
         return (detail or f"generation failed ({type(exc).__name__})")[:500]
     name = type(exc).__name__
     msg = str(exc).strip()
