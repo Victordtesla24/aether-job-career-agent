@@ -13,6 +13,8 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request, status
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -24,6 +26,7 @@ from app.rate_limit import (
     build_register_rate_limiter,
     build_reset_password_rate_limiter,
 )
+from app.redaction import redact_validation_errors
 from app.routers import (
     admin,
     agents,
@@ -446,6 +449,25 @@ def create_app() -> FastAPI:
         return JSONResponse(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             content={"detail": str(exc) or "Add your resume before generating this."},
+        )
+
+    # SEC-422 — request-validation failures must never echo a credential.
+    # FastAPI's built-in handler answers 422 with jsonable_encoder(exc.errors()),
+    # and Pydantic sets each error's ``input`` to the offending value — which for
+    # a ``missing`` error is the ENTIRE submitted body. A user who misspells the
+    # login field (``passwrd``) therefore had their plaintext password mirrored
+    # straight back, and into every response-body-capturing sink downstream.
+    # Registering this at the app level (not per-route) is deliberate: every
+    # route added later inherits the guarantee without anyone remembering to opt
+    # in. See app/redaction.py for what is redacted and why key-name matching
+    # alone is not enough.
+    @app.exception_handler(RequestValidationError)
+    async def _validation_handler(  # pyright: ignore[reportUnusedFunction]
+        _request: Request, exc: RequestValidationError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            content={"detail": jsonable_encoder(redact_validation_errors(exc.errors()))},
         )
 
     app.include_router(health.router)
