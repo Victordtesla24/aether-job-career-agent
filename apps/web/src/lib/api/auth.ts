@@ -198,6 +198,17 @@ export async function resetPassword(
       const detail = await extractDetail(res);
       throw new AuthApiError(detail || "This reset link is invalid or has expired.", 400);
     }
+    // 409 — the API refused because this identity's password is managed by
+    // server configuration (§14.7 AETHER_ADMIN_PASSWORD_HASH, re-applied on
+    // every restart). Surface the backend's own reason: the generic fallback
+    // below would tell the visitor to retry something that can never succeed.
+    if (res.status === 409) {
+      const detail = await extractDetail(res);
+      throw new AuthApiError(
+        detail || "This password is managed by server configuration and cannot be reset here.",
+        409,
+      );
+    }
     if (res.status === 422) {
       const detail = await extractDetail(res);
       throw new AuthApiError(cleanValidationDetail(detail), 422);

@@ -282,6 +282,47 @@ regression set, 147 tests) green on origin/main content both before AND after U2
 merged in. Evidence: `uat/reports/evidence/market-perf/main-reds/land/`. The 9 reds ORCH-EXEC reported
 are CLOSED on `main`.
 
+## 2026-08-14T18:5xZ — session 9c6a2ba6 pushed slice sui-b3 (studios) to the feature branch
+- **Slice:** S-UI **B3** — Resume Studio (the aha moment), Cover Letter Studio, Story Bank. Branch
+  `feat/sui-b3` @ `f110ce9` (merged with `origin/main c5db511`, U2c threshold wiring re-applied verbatim).
+  Independent judge verdict: PASS (`uat/reports/evidence/market-perf/s-ui/b3/judge/B3-JUDGE-REPORT.md`,
+  per-page scores 8/8/9, bar is ≥8).
+- **Files (FE presentation only; `apps/api` diff vs origin/main = EMPTY — 0 files):**
+  `apps/web/src/app/dashboard/{resume,cover-letters,stories,[...slug]}/page.tsx`,
+  `components/resume/{AhaHero,ChangeList,diff-semantics}.{tsx,ts}` (+ tests),
+  `components/cover-letters/*` (7 panels), `components/stories/{story-card,story-sheet,story-aside}.tsx`,
+  `components/analytics/TailoringImpact.tsx`, `lib/navigation-suggest.ts` (+ test), and this doc.
+- **Story Bank "Section not found" root cause (diagnosis/STORY-BANK-SECTION-NOT-FOUND.json):** the real
+  page ships at `/dashboard/stories`; the wireframe name `/dashboard/story-bank` hit the `[...slug]`
+  catch-all and dead-ended. Routing/anchor/data/API all ruled out with evidence — the fix is a
+  "Did you mean Story Bank?" suggestion that SUGGESTS, never redirects (silent-fallback rule). No API
+  change; `apps/api` untouched.
+- **Gates (fixer-hard reverify @ f110ce9, artefacts `uat/reports/evidence/market-perf/s-ui/b3/gates/*-fixer-reverify.txt`):**
+  targeted vitest 26 files / 126 tests PASS; full vitest (post-merge) 203 files / 1661 PASS; `tsc --noEmit`
+  0; `next lint --max-warnings=0` clean; worktree `next build` exit 0. No existing test modified (3 NEW
+  test files for B3-created code only; carve-out: none).
+- Touches no other session's active claims.
+
+### Correction — this batch DOES land to `main` now, superseding the note above
+S-UI-REBUILD-SPEC.md §6.5 describes ONE coordinated landing after all five batches (B0–B4) merge into
+`feat/sui-rebuild`. In practice B0/B1(`feat/sui1-agents`→dashboard+analytics)/B2 already each landed to
+`main` individually with their own deploy + live-verify (see B2 LAND/VERIFY entries, `analytics-viz`
+entries, this doc's history) — this session's standing mandate is thin-slice continuous production
+delivery (owner instruction, 2026-08-13), which supersedes the batched-integration plan in §6.5 for this
+workstream. B3 follows the same precedent: landing directly to `main` per-batch rather than waiting on
+B4. Recorded here so a future reader of §6.5 isn't misled by the doc text, and so the earlier "NOT main
+landing" note on this same branch (superseded, not deleted, see git history) doesn't cause confusion.
+
+## Claim — session 9c6a2ba6, slice sui-b3, 2026-08-14T19:3xZ — LANDING to main
+
+Landing `feat/sui-b3` (Resume Studio aha moment, Cover Letter Studio, Story Bank fix) to `main`, worktree
+`aether-wt-sui-b3`. Merged latest `origin/main` (`e0efeec`, includes admin-full + dashboard 409 hotfix)
+into the branch; re-running targeted gates + `next build` on the merged tree before push. `apps/api` diff
+vs `origin/main` remains EMPTY (B3 is FE-only). Files listed above, plus this doc. Not touching any other
+session's active claims (ORCH-EXEC's MON-*/B5/B7/D.*/routers/agents.py, sidebar.tsx deletion).
+
+- **Expected deploy window:** next `aether-autodeploy.timer` cycle (5-min) after `HEAD:main` push.
+
 ## 2026-08-14T19:0xZ — session 9c6a2ba6 CLAIMS a web deploy (dashboard below-floor 409 hotfix)
 - Prod bug: Dashboard "Needs Approval" inline Approve leaked the U2c quality-floor 409 as a raw exception + dropped the card (mislabeled "already handled"). Fix: resolveApproval detects the below-floor 409 (acknowledge_below_floor token), offers Approve-anyway, re-sends with the flag. Files: apps/web/src/app/dashboard/page.tsx + its test. Push HEAD:main → auto-deploy web rebuild.
 
@@ -313,3 +354,143 @@ changes with a 409 instead of silently reverting at next restart).
   claims or the still-allowlisted `test_blocker010_board_sweep_abort_recovery.py` / `cover_letter/{quality,retry3}.json`.
 - Expected deploy window: next `aether-autodeploy.timer` cycle after `HEAD:main` push.
 - Not touching any other session's active claims (ORCH-EXEC's MON-*/B5/B7/D.*, u2c, uagi-p1a).
+
+## uagi-p1a LAND — land+verify session, 2026-08-14T19:1xZ-19:2xZ — BLOCKED before `HEAD:main`, not by choice
+
+Picked up `feat/uagi-p1a` @ `4aaadc8` (build + 2 independent adversarial re-reviews already PASS on
+file — `uat/reports/evidence/market-perf/u-agi/p1a/{BUILD-P1A,REVIEW-P1A,REVIEW-P1A-REREVIEW,
+GATE-P1A-COMPLETION-VERIFY-fixerhard}.*`). Merged `origin/main` clean, 0 conflicts (`71fd4a3`).
+Post-merge P1-A suite gate: **269 passed** (matches pre-merge exactly). Merge surfaced one real
+regression — P1-A's 19-row charter + new routes shifted 5 line-number citations in
+`workflow-linkage-provenance.test.ts` (U-STORY-3a's content-level provenance gate); re-anchored all 5,
+verified 10/10 green (`a5040f8`, same file/pattern as the earlier `e430d5b` fix from U2c's landing).
+Both commits pushed to `feat/uagi-p1a` (NOT `main`) + PR #15 opened for an independent CI signal
+without touching the deploy timer.
+
+**Did NOT push `HEAD:main`.** Fresh prod DB probe this session
+(`uat/reports/evidence/market-perf/u-agi/p1a/verify/00-PRE-DEPLOY-PROBE-BLOCKING.md`) confirms
+BUILD-P1A.md's own open item #7 (F8) is live and unresolved: the deployment-wide
+`ProviderCredential('anthropic')` row is `authMode=oauth_token` (the owner's Max/Pro subscription);
+zero users hold a personal Anthropic credential; no `ANTHROPIC_API_KEY` fallback is configured; and
+the owner's OWN 2 `AgentConfig` rows (`claude-haiku-4-5-20251001`, `claude-opus-4-8`) are served TODAY
+by exactly the fallback path F8 walls off. Merging as-is would break the owner's own configured agents
+with an honest no-credential error, unannounced — the ADR's own text names this an **operator ruling**,
+not a landing decision. `test_uagi_p1a_credential_separation.py::test_f8_user_content_never_consumes_
+the_operator_subscription_row` independently corroborates the contract at the code level (asserts
+`None` for exactly this `authMode=oauth_token` shape).
+
+**What unblocks this**: an explicit operator decision — accept the honest failure for those 2 configs
+(re-point them at a credentialed model, or accept the visible error), OR provision a real operator
+`ANTHROPIC_API_KEY`. Either is a one-line change once decided. Also flagged, non-blocking for P1-A's own
+diff: PROBE-R8-2 (`Application_user_job_active_key`) does not exist in the prod `aether` schema — the
+submission silo's DB backstop is unconfirmed on prod, pre-existing and untouched by this branch.
+Not touching any other session's active claims. `feat/uagi-p1a` will need one more `origin/main` sync
+before it can land, since main kept moving (`admin-full`, `B3`) while this was open.
+
+## admin-full LAND update — session 9c6a2ba6, 2026-08-14T19:2x-19:4xZ
+
+`e0efeec` deployed clean (`aether-autodeploy.timer` 19:27:33Z, 3/3 health) — the functional admin-full
+code is live. Its own CI then failed: the merge shifted 2 more `workflow-linkage-provenance.test.ts`
+citations (same drift class as `e430d5b`/`a5040f8` above — `agents.py:3401,3423`→`3441,3463` and
+`:1550,2069`→`:1563,2082`), fixed at `02c1276` (10/10 green), CI now green
+(`31833484056`). Pushed `HEAD:main` — **docs/test-metadata only, zero runtime behavior change**, so
+`e0efeec` already being live means the feature itself needed no further verification wait; `02c1276`
+is queued for the next successful pull.
+
+That pull was blocked 3 cycles running (19:30/19:35/19:40Z) by an untracked
+`apps/api/tests/fixtures/llm/cover_letter/quality2.json` outside the allowlist — not mine, times/scope
+match the B3 session's active cover-letter-studio work. After 10 minutes of every deploy on the shared
+box failing (not just this one), applied the same FOREIGN-WIP-MOVED.md precedent again: backed up
+byte-exact + SHA256SUMS to `/home/ubuntu/aether-backups/foreign-wip-20260814T194032Z-quality2json/`,
+removed it so the timer can proceed. B3 session: nothing lost, restore from that path.
+
+Live production verification (owner + a disposable QA user, evidence at
+`uat/reports/evidence/phase6/admin-full-verify/`): owner dashboard shows "Owner — unlimited / No plan,
+quota or spend cap" + ADMIN tag (screenshot), `/billing/entitlement` resolver returns
+`unlimited:true,source:"admin",isAdmin:true,overrideActive:false` even with the legacy
+`runsAllowed:100000` quota row still present (confirmed moot) — admin entitlement/password/identity
+changes on the QA user each produced a matching `AdminAuditLog` row, the entitlement flip was probed
+live from the QA user's OWN session token, the password change's old token+old password both 401
+immediately (no wait) and the new password logs in, 3 admin endpoints 403 for a non-admin JWT, and the
+§14.7 env-managed identity refuses an admin-route password change with 409 (owner's real login
+re-verified unaffected, no audit row written for the refusal).
+
+### admin-full LANDED — session 9c6a2ba6, 2026-08-14T19:46Z
+
+`54e9625` (`e0efeec` functional admin-full + `02c1276` provenance-citation fix + this session's own
+docs) deployed via `aether-autodeploy.timer` at 19:45:07-19:46:49Z, all 3/3 health checks healthy,
+`deploy successful: 54e9625`. `/api/health` 200, `/` 200, no new `aether-api` errors in the 3 min
+around the restart. CI green on both admin-full pushes (`31833027588` red on the citation drift,
+`31833484056` green after the fix). Full live-production verification (owner + disposable QA user)
+complete and PASS — evidence at `uat/reports/evidence/phase6/admin-full-verify/`. Both re-review
+findings (flaky determinism test, honest `sessionsInvalidated`) and the §14.7 reset-flow adjudication
+are VERIFIED-CLOSED on production, not just in tests.
+
+### B3 LANDED — session 9c6a2ba6, 2026-08-14T20:0xZ
+
+Pushed `HEAD:main` @ `971ea04` (`54e9625..971ea04`). CI green (`31834817157`). Also re-anchored 2
+`workflow-linkage.ts` provenance citations (`agents.py:3401,3423`→`3441,3463`;
+`agents.py:1550,2069`→`1563,2082`) that admin-full's `agents.py` edit had already made stale on
+`origin/main` before this branch merged it in — confirmed independently by diffing `origin/main`
+directly (pre-merge), so not a B3 regression; same fix admin-full's own session applied in parallel
+at `02c1276` (byte-identical line numbers), which is why the second pre-land sync merged clean with
+no conflict. Full web vitest 205/205 files, 1684/1684 tests; `tsc`/`lint`/`next build` all green on
+the merged tree. `apps/api` diff vs `origin/main` remained EMPTY throughout (B3 is FE-only).
+
+**Deploy note for future landers (real gap, not hypothetical):** by the time this branch's HEAD:main
+push should have reached the `aether-autodeploy.timer`, admin-full's own coordination-doc commits
+(`4d916b4`, then a race-reconcile `5ac311f`) had already run `git pull` directly in the shared
+checkout `/home/ubuntu/github_repos/aether-job-career-agent` ahead of the timer's next tick — so
+`auto-deploy.sh`'s Step 1 (`LOCAL_HEAD == REMOTE_HEAD` ⇒ silent no-op) saw the checkout already
+synced and would have skipped the build+restart forever, even though the running `aether-web`/
+`aether-api`/`aether-worker` processes (last real restart 19:46:36Z, serving `54e9625`) had never
+actually picked up B3's code. Confirmed via `systemctl show aether-web -p ActiveEnterTimestamp`
+(19:46:36Z, predates `971ea04`) vs the shared checkout's git HEAD (`5ac311f`, postdates it). Ran the
+build+restart+3-health-check leg of the deploy recipe manually, under the same `/tmp/aether-deploy.lock`
+(lock was free), logged to `/var/log/aether/deploy.log` with a `[manual-deploy-9c6a2ba6]` tag so it's
+distinguishable from the timer's own `[auto-deploy]` lines: all 3 health checks healthy, `deploy
+successful: 5ac311f` at 19:59:46Z, all 3 services restarted 19:59:36Z. Verified live: `buildId`
+`LngNLqr1hIcl2YiZ4vI7j` served on `/dashboard/resume` matches the build this deploy produced.
+**Anyone landing next: a manual `git pull`/commit in the shared checkout for a coordination-doc entry
+can silently defeat the timer's diff-trigger — always check `ActiveEnterTimestamp` vs the checkout's
+`git log` before trusting "HEAD == origin/main" as proof of a real deploy.**
+
+- Files: `apps/web/src/app/dashboard/{resume,cover-letters,stories,[...slug]}/page.tsx`,
+  `components/resume/{AhaHero,ChangeList,diff-semantics}.{tsx,ts}` (+ tests), `components/cover-letters/*`
+  (7 panels), `components/stories/{story-card,story-sheet,story-aside}.tsx`,
+  `components/analytics/TailoringImpact.tsx`, `lib/navigation-suggest.ts` (+ test),
+  `components/agents/workflow-linkage.ts` (citation re-anchor only), this doc. No migration, no `apps/api`.
+- Not touching any other session's active claims.
+
+### B3 LIVE-VERIFIED — session 9c6a2ba6, 2026-08-14T20:1xZ
+
+Real owner login (production `/login` form, not a minted token), real owner data. Evidence:
+`uat/reports/evidence/market-perf/s-ui/b3/land/` (`land-notes.json` + 17 screenshots + capture script).
+
+- **Resume Studio aha moment**: opened v548 (real tailored version, Staff Software Engineer @ Canva).
+  Hero shows `56 → 56` (`±0` — genuinely unchanged, not a fabricated lift), `Verified · all 4 changes
+  present in the file you download`, 4 change cards / 4 coral-washed changed bullets, Format Integrity
+  independently flags `Layout hash differs from the base`. U2c's quality-floor banner and a tailoring-
+  run-incomplete banner both render untouched (wiring/copy verbatim, presentation only).
+- **Cover Letter Studio**: newest draft opens by default; Evidence Trace panel shows 4 grounded
+  citations (green, each naming its Story Bank source) and 2 ungrounded terms (amber, "no source yet —
+  add or soften") — real U-STORY-1 data, honest both ways.
+- **Story Bank fix**: the exact original repro (`/dashboard/story-bank`) now renders "Did you mean
+  Story Bank?" linking to `/dashboard/stories`; followed the link and landed on the real page. Negative
+  control (`/dashboard/does-not-exist`) correctly shows no suggestion.
+- **Sweep**: all 3 studio pages × 3 viewports (390/834/1600) — `horizontalScroll: false` everywhere,
+  0 console errors, 0 page errors, 0 `/api/*` responses ≥400 across the whole run.
+- **Final health**: 3/3 (`/api/health` via nginx, `127.0.0.1:3000/api/health`, `/` via nginx) all 200.
+  `/var/log/aether/api.log` since the restart: a handful of `psycopg2.OperationalError` connection-pool
+  warm-up reconnects (clustered in the first ~30s post-restart, self-healed, zero 5xx ever served to a
+  client) and unrelated background-worker warnings (wellfound 404, one user's `MissingResumeError` on
+  discovery-sweep) — pre-existing, not B3-caused, no user-facing impact.
+
+B3 (Resume Studio aha moment, Cover Letter Studio, Story Bank fix) is VERIFIED-CLOSED on production.
+
+### ORCH-EXEC DEPLOY WINDOW CLAIM — 2026-08-14T20:5xZ (hotfix)
+
+Landing the operator-reported bulk-approve below-floor-409 fix (approvals/page.tsx, 2 commits,
+VERIFIED-CLOSED, mirrors b1eef41 contract) to main NOW. Deploy = the autodeploy timer's next pull
+(~5 min). FE-only; no schema, no env. 9c6a2ba6: approvals/page.tsx is released back to you after
+this lands — resume B4-mobile on it once you see the deploy.

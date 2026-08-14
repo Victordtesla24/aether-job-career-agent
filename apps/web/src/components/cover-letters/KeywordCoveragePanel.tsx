@@ -10,15 +10,15 @@ export function KeywordCoveragePanel({
 }) {
   return (
     <section
-      className="glass rounded-2xl border border-white/10 p-5"
+      className="elev-1 rounded-2xl p-5"
       data-testid="keyword-coverage-panel"
     >
       <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <i className="fa-solid fa-list-check text-sm text-aether-coral" aria-hidden="true" />
-          <h2 className="text-sm font-semibold">JD Keyword Coverage</h2>
+          <h2 className="text-[13px] font-semibold tracking-[-0.01em]">JD Keyword Coverage</h2>
         </div>
-        <span className="mono text-xs font-bold text-aether-green" data-testid="keyword-score">
+        <span className="mono text-xs font-bold text-state-ok" data-testid="keyword-score">
           {keywords ? `${keywords.covered} / ${keywords.total}` : "—"}
         </span>
       </div>
@@ -40,8 +40,8 @@ export function KeywordCoveragePanel({
               data-testid={item.covered ? "keyword-covered" : "keyword-missing"}
               className={
                 item.covered
-                  ? "rounded-md border border-aether-green/20 bg-aether-green/10 px-2 py-0.5 text-[10px] text-aether-green"
-                  : "rounded-md border border-aether-yellow/20 bg-aether-yellow/10 px-2 py-0.5 text-[10px] text-aether-yellow"
+                  ? "rounded-md border border-state-ok/20 bg-state-ok/10 px-2 py-0.5 text-[10px] text-state-ok"
+                  : "rounded-md border border-state-warn/20 bg-state-warn/10 px-2 py-0.5 text-[10px] text-state-warn"
               }
             >
               {item.keyword}

@@ -7,21 +7,42 @@ gets 401 (the ``get_current_user`` chain runs first). Every MUTATION appends an
 immutable ``AdminAuditLog`` row (actor, action, target, detail, ip) — no admin
 action is silent, and the audit log is append-only (no delete/edit routes).
 
+The ADMIN-FULL account-management routes go one step further: the mutation and
+its audit row share ONE cursor in ONE transaction (the pattern
+``billing.perform_admin_cancel`` / ``perform_admin_refund`` established), so a
+failure between them — pool exhaustion, a transient DB blip, a worker restart —
+rolls BOTH back. "Audited" is therefore not best-effort: a durable admin
+mutation with no audit row is not a state this router can reach.
+
 All spend figures are USD (LLM providers bill USD; §14.8) — never AUD.
 """
 from __future__ import annotations
 
+import asyncio
+import logging
+import time
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
 from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel, Field, StrictBool, ValidationError
 
-from app.middleware.auth import AdminUser
+from app.db import ensure_password_reset_columns, get_connection
+from app.middleware.auth import (
+    AdminUser,
+    session_invalidation_boundary,
+    stamp_invalidates_tokens_minted_before,
+)
 from app.redaction import redact_validation_errors
 from app.repositories import admin as admin_repo
+from app.repositories.user import UserRepository, validate_password_policy
+from app.security import hash_password
+from app.services import entitlements
 
 router = APIRouter()
+
+logger = logging.getLogger(__name__)
 
 
 def _client_ip(request: Request) -> Optional[str]:
@@ -161,6 +182,354 @@ def admin_unsuspend_user(
         ip=_client_ip(request),
     )
     return {"userId": user_id, "suspended": suspended}
+
+
+# --------------------------------------------------------------------------- #
+# User management (ADMIN-FULL) — entitlement, credentials, Stripe-linked actions
+#
+# USER MANDATE (2026-08-14): "admin users can change plans, subscriptions,
+# username/password of ANY user". Every route below is ``AdminUser``-gated and
+# every mutation appends an ``AdminAuditLog`` row with actor, target, action and
+# before->after for NON-SECRET fields. A password change logs the EVENT and never
+# any value — audit is universal, secrets are not audit material.
+#
+# BILLING INVARIANTS (sacred): a plan change here is an in-app ENTITLEMENT
+# override (immediate, Stripe-independent, and VISIBLY an override in this
+# response + the audit row). Where a real Stripe subscription exists, cancel and
+# refund route through the EXISTING billing service paths — this router never
+# hand-mutates billing state, so no-double-billing / refund-revoke / dunning
+# grace stay exactly as they were.
+# --------------------------------------------------------------------------- #
+
+
+async def _parse_json_object(request: Request) -> dict[str, Any]:
+    """Decode a JSON object body AFTER ``AdminUser`` has resolved.
+
+    Same body-before-auth hazard (and the same fix) as ``_parse_settings_body``:
+    a Pydantic body parameter would make FastAPI decode the body BEFORE
+    dependencies, so an anonymous caller could see a 422 instead of a 401.
+    """
+    try:
+        raw = await request.json()
+    except Exception:  # noqa: BLE001 — malformed / non-JSON / empty body
+        return {}
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY, "Request body must be an object."
+        )
+    return raw
+
+
+def _require_user(user_id: str) -> None:
+    if not admin_repo.user_exists(user_id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
+
+
+@router.post("/users/{user_id}/entitlement")
+async def admin_set_entitlement(
+    admin: AdminUser, user_id: str, request: Request
+) -> dict[str, Any]:
+    """Grant / replace / clear a user's in-app entitlement override.
+
+    Body ``{"kind": "comp"|"tier"|"unlimited"|"none", "planId"?, "note"?}``.
+    ``none`` clears the override. ``comp``/``tier`` require a real plan id and
+    apply that plan's ceiling to ``UsageQuota`` IMMEDIATELY — while leaving the
+    ``Subscription`` row (the Stripe truth) untouched, so a paying customer's
+    billing record is never silently contradicted.
+
+    ATOMIC WITH ITS AUDIT ROW: the override write, the post-write ``resolve``
+    that produces the audit ``after``, and the ``AdminAuditLog`` insert all run
+    on ONE cursor in ONE transaction (the pattern ``perform_admin_cancel`` /
+    ``perform_admin_refund`` already use). A failure anywhere in that window
+    rolls the whole thing back, so there is no such thing as a durable,
+    unaudited entitlement change.
+    """
+    body = await _parse_json_object(request)
+    _require_user(user_id)
+    kind = str(body.get("kind") or "").strip().lower()
+    clearing = kind in ("none", "clear", "")
+    plan_id = body.get("planId")
+    note = body.get("note")
+
+    # Every lazy-DDL / row-seed side effect happens OUTSIDE the transaction:
+    # inside it, the cur paths issue no DDL and open no second connection.
+    entitlements.prepare_override_write(user_id)
+    admin_repo._ensure_admin_schema()
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            # ``before`` is read on the SAME cursor as the write, so the audit
+            # pair cannot straddle someone else's concurrent change.
+            before = entitlements.resolve(user_id, cur=cur).as_dict()
+            if clearing:
+                entitlements.clear_override(user_id, cur=cur)
+            else:
+                try:
+                    entitlements.set_override(
+                        user_id,
+                        kind=kind,
+                        plan_id=str(plan_id) if plan_id else None,
+                        note=str(note) if note else None,
+                        actor_id=admin["id"],
+                        cur=cur,
+                    )
+                except ValueError as exc:
+                    raise HTTPException(
+                        status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)
+                    ) from exc
+            after = entitlements.resolve(user_id, cur=cur).as_dict()
+            admin_repo.write_audit(
+                admin["id"],
+                "clear_entitlement_override"
+                if clearing
+                else "set_entitlement_override",
+                target_type="user",
+                target_id=user_id,
+                detail={"before": before, "after": after},
+                ip=_client_ip(request),
+                cur=cur,
+            )
+        conn.commit()
+    return {"userId": user_id, "entitlement": after}
+
+
+@router.post("/users/{user_id}/password")
+async def admin_set_password(
+    admin: AdminUser, user_id: str, request: Request
+) -> dict[str, Any]:
+    """Set a user's password on their behalf.
+
+    The value is validated against the SAME policy self-service registration
+    uses, hashed with the SAME hasher (``app.security.hash_password``), and
+    written through ``UserRepository.set_password`` — which stamps
+    ``passwordChangedAt`` (O-4). The plaintext is never logged, never echoed
+    back, and never written to the audit row: the audit records that the event
+    happened, not what it was.
+
+    SESSION INVALIDATION IS EARNED, NOT ASSERTED. An admin reaches for this
+    route to cut off a compromised or abusive session NOW, so the response may
+    not simply claim it. A bare ``now()`` stamp does NOT invalidate a token
+    minted earlier in the same whole second — ``iat`` is truncated to seconds
+    and ``_IAT_GRACE_SECONDS`` forgives that much — and because the check
+    compares two fixed timestamps, such a token then survives for the REST of
+    its 24h TTL, not for one more second. So this route waits for
+    ``session_invalidation_boundary`` (at most ~1.25s, mostly absorbed by
+    bcrypt) before writing, then re-reads the stamp it actually wrote and
+    reports ``sessionsInvalidated`` from
+    ``stamp_invalidates_tokens_minted_before``. ``true`` therefore means "every
+    token minted before ``sessionsInvalidatedBefore`` is already rejected", and
+    a ``false`` (clock skew beyond the margin) is reported honestly rather than
+    papered over. The grace window itself is untouched: a login AFTER the change
+    is still never falsely 401'd.
+
+    An identity whose password §14.7 owns (``AETHER_ADMIN_PASSWORD_HASH``) is
+    REFUSED with 409 — ``apply_admin_rotation`` re-applies that hash on every
+    boot, so accepting the change here would report success for a write the
+    next restart silently reverts.
+
+    ATOMIC WITH ITS AUDIT ROW: the hash write and the ``AdminAuditLog`` insert
+    share one cursor in one transaction. Before this, a failure between them
+    (pool exhaustion, a DB blip, a worker restart) left the target locked out of
+    every existing session by a password change nothing recorded.
+    """
+    received_at = time.time()
+    body = await _parse_json_object(request)
+    _require_user(user_id)
+    target = UserRepository().get_auth_context(user_id)
+    if admin_repo.password_is_env_managed(target.get("email") if target else None):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, admin_repo.ENV_MANAGED_PASSWORD_MESSAGE
+        )
+    new_password = body.get("newPassword")
+    if not isinstance(new_password, str) or not new_password:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY, "newPassword is required."
+        )
+    problems = validate_password_policy(new_password)
+    if problems:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "; ".join(problems))
+
+    # Lazy DDL first, outside the transaction (see admin_set_entitlement).
+    ensure_password_reset_columns()
+    admin_repo._ensure_admin_schema()
+    password_hash = hash_password(new_password)
+
+    # Clear the iat-truncation boundary BEFORE stamping, so the invalidation
+    # this route reports is real (see the docstring). Bounded by construction:
+    # the boundary is < 1.25s past the second the request arrived in, and the
+    # bcrypt hash above has already spent part of it. ``asyncio.sleep`` keeps
+    # the event loop free for other requests while it elapses.
+    delay = session_invalidation_boundary(received_at) - time.time()
+    if delay > 0:
+        await asyncio.sleep(delay)
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            UserRepository().set_password(user_id, password_hash, cur=cur)
+            # Read back the stamp on the SAME cursor: what the response claims
+            # is derived from what was actually written, never assumed.
+            cur.execute(
+                'SELECT "passwordChangedAt" FROM "User" WHERE "id"=%s', (user_id,)
+            )
+            row = cur.fetchone()
+            sessions_invalidated = stamp_invalidates_tokens_minted_before(
+                row[0] if row else None, received_at
+            )
+            admin_repo.write_audit(
+                admin["id"],
+                "set_user_password",
+                target_type="user",
+                target_id=user_id,
+                # NEVER the value — not the password, not the hash, not a prefix.
+                detail={"sessionsInvalidated": sessions_invalidated},
+                ip=_client_ip(request),
+                cur=cur,
+            )
+        conn.commit()
+
+    if not sessions_invalidated:
+        # Honest, actionable, and value-free: the password DID change, but the
+        # lockout the admin came for is not provable, so say so instead of
+        # returning the optimistic default.
+        logger.warning(
+            "admin password change for userId=%s could not confirm session "
+            "invalidation — the passwordChangedAt stamp did not clear the iat "
+            "grace window, which points at clock skew between the API and the "
+            "database. Existing sessions for this user may still be live.",
+            user_id,
+        )
+    return {
+        "userId": user_id,
+        "passwordChanged": True,
+        "sessionsInvalidated": sessions_invalidated,
+        "sessionsInvalidatedBefore": (
+            datetime.fromtimestamp(received_at, tz=timezone.utc).isoformat()
+            if sessions_invalidated
+            else None
+        ),
+    }
+
+
+@router.post("/users/{user_id}/identity")
+async def admin_update_identity(
+    admin: AdminUser, user_id: str, request: Request
+) -> dict[str, Any]:
+    """Change a user's email / username / display name.
+
+    Both login identities are UNIQUE, so a collision is an honest 409 rather than
+    a silently-ignored write. The audit row carries the full before->after pair.
+
+    ATOMIC WITH ITS AUDIT ROW: the identity write and the ``AdminAuditLog``
+    insert share one cursor in one transaction, so a caller can never end up
+    logging in under an email nothing recorded the change of.
+    """
+    body = await _parse_json_object(request)
+    _require_user(user_id)
+    email = body.get("email")
+    username = body.get("username")
+    name = body.get("name")
+    if email is None and username is None and name is None:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "Provide at least one of email, username or name.",
+        )
+    if email is not None:
+        email = str(email).strip()
+        if "@" not in email or " " in email or len(email) < 3:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY, "email is not a valid address."
+            )
+    if username is not None:
+        username = str(username).strip()
+    if name is not None:
+        name = str(name).strip()
+
+    admin_repo._ensure_admin_schema()  # lazy DDL first, outside the transaction
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            try:
+                before, after = admin_repo.update_user_identity(
+                    user_id, email=email, username=username, name=name, cur=cur
+                )
+            except admin_repo.IdentityConflictError as exc:
+                raise HTTPException(
+                    status.HTTP_409_CONFLICT, f"That {exc} is already taken."
+                ) from exc
+            except LookupError as exc:
+                raise HTTPException(
+                    status.HTTP_404_NOT_FOUND, "User not found"
+                ) from exc
+
+            admin_repo.write_audit(
+                admin["id"],
+                "update_user_identity",
+                target_type="user",
+                target_id=user_id,
+                detail={"before": before, "after": after},
+                ip=_client_ip(request),
+                cur=cur,
+            )
+        conn.commit()
+    return {"userId": user_id, "before": before, "after": after}
+
+
+@router.post("/users/{user_id}/subscription/cancel")
+async def admin_cancel_subscription(
+    admin: AdminUser, user_id: str, request: Request
+) -> dict[str, Any]:
+    """Cancel a user's REAL Stripe subscription through the billing service.
+
+    Body ``{"atPeriodEnd": true}`` (default) schedules cancellation at the end of
+    the paid period; ``false`` revokes immediately via the shared
+    ``_revoke_to_free`` handler. A user with no Stripe subscription gets an
+    honest 409 — the lever for that case is an entitlement override.
+    """
+    body = await _parse_json_object(request)
+    _require_user(user_id)
+    from app.routers.billing import perform_admin_cancel
+
+    at_period_end = body.get("atPeriodEnd", True)
+    if not isinstance(at_period_end, bool):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY, "atPeriodEnd must be a boolean."
+        )
+    return perform_admin_cancel(
+        actor_user_id=admin["id"],
+        target_user_id=user_id,
+        at_period_end=at_period_end,
+        ip=_client_ip(request),
+    )
+
+
+@router.post("/users/{user_id}/subscription/refund")
+async def admin_refund_subscription(
+    admin: AdminUser, user_id: str, request: Request
+) -> dict[str, Any]:
+    """Refund this user's latest paid charge via the EXISTING admin-refund path
+    (``billing.perform_admin_refund``) — same gateway calls, same
+    ``_revoke_to_free``, same audit action as ``POST /billing/admin/refund``."""
+    await _parse_json_object(request)
+    _require_user(user_id)
+    from app.routers.billing import perform_admin_refund
+
+    return perform_admin_refund(
+        actor_user_id=admin["id"], target_user_id=user_id, ip=_client_ip(request)
+    )
+
+
+@router.get("/users/{user_id}/audit")
+def admin_user_audit(
+    _admin: AdminUser,
+    user_id: str,
+    limit: int = Query(default=50, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+) -> dict[str, Any]:
+    """The append-only audit trail for ONE user (newest first)."""
+    return admin_repo.list_audit(
+        limit=limit, offset=offset, target_type="user", target_id=user_id
+    )
 
 
 # --------------------------------------------------------------------------- #
