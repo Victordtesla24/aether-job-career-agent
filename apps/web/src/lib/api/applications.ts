@@ -14,6 +14,28 @@ import { apiRequest, type RequestOptions } from "./client";
  * honest state must degrade to "render its label and offer nothing" here,
  * never throw a parse error that blanks the whole board.
  */
+/**
+ * U5d-3 Pillar 4a — one employer question, structured well enough to render a
+ * real input for it. Parsed off the employer's own page by the apply-executor
+ * and persisted on the row; `label` is their VERBATIM wording, never a
+ * paraphrase, because the user is about to answer that exact question.
+ *
+ * `reusable` is the honest per-question answer to "if I answer this once, will
+ * Aether answer it for me next time?" — false for every sensitive/legal class,
+ * which stays user-gated forever.
+ */
+export const CardQuestionSchema = z.object({
+  name: z.string(),
+  label: z.string(),
+  kind: z.string(),
+  options: z.array(z.string()).default([]),
+  required: z.boolean().default(true),
+  sensitivity: z.string(),
+  reusable: z.boolean(),
+});
+
+export type CardQuestion = z.infer<typeof CardQuestionSchema>;
+
 export const SubmissionControlSchema = z.object({
   state: z.string(),
   action: z.enum([
@@ -22,6 +44,7 @@ export const SubmissionControlSchema = z.object({
     "open_posting",
     "reconfirm",
     "fix_artifacts",
+    "answer_question",
     "none",
   ]),
   label: z.string(),
@@ -30,6 +53,11 @@ export const SubmissionControlSchema = z.object({
   applyUrl: z.string().nullish(),
   href: z.string().nullish(),
   missing: z.array(z.string()).default([]),
+  // Nullish-tolerant and NOT defaulted: an API build predating U5d-3 sends no
+  // questions at all, and "absent" must stay distinguishable from "none" so
+  // the card falls back to the "open the posting" control rather than throwing
+  // — the same honest-degrade rule the transmission fields above use.
+  questions: z.array(CardQuestionSchema).nullish(),
 });
 
 export type SubmissionControl = z.infer<typeof SubmissionControlSchema>;
