@@ -313,20 +313,25 @@ const HOP = {
     ],
     status: "live",
   },
-  submissionWritesApplication: {
-    from: "agent.submission",
-    to: "store.Application",
-    kind: "writes",
-    mechanism:
-      "reuses routers.jobs.submit_application_for_job VERBATIM — the same gate and write the Jobs board Apply button performs",
-    evidence: "apps/api/app/agents/submission_agent.py:73,231",
-    discoveryEvidence: "apps/api/app/agents/submission_agent.py:42,87",
-    anchors: [
-      "from app.routers.jobs import submit_application_for_job",
-      "outcome = submit_application_for_job(",
-    ],
-    status: "live",
-  },
+  // NOTE (land-time finding, this slice): a `submissionWritesApplication` hop
+  // ("agent.submission -> store.Application", reusing
+  // `routers.jobs.submit_application_for_job` VERBATIM) stood here and backed
+  // the `submission->learningFeedback` linkage below. It is REMOVED, not
+  // re-cited: the U5d-2 rewrite that merged in alongside this slice deleted
+  // that call path entirely (submission_agent.py's own docstring: "the
+  // job-scoped bookkeeping call (`submit_application_for_job`) is GONE").
+  // Submission now only queues an `ApprovalRequest`
+  // (`application_submission.queue_submission_approval`) — the real
+  // `Application.transmittedAt` write happens later, gated behind
+  // `POST /approvals/{id}/execute` (`apply_executor._record_site_transmission`),
+  // a materially different, human-gated claim the frozen AGENT-GRAPH.json
+  // discovery never recorded and this slice has no mandate to invent. Per the
+  // anti-fabrication law (orchestration-map-model.ts:20-22) a hop that can no
+  // longer be verified against the live tree is dropped, never re-pointed to
+  // an uninspected new mechanism. Re-running discovery on the new submission
+  // architecture and re-adding this edge (correctly, as
+  // submission->ApprovalRequest and ApprovalRequest->Application) is future
+  // work for whoever owns the next AGENT-GRAPH refresh.
   applicationFeedsLearning: {
     from: "store.Application",
     to: "agent.learningFeedback",
@@ -355,7 +360,7 @@ const HOP = {
     mechanism:
       "one synced thread per run; never mutates the Email Agent's triage labels",
     evidence:
-      "apps/api/app/agents/sentiment_analysis_agent.py:13,113; catalog copy apps/api/app/routers/agents.py:348",
+      "apps/api/app/agents/sentiment_analysis_agent.py:13,113; catalog copy apps/api/app/routers/agents.py:357",
     discoveryEvidence:
       "apps/api/app/agents/sentiment_analysis_agent.py:51; catalog copy agents.py:343",
     anchors: [
@@ -370,7 +375,7 @@ const HOP = {
     to: "agent.jobDiscovery",
     kind: "triggers",
     mechanism: "_pipeline_core sequential _dispatch",
-    evidence: "apps/api/app/routers/agents.py:3372,3394",
+    evidence: "apps/api/app/routers/agents.py:3389,3411",
     discoveryEvidence: "apps/api/app/routers/agents.py:3380",
     anchors: ["def _pipeline_core(", 'scout_out = _dispatch(user_id, "scout", params)'],
     status: "live",
@@ -446,7 +451,7 @@ const HOP = {
     mechanism:
       "synthesis over the user's own postings; optional guard-checked LLM narrative",
     evidence:
-      "apps/api/app/agents/company_research_agent.py:53,183; narrative opt-in at apps/api/app/routers/agents.py:1521,2040-2045",
+      "apps/api/app/agents/company_research_agent.py:53,183; narrative opt-in at apps/api/app/routers/agents.py:1538,2057",
     discoveryEvidence:
       "apps/api/app/agents/company_research_agent.py:53; narrative opt-in at apps/api/app/routers/agents.py:2020-2027",
     anchors: [
@@ -517,15 +522,6 @@ export const WORKFLOW_LINKAGES: readonly WorkflowLinkage[] = [
     label: "tailored resume → extraction input",
     meaning: "The resume tailoring writes is the document story extraction reads its bullets from.",
     provenance: [HOP.tailoringWritesResume, HOP.resumeFeedsStoryExtraction],
-  },
-  {
-    id: "submission->learningFeedback",
-    from: "submission",
-    to: "learningFeedback",
-    via: "Applications",
-    label: "applications → conversion measurement",
-    meaning: "The applications submission records are what the learning loop measures conversion from.",
-    provenance: [HOP.submissionWritesApplication, HOP.applicationFeedsLearning],
   },
   {
     id: "emailAgent->sentimentAnalysis",
