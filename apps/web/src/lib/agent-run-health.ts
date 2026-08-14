@@ -134,8 +134,21 @@ export function stalledForMs(run: AgentRun, now: number = Date.now()): number | 
   if (!isInFlight(run)) return null;
   const age = ageMs(runAnchor(run), now);
   if (age === null) return null;
-  const limit = run.status === "queued" ? QUEUED_STALE_MS : RUNNING_STALE_MS;
-  return age >= limit ? age : null;
+  return age >= staleLimitFor(run.status) ? age : null;
+}
+
+/**
+ * The staleness window that applies to an in-flight status.
+ *
+ * Exported so a surface holding only a STATUS + a TIMESTAMP (no full run row —
+ * e.g. the per-agent `lastRunStatus`/`lastRunAt` pair on
+ * `GET /agents/orchestration-map`) applies the identical window rather than
+ * inventing its own. Anything that is not `queued` is measured against the
+ * running window, which is the shorter of the two: a status we do not
+ * recognise never buys extra time to look alive.
+ */
+export function staleLimitFor(status: string): number {
+  return status === "queued" ? QUEUED_STALE_MS : RUNNING_STALE_MS;
 }
 
 export function isStalledRun(run: AgentRun, now: number = Date.now()): boolean {
@@ -156,10 +169,20 @@ export function humanizeDuration(ms: number): string {
   return `${Math.floor(hrs / 24)} days`;
 }
 
+/**
+ * "stalled for 8 days" — ONE definition of the phrase, shared by every surface.
+ *
+ * `null` (no usable timestamp) deliberately still says "stalled": a row we
+ * cannot date is not evidence of life, so it degrades to the honest word
+ * without a fabricated duration.
+ */
+export function stalledPhrase(ms: number | null): string {
+  return ms === null ? "stalled" : `stalled for ${humanizeDuration(ms)}`;
+}
+
 /** "stalled for 8 days" — the label every surface shows in place of a spinner. */
 export function stalledLabel(run: AgentRun, now: number = Date.now()): string {
-  const ms = stalledForMs(run, now);
-  return ms === null ? "stalled" : `stalled for ${humanizeDuration(ms)}`;
+  return stalledPhrase(stalledForMs(run, now));
 }
 
 /**

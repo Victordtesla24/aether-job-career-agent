@@ -278,20 +278,51 @@ export interface RequestOptions {
   body?: unknown;
   token?: string;
   baseUrl?: string;
+  /**
+   * Abort the request if the server has not responded within this many
+   * milliseconds (MF-A, round-5 re-review). Optional and opt-in: omitting it
+   * keeps today's unbounded `fetch` — this module never bounded ANY call
+   * with a timeout, which is exactly what let a hung fidelity check leave a
+   * frozen claim on screen indefinitely (see
+   * `components/approvals/ApprovalModal.tsx`'s live-fidelity effect). A
+   * caller that opts in gets an honest rejection instead of a silent hang;
+   * every other caller is byte-identical to before.
+   */
+  timeoutMs?: number;
 }
 
 /** Authenticated JSON request with a single retry on expired tokens. */
 export async function apiRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
   const baseUrl = options.baseUrl ?? apiBaseUrl();
-  const doFetch = async (token: string): Promise<Response> =>
-    fetch(`${baseUrl}${path}`, {
-      method: options.method ?? "GET",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: options.body === undefined ? undefined : JSON.stringify(options.body),
-    });
+  const doFetch = async (token: string): Promise<Response> => {
+    const controller = options.timeoutMs !== undefined ? new AbortController() : undefined;
+    const timer =
+      controller !== undefined
+        ? setTimeout(() => controller.abort(), options.timeoutMs)
+        : undefined;
+    try {
+      return await fetch(`${baseUrl}${path}`, {
+        method: options.method ?? "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: options.body === undefined ? undefined : JSON.stringify(options.body),
+        signal: controller?.signal,
+      });
+    } catch (error) {
+      // A timeout abort rejects `fetch` with an opaque `AbortError` — name it
+      // honestly instead of letting that cryptic message reach a caller/UI.
+      if (controller?.signal.aborted) {
+        throw new Error(
+          `${options.method ?? "GET"} ${path} timed out after ${options.timeoutMs}ms — the server did not respond in time.`,
+        );
+      }
+      throw error;
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+    }
+  };
 
   let token = options.token ?? (await getToken());
   let res = await doFetch(token);

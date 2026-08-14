@@ -21,16 +21,18 @@ from app.repositories.resume import ResumeRepository
 from app.repositories.story import StoryRepository
 from app.services.ats_engine import ATSEngine
 from app.services.career_data import build_career_corpus
-from app.services.evidence_corpus import build_corpus_evidence
+from app.services.evidence_corpus import build_corpus_evidence, corpus_items_to_evidence_text
+from app.services.resume_format import FormatFidelity, describe_fidelity, pending_fidelity
 from app.services.resume_grounding import MissingResumeError
 from app.services.resume_parser import parse_resume_pdf
-from app.services.resume_pdf import extract_pdf_bullets
+from app.services.resume_pdf import bundled_format_hashes, extract_pdf_bullets
 from app.services.resume_tailor import (
     ResumeTailorService,
     TailorResult,
     render_tailored_raw_text,
     strip_bullet_lines,
 )
+from app.services.story_corpus import story_corpus_item
 from app.services.tailoring_loop import (
     DEFAULT_MAX_ITERATIONS,
     DEFAULT_TARGET_SCORE,
@@ -142,6 +144,59 @@ def _compute_conversion_metrics(
     }
 
 
+#: Default cap on the Story Bank text folded into ONE prompt. Deliberately the
+#: same number as ``evidence_corpus._DEFAULT_MAX_CHARS``: the two evidence
+#: producers that share a single tailoring/cover prompt must share one
+#: budgeting discipline, or the unbounded one silently crowds out the bounded
+#: one. Overridable without a deploy via ``AETHER_STORY_EVIDENCE_MAX_CHARS``.
+_DEFAULT_STORY_EVIDENCE_MAX_CHARS = 4000
+
+#: Generation-time relevance floor for Story Bank selection (U-STORY-1 step 1).
+#:
+#: ``story_relevance_score`` is the share of the POSTING's term-frequency
+#: weighted vocabulary that ONE story proves, so its realistic ceiling is small:
+#: measured against a full-length posting, a squarely on-point story scores
+#: ~0.20 and a genuinely unrelated one scores exactly 0.0
+#: (``uat/reports/evidence/market-perf/u-story/s1/relevance-range.json``). The
+#: §7.3.5 default of 0.4 that ``story_relevance.relevance_threshold()`` returns
+#: is therefore unreachable for ANY single story, and applying it here would
+#: drop the candidate's entire Story Bank from the prompt — deleting the very
+#: candidate-own evidence the cover-letter claim guard needs and turning true
+#: claims into rejections. That threshold has never been exercised as a
+#: selection floor anywhere (``GET /stories?job_id=`` reports the score, it does
+#: not filter on it), so this is its first live calibration, not a relaxation of
+#: a shipped guard: no fabrication or entailment guard reads this value, and a
+#: WIDER set of the candidate's own TRUE stories can only ever make the guards
+#: more permissive about things the candidate genuinely did.
+#:
+#: The floor kept here is "proves at least something this posting asks for" —
+#: the one magnitude with an evidence-grounded meaning rather than a guessed
+#: one. Bounding is then done by RANK + CHARACTER BUDGET, exactly as the corpus
+#: path does it (``evidence_corpus.build_corpus_evidence``). Overridable via
+#: ``AETHER_STORY_EVIDENCE_MIN_RELEVANCE``.
+_DEFAULT_STORY_EVIDENCE_MIN_RELEVANCE = 0.01
+
+
+def _story_evidence_max_chars() -> int:
+    try:
+        value = int(os.environ.get("AETHER_STORY_EVIDENCE_MAX_CHARS", ""))
+    except ValueError:
+        return _DEFAULT_STORY_EVIDENCE_MAX_CHARS
+    return value if value > 0 else _DEFAULT_STORY_EVIDENCE_MAX_CHARS
+
+
+def _story_evidence_min_relevance() -> float:
+    try:
+        return float(
+            os.environ.get(
+                "AETHER_STORY_EVIDENCE_MIN_RELEVANCE",
+                str(_DEFAULT_STORY_EVIDENCE_MIN_RELEVANCE),
+            )
+        )
+    except (TypeError, ValueError):
+        return _DEFAULT_STORY_EVIDENCE_MIN_RELEVANCE
+
+
 def build_story_evidence(
     user_id: str,
     repo: StoryRepository | None = None,
@@ -165,25 +220,86 @@ def build_story_evidence(
     ``relevance_threshold()`` against this specific job. This can only ever
     NARROW which of the candidate's own TRUE stories are included — it never
     adds, rewrites, or invents story content, so the anti-fabrication
-    entailment guard downstream is unaffected."""
+    entailment guard downstream is unaffected.
+
+    Selection and bounding mirror the corpus path
+    (``services/evidence_corpus.build_corpus_evidence``) so the two producers
+    that share one prompt behave the same way:
+
+    * with a ``job_description``, stories that prove nothing the posting asks
+      for are dropped (:func:`~app.services.story_relevance.filter_stories_by_relevance`
+      at :data:`_DEFAULT_STORY_EVIDENCE_MIN_RELEVANCE`) and the survivors are
+      ordered strongest-first;
+    * with or without one, the rendered text is truncated to a character budget
+      (:func:`_story_evidence_max_chars`). Before U-STORY-1 this path was the
+      only unbounded evidence producer in the tailoring prompt — a 40-story
+      bank was folded whole into every job's prompt.
+    """
     repo = repo or StoryRepository()
     stories = repo.list_by_user(user_id)
     if job_description:
-        from app.services.story_relevance import filter_stories_by_relevance
+        from app.services.story_relevance import (
+            filter_stories_by_relevance,
+            story_relevance_score,
+        )
 
-        stories = filter_stories_by_relevance(stories, job_description)
+        stories = filter_stories_by_relevance(
+            stories, job_description, threshold=_story_evidence_min_relevance()
+        )
+        # Strongest evidence first, so what the character budget below keeps is
+        # the evidence most able to move THIS application — never an arbitrary
+        # prefix of the bank. The id tiebreak keeps the order deterministic
+        # when two stories score identically.
+        stories = sorted(
+            stories,
+            key=lambda s: (
+                -story_relevance_score(s, job_description),
+                str(s.get("id") or ""),
+            ),
+        )
+    budget = _story_evidence_max_chars()
     parts: list[str] = []
+    used = 0
     for story in stories:
-        fields = [str(story.get("title") or ""), " ".join(story.get("tags") or [])]
-        for key in ("situation", "task", "action", "result"):
-            fields.append(str(story.get(key) or ""))
-        metrics = story.get("metrics")
-        if isinstance(metrics, dict):
-            fields.extend(f"{k} {v}" for k, v in metrics.items())
-        text = " ".join(f for f in fields if f).strip()
-        if text:
-            parts.append(text)
+        item = story_corpus_item(story)
+        if item is None:
+            continue
+        text = corpus_items_to_evidence_text([item])
+        # ``continue`` rather than ``break`` (mirrors ``build_corpus_evidence``):
+        # one oversized story must not evict every shorter one behind it.
+        cost = len(text) + (2 if parts else 0)
+        if used + cost > budget:
+            continue
+        parts.append(text)
+        used += cost
     return "\n\n".join(parts)
+
+
+def join_evidence_units(*parts: str) -> str:
+    """Blank-line-join evidence text, dropping units that repeat verbatim.
+
+    ``resume_tailor._scoped_evidence_map`` splits ``evidence_extra`` on blank
+    lines, so a UNIT is the atom of the evidence contract. Since U-STORY-1 step
+    5 every story reaches the prompt through TWO producers — live rows via
+    :func:`build_story_evidence` and their ``EvidenceCorpusItem`` mirror via
+    ``build_corpus_evidence`` — and both render through
+    ``corpus_items_to_evidence_text``, so a mirrored story's unit is
+    byte-identical on both sides. Joining naively would pay for the whole Story
+    Bank twice in every tailoring prompt, undoing the token load step 1 priced
+    down. Order is preserved (first occurrence wins), so ranking survives.
+    """
+    units: list[str] = []
+    seen: set[str] = set()
+    for part in parts:
+        if not part:
+            continue
+        for unit in re.split(r"\n\s*\n", part):
+            stripped = unit.strip()
+            if not stripped or stripped in seen:
+                continue
+            seen.add(stripped)
+            units.append(stripped)
+    return "\n\n".join(units)
 
 
 #: Content-word tokenizer for the tailor grounding metric (mirrors the cover
@@ -223,15 +339,28 @@ def grounding_confidence(bullets: list[dict[str, str]], corpus: str) -> int:
 
 
 def build_tailor_approval_extras(
-    result: "Any", job: dict[str, Any], evidence_corpus: str
+    result: "Any", job: dict[str, Any], evidence_corpus: str, fidelity: FormatFidelity
 ) -> dict[str, Any]:
     """Approval-card fields the review modal renders for a tailored résumé
     (MV-resume-studio-001) — ``preview`` (the changed bullets a human reviews),
     ``why`` (why the gate fired), ``reasoning`` (what the agent verified) and
-    ``confidence`` (evidence grounding). Every reasoning item is TRUE by
-    construction: a version only reaches this point after its rewrites passed the
-    fabrication + entailment guards, and the source PDF's ``formatHash`` is carried
-    through untouched.
+    ``confidence`` (evidence grounding).
+
+    The fabrication/entailment-guard reasoning items are TRUE by construction:
+    a version only reaches this point after its rewrites passed both guards.
+    The layout-preservation item is NOT — it used to unconditionally claim
+    "Original layout preserved... Verified" for every run regardless of the
+    base document's own fidelity, which a live coherence re-review proved
+    false for 2 of 3 sampled production approvals (reflow-template,
+    ``formatPreserved: false`` bases still shown a green "Verified" claim;
+    SONNET-COHERENCE-REREVIEW-20260814.md finding F4). ``fidelity`` — the
+    SAME ``describe_fidelity``/``pending_fidelity`` decision table
+    ``GET /resumes`` stamps every listed version with — is required so this
+    item can only ever say what the base document's real mechanism supports:
+    a "check" when it claims preservation (still caveated as pending
+    per-document verification — no render/download has happened yet at
+    approval-creation time), a "warning" naming the true limitation
+    otherwise. Never an unconditional claim.
     """
     changed = [
         (cur, orig)
@@ -264,11 +393,8 @@ def build_tailor_approval_extras(
                 ),
             },
             {
-                "kind": "check",
-                "text": (
-                    "Original layout preserved — the source PDF's format hash is "
-                    "carried through untouched."
-                ),
+                "kind": "check" if fidelity.preserved is True else "warning",
+                "text": f"Original layout: {fidelity.note}",
             },
             {
                 "kind": "check",
@@ -447,6 +573,43 @@ class TailoringAgent:
         )
         return healed or base
 
+    def _pending_fidelity_for(self, base: dict[str, Any], user_id: str) -> FormatFidelity:
+        """The honest, mechanism-level fidelity report for the version about
+        to be tailored FROM ``base`` — the SAME decision table ``GET /resumes``
+        stamps every listed version with (:mod:`app.services.resume_format`),
+        computed here at approval-creation time so
+        :func:`build_tailor_approval_extras` can state a real, per-state
+        layout-preservation line instead of an unconditional claim
+        (ML-U2B-approval-honesty).
+
+        No download/render has happened yet at this point in the run, so a
+        mechanism claim of preservation is wrapped in :func:`pending_fidelity`
+        — exactly what ``stamp_fidelity`` does for a tailored listing row
+        whose parent claims preservation: state the mechanism, not an
+        outcome nobody has checked yet.
+
+        ``original_meta_by_user`` is looked up defensively (``getattr``): test
+        doubles for :class:`ResumeRepository` that predate this fix do not
+        implement it, and the honest degrade for "we don't know whether the
+        original is stored" is the same default ``stamp_fidelity`` already
+        uses for a résumé absent from its own ``original_meta`` mapping —
+        ``hasOriginal=False`` — never a crash and never an affirmative guess.
+        """
+        format_hash = base.get("formatHash")
+        meta_lookup = getattr(self._resumes, "original_meta_by_user", None)
+        meta: dict[str, Any] = {}
+        if meta_lookup is not None:
+            meta = meta_lookup(user_id).get(base.get("id"), {})
+        fidelity = describe_fidelity(
+            bundled_match=bool(format_hash) and format_hash in bundled_format_hashes(),
+            has_original=bool(meta.get("hasOriginal")),
+            content_type=meta.get("originalContentType"),
+            is_tailored=True,
+        )
+        if fidelity.preserved is True:
+            fidelity = pending_fidelity(fidelity)
+        return fidelity
+
     def run(
         self,
         user_id: str,
@@ -495,7 +658,14 @@ class TailoringAgent:
         # GAP-P6-TAIL-001: the Story Bank is real, evidence-grounded career
         # signal usually absent from the polished résumé text — the source of
         # truthful JD keywords the tailor can surface for a genuine ATS lift.
-        story_evidence = build_story_evidence(user_id, self._stories)
+        # U-STORY-1 step 1: scoped to THIS posting. Without ``job_description``
+        # every story the user owns was folded into every job's prompt,
+        # unranked and unbounded — the largest unpriced token load in the
+        # tailoring prompt on a large bank. Relevance selection can only NARROW
+        # the candidate's own true stories, so no guard semantics change.
+        story_evidence = build_story_evidence(
+            user_id, self._stories, job_description=jd
+        )
         # U2b/U2c-0: the provenance-tagged evidence corpus (baseline résumé +
         # portfolio + public repos, each claim carrying its source, epistemic
         # status and confidence). Ranked against THIS job description and
@@ -505,8 +675,8 @@ class TailoringAgent:
         # rejected and reverted. Empty string for a user with no corpus, which
         # keeps behaviour identical to before for those accounts.
         corpus_evidence = build_corpus_evidence(user_id, jd)
-        evidence_extra = "\n\n".join(
-            p for p in (career_corpus, story_evidence, corpus_evidence) if p
+        evidence_extra = join_evidence_units(
+            career_corpus, story_evidence, corpus_evidence
         )
         # §5.3 item 1: score-aware iterative tailoring — tailor, score via the
         # SAME ATSEngine ``/resumes/{id}/ats`` uses, and — while below the 85
@@ -652,6 +822,10 @@ class TailoringAgent:
             changes=net_changes,
             rejected=best["rejected"],
         )
+        # ML-U2B-approval-honesty: the base document's REAL fidelity mechanism
+        # (not an unconditional claim) drives the approval card's
+        # layout-preservation line — see _pending_fidelity_for's docstring.
+        fidelity = self._pending_fidelity_for(base, user_id)
         approval = self._approvals.create(
             user_id,
             "application_submit",
@@ -665,7 +839,7 @@ class TailoringAgent:
                 # than the application_submit defaults.
                 "agent": "Tailoring Agent",
                 "action": "apply a tailored résumé",
-                **build_tailor_approval_extras(loop_as_result, job, evidence_corpus),
+                **build_tailor_approval_extras(loop_as_result, job, evidence_corpus, fidelity),
             },
         )
         # RT-005: a successfully tailored job belongs in the "Tailoring"

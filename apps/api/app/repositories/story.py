@@ -49,7 +49,9 @@ from app.db import (
     new_id,
     rows_to_dicts,
 )
+from app.repositories.evidence_corpus import EvidenceCorpusRepository
 from app.services.dedup import compute_story_content_hash
+from app.services.story_corpus import story_corpus_item, story_item_id
 from app.services.story_paraphrase import CREATE_TIME_THRESHOLDS, best_paraphrase_match
 
 #: Client-safe columns — the internal ``contentHash`` is NEVER selected.
@@ -63,6 +65,48 @@ _STAR_FIELDS = ("title", "situation", "task", "action", "result")
 
 
 class StoryRepository:
+    def _mirror_to_corpus(self, user_id: str, row: dict[str, Any]) -> None:
+        """Mirror one LIVE story into ``EvidenceCorpusItem`` (U-STORY-1 step 5).
+
+        ``itemId = "story:<id>"`` and ``source = "story_bank"``, written through
+        the existing idempotent ``upsert_many`` — no schema change, no second
+        evidence path. What it buys (U-STORY-DISCOVERY.md §2.4 B): stories
+        inherit the corpus path's JD ranking and character budget for free, and
+        a story becomes individually CITABLE — the first time anything
+        downstream can say WHICH story grounded a claim, which is the
+        prerequisite for any learning loop at all.
+
+        Deliberately NOT inside the story's own transaction: the mirror is a
+        derived projection, and holding the (lazily created) corpus table's DDL
+        inside the story write would couple a first-hit CREATE TABLE to every
+        save. A mirror that fails to land is re-written by the next save of
+        that story, and ``upsert_many`` is keyed on ``(userId, itemId)`` so
+        replaying it is free. Failures are NOT swallowed — a broken mirror
+        surfaces rather than silently leaving stories uncitable.
+
+        KNOWN RESIDUAL, filed rather than silently patched: the CRUD paths here
+        (create / update / delete) are mirrored, but the bulk paraphrase de-dup
+        sweep archives a row directly in its own audited transaction
+        (``services/story_dedup_migration.py:273``) and un-archives it at
+        :578. Those two writes do not touch the mirror, so between an operator
+        sweep and the next save of that story its claim would remain in the
+        corpus while ``list_by_user`` (this module's docstring, GMV4-story-004)
+        no longer returns it. The sweep is operator-gated and plan-reviewed —
+        never a live user path — so this is a follow-up for the sweep's own
+        slice (add ``_unmirror_from_corpus`` on archive and
+        ``_mirror_to_corpus`` on restore, inside that transaction's
+        reconciliation), NOT a silent hole left unrecorded.
+        """
+        item = story_corpus_item(row)
+        if item is None or not item.get("id"):
+            return
+        EvidenceCorpusRepository().upsert_many(user_id, [item])
+
+    def _unmirror_from_corpus(self, user_id: str, story_id: str) -> None:
+        """Retract one story's corpus mirror — deleting a story must delete its
+        evidence, or the guard keeps honouring a claim the user withdrew."""
+        EvidenceCorpusRepository().delete_items(user_id, [story_item_id(story_id)])
+
     def create(self, user_id: str, story: dict[str, Any]) -> dict[str, Any]:
         """The saved row, exactly as every existing caller expects it.
 
@@ -156,6 +200,7 @@ class StoryRepository:
                             replace_evidence=True,
                         )
                         conn.commit()
+                        self._mirror_to_corpus(user_id, rows[0])
                         return rows[0], True
 
                 cur.execute(
@@ -170,7 +215,12 @@ class StoryRepository:
                         f'SELECT {_COLUMNS} FROM "StoryEntry" WHERE "id" = %s',
                         (existing[0],),
                     )
-                    return rows_to_dicts(cur)[0], False
+                    hit = rows_to_dicts(cur)[0]
+                    # Nothing was written, but re-asserting the mirror is free
+                    # (idempotent upsert) and self-heals a story whose mirror
+                    # never landed.
+                    self._mirror_to_corpus(user_id, hit)
+                    return hit, False
 
                 cur.execute(
                     'SELECT "id","title","situation","task","action","result",'
@@ -196,6 +246,7 @@ class StoryRepository:
                         replace_evidence=False,
                     )
                     conn.commit()
+                    self._mirror_to_corpus(user_id, rows[0])
                     return rows[0], True
 
                 cur.execute(
@@ -223,6 +274,7 @@ class StoryRepository:
                 )
                 rows = rows_to_dicts(cur)
             conn.commit()
+        self._mirror_to_corpus(user_id, rows[0])
         return rows[0], False
 
     def _merge_into(
@@ -445,7 +497,10 @@ class StoryRepository:
                 )
                 rows = rows_to_dicts(cur)
             conn.commit()
-        return rows[0] if rows else None
+        if not rows:
+            return None
+        self._mirror_to_corpus(user_id, rows[0])
+        return rows[0]
 
     def delete(self, story_id: str, user_id: str) -> bool:
         """Delete a LIVE story. An ARCHIVED id returns ``False`` (-> HTTP 404).
@@ -474,4 +529,6 @@ class StoryRepository:
                 )
                 deleted = cur.rowcount
             conn.commit()
+        if deleted > 0:
+            self._unmirror_from_corpus(user_id, story_id)
         return deleted > 0

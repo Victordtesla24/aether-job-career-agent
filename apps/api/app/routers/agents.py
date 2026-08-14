@@ -111,9 +111,16 @@ _PIPELINE_AGENT_NAMES = (
 #: where a real email leaves the system stays ``POST /approvals/{id}/execute``.
 #: An agent that only classifies or drafts text and sends nothing does NOT belong
 #: here — the gate marks a pending outbound side-effect, not "produced text".
+#:
+#: U5d-2: ``submission`` joined this set when its terminal act became a real
+#: pending ``application_submit`` ApprovalRequest (FORENSICS.md §4.2). Note the
+#: per-run refinement at the ``approvalRequired`` assignment below — membership
+#: here declares what the AGENT's terminal act is, and the run record still
+#: reports only the gate that run genuinely created.
 _APPROVAL_GATED = {
     "tailor", "coverLetter", "emailAgent",
     "recruiterOutreach", "reference", "notification",
+    "submission",
 }
 
 # ---------------------------------------------------------------------------
@@ -233,23 +240,30 @@ AGENT_CATALOG: list[dict[str, Any]] = [
             "which claims were rejected, flagged or withheld, and which artifacts "
             "came back clean. Runs that never reached a verdict are excluded, never "
             "passed. Deterministic, no LLM cost."},
-    # ADR-AG-1 (GM2-AGENTS-001): the old tip promised "reliable form-filling
-    # and browser automation reasoning" for GPT-4o — no browser-automation or
-    # third-party form-filling integration exists in this product. The honest,
-    # REAL scope is the submission gate + write POST /jobs/{id}/apply already
-    # performs (app.routers.jobs.submit_application_for_job), now also
-    # runnable as an agent — never left as a permanently "planned" card with
-    # no backend (§4), and never a stub: it is the SAME write the Jobs board's
-    # Apply button makes, reused verbatim.
+    # ADR-AG-1 (GM2-AGENTS-001) + U5d + U5d-2. The tip has been wrong twice. It
+    # first promised "reliable form-filling and browser automation reasoning";
+    # that was replaced with "Submits one of your OWN ready applications", which
+    # production proved is ALSO false — the card wrote tracker bookkeeping and
+    # transmitted nothing (0 of 606 applications has ever carried a
+    # transmittedAt; FORENSICS.md). U5d-2 rewired the run to the real U5 apply
+    # engine, so the tip now describes THAT: it prepares and gates, it never
+    # transmits, and the approval is named as the thing that does.
     {"key": "submission", "name": "Submission Agent", "icon": "fa-paper-plane",
      "accent": "green", "backend": "submission", "recommended": "deterministic",
-     "tip": "Submits one of your OWN ready applications — the exact gate and "
-            "write the Jobs board's Apply button already performs (a "
-            "job-tailored resume plus a non-empty Cover Letter Studio draft), "
-            "now runnable as an agent. No browser automation or third-party "
-            "form-filling exists; nothing is invented. With no job specified "
-            "it picks your most recently updated ready application and "
-            "reports which one. Deterministic, no LLM cost."},
+     "tip": "Takes one of your OWN ready applications (a job-tailored resume "
+            "plus a non-empty Cover Letter Studio draft — the exact gate the "
+            "Jobs board's Apply button enforces), works out how that posting "
+            "can actually be applied to, and queues it for your approval. It "
+            "transmits NOTHING itself: a run ends as a pending card in "
+            "Approvals, and the application only reaches the employer when you "
+            "approve it there or press Submit on the application card. Where "
+            "Aether will not auto-submit — Lever, SmartRecruiters, an "
+            "employer's own form, Seek — it says so and hands you the direct "
+            "link instead of pretending. Every run reports its real state — "
+            "transmitted, awaiting approval, manual step required, or no "
+            "change — read back from the row, never assumed. With no job "
+            "specified it picks your most recently updated ready application "
+            "and reports which one. Deterministic, no LLM cost."},
     {"key": "matchScoring", "name": "Match Scoring Agent", "icon": "fa-bullseye",
      "accent": "indigo", "backend": "fitScorer", "recommended": "deterministic",
      "tip": "Deterministic 10-dimension fit scoring + ATS keyword/semantic engine — "
@@ -1338,7 +1352,24 @@ def _execute_reserved_run(
         raise
     duration_ms = int((time.monotonic() - started) * 1000)
     output["duration_ms"] = duration_ms
-    output["approvalRequired"] = _run_is_approval_gated(agent_name, params)
+    # U5d: a run that ITSELF reports it ended awaiting an approval IS gated,
+    # whatever the agent-level table says. Derived from the run's OWN output,
+    # never assumed, so it cannot report a gate for a run that did not create
+    # one.
+    #
+    # U5d-2: ``submission`` is now IN ``_APPROVAL_GATED`` (its terminal act is a
+    # real W-SUB card), which on its own would make the static answer ``true``
+    # for EVERY submission run — including the ones that end in a manual step
+    # having created no approval at all. That is the same shape of falsehood,
+    # pointed the other way, so for any agent whose output carries a
+    # ``submissionState`` the run's own persisted state is authoritative: it
+    # created a gate iff it says it is awaiting one.
+    submission_state = output.get("submissionState")
+    output["approvalRequired"] = (
+        submission_state == "awaiting_approval"
+        if submission_state is not None
+        else _run_is_approval_gated(agent_name, params)
+    )
     output["billingAudit"] = audit
     # An honest "no letter produced" degrade: the cover-letter agent hit an
     # LLMUnavailableError on its FIRST draft and returned a coverLetterUnavailable

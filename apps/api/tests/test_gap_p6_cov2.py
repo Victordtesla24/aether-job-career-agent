@@ -72,7 +72,7 @@ def _stub_evidence(monkeypatch) -> None:
     )
     monkeypatch.setattr(
         "app.agents.cover_letter_agent.build_story_evidence",
-        lambda uid, repo=None: "",
+        lambda uid, repo=None, job_description=None: "",
     )
 
 

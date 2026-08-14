@@ -443,7 +443,7 @@ def _attempt_transmission(user_id: str, application_id: str, approval_id: str) -
         _transmit_by_email(user_id, application, approval_id)
         return
     if channel not in AUTOMATABLE_CHANNELS:
-        reason, message = _no_channel_reason(channel, application, apply_url)
+        reason, message = no_channel_reason(channel, application, apply_url)
         record_manual_step(user_id, application_id, reason, message)
         raise ManualStepRequired(reason, message)
     if not apply_url:
@@ -451,7 +451,7 @@ def _attempt_transmission(user_id: str, application_id: str, approval_id: str) -
         # this cannot normally happen — and if it ever did, the executor would
         # fall into its replay mode and record a submission that never left the
         # building. Refuse instead, honestly.
-        reason, message = _no_channel_reason("unknown", application, "")
+        reason, message = no_channel_reason("unknown", application, "")
         record_manual_step(user_id, application_id, reason, message)
         raise ManualStepRequired(reason, message)
     answers = application.get("answers")
@@ -476,7 +476,7 @@ def _attempt_transmission(user_id: str, application_id: str, approval_id: str) -
     )
 
 
-def _no_channel_reason(
+def no_channel_reason(
     channel: str, application: dict[str, Any], apply_url: str = ""
 ) -> tuple[str, str]:
     """``(reason_code, user-facing message)`` for a channel we do not drive.
@@ -522,6 +522,13 @@ def _no_channel_reason(
             f"{application.get('sourceUrl') or ''}"
         ).strip(),
     )
+
+
+#: U5d-2 — the Submission Agent reaches the SAME copy through the SAME
+#: function. Kept as an alias rather than a second definition so the sweep and
+#: the agent can never tell a user two different stories about one posting;
+#: the private name stays valid for this module's existing call sites and tests.
+_no_channel_reason = no_channel_reason
 
 
 def approval_age_days(approved_at: Any, now: datetime | None = None) -> float | None:

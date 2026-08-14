@@ -3,6 +3,37 @@ import { z } from "zod";
 
 import { apiRequest, type RequestOptions } from "./client";
 
+/**
+ * U5d-2 — the per-application submit control.
+ *
+ * `state` and `action` are BACKEND-decided (see
+ * `apps/api/app/services/submission_control.py`); the two transient states the
+ * server cannot observe — `submitting` and `failed` — are added by this client
+ * and only for the lifetime of its own in-flight request. `state` is a plain
+ * string rather than a closed enum on purpose: an API build that adds a new
+ * honest state must degrade to "render its label and offer nothing" here,
+ * never throw a parse error that blanks the whole board.
+ */
+export const SubmissionControlSchema = z.object({
+  state: z.string(),
+  action: z.enum([
+    "submit",
+    "send_email",
+    "open_posting",
+    "reconfirm",
+    "fix_artifacts",
+    "none",
+  ]),
+  label: z.string(),
+  detail: z.string(),
+  channel: z.string(),
+  applyUrl: z.string().nullish(),
+  href: z.string().nullish(),
+  missing: z.array(z.string()).default([]),
+});
+
+export type SubmissionControl = z.infer<typeof SubmissionControlSchema>;
+
 export const ApplicationSchema = z.object({
   id: z.string(),
   jobId: z.string(),
@@ -50,6 +81,19 @@ export const ApplicationSchema = z.object({
   manualStepReason: z.string().nullish(),
   manualStepDetail: z.string().nullish(),
   manualStepAt: z.string().nullish(),
+  // U5d — the honest reclassification of a row that CLAIMS a submission with
+  // no transmission evidence. Since U5d-2 this is also stamped at WRITE time
+  // by every bookkeeping path, so "recorded_not_transmitted" now means "the
+  // writer itself said it transmitted nothing", not "a census guessed later".
+  submissionTruthState: z.string().nullish(),
+  submissionTruthNote: z.string().nullish(),
+  // U5d-2 — the per-card submit control, computed ONCE on the server from the
+  // persisted columns (apps/api/app/services/submission_control.py). The UI
+  // renders what it is given: deriving a card state client-side is how the
+  // Submitted column ended up asserting 346 submissions the database could not
+  // support. Nullish-tolerant so an older API build degrades to "no control"
+  // rather than throwing.
+  submissionControl: SubmissionControlSchema.nullish(),
 });
 
 export type Application = z.infer<typeof ApplicationSchema>;
@@ -77,6 +121,74 @@ export async function submitApplication(
       ...options,
       method: "POST",
       body: { applied_url: appliedUrl ?? null },
+    }),
+  );
+}
+
+const RequestSubmissionSchema = z.object({
+  approvalId: z.string(),
+  applicationId: z.string(),
+  channel: z.string(),
+  transmitted: z.literal(false),
+  detail: z.string(),
+});
+
+export type RequestSubmissionResult = z.infer<typeof RequestSubmissionSchema>;
+
+/**
+ * U5d-2 — record the user's approval for THIS application. Step 1 of 2.
+ *
+ * The click on the card IS the approval (USER MANDATE 2026-08-14), so this
+ * creates AND approves an `application_submit` ApprovalRequest server-side,
+ * through the same repository the Approvals screen uses. It transmits nothing
+ * — `transmitted` is a `z.literal(false)`, so a build that ever started
+ * returning `true` here would fail the parse rather than let the UI paint a
+ * success. Step 2 is {@link executeApproval}, the EXISTING execute endpoint.
+ */
+export async function requestSubmission(
+  id: string,
+  options: RequestOptions = {},
+): Promise<RequestSubmissionResult> {
+  return RequestSubmissionSchema.parse(
+    await apiRequest<unknown>(`/applications/${id}/request-submission`, {
+      ...options,
+      method: "POST",
+    }),
+  );
+}
+
+const ExecuteSubmissionSchema = z.object({
+  status: z.string(),
+  transmitted: z.boolean(),
+  applicationId: z.string().nullish(),
+  channel: z.string().nullish(),
+  reason: z.string().nullish(),
+  detail: z.string().nullish(),
+  transmittedAt: z.string().nullish(),
+  transmissionRef: z.string().nullish(),
+});
+
+export type ExecuteSubmissionResult = z.infer<typeof ExecuteSubmissionSchema>;
+
+/**
+ * U5d-2 — step 2 of 2: execute the approval the click just recorded.
+ *
+ * This is the EXISTING `POST /approvals/{id}/execute` endpoint and its
+ * single-shot `claim_execution` guard — deliberately not a new route, so the
+ * per-card control cannot become a second way to submit that bypasses the gate.
+ *
+ * Its answer is ADVISORY. The card only ever reaches "Submitted ✓" by
+ * re-reading the application row and finding a real `transmittedAt`, because
+ * the row is the only thing that can prove a transmission happened.
+ */
+export async function executeApproval(
+  approvalId: string,
+  options: RequestOptions = {},
+): Promise<ExecuteSubmissionResult> {
+  return ExecuteSubmissionSchema.parse(
+    await apiRequest<unknown>(`/approvals/${approvalId}/execute`, {
+      ...options,
+      method: "POST",
     }),
   );
 }

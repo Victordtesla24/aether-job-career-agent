@@ -703,9 +703,46 @@ def _existing_application(user_id: str, job_id: str) -> tuple[str, str] | None:
     return (row[0], row[1]) if row else None
 
 
-def submit_application_for_job(user_id: str, job_id: str) -> dict[str, Any]:
+def _application_by_id(user_id: str, job_id: str, application_id: str) -> tuple[str, str] | None:
+    """One SPECIFIC application of this user, for this job — U5d.
+
+    ``_existing_application``'s ``ORDER BY "createdAt" DESC LIMIT 1`` is right
+    for the Apply button (the user clicked a job, not a row) but wrong for a
+    caller that already knows WHICH application it means: in production it
+    resolved a job's newest already-submitted row and silently bypassed the
+    gate that should have run against the older ready draft the Submission
+    Agent had actually selected (FORENSICS.md §3). Owner- AND job-scoped, so
+    a pinned id can never reach across users or jobs.
+    """
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT "id", "status" FROM "Application" '
+                'WHERE "id" = %s AND "userId" = %s AND "jobId" = %s',
+                (application_id, user_id, job_id),
+            )
+            row = cur.fetchone()
+    return (row[0], row[1]) if row else None
+
+
+def submit_application_for_job(
+    user_id: str, job_id: str, *, application_id: str | None = None
+) -> dict[str, Any]:
     """Create an Application for ``job_id`` (owned by ``user_id``) and advance
     the job to ``applied`` (idempotent).
+
+    ``application_id`` (U5d, optional) PINS the row this call operates on
+    instead of letting ``_existing_application`` pick the job's newest row.
+    The Apply button passes nothing and is unchanged; the Submission Agent
+    passes the id of the ready draft it selected, so the gate below runs
+    against the row the agent actually chose.
+
+    The returned dict reports what really happened to the database —
+    ``changed`` (a real ``rowcount``: a row was inserted or promoted) and
+    ``alreadySubmitted`` (the reuse branch: nothing was written) — so no
+    caller has to infer a write from control flow. Production's three
+    false-positive runs all took the reuse branch and claimed a submission
+    precisely because this function returned no such signal.
 
     The REAL submission gate + write behind ``POST /{job_id}/apply`` — requires
     both a job-tailored resume and a non-empty Cover Letter Studio draft before
@@ -723,9 +760,20 @@ def submit_application_for_job(user_id: str, job_id: str) -> dict[str, Any]:
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    existing_application = _existing_application(user_id, job_id)
+    if application_id is not None:
+        existing_application = _application_by_id(user_id, job_id, application_id)
+        if existing_application is None:
+            raise HTTPException(status_code=404, detail="Application not found")
+    else:
+        existing_application = _existing_application(user_id, job_id)
+    already_submitted = (
+        existing_application is not None and existing_application[1] != "draft"
+    )
+    inserted = False
+    promoted = False
     resume_id: str | None = None
-    if existing_application is not None and existing_application[1] != "draft":
+    if already_submitted:
+        assert existing_application is not None
         application_id = existing_application[0]
     else:
         resume_id = _resume_for_apply(user_id, job_id)
@@ -813,8 +861,27 @@ def submit_application_for_job(user_id: str, job_id: str) -> dict[str, Any]:
 
     updated = job if job.get("status") == "applied" else repository.update_status(job_id, "applied")
     assert updated is not None
+    if inserted or promoted:
+        # U5d-2 WRITE-TIME TRUTH MARKER. This function's write is BOOKKEEPING:
+        # it records that the user applied, and transmits nothing (transmission
+        # lives behind the ApprovalRequest gate and the U5 apply engine). Say so
+        # on the row in the same request that writes 'submitted', so a
+        # claimed-submitted row with no proof and no marker becomes a bug rather
+        # than an ambiguity the U5d census has to interpret after the fact. The
+        # stamp is guarded on ``transmittedAt IS NULL``, so a row that later
+        # gains real evidence is never mislabelled.
+        from app.services.submission_truth import mark_recorded_not_transmitted
+
+        mark_recorded_not_transmitted(user_id, application_id)
     submission = _queue_or_report_submission(user_id, job_id, application_id, resume_id)
-    return {"job": updated, "applicationId": application_id, "submission": submission}
+    return {
+        "job": updated,
+        "applicationId": application_id,
+        "submission": submission,
+        # U5d — the REAL rowcounts, so a caller never has to infer a write.
+        "changed": bool(inserted or promoted),
+        "alreadySubmitted": already_submitted,
+    }
 
 
 def _queue_or_report_submission(
