@@ -9,6 +9,7 @@ import { useCallback, useEffect, useState } from "react";
 import MarketPulse from "../../../components/analytics/MarketPulse";
 import { useRealtimeResources } from "../../../hooks/useRealtime";
 import MetricTooltip from "../../../components/MetricTooltip";
+import AgentPolicyPanel from "../../../components/agents/AgentPolicyPanel";
 import {
   fetchAgentRoi,
   fetchAtsDistribution,
@@ -22,6 +23,7 @@ import {
   type Funnel,
   type Period,
 } from "../../../lib/api/analytics";
+import { fetchAgentPolicy, type AgentPolicy } from "../../../lib/api/agentPolicy";
 
 const PERIODS: Period[] = ["7d", "30d", "90d", "all"];
 
@@ -33,6 +35,10 @@ export default function AnalyticsPage() {
   const [conversion, setConversion] = useState<Conversion | null>(null);
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // U-AX item 2(a): the self-improvement loop's current tier — loaded
+  // independently so a failure here never blanks the rest of the page (same
+  // degrade pattern the dashboard summary already uses below).
+  const [policy, setPolicy] = useState<AgentPolicy | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -61,6 +67,14 @@ export default function AnalyticsPage() {
       } catch {
         // Dashboard endpoint not yet deployed — degrade gracefully.
         setDashboard(null);
+      }
+
+      try {
+        setPolicy(await fetchAgentPolicy());
+      } catch {
+        // U-AX policy panel is additive — its own failure must not take down
+        // the funnel/conversion/ATS panels above.
+        setPolicy(null);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load analytics");
@@ -162,6 +176,12 @@ export default function AnalyticsPage() {
           {error}
         </p>
       ) : null}
+
+      {/* U-AX item 2(a)/(c): the self-improvement loop's live state — the
+          exact tier every real agent is currently obeying, why, and what it
+          changes. Additive to the page; a load failure leaves it absent
+          rather than blocking anything above. */}
+      {policy ? <AgentPolicyPanel policy={policy} /> : null}
 
       {dashboard === null && !error ? (
         /* Space reservation while the summary loads — rendering nothing and
@@ -306,6 +326,22 @@ export default function AnalyticsPage() {
                 </span>
               )}
             </div>
+            {/* U-AX item 1/2: "what should the user DO with this?" — the raw
+                rate above is action-relevant only once it is framed against
+                the 20% target the self-improvement loop escalates against.
+                Never printed as a negative "gap" figure — the target minus
+                the rate, stated as the ground the agents still need to make
+                up, honestly zeroed out once the target is met. */}
+            {hasApplications ? (
+              <p
+                className="mt-2 text-xs text-aether-muted-dim"
+                data-testid="interview-conversion-gap"
+              >
+                {conversion.interview_conversion_rate >= 20
+                  ? "At or above the 1-in-5 (20%) interview-conversion target."
+                  : `${(20 - conversion.interview_conversion_rate).toFixed(1)} points below the 1-in-5 (20%) target — the agent policy escalates its rigor tier until this closes.`}
+              </p>
+            ) : null}
           </>
         )}
       </section>

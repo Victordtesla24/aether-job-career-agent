@@ -11,6 +11,9 @@ import { useRealtimeResources } from "../../../hooks/useRealtime";
 import { apiRequest } from "../../../lib/api/client";
 import type { Job } from "../../../lib/api/jobs";
 import { conversionImpactFrom, type ConversionImpact } from "../../../lib/scoring/provenance";
+import TailoringImpact, {
+  type TailoringDimension,
+} from "../../../components/analytics/TailoringImpact";
 import {
   downloadResume,
   fetchResumeDiff,
@@ -39,6 +42,100 @@ type AtsScore = {
    *  semantic component above is a placeholder, not a real measurement. */
   semantic_degraded?: boolean;
 };
+
+/**
+ * U-AX build spec item 3 — the 10-dimension fit set, verbatim from
+ * `GET /jobs/{id}/insights` (`apps/api/app/routers/jobs.py::_build_insights`),
+ * which is ALWAYS scored against this user's IMMUTABLE base resume
+ * (`resolve_user_resume_text`, never a tailored version) — the honest
+ * "before" snapshot for any tailored version of the same job.
+ */
+interface JobInsightsDimension {
+  label: string;
+  score: number;
+  degraded: boolean;
+}
+
+interface JobInsights {
+  scored: boolean;
+  overall: number;
+  keywordMatch: number;
+  semantic: number;
+  experience: number;
+  dimensions: JobInsightsDimension[];
+}
+
+const DIMENSION_ORDER = [
+  "Technical Skills",
+  "Experience Level",
+  "Industry Match",
+  "Role Alignment",
+  "Culture Fit",
+  "Salary Fit",
+  "Location Match",
+  "Career Growth",
+  "Company Stability",
+  "North Star Align",
+] as const;
+
+/**
+ * The "after" (tailored) 10-dimension snapshot, derived from a REAL re-score
+ * of the tailored resume text (`GET /resumes/{id}/ats`) against the same job
+ * the baseline `JobInsights` above was scored against — never guessed.
+ *
+ * Every dimension is EXACT or algebraically exact, mirroring the SAME blend
+ * `_build_insights` uses server-side (jobs.py):
+ * - Technical Skills / Experience Level / Industry Match / Role Alignment /
+ *   Culture Fit / North Star Align are recomputed directly from the tailored
+ *   resume's own keyword/experience/semantic/overall subscores — a genuine
+ *   second measurement, not an estimate.
+ * - Salary Fit / Location Match / Company Stability depend ONLY on the job
+ *   (salary bounds, remote flag, source) — tailoring the resume's WORDS
+ *   cannot move them, so the honest "after" value is the same measured
+ *   baseline, never a fabricated guess.
+ * - Career Growth blends a title-derived seniority term (identical for both
+ *   snapshots — same job) with 0.4×overall; the seniority term cancels out
+ *   algebraically, so "after" is the measured baseline plus the resume-
+ *   dependent overall movement, exact to backend rounding.
+ */
+function deriveTailoredDimensions(
+  baseline: JobInsightsDimension[],
+  baselineOverall: number,
+  tailored: {
+    overall: number;
+    keyword_match: number;
+    semantic_similarity: number;
+    experience_gap: number;
+  },
+): TailoringDimension[] {
+  const baselineScore = new Map(baseline.map((d) => [d.label, d.score]));
+  const round1 = (n: number) => Math.round(n * 10) / 10;
+  const overallDelta = tailored.overall - baselineOverall;
+  return DIMENSION_ORDER.map((label): TailoringDimension => {
+    switch (label) {
+      case "Technical Skills":
+        return { label, score: round1(tailored.keyword_match) };
+      case "Experience Level":
+        return { label, score: round1(tailored.experience_gap) };
+      case "Industry Match":
+        return { label, score: round1(tailored.semantic_similarity) };
+      case "Role Alignment":
+        return { label, score: round1(tailored.overall) };
+      case "Culture Fit":
+        return {
+          label,
+          score: round1(0.5 * tailored.semantic_similarity + 0.5 * tailored.experience_gap),
+        };
+      case "North Star Align":
+        return { label, score: round1(0.6 * tailored.overall + 0.4 * tailored.semantic_similarity) };
+      case "Career Growth":
+        return { label, score: round1((baselineScore.get(label) ?? 0) + 0.4 * overallDelta) };
+      default:
+        // Salary Fit / Location Match / Company Stability — job-only.
+        return { label, score: round1(baselineScore.get(label) ?? 0) };
+    }
+  });
+}
 
 /** How many version cards to show before "Show more" (MV-resume-studio-005). */
 const VERSIONS_PAGE_SIZE = 8;
@@ -89,6 +186,15 @@ export default function ResumePage() {
   const [selected, setSelected] = useState<Resume | null>(null);
   const [diff, setDiff] = useState<ResumeDiff | null>(null);
   const [ats, setAts] = useState<AtsScore | null>(null);
+  // U-AX item 3: honest before(baseline)/after(tailored) ATS + all 10
+  // fit-radar dimensions for the SELECTED tailored version. Null whenever
+  // either real re-score is unavailable — never a partial/guessed panel.
+  const [tailoringImpact, setTailoringImpact] = useState<{
+    beforeAts: number;
+    afterAts: number;
+    beforeDimensions: TailoringDimension[];
+    afterDimensions: TailoringDimension[];
+  } | null>(null);
   const [conversion, setConversion] = useState<ConversionImpact | null>(null);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -200,6 +306,7 @@ export default function ResumePage() {
     setSelected(resume);
     setDiff(null);
     setAts(null);
+    setTailoringImpact(null);
     setDownloadNote(null);
     // W-TAILOR-CONVERGE item 5: the before/after ATS panel used to exist only
     // in transient state populated by the tailor RUN response, so a reload (or
@@ -225,10 +332,36 @@ export default function ResumePage() {
       setDiff(null);
     }
     if (resume.sourceJobId) {
+      let tailoredAts: AtsScore | null = null;
       try {
-        setAts(await apiRequest<AtsScore>(`/resumes/${resume.id}/ats`));
+        tailoredAts = await apiRequest<AtsScore>(`/resumes/${resume.id}/ats`);
+        setAts(tailoredAts);
       } catch {
         setAts(null);
+      }
+      // U-AX item 3: the baseline snapshot for the SAME job — GET
+      // /jobs/{id}/insights is always scored against the immutable base
+      // resume, so it is the honest "before" half regardless of which
+      // tailored version is selected.
+      if (tailoredAts) {
+        try {
+          const insights = await apiRequest<JobInsights>(`/jobs/${resume.sourceJobId}/insights`);
+          if (insights.scored) {
+            setTailoringImpact({
+              beforeAts: insights.overall,
+              afterAts: tailoredAts.overall,
+              beforeDimensions: insights.dimensions.map((d) => ({ label: d.label, score: d.score })),
+              afterDimensions: deriveTailoredDimensions(insights.dimensions, insights.overall, {
+                overall: tailoredAts.overall,
+                keyword_match: tailoredAts.keyword_match,
+                semantic_similarity: tailoredAts.semantic_similarity,
+                experience_gap: tailoredAts.experience_gap,
+              }),
+            });
+          }
+        } catch {
+          setTailoringImpact(null);
+        }
       }
     }
   };
@@ -736,6 +869,18 @@ export default function ResumePage() {
             </p>
           ) : null}
         </section>
+      ) : null}
+
+      {/* U-AX item 3: honest before(baseline)/after(tailored) ATS + all 10
+          fit-radar dimensions for this version, threshold line marked,
+          deltas never clamped or hidden. */}
+      {tailoringImpact ? (
+        <TailoringImpact
+          beforeAts={tailoringImpact.beforeAts}
+          afterAts={tailoringImpact.afterAts}
+          beforeDimensions={tailoringImpact.beforeDimensions}
+          afterDimensions={tailoringImpact.afterDimensions}
+        />
       ) : null}
 
       <div className="grid gap-4 lg:grid-cols-2" data-design-id="evidence-voice-rs15">
