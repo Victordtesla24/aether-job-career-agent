@@ -775,6 +775,66 @@ def _cover_result_degraded(result: Any) -> bool:
     )
 
 
+def _spend_cap_breach(user_id: str) -> dict[str, Any] | None:
+    """The user's quota row when their USD spend cap is already reached, else None.
+
+    S-4. The sweep passes ``skip_quota=True`` so its runs never eat a paid RUN
+    allowance — but they spend the user's REAL DOLLARS, so the USD cap has to
+    stop them. ``_record_run`` is the authoritative gate (it re-reads the same
+    row immediately before any LLM call and raises an honest 429); this check
+    exists so the stretch STOPS at the cap instead of walking the rest of the
+    board collecting one 429 per job, and so the reason it stopped is recorded.
+
+    A quota store that cannot be read is NOT treated as "under the cap": the
+    exception propagates to the caller, which stops the stretch. Guessing
+    "probably fine" here is exactly the silent bypass this fix removes.
+    """
+    from app.repositories.billing import UsageQuotaRepository
+
+    quota = UsageQuotaRepository().get_or_create(user_id)
+    if quota is None:
+        return None
+    if float(quota["spendUsedUsd"]) >= float(quota["spendCapUsd"]):
+        return quota
+    return None
+
+
+def _record_spend_cap_stop(user_id: str, quota: dict[str, Any]) -> None:
+    """Persist an honest AgentRun row saying autopilot stopped at the spend cap.
+
+    Without a row the user sees autopilot simply go quiet: the board stops
+    advancing with nothing in "Recent runs" explaining why. This records the
+    stop as a failed ``boardSweep`` run carrying the actual numbers, costs $0
+    (no LLM call is made), and is written once per stopped stretch.
+    """
+    from app.repositories.agent_run import AgentRunRepository
+
+    used = float(quota["spendUsedUsd"])
+    cap = float(quota["spendCapUsd"])
+    runs = AgentRunRepository()
+    run = runs.start(
+        user_id,
+        "boardSweep",
+        {"reason": "spend_cap_exceeded", "spendUsedUsd": used, "spendCapUsd": cap},
+    )
+    runs.finish(
+        run["id"],
+        "failed",
+        output={
+            "stopped": True,
+            "reason": "spend_cap_exceeded",
+            "spendUsedUsd": used,
+            "spendCapUsd": cap,
+        },
+        error=(
+            f"Autopilot stopped: this period's AI spend cap of ${cap:.2f} is "
+            f"reached (${used:.2f} used). No further automated runs will start "
+            "until the cap resets or is raised."
+        ),
+        cost_usd=0.0,
+    )
+
+
 def _run_agent(user_id: str, agent_key: str, params: dict[str, Any]) -> dict[str, Any]:
     """One reserved, budgeted agent run — the exact machinery manual runs use.
 
@@ -855,6 +915,23 @@ def sweep_user_stretch(
     while True:
         if summary["processed"] + summary["failures"] >= max_jobs:
             summary["reason"] = "job-cap"
+            break
+        # S-4: the USD spend cap is checked BEFORE every dispatch, so a user at
+        # their ceiling costs zero further LLM calls this stretch (and every
+        # later stretch) instead of the sweep spending unbounded real money the
+        # cap could not see.
+        breach = _spend_cap_breach(user_id)
+        if breach is not None:
+            summary["reason"] = "spend-cap-reached"
+            summary["spendUsedUsd"] = float(breach["spendUsedUsd"])
+            summary["spendCapUsd"] = float(breach["spendCapUsd"])
+            logger.warning(
+                "board-sweep %s: STOPPING — USD spend cap reached "
+                "(used $%.4f of $%.2f cap). No further automated runs will "
+                "start for this user until the cap resets or is raised.",
+                user_id, summary["spendUsedUsd"], summary["spendCapUsd"],
+            )
+            _record_spend_cap_stop(user_id, breach)
             break
         target = _next_target(user_id, attempted)
         if target is None:

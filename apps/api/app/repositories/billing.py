@@ -482,6 +482,19 @@ class UsageQuotaRepository:
                 rows = rows_to_dicts(cur)
         return rows[0] if rows else None
 
+    def get_or_create(self, user_id: str) -> Optional[dict[str, Any]]:
+        """Quota row for a user, creating the plan-default row when absent.
+
+        The read half of ``reserve`` without the run-count increment — used by
+        the spend-cap gate for automated system operations (S-4), which must NOT
+        consume the user's paid RUN allowance but MUST still respect the USD
+        spend cap. ``ensure_user_billing`` is the same row-creation call
+        ``reserve`` makes, so a user who has never run an agent is gated against
+        their real plan cap rather than sailing past a missing row.
+        """
+        ensure_user_billing(user_id)
+        return self.get_by_user(user_id)
+
     def reserve(self, user_id: str) -> Optional[dict[str, Any]]:
         """Atomically reserve ONE run against the run quota (rolling over an
         expired period). Returns the post-reserve quota row, or ``None`` when the

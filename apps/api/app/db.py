@@ -6,13 +6,19 @@ query parameter that psycopg2 does not understand, so it is translated into a
 ``search_path`` option here.
 
 The hosted PostgreSQL caps concurrent connections at 25 and kills idle
-transactions, so connections are short-lived: open, use, close.
+transactions, so connections are short-lived: acquire, use, release. They are
+handed out by a bounded per-process pool (:class:`_ConnectionPool`) instead of
+being dialled fresh every time — see ``get_connection`` and the connection
+budget documented on ``_default_pool_max``.
 """
 from __future__ import annotations
 
 import logging
 import os
 import secrets
+import threading
+import time
+from collections import deque
 from contextlib import contextmanager
 from typing import Any, Iterator
 from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
@@ -142,16 +148,349 @@ class _NulByteGuardCursor(psycopg2.extensions.cursor):
             raise
 
 
-@contextmanager
-def get_connection() -> Iterator[psycopg2.extensions.connection]:
-    """Yield a short-lived psycopg2 connection with the right search_path."""
+class PoolExhaustedError(RuntimeError):
+    """No pooled connection became available inside the acquire timeout.
+
+    Raised (and translated into an honest HTTP 503 by ``get_connection``) rather
+    than waiting forever: S-3's failure mode is a request that hangs holding a
+    thread until something upstream times out, which is strictly worse for the
+    user than being told the truth immediately.
+    """
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = os.environ.get(name)
+    if raw is None or not raw.strip():
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        logger.warning("%s=%r is not an integer — using %d", name, raw, default)
+        return default
+    return value if value > 0 else default
+
+
+def _env_float(name: str, default: float) -> float:
+    raw = os.environ.get(name)
+    if raw is None or not raw.strip():
+        return default
+    try:
+        value = float(raw)
+    except ValueError:
+        logger.warning("%s=%r is not a number — using %.3f", name, raw, default)
+        return default
+    return value if value > 0 else default
+
+
+#: Env var each process uses to declare its own slice of the 25-connection cap.
+POOL_MAX_ENV = "AETHER_DB_POOL_MAX"
+
+#: DEFAULT per-process ceiling on OPEN connections. The hosted PostgreSQL caps
+#: the whole account at 25 concurrent connections, so every consumer gets an
+#: explicit slice (S-3). Every consumer of ``get_connection`` was enumerated
+#: before choosing these numbers:
+#:
+#:   * API (``uvicorn app.main:app``, ONE process, no ``--workers``): sync route
+#:     handlers run on anyio's default thread pool (~40 threads), so before this
+#:     pool existed up to ~40 simultaneous ``psycopg2.connect`` calls were
+#:     possible against a 25-connection account. Slice: **12** (this default).
+#:   * arq worker (``app.workers.settings``, ``max_jobs=3`` + 3 cron jobs):
+#:     a handful of concurrent jobs, each opening connections one at a time
+#:     through repositories. Slice: **4**, set via ``AETHER_DB_POOL_MAX=4`` in
+#:     ``start-worker.sh``.
+#:   * One-shot scripts (``apps/api/scripts/*.py``), ``psql`` sessions, Prisma
+#:     migrations and the pytest suite: short-lived, run by an operator.
+#:     Reserve: the remaining **9** (25 - 12 - 4), which is also the headroom
+#:     that keeps a stuck API process from starving an operator's psql.
+#:
+#: A process that needs a different slice sets ``AETHER_DB_POOL_MAX``; nothing
+#: here silently grows past the value it is given.
+_DEFAULT_POOL_MAX = 12
+
+#: How long ``get_connection`` waits for a free slot before giving up with an
+#: honest 503. Bounded — never infinite (see :class:`PoolExhaustedError`).
+_DEFAULT_ACQUIRE_TIMEOUT_SECONDS = 5.0
+
+#: Idle connections kept warm between requests. Open-but-unused connections
+#: still occupy the account-wide 25-connection cap, so the pool keeps only a
+#: small warm set and closes the rest on release; ``_DEFAULT_POOL_MAX`` remains
+#: the hard ceiling on connections OPEN AT ONCE.
+_DEFAULT_MAX_IDLE = 4
+
+#: An idle pooled connection older than this is closed and re-dialled on
+#: acquire rather than trusted. The hosted database kills queries at 5s and
+#: idle transactions at 30s, and its proxy can drop an idle session with no
+#: notice the client sees until the next statement fails.
+_DEFAULT_RECYCLE_SECONDS = 60.0
+
+#: An idle pooled connection older than this is validated with ``SELECT 1``
+#: before being handed out (cheap pre-ping). Fresher connections skip the round
+#: trip: they were used moments ago, so a mid-flight death is caught by the
+#: caller's own statement and the broken connection is discarded on release.
+_DEFAULT_PREPING_AFTER_SECONDS = 5.0
+
+
+def _default_pool_max() -> int:
+    return _env_int(POOL_MAX_ENV, _DEFAULT_POOL_MAX)
+
+
+class _ConnectionPool:
+    """A bounded, thread-safe pool of psycopg2 connections for ONE DSN.
+
+    Deliberately hand-rolled rather than ``psycopg2.pool.ThreadedConnectionPool``
+    because three behaviours this deployment needs are not available there:
+
+    1. **Bounded waiting.** ``ThreadedConnectionPool.getconn()`` raises
+       immediately once ``maxconn`` is reached; here a caller waits up to
+       ``acquire_timeout`` for a peer to finish (smoothing the bursty dashboard
+       fan-out that motivated S-3) and only then fails — and it always fails
+       eventually rather than hanging.
+    2. **Idle trimming.** Only ``max_idle`` connections are kept warm; the rest
+       are closed on release so idle sockets do not sit on the account-wide
+       25-connection cap while another process needs one.
+    3. **Recycling / pre-ping.** The hosted database kills 5s queries and 30s
+       idle transactions, so a pooled connection can be dead by the time it is
+       reused. Stale ones are re-dialled and marginal ones validated with
+       ``SELECT 1`` before being handed out, instead of surfacing as a random
+       ``OperationalError`` in an unrelated request.
+    """
+
+    def __init__(
+        self,
+        dsn: str,
+        options: str | None,
+        *,
+        max_size: int,
+        acquire_timeout: float,
+        max_idle: int,
+        recycle_seconds: float,
+        preping_after_seconds: float,
+    ) -> None:
+        self.dsn = dsn
+        self.options = options
+        self.max_size = max_size
+        self.acquire_timeout = acquire_timeout
+        self.max_idle = max_idle
+        self.recycle_seconds = recycle_seconds
+        self.preping_after_seconds = preping_after_seconds
+        self._cond = threading.Condition(threading.Lock())
+        #: (connection, released_at_monotonic), most-recently-released last.
+        self._idle: deque[tuple[Any, float]] = deque()
+        #: Connections that EXIST right now (idle + leased). Never > max_size.
+        self._open = 0
+        self._leased = 0
+
+    # -- internals ---------------------------------------------------------
+    def _connect(self) -> Any:
+        return psycopg2.connect(
+            self.dsn, options=self.options, cursor_factory=_NulByteGuardCursor
+        )
+
+    @staticmethod
+    def _close_quietly(conn: Any) -> None:
+        try:
+            conn.close()
+        except Exception:  # noqa: BLE001 — closing a dead socket must never raise
+            pass
+
+    def _is_usable(self, conn: Any, idle_for: float) -> bool:
+        """Whether a pooled connection can be handed out as-is."""
+        if conn.closed:
+            return False
+        if idle_for >= self.recycle_seconds:
+            return False
+        if idle_for < self.preping_after_seconds:
+            return True
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT 1")
+                cur.fetchone()
+            conn.rollback()
+        except Exception:  # noqa: BLE001 — a failed ping means "discard it"
+            return False
+        return True
+
+    # -- public ------------------------------------------------------------
+    def acquire(self, timeout: float | None = None) -> Any:
+        timeout = self.acquire_timeout if timeout is None else timeout
+        deadline = time.monotonic() + timeout
+        while True:
+            reuse: Any = None
+            with self._cond:
+                if self._idle:
+                    reuse, released_at = self._idle.pop()
+                    self._leased += 1
+                elif self._open < self.max_size:
+                    self._open += 1
+                    self._leased += 1
+                else:
+                    remaining = deadline - time.monotonic()
+                    if remaining <= 0 or not self._cond.wait(remaining):
+                        if deadline - time.monotonic() <= 0:
+                            raise PoolExhaustedError(
+                                f"all {self.max_size} pooled database connections "
+                                f"are busy (waited {timeout:.1f}s)"
+                            )
+                    continue
+            # Dialling / validating happens OUTSIDE the lock so a slow TCP
+            # handshake never blocks other threads returning connections.
+            try:
+                if reuse is not None:
+                    if self._is_usable(reuse, time.monotonic() - released_at):
+                        return reuse
+                    self._close_quietly(reuse)
+                return self._connect()
+            except Exception:
+                with self._cond:
+                    self._open -= 1
+                    self._leased -= 1
+                    self._cond.notify()
+                raise
+
+    def release(self, conn: Any, *, discard: bool = False) -> None:
+        keep = not discard and not conn.closed
+        if keep:
+            # Mirrors what ``conn.close()`` used to guarantee: nothing a caller
+            # left uncommitted is ever visible to the next borrower.
+            try:
+                status = conn.get_transaction_status()
+                if status == psycopg2.extensions.TRANSACTION_STATUS_UNKNOWN:
+                    keep = False
+                elif status != psycopg2.extensions.TRANSACTION_STATUS_IDLE:
+                    conn.rollback()
+            except Exception:  # noqa: BLE001 — un-rollback-able ⇒ not reusable
+                keep = False
+        with self._cond:
+            self._leased -= 1
+            if keep and len(self._idle) < self.max_idle:
+                self._idle.append((conn, time.monotonic()))
+            else:
+                self._open -= 1
+                keep = False
+            self._cond.notify()
+        if not keep:
+            self._close_quietly(conn)
+
+    def close_all(self) -> None:
+        with self._cond:
+            idle, self._idle = list(self._idle), deque()
+            self._open -= len(idle)
+            self._cond.notify_all()
+        for conn, _ in idle:
+            self._close_quietly(conn)
+
+    def stats(self) -> dict[str, Any]:
+        with self._cond:
+            return {
+                "max": self.max_size,
+                "open": self._open,
+                "leased": self._leased,
+                "idle": len(self._idle),
+            }
+
+
+_pool_lock = threading.Lock()
+_pool: _ConnectionPool | None = None
+_pool_pid: int | None = None
+
+
+def _get_pool() -> _ConnectionPool:
+    """The process-wide pool for the CURRENT ``DATABASE_URL``.
+
+    Rebuilt (never shared) when the DSN changes — the test-suite swaps in the
+    ``aether_test`` schema — or when the pid changes, because a pool inherited
+    across ``fork()`` would hand a child a socket its parent is also using.
+    """
+    global _pool, _pool_pid
     dsn, schema = _translate_prisma_url(get_database_url())
     options = f"-csearch_path={schema}" if schema else None
-    conn = psycopg2.connect(dsn, options=options, cursor_factory=_NulByteGuardCursor)
+    pid = os.getpid()
+    with _pool_lock:
+        current = _pool
+        if current is not None and _pool_pid != pid:
+            # Inherited across a fork: drop the reference WITHOUT closing, since
+            # the sockets belong to the parent process.
+            current = None
+            _pool = None
+        if current is not None and (current.dsn != dsn or current.options != options):
+            stale, _pool = current, None
+            stale.close_all()
+            current = None
+        if current is None:
+            current = _ConnectionPool(
+                dsn,
+                options,
+                max_size=_default_pool_max(),
+                acquire_timeout=_env_float(
+                    "AETHER_DB_POOL_ACQUIRE_TIMEOUT_SECONDS",
+                    _DEFAULT_ACQUIRE_TIMEOUT_SECONDS,
+                ),
+                max_idle=_env_int("AETHER_DB_POOL_MAX_IDLE", _DEFAULT_MAX_IDLE),
+                recycle_seconds=_env_float(
+                    "AETHER_DB_POOL_RECYCLE_SECONDS", _DEFAULT_RECYCLE_SECONDS
+                ),
+                preping_after_seconds=_env_float(
+                    "AETHER_DB_POOL_PREPING_AFTER_SECONDS",
+                    _DEFAULT_PREPING_AFTER_SECONDS,
+                ),
+            )
+            _pool, _pool_pid = current, pid
+        return current
+
+
+def pool_stats() -> dict[str, Any]:
+    """Live pool counters (``max``/``open``/``leased``/``idle``) for ops+tests."""
+    return _get_pool().stats()
+
+
+def reset_pool() -> None:
+    """Close every idle pooled connection and forget the pool.
+
+    Used by tests that change the pool's env knobs; leased connections are left
+    to their owners and simply close on release.
+    """
+    global _pool, _pool_pid
+    with _pool_lock:
+        stale, _pool, _pool_pid = _pool, None, None
+    if stale is not None:
+        stale.close_all()
+
+
+@contextmanager
+def get_connection() -> Iterator[psycopg2.extensions.connection]:
+    """Yield a pooled psycopg2 connection with the right ``search_path``.
+
+    The contract every one of the 650+ call sites already relies on is
+    unchanged: a ready-to-use connection with the NUL-byte guard cursor
+    installed, work committed explicitly by the caller, anything uncommitted
+    discarded on exit. What changed (S-3) is that the connection comes from a
+    bounded pool instead of a fresh ``psycopg2.connect`` per use, so this
+    process can never hold more than its slice of the hosted 25-connection cap.
+
+    When every slot is busy for longer than the acquire timeout the caller gets
+    an honest ``503`` — never an unbounded wait, and never a silent success on
+    a connection that does not exist.
+    """
+    pool = _get_pool()
+    try:
+        conn = pool.acquire()
+    except PoolExhaustedError as exc:
+        logger.warning("database pool exhausted: %s", exc)
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "The service is at capacity right now. Please retry in a moment.",
+        ) from exc
+    discard = False
     try:
         yield conn
+    except (psycopg2.OperationalError, psycopg2.InterfaceError):
+        # The connection itself failed (server hung up, killed query, dropped
+        # socket). Never return it to the pool — the next borrower would
+        # inherit the breakage.
+        discard = True
+        raise
     finally:
-        conn.close()
+        pool.release(conn, discard=discard)
 
 
 def new_id() -> str:
