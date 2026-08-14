@@ -27,6 +27,7 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import { AdminPageHeader } from "../../../../components/admin/admin-shell";
+import { ApiError } from "../../../../lib/api/client";
 import { formatDateTime } from "../../../../lib/format";
 import {
   cancelUserSubscription,
@@ -138,7 +139,14 @@ export default function AdminUserDetailPage() {
         setNotice(typeof outcome === "string" ? outcome : successMessage);
         await load();
       } catch (e) {
-        setError(e instanceof Error ? e.message : "Action failed");
+        // A 409 is the backend REFUSING honestly (nothing to cancel, §14.7
+        // owner-password rule, ...) — word it as a refusal with the server's
+        // own explanation, never as a generic failure.
+        if (e instanceof ApiError && e.status === 409) {
+          setError(`Not applicable: ${e.message}`);
+        } else {
+          setError(e instanceof Error ? e.message : "Action failed");
+        }
       } finally {
         setBusy(false);
       }
@@ -403,45 +411,76 @@ export default function AdminUserDetailPage() {
         </Panel>
 
         <Panel title="Stripe subscription actions" testId="admin-subscription-actions">
-          <p className="mb-2 text-xs text-aether-muted">
-            These act on a REAL Stripe subscription through Aether&apos;s billing service. A
-            user without one is refused — grant an entitlement override instead.
-          </p>
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              data-testid="admin-cancel-at-period-end"
-              onClick={() => onCancelSubscription(true)}
-              disabled={busy}
-              className={QUIET_BTN}
-            >
-              Cancel at period end
-            </button>
-            <button
-              type="button"
-              data-testid="admin-cancel-now"
-              onClick={() => onCancelSubscription(false)}
-              disabled={busy}
-              className={QUIET_BTN}
-            >
-              Cancel now (revoke to Free)
-            </button>
-            <button
-              type="button"
-              data-testid="admin-refund"
-              onClick={onRefund}
-              disabled={busy}
-              className="rounded-md bg-red-500/20 px-4 py-2 text-sm font-medium text-red-300 hover:bg-red-500/30 disabled:opacity-50"
-            >
-              Refund latest charge
-            </button>
-          </div>
-          {detail.subscription ? (
-            <p className="mt-3 text-xs text-aether-muted-dim">
-              {detail.subscription.planId} · {detail.subscription.status}
-              {detail.subscription.cancelAtPeriodEnd ? " · cancels at period end" : ""}
+          {u.isAdmin ? (
+            /* Administrator/owner accounts are exempt from plans by design
+               (entitlements.resolve: isAdmin wins), so there is never a Stripe
+               subscription here — offering Cancel would only ever produce the
+               backend's honest 409 refusal. */
+            <p data-testid="admin-sub-exempt" className="text-sm text-aether-muted">
+              This is an administrator account — it is exempt from plans and
+              subscriptions, so there is no Stripe subscription to cancel or
+              refund.
             </p>
-          ) : null}
+          ) : detail.subscription ? (
+            <>
+              <p className="mb-2 text-xs text-aether-muted">
+                These act on the user&apos;s REAL Stripe subscription through
+                Aether&apos;s billing service.
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  data-testid="admin-cancel-at-period-end"
+                  onClick={() => onCancelSubscription(true)}
+                  disabled={busy}
+                  className={QUIET_BTN}
+                >
+                  Cancel at period end
+                </button>
+                <button
+                  type="button"
+                  data-testid="admin-cancel-now"
+                  onClick={() => onCancelSubscription(false)}
+                  disabled={busy}
+                  className={QUIET_BTN}
+                >
+                  Cancel now (revoke to Free)
+                </button>
+                <button
+                  type="button"
+                  data-testid="admin-refund"
+                  onClick={onRefund}
+                  disabled={busy}
+                  className="rounded-md bg-red-500/20 px-4 py-2 text-sm font-medium text-red-300 hover:bg-red-500/30 disabled:opacity-50"
+                >
+                  Refund latest charge
+                </button>
+              </div>
+              <p className="mt-3 text-xs text-aether-muted-dim">
+                {detail.subscription.planId} · {detail.subscription.status}
+                {detail.subscription.cancelAtPeriodEnd ? " · cancels at period end" : ""}
+              </p>
+            </>
+          ) : (
+            <>
+              <p data-testid="admin-sub-none" className="text-sm text-aether-muted">
+                No Stripe subscription on this account — plan access is
+                controlled by the Entitlement override above. A past paid charge
+                can still be refunded.
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  data-testid="admin-refund"
+                  onClick={onRefund}
+                  disabled={busy}
+                  className="rounded-md bg-red-500/20 px-4 py-2 text-sm font-medium text-red-300 hover:bg-red-500/30 disabled:opacity-50"
+                >
+                  Refund latest charge
+                </button>
+              </div>
+            </>
+          )}
         </Panel>
 
         <Panel title="Spend cap (US$)">
