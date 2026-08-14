@@ -483,7 +483,8 @@ class UsageQuotaRepository:
         return rows[0] if rows else None
 
     def get_or_create(self, user_id: str) -> Optional[dict[str, Any]]:
-        """Quota row for a user, creating the plan-default row when absent.
+        """Quota row for a user, creating the plan-default row when absent and
+        rolling an expired period over first.
 
         The read half of ``reserve`` without the run-count increment — used by
         the spend-cap gate for automated system operations (S-4), which must NOT
@@ -491,9 +492,45 @@ class UsageQuotaRepository:
         spend cap. ``ensure_user_billing`` is the same row-creation call
         ``reserve`` makes, so a user who has never run an agent is gated against
         their real plan cap rather than sailing past a missing row.
+
+        It also applies ``reserve``'s ``now() >= "periodEnd"`` rollover, because
+        this is the ONLY read behind both S-4 gates: without it, a user whose
+        period lapsed while at the cap keeps being refused against LAST period's
+        ``spendUsedUsd`` until some OTHER code path happens to roll the row —
+        for today's paying subscribers the Stripe renewal webhook does, but a
+        gate must not depend on a different subsystem's timing to stop lying.
         """
         ensure_user_billing(user_id)
-        return self.get_by_user(user_id)
+        rolled = self._roll_expired_period(user_id)
+        return rolled if rolled is not None else self.get_by_user(user_id)
+
+    def _roll_expired_period(self, user_id: str) -> Optional[dict[str, Any]]:
+        """Reset an EXPIRED quota period to the current month; else return None.
+
+        The same single conditional UPDATE ``reserve`` uses (atomic — no
+        read-modify-write race), minus the run reservation: this path consumes
+        nothing, so ``runsUsed`` starts the new period at 0 rather than 1. A
+        live period matches no rows and is left byte-for-byte untouched.
+        """
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f'''
+                    UPDATE "UsageQuota" SET
+                      "periodStart"  = date_trunc('month', now()),
+                      "periodEnd"    = date_trunc('month', now())
+                                       + interval '1 month',
+                      "runsUsed"     = 0,
+                      "spendUsedUsd" = 0,
+                      "updatedAt"    = now()
+                    WHERE "userId" = %s AND now() >= "periodEnd"
+                    RETURNING {self._COLS}
+                    ''',
+                    (user_id,),
+                )
+                rows = rows_to_dicts(cur)
+            conn.commit()
+        return rows[0] if rows else None
 
     def reserve(self, user_id: str) -> Optional[dict[str, Any]]:
         """Atomically reserve ONE run against the run quota (rolling over an

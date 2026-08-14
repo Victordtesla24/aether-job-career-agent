@@ -835,6 +835,30 @@ def _record_spend_cap_stop(user_id: str, quota: dict[str, Any]) -> None:
     )
 
 
+def _stop_on_spend_cap(
+    summary: dict[str, Any], user_id: str, quota: dict[str, Any]
+) -> None:
+    """The ONE honest spend-cap stop path: summary numbers + WARNING + AgentRun.
+
+    Both ways a stretch can hit the ceiling route through here, so they cannot
+    drift apart: the per-iteration pre-check (which sees a user already at the
+    cap) and a mid-job crossing (where a dispatch's own realized spend lands on
+    the cap and ``_record_run``'s gate refuses the NEXT dispatch of the same
+    job with a ``spend_cap_exceeded`` 429 — before it starts an AgentRun row,
+    so nothing else would record the event).
+    """
+    summary["reason"] = "spend-cap-reached"
+    summary["spendUsedUsd"] = float(quota["spendUsedUsd"])
+    summary["spendCapUsd"] = float(quota["spendCapUsd"])
+    logger.warning(
+        "board-sweep %s: STOPPING — USD spend cap reached "
+        "(used $%.4f of $%.2f cap). No further automated runs will "
+        "start for this user until the cap resets or is raised.",
+        user_id, summary["spendUsedUsd"], summary["spendCapUsd"],
+    )
+    _record_spend_cap_stop(user_id, quota)
+
+
 def _run_agent(user_id: str, agent_key: str, params: dict[str, Any]) -> dict[str, Any]:
     """One reserved, budgeted agent run — the exact machinery manual runs use.
 
@@ -922,16 +946,7 @@ def sweep_user_stretch(
         # cap could not see.
         breach = _spend_cap_breach(user_id)
         if breach is not None:
-            summary["reason"] = "spend-cap-reached"
-            summary["spendUsedUsd"] = float(breach["spendUsedUsd"])
-            summary["spendCapUsd"] = float(breach["spendCapUsd"])
-            logger.warning(
-                "board-sweep %s: STOPPING — USD spend cap reached "
-                "(used $%.4f of $%.2f cap). No further automated runs will "
-                "start for this user until the cap resets or is raised.",
-                user_id, summary["spendUsedUsd"], summary["spendCapUsd"],
-            )
-            _record_spend_cap_stop(user_id, breach)
+            _stop_on_spend_cap(summary, user_id, breach)
             break
         target = _next_target(user_id, attempted)
         if target is None:
@@ -1000,6 +1015,33 @@ def sweep_user_stretch(
             break
         except HTTPException as exc:
             if exc.status_code == 429:
+                detail = exc.detail if isinstance(exc.detail, dict) else {}
+                if detail.get("code") == "spend_cap_exceeded":
+                    # The cap was crossed MID-JOB: this job's own earlier
+                    # dispatch spent the last of the allowance, so
+                    # ``_record_run`` refused the follow-up call before it
+                    # could start an AgentRun row. Money-safe either way, but
+                    # the pre-check never saw this crossing, so without the
+                    # honest path here the stop would be an INFO
+                    # "quota-exhausted" and the user's Recent runs would show
+                    # autopilot going quiet with no reason on the record.
+                    breach = _spend_cap_breach(user_id)
+                    if breach is not None:
+                        _stop_on_spend_cap(summary, user_id, breach)
+                    else:
+                        # Raced back under the cap (a period rollover or a
+                        # refund between the refusal and this read). State
+                        # exactly that rather than writing a row asserting
+                        # numbers the ledger no longer shows.
+                        summary["reason"] = "spend-cap-reached"
+                        logger.warning(
+                            "board-sweep %s job %s: dispatch refused for "
+                            "spend_cap_exceeded, but the quota row no longer "
+                            "reads over cap — stopping without a stop row "
+                            "rather than recording numbers it cannot confirm",
+                            user_id, job_id,
+                        )
+                    break
                 summary["reason"] = "quota-exhausted"
                 logger.info("board-sweep %s: plan quota 429 — stopping", user_id)
                 break
