@@ -176,23 +176,27 @@ def _make_docx_bytes(paragraphs: list[tuple[str, str]]) -> bytes:
 # ---------------------------------------------------------------------------
 
 
-def test_pdf_splice_never_ships_a_change_it_could_not_apply(client, auth_headers):
+def test_pdf_splice_ships_preserved_layout_and_discloses_the_unplaceable_change(
+    client, auth_headers,
+):
     """The exact production failure, reproduced against the same bundled layout.
 
     One rewrite targets a left-rail line the splice engine skips; the other a
     right-column work bullet it can redraw.
 
-    ROUND 2 (coherence round, 2026-08-14) — this test originally pinned the
-    weaker contract that shipped: serve the partial splice, but *describe* it
-    honestly ("1 of 2 applied", the dropped rewrite named). Naming the loss is
-    not the same as not causing it: the file the user downloaded was still
-    neither their baseline nor their tailored résumé, while the DOCX and text
-    paths already refused to do that on the identical completeness rule. So the
-    contract is now the sibling paths': an incomplete splice falls back to the
-    branded render, which carries this version's whole tailored content, and
-    the report says plainly that the original layout was not preserved. The
-    "name what was dropped" behaviour itself is still pinned — at the level it
-    belongs, on the report builder, in test_u2b_fidelity_coherence.py.
+    ROUND 2 (coherence round, 2026-08-14) pinned the weaker contract that
+    dropped the WHOLE two-column layout to the branded single-column template
+    whenever one out-of-scope rewrite could not be placed — the exact live
+    cfe7a0f→c12187 divergence (9.4 KB single-column ReportLab file where the
+    user's two-column PDF should have been).
+
+    MODELS-LIVE R-FMT REVERSES that policy (``uat/reports/evidence/market-perf/
+    resume-format/SYNTHESIS.md`` §3): the mandate is *tailored = baseline with
+    ONLY text changed, visual format intact.* So the splice SHIPS the preserved
+    layout with the rewrite it CAN place; the rewrite it cannot place keeps the
+    baseline wording and is disclosed as residue (``changesDropped``). It never
+    drops to branded over a single out-of-scope region — that only happens on a
+    genuine WHOLE-document loss or an unreadable file (U2b CRITICAL, intact).
     """
     baseline, left, right = _seed_bundled_baseline(client, auth_headers)
     left_after = f"Product and delivery leadership across regulated platforms; {left}"
@@ -210,33 +214,41 @@ def test_pdf_splice_never_ships_a_change_it_could_not_apply(client, auth_headers
         "the claim must come from re-reading the produced document, not from "
         f"resume metadata, got {report!r}"
     )
-    assert report["method"] == "reflow-template", (
-        "the splice could not place the left-rail rewrite, so the download must "
-        f"be the content-complete branded render instead, got {report!r}"
+    assert report["method"] == "pdf-in-place-splice", (
+        "the preserved two-column layout ships; it is NOT dropped to the branded "
+        f"template over one out-of-scope rewrite, got {report!r}"
     )
-    assert report["formatPreserved"] is False, report
+    assert report["formatPreserved"] is True, report
+    assert report["confidence"] == "partial", report
     assert report["changesRequested"] == 2
-    assert report["changesApplied"] == 2, report
-    assert report["changesDropped"] == 0, report
+    assert report["changesApplied"] == 1, report
+    assert report["changesDropped"] == 1, report
     note = report["note"].lower()
-    assert "aether template" in note, note
+    assert "aether template" not in note, note
+    assert "layout is preserved" in note, note
+    assert "original wording" in note, note
     assert "every other element is identical" not in note, (
         f"the falsified completeness claim must not survive, got {note!r}"
     )
+    # The unplaceable rewrite is NAMED as residue, not hidden.
+    assert report["changesDropped"] == 1
+    assert any(
+        left_after[:40] in str(d.get("after", "")) for d in report["droppedChanges"]
+    ), report["droppedChanges"]
 
-    # The report must match the file the user really gets — verified here
-    # independently of the endpoint's own machinery. Neither rewrite may be
-    # missing from it: that is the loss this round refuses to ship.
+    # The file the user really gets — verified independently of the endpoint's
+    # own machinery: the placeable rewrite is applied, and the unplaceable one
+    # keeps the baseline wording (the layout is preserved, not the tailoring).
     download = client.get(f"/resumes/{child['id']}/download", headers=auth_headers)
     assert download.status_code == 200, download.text
     text = " ".join(_pdf_text(download.content).split())
-    assert left_after[:60] in text, (
-        "the rewrite the splice engine could not place must be present in the "
-        "document the user downloads"
+    assert left in text, (
+        "the rewrite the splice engine could not place keeps its baseline wording"
     )
     assert right_after.partition(":")[2].strip()[:60] in text, text[:400]
-    assert download.headers["X-Aether-Changes-Applied"] == "2"
-    assert download.headers["X-Aether-Changes-Dropped"] == "0"
+    assert download.headers["X-Aether-Format-Method"] == "pdf-in-place-splice"
+    assert download.headers["X-Aether-Changes-Applied"] == "1"
+    assert download.headers["X-Aether-Changes-Dropped"] == "1"
 
 
 def test_listing_does_not_claim_completeness_it_has_not_verified(client, auth_headers):

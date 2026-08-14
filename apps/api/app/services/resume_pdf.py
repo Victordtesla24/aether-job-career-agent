@@ -69,6 +69,18 @@ _HIGHLIGHT_RGB = (0.996, 0.906, 0.875)
 _HIGHLIGHT_OPACITY = 0.55
 
 _MARKERS = ("•", "●", "▪")
+
+
+class PdfRenderError(RuntimeError):
+    """A stored PDF's bytes could not be opened for an in-place tailoring splice.
+
+    Mirrors ``resume_docx.DocxParseError``: the router treats it as an honest
+    "your stored original could not be opened" fallback to the branded render,
+    rather than a 500 — the bytes passed the upload gate, so this is corruption
+    we did not cause.
+    """
+
+
 #: Unicode punctuation folded before matching a stored bullet to a PDF block,
 #: so curly quotes / en-dashes in one source don't defeat an exact match.
 _PUNCT_FOLD = str.maketrans({
@@ -367,22 +379,45 @@ def extract_pdf_bullets(pdf_path: Path | str) -> list[str]:
     return extract_bullets(flat_text)
 
 
-def render_tailored_pdf(original_path: Path, changes: list[tuple[str, str]]) -> bytes:
+def render_tailored_pdf(
+    original: Path | bytes, changes: list[tuple[str, str]]
+) -> bytes:
     """Return format-preserving PDF bytes for a tailored resume.
+
+    ``original`` is EITHER a filesystem :class:`~pathlib.Path` to a bundled seed
+    asset OR the raw bytes of a user's stored PDF upload. The latter is the
+    majority real-world case — a tailored child of a genuine, non-bundled PDF
+    upload derives from its parent's stored bytes (``originalFile``), which never
+    resolve to a bundled asset on disk (``resolve_original_pdf`` returns ``None``
+    for them) and so must be spliced from the bytes directly rather than a path.
+    Routing those bytes here is what keeps such a résumé on its own two-column
+    layout instead of dropping to the branded template (the live cfe7a0f→c12187
+    divergence, MODELS-LIVE R-FMT §1 contributing factor #4).
 
     ``changes`` is a list of ``(before, after)`` pairs — the original and the
     reworded text of each bullet whose text changed. Each pair is matched to a
-    work bullet in ``original_path`` and that bullet is redrawn with ``after``
+    work bullet in the source document and that bullet is redrawn with ``after``
     in full, replacing the original text. Pairs that don't match a work bullet
-    (e.g. left-rail skills) are skipped, leaving the original untouched. With no
-    matching changes the pristine source bytes are returned.
+    (e.g. left-rail skills, or any region this splice engine cannot place) are
+    skipped, leaving the original untouched — the layout is preserved and the
+    unplaced rewrite keeps its baseline wording (disclosed as residue upstream),
+    NEVER a reason to abandon the user's own layout. With no matching changes the
+    pristine source bytes are returned.
 
     ``after`` is the *complete* reworded bullet, so it replaces the whole
     bullet. The previous implementation spliced ``after`` onto the bullet's
     original continuation, which duplicated and dangled text whenever the
     rewrite already restated that continuation (GAP-P4-044).
+
+    :raises PdfRenderError: the bytes/path could not be opened as a PDF.
     """
-    doc = fitz.open(original_path)
+    try:
+        if isinstance(original, (bytes, bytearray)):
+            doc = fitz.open(stream=bytes(original), filetype="pdf")
+        else:
+            doc = fitz.open(original)
+    except (RuntimeError, ValueError) as exc:  # fitz.FileDataError ⊂ RuntimeError
+        raise PdfRenderError(str(exc)) from exc
     try:
         # Index every work bullet by BOTH its full text and its first line, so a
         # stored bullet matches whether it holds the complete sentence (current

@@ -7,7 +7,16 @@ import urllib.parse
 from dataclasses import dataclass
 from typing import Any
 
-from fastapi import APIRouter, File, Form, HTTPException, Response, UploadFile, status
+from fastapi import (
+    APIRouter,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    Response,
+    UploadFile,
+    status,
+)
 from pydantic import BaseModel, Field
 
 from app.middleware.auth import CurrentUser
@@ -700,7 +709,86 @@ def _tailoring_changes(
     return changes
 
 
-def _render_resume(resume_id: str, user_id: str) -> _RenderedResume:
+def _inplace_render_or_fallback(
+    rendered: bytes,
+    media_type: str,
+    filename: str,
+    changes: list[tuple[str, str]],
+    source: dict[str, Any],
+    base_report: Any,
+    *,
+    stored_original: bool,
+) -> tuple[_RenderedResume | None, Any]:
+    """Decide whether an in-place render ships, or falls to the branded render.
+
+    MODELS-LIVE R-FMT §2/§3 — the format-preservation ruling that replaces the
+    U2b all-or-nothing gate. An in-place render (PDF splice / DOCX-native /
+    text-native) reproduces the user's OWN document, so it SHIPS with every
+    rewrite it could place; a rewrite it could not place keeps the baseline
+    wording and is disclosed as residue (``changesDropped`` + the honest note),
+    NEVER a reason to drop the whole preserved layout to the branded template.
+
+    It falls back to the branded render in exactly two honest cases, both of
+    which the branded (content-complete) render handles better than a preserved
+    layout would:
+
+    * the produced file cannot be re-read at all (corruption we did not cause);
+    * the render lost part of the user's WHOLE original document — a dropped
+      heading, a vanished contact line, an eaten untracked bullet. That is
+      measured against the parent's own document with only the PLACED rewrites
+      substituted (:func:`build_applied_content`), so an unplaceable rewrite
+      whose original wording still stands is NOT mistaken for content loss (the
+      false positive that used to nuke the layout), while a genuine loss still
+      routes to the complete branded render — the U2b CRITICAL guarantee, intact.
+
+    Returns ``(rendered_resume, None)`` to ship, or ``(None, fallback_report)``
+    to continue to the branded render with an honest reason.
+    """
+    from app.services.format_verification import verify_changes
+    from app.services.resume_completeness import (
+        build_applied_content,
+        verify_completeness,
+    )
+    from app.services.resume_format import native_fallback_fidelity, verified_fidelity
+
+    verification = verify_changes(rendered, media_type, changes)
+    if not verification.text_extracted:
+        return None, native_fallback_fidelity(
+            unreadable=True, stored_original=stored_original
+        )
+    applied_changes = [
+        (outcome.before, outcome.after)
+        for outcome in verification.outcomes
+        if outcome.applied
+    ]
+    completeness = verify_completeness(
+        rendered, media_type, build_applied_content(source, applied_changes)
+    )
+    if not completeness.complete:
+        # TRUE whole-document loss (not a mere unplaceable rewrite) → the branded
+        # render carries this version's complete content; ship that instead.
+        return None, native_fallback_fidelity(
+            content_incomplete=True, stored_original=stored_original
+        )
+    return (
+        _RenderedResume(
+            content=rendered,
+            media_type=media_type,
+            filename=filename,
+            fidelity=verified_fidelity(
+                base_report,
+                verification,
+                completeness=completeness,
+                partial_preserves_format=True,
+            ),
+        ),
+        None,
+    )
+
+
+def _render_resume(
+    resume_id: str, user_id: str, *, branded: bool = False
+) -> _RenderedResume:
     """Produce a résumé download AND verify the fidelity claim made about it.
 
     Shared by ``GET /resumes/{id}/download`` and ``GET /resumes/{id}/fidelity``
@@ -722,13 +810,16 @@ def _render_resume(resume_id: str, user_id: str) -> _RenderedResume:
         render_tailored_docx_report,
     )
     from app.services.resume_format import (
+        branded_optin_fidelity,
         describe_fidelity,
         is_docx_content_type,
+        is_pdf_content_type,
         is_text_content_type,
         native_fallback_fidelity,
         verified_fidelity,
     )
     from app.services.resume_pdf import (
+        PdfRenderError,
         create_branded_resume_pdf,
         render_tailored_pdf,
         resolve_original_pdf,
@@ -743,6 +834,39 @@ def _render_resume(resume_id: str, user_id: str) -> _RenderedResume:
     is_tailored = parent is not None
     changes = _tailoring_changes(resume, parent)
     source = parent or resume
+
+    if branded:
+        # EXPLICIT OPT-IN (``?branded=true``) — MODELS-LIVE R-FMT binding scope
+        # item 5. The branded template is a design the user CHOSE ("re-style my
+        # résumé"), never the silent fallback for a retained-original row: it is
+        # reachable only by asking for it here, is labelled ``branded-optin`` (not
+        # ``reflow-template``), and is reported ``preserved: False`` so it can
+        # never masquerade as the user's own layout. It is still the LAST render,
+        # so its completeness is REPORTED, not routed around.
+        from app.services.format_verification import verify_changes
+        from app.services.resume_completeness import (
+            build_resume_content as _brc,
+        )
+        from app.services.resume_completeness import (
+            verify_completeness as _vc,
+        )
+
+        name, title, objective, sections, contact = _branded_content(resume)
+        pdf_bytes = create_branded_resume_pdf(
+            name, title, objective, sections, changes or None, contact=contact
+        )
+        return _RenderedResume(
+            content=pdf_bytes,
+            media_type=_PDF_CONTENT_TYPE,
+            filename=f"resume-{resume_id[:8]}.pdf",
+            fidelity=verified_fidelity(
+                branded_optin_fidelity(),
+                verify_changes(pdf_bytes, _PDF_CONTENT_TYPE, changes),
+                completeness=_vc(
+                    pdf_bytes, _PDF_CONTENT_TYPE, _brc(resume, parent)
+                ),
+            ),
+        )
     #: What this résumé OWES the user — every section heading, every bullet
     #: (tracked or not), every line of prose and every contact detail. Each
     #: produced artifact is measured against it before it is served, because the
@@ -794,20 +918,17 @@ def _render_resume(resume_id: str, user_id: str) -> _RenderedResume:
                         ),
                     )
                 rendered, _applied = render_tailored_docx_report(data, changes)
-                verification = verify_changes(rendered, DOCX_CONTENT_TYPE, changes)
-                completeness = verify_completeness(rendered, DOCX_CONTENT_TYPE, content)
-                if verification.complete and completeness.complete:
-                    return _RenderedResume(
-                        content=rendered,
-                        media_type=DOCX_CONTENT_TYPE,
-                        filename=f"resume-{resume_id[:8]}.docx",
-                        fidelity=verified_fidelity(
-                            native_report, verification, completeness=completeness
-                        ),
-                    )
-                fallback_report = native_fallback_fidelity(
-                    content_incomplete=verification.complete
+                shipped, fallback_report = _inplace_render_or_fallback(
+                    rendered,
+                    DOCX_CONTENT_TYPE,
+                    f"resume-{resume_id[:8]}.docx",
+                    changes,
+                    source,
+                    native_report,
+                    stored_original=True,
                 )
+                if shipped is not None:
+                    return shipped
             except DocxParseError:
                 # Stored bytes that no longer open as a package (they passed the
                 # upload gate, so this is corruption we did not cause): the user
@@ -828,21 +949,56 @@ def _render_resume(resume_id: str, user_id: str) -> _RenderedResume:
                         ),
                     )
                 rewritten, _applied_count = _tailored_text_document(data, changes)
-                verification = verify_changes(rewritten, media_type, changes)
-                completeness = verify_completeness(rewritten, media_type, content)
-                if verification.complete and completeness.complete:
+                shipped, fallback_report = _inplace_render_or_fallback(
+                    rewritten,
+                    media_type,
+                    f"resume-{resume_id[:8]}.{suffix}",
+                    changes,
+                    source,
+                    native_report,
+                    stored_original=True,
+                )
+                if shipped is not None:
+                    return shipped
+            except UnicodeDecodeError:
+                fallback_report = native_fallback_fidelity(unreadable=True)
+        elif data and is_pdf_content_type(content_type):
+            # A genuine, non-bundled PDF upload — the MAJORITY real-world case
+            # and the exact format of the live cfe7a0f→c12187 incident. Its
+            # ``formatHash`` is a digest of the USER's own bytes, so
+            # ``resolve_original_pdf`` returns None and the stored ``originalFile``
+            # bytes (the parent's, for a tailored child) must be spliced DIRECTLY
+            # rather than via a bundled path. Before this slice these bytes were
+            # only ever consumed by the DOCX/text branches, so every PDF upload
+            # dropped straight to the branded template — the relaxed in-place gate
+            # was never even reached (ML-RFMT PDF splice gap).
+            try:
+                if not is_tailored:
                     return _RenderedResume(
-                        content=rewritten,
-                        media_type=media_type,
-                        filename=f"resume-{resume_id[:8]}.{suffix}",
+                        content=bytes(data),  # base → the user's own PDF, verbatim
+                        media_type=_PDF_CONTENT_TYPE,
+                        filename=f"resume-{resume_id[:8]}.pdf",
                         fidelity=verified_fidelity(
-                            native_report, verification, completeness=completeness
+                            native_report, None, byte_identical=True
                         ),
                     )
-                fallback_report = native_fallback_fidelity(
-                    content_incomplete=verification.complete
+                spliced = render_tailored_pdf(bytes(data), changes)
+                shipped, fallback_report = _inplace_render_or_fallback(
+                    spliced,
+                    _PDF_CONTENT_TYPE,
+                    f"resume-{resume_id[:8]}.pdf",
+                    changes,
+                    source,
+                    native_report,
+                    stored_original=True,
                 )
-            except UnicodeDecodeError:
+                if shipped is not None:
+                    return shipped
+            except PdfRenderError:
+                # Stored bytes that no longer open as a PDF (they passed the
+                # upload gate, so this is corruption we did not cause): the user
+                # still gets their tailored content through the branded render
+                # rather than a 500.
                 fallback_report = native_fallback_fidelity(unreadable=True)
 
     if original is not None and original.exists():
@@ -862,27 +1018,27 @@ def _render_resume(resume_id: str, user_id: str) -> _RenderedResume:
                 fidelity=verified_fidelity(splice_report, None, byte_identical=True),
             )
         spliced = render_tailored_pdf(original, changes)  # splice in place
-        verification = verify_changes(spliced, _PDF_CONTENT_TYPE, changes)
-        # The SAME completeness rule the DOCX/text paths above apply. The
-        # in-place engine only redraws right-column work bullets, so a rewrite
-        # aimed at the left rail cannot be placed — and live production shipped
-        # exactly that file (1 of 4 changes missing, verify-truthround/,
-        # 2026-08-14). A partial splice is neither the user's baseline nor their
-        # tailored résumé; the honest alternative is the branded render below,
-        # which is built from this version's own tailored text.
-        completeness = verify_completeness(spliced, _PDF_CONTENT_TYPE, content)
-        if verification.complete and completeness.complete:
-            return _RenderedResume(
-                content=spliced,
-                media_type=_PDF_CONTENT_TYPE,
-                filename=f"resume-{resume_id[:8]}.pdf",
-                fidelity=verified_fidelity(
-                    splice_report, verification, completeness=completeness
-                ),
-            )
-        fallback_report = native_fallback_fidelity(
-            stored_original=False, content_incomplete=verification.complete
+        # MODELS-LIVE R-FMT §2/§3 — the format-preservation ruling that replaces
+        # the U2b all-or-nothing gate here. The in-place engine only redraws
+        # right-column work bullets, so a rewrite aimed at the left rail cannot
+        # be placed; under the old gate ONE such rewrite dropped the ENTIRE
+        # two-column layout to the branded single-column template (the live
+        # cfe7a0f→c12187 divergence). The splice preserves the user's own layout
+        # and keeps the baseline wording of any rewrite it could not place, so it
+        # SHIPS with the changes it CAN place and discloses the rest as residue —
+        # falling back to the branded render only when the file is unreadable or
+        # the WHOLE document lost content (measured against the placed rewrites).
+        shipped, fallback_report = _inplace_render_or_fallback(
+            spliced,
+            _PDF_CONTENT_TYPE,
+            f"resume-{resume_id[:8]}.pdf",
+            changes,
+            source,
+            splice_report,
+            stored_original=False,
         )
+        if shipped is not None:
+            return shipped
 
     # No bundled source PDF for this résumé — a user-authored upload/ingest
     # (NF-final-B-005) — or a native/in-place rewrite that could not be
@@ -942,18 +1098,37 @@ def _fidelity_headers(fidelity: Any) -> dict[str, str]:
     }
 
 
+#: The explicit branded opt-in shared by ``/download`` and ``/fidelity`` — the
+#: ONLY way to reach the Aether template for a résumé that has a preservable
+#: original (MODELS-LIVE R-FMT binding scope item 5). Default ``False`` so the
+#: format-preserving render is always what a plain download returns.
+_BRANDED_OPTIN = Query(
+    False,
+    description=(
+        "Explicitly re-style this résumé in the Aether branded template instead "
+        "of preserving its own format. Honest opt-in: the response is reported "
+        "as branded-optin / formatPreserved:false, never a silent fallback."
+    ),
+)
+
+
 @router.get("/{resume_id}/fidelity")
-def resume_fidelity(resume_id: str, current_user: CurrentUser) -> dict[str, Any]:
+def resume_fidelity(
+    resume_id: str,
+    current_user: CurrentUser,
+    branded: bool = _BRANDED_OPTIN,
+) -> dict[str, Any]:
     """What a download of THIS version really does — verified, not asserted.
 
-    Renders the version exactly as ``/download`` would, re-reads the produced
-    document, and reports per-change whether the tailored wording is genuinely
-    in it: ``changesRequested`` / ``changesApplied`` / ``changesDropped``, plus
-    the rewrites that could not be applied. Resume Studio renders this report
-    for the version the user opened; the listing (which cannot re-render every
-    version) says the check is pending rather than claiming an outcome.
+    Renders the version exactly as ``/download`` would (honouring the same
+    ``branded`` opt-in), re-reads the produced document, and reports per-change
+    whether the tailored wording is genuinely in it: ``changesRequested`` /
+    ``changesApplied`` / ``changesDropped``, plus the rewrites that could not be
+    applied. Resume Studio renders this report for the version the user opened;
+    the listing (which cannot re-render every version) says the check is pending
+    rather than claiming an outcome.
     """
-    rendered = _render_resume(resume_id, current_user["id"])
+    rendered = _render_resume(resume_id, current_user["id"], branded=branded)
     return {
         "resume_id": resume_id,
         "formatPreserved": rendered.fidelity.preserved,
@@ -962,7 +1137,11 @@ def resume_fidelity(resume_id: str, current_user: CurrentUser) -> dict[str, Any]
 
 
 @router.get("/{resume_id}/download")
-def download_resume(resume_id: str, current_user: CurrentUser) -> Response:
+def download_resume(
+    resume_id: str,
+    current_user: CurrentUser,
+    branded: bool = _BRANDED_OPTIN,
+) -> Response:
     """Download a résumé in the baseline document's OWN format (U2b / R-F4).
 
     The baseline the user uploaded is the immutable source of truth for content
@@ -970,11 +1149,12 @@ def download_resume(resume_id: str, current_user: CurrentUser) -> Response:
 
     - **Bundled-asset PDF** (the seeded operator résumés): base → the original
       bytes verbatim; tailored → the original PDF with *only* the reworded
-      bullets redrawn in place (same two-column layout, panel, accents, fonts),
-      served only when re-reading it proves every rewrite landed — an
-      incomplete splice falls back to the branded render, exactly like the
-      DOCX/text paths, rather than shipping a half-tailored copy of the user's
-      own document.
+      bullets redrawn in place (same two-column layout, panel, accents, fonts).
+    - **Stored PDF upload** (a genuine, non-bundled user PDF): base → the user's
+      own file, byte-identical; tailored → the same PDF with only the reworded
+      work bullets redrawn in place (``render_tailored_pdf`` on the stored
+      bytes). A rewrite the splice cannot place keeps its baseline wording and is
+      disclosed as residue — the layout is preserved, never dropped to branded.
     - **Stored .docx upload** → the flagship format-preserving path: base → the
       user's own file, byte-identical; tailored → native run-level text
       replacement inside their own document (``services/resume_docx.py``), so
@@ -982,14 +1162,19 @@ def download_resume(resume_id: str, current_user: CurrentUser) -> Response:
       through unchanged.
     - **Stored .txt/.md upload** → the same idea, trivially: their own file with
       the reworded lines substituted.
-    - **Anything else** (PDF uploads, and rows with no stored original — text
-      ingested through ``POST /resumes``, or uploaded before U2a kept files):
-      rebuilt from the résumé's structured content with the branded template.
-      This is a genuine re-format, so ``GET /resumes`` reports it as
-      ``formatPreserved: false`` with an explicit ``formatFidelity`` note
-      instead of claiming preservation (R-F2). Generalised in-place PDF
-      splicing for arbitrary uploads is the next slice, and until it ships the
-      product says so rather than implying fidelity it does not have.
+    - **No stored original** (text ingested through ``POST /resumes``, or
+      uploaded before U2a kept files): rebuilt from the résumé's structured
+      content with the branded template. This is a genuine re-format, so
+      ``GET /resumes`` reports it as ``formatPreserved: false`` and tells the
+      user to re-upload their source file to restore format-preserving
+      tailoring, rather than implying fidelity it does not have (R-F2).
+
+    An in-place render falls back to that branded template ONLY when the stored
+    file cannot be re-read or the whole document lost content (the U2b CRITICAL
+    guarantee) — both reported honestly, never silently. The branded template is
+    otherwise reachable only by EXPLICIT opt-in (``?branded=true``), a user
+    "re-style my résumé" choice reported as ``branded-optin`` /
+    ``formatPreserved: false`` (binding scope item 5).
 
     Whichever branch runs, the produced file is re-read before it is returned
     and the response carries the VERIFIED summary — ``X-Aether-Format-Method``,
@@ -997,7 +1182,7 @@ def download_resume(resume_id: str, current_user: CurrentUser) -> Response:
     counts. The full report (including any rewrite that could not be applied)
     is at ``GET /resumes/{id}/fidelity``.
     """
-    rendered = _render_resume(resume_id, current_user["id"])
+    rendered = _render_resume(resume_id, current_user["id"], branded=branded)
     return Response(
         content=rendered.content,
         media_type=rendered.media_type,

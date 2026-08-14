@@ -145,7 +145,7 @@ def test_verified_fidelity_cannot_report_preserved_true_over_a_dropped_change():
         (True, False, None),  # pdf-in-place-splice
         (False, True, "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
         (False, True, "text/plain; charset=utf-8"),
-        (False, True, "application/pdf"),  # reflow-template (already False)
+        (False, True, "application/pdf"),  # pdf-in-place-splice, forced False by the drop
     ],
 )
 def test_no_method_pairs_preserved_true_with_a_verified_dropped_change(
@@ -221,15 +221,19 @@ def test_an_unverifiable_artifact_stays_unknown_rather_than_denied():
 # ---------------------------------------------------------------------------
 
 
-def test_pdf_splice_that_cannot_apply_a_change_falls_back_to_a_complete_render(
+def test_pdf_splice_that_cannot_apply_a_change_preserves_the_layout_with_residue(
     client, auth_headers,
 ):
-    """A rewrite the splice engine cannot place ⇒ no partial file is shipped.
+    """A rewrite the splice engine cannot place ⇒ the layout is STILL preserved.
 
-    Identical rule to the DOCX/text paths: the user gets the branded render,
-    which carries this version's whole tailored content, plus an explicit
-    report saying the original layout was NOT preserved and why. What they must
-    never get is their own layout with a tailored change silently missing.
+    MODELS-LIVE R-FMT reverses the round-2 policy that dropped the whole
+    two-column layout to the branded template over one out-of-scope rewrite (the
+    live cfe7a0f→c12187 single-column divergence). The mandate is *tailored =
+    baseline with ONLY text changed, visual format intact*, so the splice ships
+    the preserved layout, applies the placeable rewrite, and discloses the
+    unplaceable one as residue with its baseline wording intact. Falling back to
+    the branded render is reserved for a genuine WHOLE-document loss or an
+    unreadable file — the U2b CRITICAL guarantee, which stays intact.
     """
     baseline, left, right = _seed_bundled_baseline(client, auth_headers)
     left_after = f"Product and delivery leadership across regulated platforms; {left}"
@@ -243,31 +247,36 @@ def test_pdf_splice_that_cannot_apply_a_change_falls_back_to_a_complete_render(
     assert res.status_code == 200, res.text
     report = res.json()
 
-    assert report["method"] == "reflow-template", (
-        "a splice that cannot apply every rewrite must fall back to the "
-        f"content-complete branded render, got {report!r}"
+    assert report["method"] == "pdf-in-place-splice", (
+        "the preserved layout ships; it is NOT dropped to the branded template "
+        f"over one out-of-scope rewrite, got {report!r}"
     )
-    assert report["formatPreserved"] is False, report
+    assert report["formatPreserved"] is True, report
+    assert report["confidence"] == "partial", report
     assert report["changesRequested"] == 2
-    assert report["changesDropped"] == 0, report
-    assert report["changesApplied"] == 2, report
+    assert report["changesApplied"] == 1, report
+    assert report["changesDropped"] == 1, report
     note = report["note"].lower()
-    assert "aether template" in note, note
-    assert "could not be located" in note or "could not be applied" in note, note
+    assert "aether template" not in note, note
+    assert "layout is preserved" in note and "original wording" in note, note
 
     download = client.get(f"/resumes/{child['id']}/download", headers=auth_headers)
     assert download.status_code == 200, download.text
-    assert download.headers["X-Aether-Changes-Dropped"] == "0"
-    assert download.headers["X-Aether-Format-Method"] == "reflow-template"
+    assert download.headers["X-Aether-Changes-Applied"] == "1"
+    assert download.headers["X-Aether-Changes-Dropped"] == "1"
+    assert download.headers["X-Aether-Format-Method"] == "pdf-in-place-splice"
 
-    # Independently of the endpoint's own report: both rewrites really are in
-    # the file the user receives.
-    haystack = " ".join(_pdf_text(download.content).split()).lower()
-    for rewrite in (left_after, right_after):
-        needle = " ".join(rewrite[:60].split()).lower()
-        assert needle in haystack, (
-            f"the tailored wording {needle!r} is missing from the downloaded file"
-        )
+    # Independently of the endpoint's own report: the placeable rewrite is in the
+    # file (checked on the grey-body half after the bold lead-in, which the
+    # splice draws through a single TextWriter, so it is a contiguous run), and
+    # the unplaceable one keeps its baseline wording (residue).
+    text = " ".join(_pdf_text(download.content).split())
+    assert right_after.partition(":")[2].strip()[:50] in text, (
+        "the placeable rewrite must be in the downloaded file"
+    )
+    assert left in text, (
+        "the unplaceable rewrite keeps its baseline wording in the preserved layout"
+    )
 
 
 def test_a_splice_that_applies_every_change_still_returns_the_original_layout(
