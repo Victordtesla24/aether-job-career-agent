@@ -373,3 +373,14 @@ live from the QA user's OWN session token, the password change's old token+old p
 immediately (no wait) and the new password logs in, 3 admin endpoints 403 for a non-admin JWT, and the
 §14.7 env-managed identity refuses an admin-route password change with 409 (owner's real login
 re-verified unaffected, no audit row written for the refusal).
+
+### admin-full LANDED — session 9c6a2ba6, 2026-08-14T19:46Z
+
+`54e9625` (`e0efeec` functional admin-full + `02c1276` provenance-citation fix + this session's own
+docs) deployed via `aether-autodeploy.timer` at 19:45:07-19:46:49Z, all 3/3 health checks healthy,
+`deploy successful: 54e9625`. `/api/health` 200, `/` 200, no new `aether-api` errors in the 3 min
+around the restart. CI green on both admin-full pushes (`31833027588` red on the citation drift,
+`31833484056` green after the fix). Full live-production verification (owner + disposable QA user)
+complete and PASS — evidence at `uat/reports/evidence/phase6/admin-full-verify/`. Both re-review
+findings (flaky determinism test, honest `sessionsInvalidated`) and the §14.7 reset-flow adjudication
+are VERIFIED-CLOSED on production, not just in tests.
