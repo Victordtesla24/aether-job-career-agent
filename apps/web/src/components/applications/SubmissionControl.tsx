@@ -29,7 +29,9 @@
 import Link from "next/link";
 import { useCallback, useState } from "react";
 
+import type { AnswerQuestionResult } from "../../lib/api/answer-bank";
 import type { Application, SubmissionControl } from "../../lib/api/applications";
+import AnswerQuestionForm, { type AnswerFormDeps } from "./AnswerQuestionForm";
 import {
   cardStateFor,
   isPressable,
@@ -55,6 +57,7 @@ export default function SubmissionControl({
   application,
   onReconfirm,
   onSettled,
+  onAnswered,
   deps,
 }: {
   application: Pick<
@@ -65,8 +68,10 @@ export default function SubmissionControl({
   onReconfirm?: () => void;
   /** Called with the real outcome so the board can refresh from the server. */
   onSettled?: (outcome: CardSubmissionOutcome) => void;
+  /** U5d-3: called after an in-card answer is banked, so the board re-reads. */
+  onAnswered?: (result: AnswerQuestionResult) => void;
   /** Injected transport (tests). Production uses the real API clients. */
-  deps?: CardSubmissionDeps;
+  deps?: CardSubmissionDeps & AnswerFormDeps;
 }) {
   const control: SubmissionControl | null = application.submissionControl ?? null;
   const [local, setLocal] = useState<LocalSubmissionState>("idle");
@@ -142,6 +147,50 @@ export default function SubmissionControl({
       >
         <i className="fa-solid fa-circle-check text-[9px]" aria-hidden="true" />
         <span data-testid="submission-control-label">{control.label}</span>
+      </div>
+    );
+  }
+
+  // U5d-3 Pillar 4a. The blocker is a question and the server captured its
+  // structure, so the irreducible human step happens HERE — not on the
+  // employer's site. Rendered as its own branch (not inside `body`) because it
+  // is a form, not a one-line control.
+  const questions = control.questions ?? [];
+  if (control.action === "answer_question" && questions.length > 0) {
+    return (
+      <div
+        data-testid="submission-control"
+        data-state={state}
+        data-action="answer_question"
+        data-channel={control.channel}
+        className="mt-2"
+      >
+        <p className="flex items-start gap-1.5 text-[10px] leading-snug text-aether-coral">
+          <i className="fa-solid fa-circle-question mt-[2px] text-[9px]" aria-hidden="true" />
+          <span data-testid="submission-control-detail">{detail}</span>
+        </p>
+        <AnswerQuestionForm
+          applicationId={application.id}
+          questions={questions}
+          onAnswered={onAnswered}
+          deps={deps}
+        />
+        {/* Answering here is the SHORT path, never the only one. A user who
+            would rather finish on the employer's site must always be able to,
+            so the real posting URL stays one click away. */}
+        {control.applyUrl ? (
+          <a
+            data-testid="submission-control-link"
+            href={control.applyUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="mt-1.5 inline-flex items-center gap-1 text-[10px] text-aether-muted-dim transition hover:text-white"
+          >
+            or open the posting and apply there
+            <i className="fa-solid fa-arrow-up-right-from-square text-[8px]" aria-hidden="true" />
+          </a>
+        ) : null}
       </div>
     );
   }

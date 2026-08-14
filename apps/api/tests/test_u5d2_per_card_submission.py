@@ -429,7 +429,12 @@ class TestExecuteRoutesToTheApplyEngine:
         )
         monkeypatch.setattr(
             apply_executor, "build_form_fill_plan",
-            lambda html, *, channel, profile: [],
+            # Mirrors the real seam's signature and RETURN SHAPE (U5d-3 added
+            # the optional Answer Bank resolver and the audit list), so this
+            # stub cannot drift into testing a contract production never has.
+            lambda html, *, channel, profile, answer_bank=None: {
+                "fields": [], "unanswerable_required": [], "answerBankAudit": [],
+            },
         )
         monkeypatch.setattr(apply_sweep, "_render_resume_pdf", lambda uid, app: b"%PDF-")
 
@@ -505,7 +510,12 @@ class TestExecuteRoutesToTheApplyEngine:
         monkeypatch.setattr(apply_executor, "fetch_apply_page", lambda url: "<form></form>")
         monkeypatch.setattr(
             apply_executor, "build_form_fill_plan",
-            lambda html, *, channel, profile: [],
+            # Mirrors the real seam's signature and RETURN SHAPE (U5d-3 added
+            # the optional Answer Bank resolver and the audit list), so this
+            # stub cannot drift into testing a contract production never has.
+            lambda html, *, channel, profile, answer_bank=None: {
+                "fields": [], "unanswerable_required": [], "answerBankAudit": [],
+            },
         )
         monkeypatch.setattr(apply_sweep, "_render_resume_pdf", lambda uid, app: b"%PDF-")
         real_execute = apply_executor.execute_site_application
@@ -540,7 +550,7 @@ class TestExecuteRoutesToTheApplyEngine:
         monkeypatch.setattr(apply_sweep, "_render_resume_pdf", lambda uid, app: b"%PDF-")
         monkeypatch.setattr(apply_executor, "fetch_apply_page", lambda url: "<html/>")
 
-        def _blocked(html, *, channel, profile):
+        def _blocked(html, *, channel, profile, answer_bank=None):
             raise apply_executor.ManualStepRequired(
                 "captcha", "This form is protected by a CAPTCHA."
             )

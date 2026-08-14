@@ -74,7 +74,10 @@ export default function Section({
       <div className={bodyClassName}>{children}</div>
 
       {footnote ? (
-        <p className="mt-3 flex items-start gap-1.5 text-[11px] leading-[1.5] text-aether-muted-dim">
+        <p
+          data-prose="caption"
+          className="mt-3 flex items-start gap-1.5 text-[11px] leading-[1.5] text-aether-muted-dim"
+        >
           <i className="fa-solid fa-circle-info mt-[3px] shrink-0 text-[10px]" aria-hidden="true" />
           <span className="min-w-0">{footnote}</span>
         </p>
