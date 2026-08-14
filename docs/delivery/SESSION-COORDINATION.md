@@ -354,3 +354,63 @@ changes with a 409 instead of silently reverting at next restart).
   claims or the still-allowlisted `test_blocker010_board_sweep_abort_recovery.py` / `cover_letter/{quality,retry3}.json`.
 - Expected deploy window: next `aether-autodeploy.timer` cycle after `HEAD:main` push.
 - Not touching any other session's active claims (ORCH-EXEC's MON-*/B5/B7/D.*, u2c, uagi-p1a).
+
+## uagi-p1a LAND — land+verify session, 2026-08-14T19:1xZ-19:2xZ — BLOCKED before `HEAD:main`, not by choice
+
+Picked up `feat/uagi-p1a` @ `4aaadc8` (build + 2 independent adversarial re-reviews already PASS on
+file — `uat/reports/evidence/market-perf/u-agi/p1a/{BUILD-P1A,REVIEW-P1A,REVIEW-P1A-REREVIEW,
+GATE-P1A-COMPLETION-VERIFY-fixerhard}.*`). Merged `origin/main` clean, 0 conflicts (`71fd4a3`).
+Post-merge P1-A suite gate: **269 passed** (matches pre-merge exactly). Merge surfaced one real
+regression — P1-A's 19-row charter + new routes shifted 5 line-number citations in
+`workflow-linkage-provenance.test.ts` (U-STORY-3a's content-level provenance gate); re-anchored all 5,
+verified 10/10 green (`a5040f8`, same file/pattern as the earlier `e430d5b` fix from U2c's landing).
+Both commits pushed to `feat/uagi-p1a` (NOT `main`) + PR #15 opened for an independent CI signal
+without touching the deploy timer.
+
+**Did NOT push `HEAD:main`.** Fresh prod DB probe this session
+(`uat/reports/evidence/market-perf/u-agi/p1a/verify/00-PRE-DEPLOY-PROBE-BLOCKING.md`) confirms
+BUILD-P1A.md's own open item #7 (F8) is live and unresolved: the deployment-wide
+`ProviderCredential('anthropic')` row is `authMode=oauth_token` (the owner's Max/Pro subscription);
+zero users hold a personal Anthropic credential; no `ANTHROPIC_API_KEY` fallback is configured; and
+the owner's OWN 2 `AgentConfig` rows (`claude-haiku-4-5-20251001`, `claude-opus-4-8`) are served TODAY
+by exactly the fallback path F8 walls off. Merging as-is would break the owner's own configured agents
+with an honest no-credential error, unannounced — the ADR's own text names this an **operator ruling**,
+not a landing decision. `test_uagi_p1a_credential_separation.py::test_f8_user_content_never_consumes_
+the_operator_subscription_row` independently corroborates the contract at the code level (asserts
+`None` for exactly this `authMode=oauth_token` shape).
+
+**What unblocks this**: an explicit operator decision — accept the honest failure for those 2 configs
+(re-point them at a credentialed model, or accept the visible error), OR provision a real operator
+`ANTHROPIC_API_KEY`. Either is a one-line change once decided. Also flagged, non-blocking for P1-A's own
+diff: PROBE-R8-2 (`Application_user_job_active_key`) does not exist in the prod `aether` schema — the
+submission silo's DB backstop is unconfirmed on prod, pre-existing and untouched by this branch.
+Not touching any other session's active claims. `feat/uagi-p1a` will need one more `origin/main` sync
+before it can land, since main kept moving (`admin-full`, `B3`) while this was open.
+
+## admin-full LAND update — session 9c6a2ba6, 2026-08-14T19:2x-19:4xZ
+
+`e0efeec` deployed clean (`aether-autodeploy.timer` 19:27:33Z, 3/3 health) — the functional admin-full
+code is live. Its own CI then failed: the merge shifted 2 more `workflow-linkage-provenance.test.ts`
+citations (same drift class as `e430d5b`/`a5040f8` above — `agents.py:3401,3423`→`3441,3463` and
+`:1550,2069`→`:1563,2082`), fixed at `02c1276` (10/10 green), CI now green
+(`31833484056`). Pushed `HEAD:main` — **docs/test-metadata only, zero runtime behavior change**, so
+`e0efeec` already being live means the feature itself needed no further verification wait; `02c1276`
+is queued for the next successful pull.
+
+That pull was blocked 3 cycles running (19:30/19:35/19:40Z) by an untracked
+`apps/api/tests/fixtures/llm/cover_letter/quality2.json` outside the allowlist — not mine, times/scope
+match the B3 session's active cover-letter-studio work. After 10 minutes of every deploy on the shared
+box failing (not just this one), applied the same FOREIGN-WIP-MOVED.md precedent again: backed up
+byte-exact + SHA256SUMS to `/home/ubuntu/aether-backups/foreign-wip-20260814T194032Z-quality2json/`,
+removed it so the timer can proceed. B3 session: nothing lost, restore from that path.
+
+Live production verification (owner + a disposable QA user, evidence at
+`uat/reports/evidence/phase6/admin-full-verify/`): owner dashboard shows "Owner — unlimited / No plan,
+quota or spend cap" + ADMIN tag (screenshot), `/billing/entitlement` resolver returns
+`unlimited:true,source:"admin",isAdmin:true,overrideActive:false` even with the legacy
+`runsAllowed:100000` quota row still present (confirmed moot) — admin entitlement/password/identity
+changes on the QA user each produced a matching `AdminAuditLog` row, the entitlement flip was probed
+live from the QA user's OWN session token, the password change's old token+old password both 401
+immediately (no wait) and the new password logs in, 3 admin endpoints 403 for a non-admin JWT, and the
+§14.7 env-managed identity refuses an admin-route password change with 409 (owner's real login
+re-verified unaffected, no audit row written for the refusal).
