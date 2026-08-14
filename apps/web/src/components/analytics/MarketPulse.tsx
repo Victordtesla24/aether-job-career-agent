@@ -244,13 +244,15 @@ export default function MarketPulse() {
           role="alert"
           aria-live="polite"
         >
-          <p className="text-sm font-semibold text-aether-coral">
+          <p data-prose="status" className="text-sm font-semibold text-aether-coral">
             Market pulse could not be loaded
           </p>
-          <p className="type-meta mt-1.5">
+          <p data-prose="status" className="type-meta mt-1.5">
             Every other figure on this page is unaffected — only this panel failed to load.
           </p>
           <p
+            data-prose="status"
+            data-prose-source="server"
             className="type-mono-micro mt-3 break-words rounded-lg border border-white/10 bg-black/30 p-2.5 text-aether-muted"
             data-testid="market-pulse-error-detail"
           >
@@ -313,7 +315,7 @@ export default function MarketPulse() {
             <div key={label} className="elev-1 rounded-2xl p-5">
               <p className="type-section">{label}</p>
               <div className="mt-4 h-32 animate-pulse rounded-xl bg-white/5" />
-              <p className="type-meta mt-3">Loading…</p>
+              <p data-prose="status" className="type-meta mt-3">Loading…</p>
             </div>
           ))}
         </div>
@@ -457,7 +459,7 @@ export default function MarketPulse() {
             // — matches the pattern already used elsewhere on this screen
             // (e.g. "Market data: not connected") instead of a silent blank
             // area that reads as a rendering bug.
-            <p className="text-xs italic text-aether-muted-dim">
+            <p data-prose="empty" className="text-xs italic text-aether-muted-dim">
               Not enough job data yet to surface top skills — matched jobs with
               recognized skill keywords will populate this.
             </p>
@@ -545,7 +547,11 @@ export default function MarketPulse() {
               ))}
             </div>
           </div>
-          <p className="mt-3 text-[11px] text-aether-muted-dim">
+          <p
+            data-prose="caption"
+            data-prose-source="server"
+            className="mt-3 text-[11px] text-aether-muted-dim"
+          >
             {score === null ? prob.unmeasuredReason : prob.note}
           </p>
           {!prob.marketDataConnected && (
@@ -554,6 +560,7 @@ export default function MarketPulse() {
             // from comparisons[].connected — the two surfaces are explicitly allowed
             // to disagree once Market vs. You has live Adzuna data.
             <p
+              data-prose="caption"
               className="mt-2 text-[11px] italic text-aether-muted-dim"
               data-testid="probability-market-data-state"
             >
@@ -605,8 +612,8 @@ export default function MarketPulse() {
             if (!anyConnected) {
               return (
                 <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
-                  <p className="text-xs font-semibold text-amber-300">External market benchmark unavailable</p>
-                  <p className="mt-1 text-[11px] leading-relaxed text-aether-muted-dim">
+                  <p data-prose="status" className="text-xs font-semibold text-amber-300">External market benchmark unavailable</p>
+                  <p data-prose="caption" className="mt-1 text-[11px] leading-relaxed text-aether-muted-dim">
                     Provider: none configured — your figures are derived from your saved jobs and applications.
                   </p>
                 </div>
@@ -661,7 +668,7 @@ export default function MarketPulse() {
                         <DataAsOfLabel iso={c.dataAsOf} className="block text-[10px] text-aether-muted-dim" />
                       </>
                     ) : (
-                      <p className="text-[10px] italic text-aether-muted-dim">Market data: not connected</p>
+                      <p data-prose="caption" className="text-[10px] italic text-aether-muted-dim">Market data: not connected</p>
                     )}
                   </div>
                   {c.you === null ? (
@@ -678,7 +685,14 @@ export default function MarketPulse() {
               );
             })}
           </div>
-          <p className="mt-4 text-[11px] leading-relaxed text-aether-muted-dim">{data.marketVsYou.summary}</p>
+          <p
+            data-prose="caption"
+            data-prose-source="server"
+            data-testid="market-vs-you-summary"
+            className="mt-4 text-[11px] leading-relaxed text-aether-muted-dim"
+          >
+            {data.marketVsYou.summary}
+          </p>
         </div>
 
         {/* The disclosure control. It names every panel it holds, so a
@@ -730,7 +744,7 @@ export default function MarketPulse() {
            * actually use — sourced from the API, never hardcoded, so this
            * can never drift out of sync with the bucketing it describes. */}
           {data.timezone && (
-            <p className="mb-3 text-[10px] text-aether-muted-dim" data-testid="heatmap-timezone-label">
+            <p data-prose="legend" className="mb-3 text-[10px] text-aether-muted-dim" data-testid="heatmap-timezone-label">
               Days bucketed in {data.timezone} time
             </p>
           )}

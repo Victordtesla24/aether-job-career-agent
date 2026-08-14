@@ -13,6 +13,14 @@ export { Radar10, RadarPlot, type Radar10Props, type RadarDimension } from "./Ra
 export { Donut, type DonutProps, type DonutSegment } from "./Donut";
 export { DivergingBar, type DivergingBarProps, type DivergingRow } from "./DivergingBar";
 export { Heatmap, type HeatmapCell, type HeatmapProps, type HeatmapRow } from "./Heatmap";
+export {
+  BulletChart,
+  type BulletChartProps,
+  type BulletCoverageSegment,
+  type BulletRow,
+} from "./BulletChart";
+export { Spark, type SparkKind, type SparkProps, type SparkTarget } from "./Spark";
+export { TierBand, type TierBandPoint, type TierBandProps } from "./TierBand";
 
 export { AxisLabel, EmptyPlot, Gridlines, ThresholdLine, UnmeasuredMark, ZeroTickRect } from "./primitives";
 export {

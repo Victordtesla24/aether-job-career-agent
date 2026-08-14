@@ -7,14 +7,26 @@
 import { useCallback, useEffect, useState } from "react";
 
 import MarketPulse from "../../../components/analytics/MarketPulse";
+import ExecutiveSummary from "../../../components/analytics/ExecutiveSummary";
 import { useRealtimeResources } from "../../../hooks/useRealtime";
 import { useUrlTab } from "../../../hooks/useUrlTab";
 import MetricTooltip from "../../../components/MetricTooltip";
 import StatBlock from "../../../components/ui/StatBlock";
 import SegmentedControl from "../../../components/ui/SegmentedControl";
 import Section from "../../../components/ui/Section";
-import { Funnel as FunnelChart, Histogram, Radar10 } from "../../../components/charts";
+import {
+  BulletChart,
+  Funnel as FunnelChart,
+  Histogram,
+  Radar10,
+} from "../../../components/charts";
 import { atsBuckets, fitDimensions, funnelSteps } from "../../../lib/analytics/chart-adapters";
+import {
+  executiveSummary,
+  normaliseTarget,
+  numberFrom,
+  INTERVIEW_TARGET_PCT,
+} from "../../../lib/analytics/executive-summary";
 import type { RealtimeResource } from "../../../lib/realtime/transport-types";
 import AgentPolicyPanel from "../../../components/agents/AgentPolicyPanel";
 import {
@@ -278,19 +290,46 @@ export default function AnalyticsPage() {
     "data-testid": `analytics-panel-${value}`,
   });
 
+  /**
+   * ANALYTICS-VIZ — the executive summary band, derived DETERMINISTICALLY from
+   * the five payloads already in state above. It sits ABOVE the view switcher,
+   * so it is on screen on every tab: "what's what in one glance" is not a
+   * property of one view.
+   */
+  const execTiles = executiveSummary({
+    period,
+    funnel,
+    conversion,
+    ats,
+    roi,
+    policy,
+    policyHistory,
+  });
+
+  /** The 1-in-5 interview-conversion target, sourced from the policy payload
+   *  when it carried one so the page and the backend can never state two
+   *  different targets. */
+  const conversionTargetPct = (() => {
+    const declared = numberFrom(policy?.thresholds, "interviewConversionTarget");
+    return declared === null ? INTERVIEW_TARGET_PCT : normaliseTarget(declared);
+  })();
+
   return (
     <div className="space-y-7">
       {/* BAND 1 — the hero moment: this screen's ONE saturated brand gesture
-          (reference rule 3) inside the atmospheric glow. */}
+          (reference rule 3) inside the atmospheric glow.
+
+          The page's old sub-title ("Funnel conversion, ATS score quality and
+          agent spend.") is GONE: it was a standalone prose line that named the
+          three views the switcher below it already names, and the executive
+          band now answers the same question with measurements instead of a
+          list of nouns. */}
       <section className="atmos-hero">
         <header className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h1 className="type-page">
               <span className="text-gradient-brand">Analytics</span>
             </h1>
-            <p className="type-page-sub mt-1">
-              Funnel conversion, ATS score quality and agent spend.
-            </p>
           </div>
           <div
             className="elev-1 flex gap-1 rounded-xl p-1"
@@ -316,10 +355,17 @@ export default function AnalyticsPage() {
           </div>
         </header>
 
+        {/* THE EXECUTIVE SUMMARY BAND — inside the lit band, above the view
+            switcher, so it is present on every tab. Five measured tiles; the
+            selectors that produce them are pure and unit-pinned. */}
+        <div className="mt-5">
+          <ExecutiveSummary tiles={execTiles} />
+        </div>
+
         {/* The view switcher lives INSIDE the lit band, under the title and
             beside nothing — so the light rig frames the page's whole chrome
-            (title, period, view) the way the Dashboard's hero frames its KPI
-            strip, and the first panel begins on unlit ground. */}
+            (title, period, summary, view) the way the Dashboard's hero frames
+            its KPI strip, and the first panel begins on unlit ground. */}
         <div className="mt-5">
           <SegmentedControl
             items={TAB_ITEMS}
@@ -334,7 +380,12 @@ export default function AnalyticsPage() {
       </section>
 
       {error ? (
-        <p className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">
+        <p
+          data-prose="status"
+          data-prose-source="server"
+          role="alert"
+          className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300"
+        >
           {error}
         </p>
       ) : null}
@@ -449,6 +500,12 @@ export default function AnalyticsPage() {
               }
               steps={funnelSteps(funnel)}
               mode="share-of-previous"
+              /* The superset qualifier was reachable only by hovering a bar
+                 (it rides on the step's `note`, into the hidden data table and
+                 the row title). A qualifier of a VISIBLE number may not be
+                 hover-only — U-AX law — so it is also stated here, in the
+                 frame's reserved caption slot, beside the chart it qualifies. */
+              footnote="“Jobs found” is cumulative all-time discovery; the Jobs board lists only currently-open postings, so its count is usually lower."
             />
           </div>
         )}
@@ -481,77 +538,96 @@ export default function AnalyticsPage() {
                 correct on the backend (interviews / submitted applications)
                 but previously stripped client-side because ConversionSchema
                 never declared the field. Rendered exactly as the API
-                returns it; the badge below only changes FRAMING (color/
-                label), never the rate. */}
-            <div
-              className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 p-4"
-              data-testid="interview-conversion-rate"
-            >
-              <div>
-                <dd className="mono flex items-center gap-1.5 text-2xl font-bold text-aether-violet">
-                  <MetricTooltip
-                    value={`${conversion.interview_conversion_rate}%`}
-                    tooltip="Interviews booked per application submitted (industry target: at least 1 in 5, i.e. 20%)."
-                  />
-                </dd>
-                <dt className="mt-1 text-xs text-aether-muted">Interview Conversion Rate</dt>
-              </div>
-              {!hasApplications ? (
-                <span
-                  className="rounded-full border border-white/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-aether-muted"
-                  data-testid="interview-conversion-badge"
-                >
-                  No applications yet
-                </span>
-              ) : conversion.interview_conversion_healthy ? (
-                <span
-                  className="rounded-full border border-aether-green/40 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-aether-green"
-                  data-testid="interview-conversion-badge"
-                >
-                  On track (≥1:5)
-                </span>
-              ) : (
-                <span
-                  className="rounded-full border border-aether-amber/40 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-aether-amber"
-                  data-testid="interview-conversion-badge"
-                >
-                  Needs improvement (&lt;1:5)
-                </span>
-              )}
+                returns it; the badge only changes FRAMING (color/label),
+                never the rate.
+
+                ANALYTICS-VIZ: the rate and the target it is judged by were a
+                numeral and a SENTENCE that asked the reader to subtract one
+                from the other. They are now a bullet row and a labelled target
+                tick — the same two numbers, with the comparison drawn instead
+                of described. The denominator ("N interviews from M submitted")
+                rides on the row, so a percentage is never shown without the
+                count it came from. */}
+            <div className="mt-4" data-testid="interview-conversion-rate">
+              <BulletChart
+                title="Interview conversion vs the 1-in-5 target"
+                windowLabel={
+                  period === "all"
+                    ? "all time — interviews per application submitted"
+                    : `the selected period (${period}) — interviews per application submitted`
+                }
+                rows={[
+                  {
+                    label: "Interview conversion",
+                    value: conversion.interview_conversion_rate,
+                    display: `${conversion.interview_conversion_rate}%`,
+                    basis:
+                      funnel === null
+                        ? undefined
+                        : `${funnel.interviewed} interview${
+                            funnel.interviewed === 1 ? "" : "s"
+                          } from ${funnel.applied} submitted`,
+                    trailing: !hasApplications ? (
+                      <span
+                        className="rounded-full border border-white/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-aether-muted"
+                        data-testid="interview-conversion-badge"
+                      >
+                        No applications yet
+                      </span>
+                    ) : conversion.interview_conversion_healthy ? (
+                      <span
+                        className="rounded-full border border-aether-green/40 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-aether-green"
+                        data-testid="interview-conversion-badge"
+                      >
+                        On track (≥1:5)
+                      </span>
+                    ) : (
+                      <span
+                        className="rounded-full border border-aether-amber/40 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-aether-amber"
+                        data-testid="interview-conversion-badge"
+                      >
+                        Needs improvement (&lt;1:5)
+                      </span>
+                    ),
+                  },
+                ]}
+                target={{
+                  value: conversionTargetPct,
+                  label: `${conversionTargetPct}% (1-in-5) target`,
+                }}
+                axisMax={Math.max(
+                  conversionTargetPct * 1.5,
+                  conversion.interview_conversion_rate * 1.15,
+                )}
+              />
             </div>
-            {/* U-AX item 1/2: "what should the user DO with this?" — the raw
-                rate above is action-relevant only once it is framed against
-                the 20% target the self-improvement loop escalates against.
-                Never printed as a negative "gap" figure — the target minus
-                the rate, stated as the ground the agents still need to make
-                up, honestly zeroed out once the target is met. */}
+            {/* U-AX item 1/2 — the gap, and what the policy is DOING about it,
+                as the ONE-LINE caption attached to the chart above.
+
+                F-UAX-04: this figure honours the selected period, while the
+                Agent Performance Policy tier is computed ALL-TIME
+                (quality_policy.resolve_policy_for_user) — the two can
+                legitimately disagree, so the claim about what the policy is
+                doing is sourced from the policy's OWN tier, never asserted
+                unconditionally. `heightened` is the only tier that actually
+                escalates rigor; `insufficient_data` explicitly does not
+                (quality_policy.py rule 2) and must say so.
+                R-05: `AgentPolicyPanel` renders ABOVE this section, so the
+                pointer says "above" and the test pins that against the real
+                DOM order. */}
             {hasApplications ? (
               <p
-                className="mt-2 text-xs text-aether-muted-dim"
+                data-prose="caption"
+                className="mt-2 text-[11px] leading-[1.45] text-aether-muted-dim"
                 data-testid="interview-conversion-gap"
               >
-                {conversion.interview_conversion_rate >= 20
-                  ? "At or above the 1-in-5 (20%) interview-conversion target."
-                  : // F-UAX-04: this figure honours the selected period, while
-                    // the Agent Performance Policy tier below is computed
-                    // ALL-TIME (quality_policy.resolve_policy_for_user) — the
-                    // two can legitimately disagree, so the claim about what
-                    // the policy is DOING must be sourced from the policy's
-                    // own tier, never asserted unconditionally. `heightened`
-                    // is the only tier that actually escalates rigor;
-                    // `insufficient_data` explicitly does not (quality_policy.py
-                    // rule 2) and must say so, not claim an escalation that
-                    // isn't happening.
-                    // R-05: AgentPolicyPanel renders ABOVE this section, so
-                    // "see below" pointed the reader at nothing. The claim was
-                    // honest and the directions were not — which is its own
-                    // kind of dishonesty on a page whose whole promise is that
-                    // what it says can be checked.
-                    policy?.tier === "heightened"
-                    ? `${(20 - conversion.interview_conversion_rate).toFixed(1)} points below the 1-in-5 (20%) target — the agent policy has escalated to heightened rigor (see Agent Performance Policy above) until this closes.`
+                {conversion.interview_conversion_rate >= conversionTargetPct
+                  ? `At or above the 1-in-5 (${conversionTargetPct}%) target — Agent Performance Policy, above.`
+                  : policy?.tier === "heightened"
+                    ? `${(conversionTargetPct - conversion.interview_conversion_rate).toFixed(1)} points to target — rigor escalated to heightened (Agent Performance Policy, above).`
                     : policy?.tier === "insufficient_data"
-                      ? `${(20 - conversion.interview_conversion_rate).toFixed(1)} points below the 1-in-5 (20%) target this period — not enough submitted applications yet, all-time, for the policy to honestly decide whether to escalate (see Agent Performance Policy above).`
-                      : `${(20 - conversion.interview_conversion_rate).toFixed(1)} points below the 1-in-5 (20%) target this period — the agent policy escalates rigor automatically once its own all-time metrics cross a threshold (see Agent Performance Policy above).`}
+                      ? `${(conversionTargetPct - conversion.interview_conversion_rate).toFixed(1)} points to target — too few submissions all-time to escalate (Agent Performance Policy, above).`
+                      : `${(conversionTargetPct - conversion.interview_conversion_rate).toFixed(1)} points to target — rigor escalates automatically at the policy's own threshold (Agent Performance Policy, above).`}
               </p>
             ) : null}
           </>
@@ -775,11 +851,17 @@ export default function AnalyticsPage() {
                       )}
                     </dd>
                     <dt className="mt-1 text-xs text-aether-muted">{label}</dt>
+                    {/* ANALYTICS-VIZ: the reason a ratio is “—” stays on the
+                        tile, at the same size, demoted from a free-standing
+                        block to the CAPTION of the tile it qualifies. The
+                        wording is tightened to one line; the two facts it
+                        carries (which windows failed to line up / which
+                        denominator is empty) are unchanged. */}
                     {!measurable ? (
-                      <p className="type-meta mt-1">
+                      <p data-prose="caption" className="type-meta mt-1">
                         {!comparable
-                          ? `Agent spend is all-time but the funnel is scoped to ${period} — select “all” to compare like with like.`
-                          : "No applications have reached this stage yet, so there is nothing to divide by."}
+                          ? `Spend is all-time, funnel is ${period} — select “all” to divide like with like.`
+                          : "No application has reached this stage yet — nothing to divide by."}
                       </p>
                     ) : null}
                   </div>
