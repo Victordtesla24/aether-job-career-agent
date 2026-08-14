@@ -1244,6 +1244,18 @@ def _execute_reserved_run(
             "message": str(exc),
         }
         runs.finish(run_id, "completed", output=honest_output, cost_usd=0.0)
+        # B6xP1A (ORCH-B1-BLUEPRINT-2026-08-14.md §4.4): the AgentRun row
+        # above was created with ``parentRunId`` already set (``_record_run``
+        # threads it through ``runs.start(..., parent_run_id=...)`` before
+        # execution starts), so the no-op run IS correctly parented in the
+        # database. But this handler's re-raise means the caller never gets a
+        # dict back to read a "run_id" off of — ``_pipeline_core`` builds its
+        # own ``tailor_out`` from the caught exception, and without this it
+        # has no way to look the row back up (e.g. via ``GET /agents/runs``)
+        # to confirm that parentage. Carried on the exception instance, same
+        # precedent as ``exc.degradedUsage`` on the FabricationError/
+        # StructuralError branch below.
+        exc.run_id = run_id
         # Refund only when THIS function manages quota (the sync path,
         # manage_quota=True); the async worker performs its own refund via
         # BackgroundJobRepository.refund_single_reservation AFTER this
@@ -3860,7 +3872,18 @@ def _pipeline_core(
             # tailored version was created and the tailor run was refunded. This
             # must NOT fail the whole pipeline — the cover-letter step draws on the
             # base résumé regardless — so record the honest no-op and continue.
-            tailor_out = {"noChangesApplied": True, "changes": 0, "message": str(exc)}
+            #
+            # B6xP1A: "run_id" is included here too, exactly like every other
+            # step's output — the AgentRun row this no-op finished is already
+            # correctly parented under the supervisor (``_dispatch`` above
+            # passed ``parent_run_id=sup_run_id``); omitting the id from this
+            # branch only would silently make the no-op case unrecoverable
+            # from ``GET /agents/runs``, a dishonest gap the success case
+            # doesn't have.
+            tailor_out = {
+                "noChangesApplied": True, "changes": 0, "message": str(exc),
+                "run_id": getattr(exc, "run_id", None),
+            }
         steps.append({"agent": "tailor", "output": tailor_out})
         try:
             letter_out = _dispatch(
