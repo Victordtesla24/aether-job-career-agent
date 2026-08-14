@@ -73,11 +73,19 @@ const STATUS_LABEL: Record<CatalogAgent["status"], string> = {
   planned: "Planned",
 };
 
+/**
+ * S-UI aesthetics slice: `.ag-node` (agents-console.css) is the console's ONE
+ * card shell — 1px hairline, top-edge highlight, soft top-light wash — so the
+ * 22 configuration cards, the orchestration map's nodes and the live-run
+ * monitor's nodes all read as the same material (reference-pack rule 15).
+ * The status semantics are unchanged: error keeps its danger tint, planned
+ * keeps its dashed, un-lit, 75%-opacity treatment.
+ */
 const CARD_BORDER: Record<CatalogAgent["status"], string> = {
-  active: "elev-1 hover:border-hairline-strong hover:bg-surface-2",
-  paused: "elev-1 hover:border-hairline-strong hover:bg-surface-2",
+  active: "ag-node",
+  paused: "ag-node",
   error: "border border-state-danger/30 bg-state-danger/[0.05] hover:border-state-danger/50",
-  planned: "border border-dashed border-hairline bg-surface-0 opacity-75",
+  planned: "ag-node ag-node-planned opacity-75",
 };
 
 type StatusFilter = "all" | CatalogAgent["status"];
@@ -228,7 +236,7 @@ function AgentCard({
   return (
     <div
       data-testid={`agent-card-${agent.key}`}
-      className={`relative flex min-h-[168px] flex-col justify-between gap-3 rounded-xl p-4 transition-[border-color,background-color] duration-[var(--dur)] sm:min-h-[150px] ${CARD_BORDER[agent.status]}`}
+      className={`relative flex min-h-[168px] flex-col justify-between gap-3 p-4 sm:min-h-[150px] ${CARD_BORDER[agent.status]}`}
     >
       <div className="flex items-start justify-between gap-2">
         <div
@@ -513,12 +521,12 @@ export default function AgentConfigGrid({
           {Array.from({ length: 8 }).map((_, i) => (
             <div
               key={i}
-              className="elev-1 min-h-[168px] animate-pulse rounded-xl sm:min-h-[150px]"
+              className="ag-node min-h-[168px] animate-pulse sm:min-h-[150px]"
             />
           ))}
         </div>
       ) : visible.length === 0 ? (
-        <div className="elev-1 rounded-xl p-8 text-center">
+        <div className="ag-panel p-8 text-center">
           <i
             className="fa-solid fa-filter-circle-xmark mb-2 text-[32px] text-aether-muted-dim/40"
             aria-hidden="true"
@@ -567,7 +575,7 @@ export default function AgentConfigGrid({
       {settingsAgent ? (
         <div
           data-testid="agent-settings-drawer"
-          className="elev-2 rounded-xl p-4"
+          className="ag-panel p-4"
           role="region"
           aria-label={`Settings for ${settingsAgent.name}`}
         >

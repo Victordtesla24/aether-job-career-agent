@@ -1,0 +1,503 @@
+/*
+ * ══ AGENTS CONSOLE — PAGE-SCOPED PRESENTATION LAYER ═════════════════════════
+ *
+ * S-UI AESTHETICS BAR (binding, user 2026-08-14): "I do not want engineering,
+ * I want aesthetics." The acceptance test is visceral — this page next to the
+ * reference pack's Linear / Mercury / Raycast captures.
+ *
+ * EVERY RULE IN THIS FILE IS PRESENTATION ONLY. No selector here changes what
+ * the page says, only how it reads. The honesty contracts (degraded "—",
+ * "not recorded", stalled labels, planned badges, footnotes) keep their exact
+ * words, their contrast and their place in the reading order; the disclosure
+ * rules below CLAMP long text to one line and give it an expander — the text
+ * itself is always present in the DOM, always in `title`, always reachable.
+ *
+ * SCOPING: every class is `ag-`-prefixed and used only by this console's own
+ * components, so importing this file cannot restyle another route.
+ *
+ * SPECIFICITY: colour declarations that a Tailwind utility is expected to
+ * override (a figure that turns green, a label that turns amber) are wrapped
+ * in `:where()`, which contributes ZERO specificity — so `text-aether-green`
+ * on the element always wins, whatever order the two stylesheets land in.
+ *
+ * The reference rules this file implements (references/S-UI-REFERENCE-PACK.md
+ * "Cross-cutting rules"):
+ *   1  near-black ground, interior surfaces only a few luminance points above
+ *   3  ONE saturated brand gesture per fold, everything else desaturated
+ *   4  numerals get their own typographic treatment (big figure / small label)
+ *   6  tables: hairline row separators only, no zebra, no cell borders
+ *   8  minimal active-state indicators
+ *  12  section-to-section separation via a luminance band, not a border
+ *  13  data-row heights in the 28–48px band
+ *  15  one card shell; density and colour carry the hierarchy
+ */
+
+.ag-console {
+  --ag-ground: #0a0a0f;
+  --ag-band: #0c0c13;
+  --ag-panel-top: #101018;
+  --ag-panel-bottom: #0c0c13;
+  --ag-coral: #ff6b35;
+  --ag-amber: #f5a623;
+  --ag-lift: rgba(255, 255, 255, 0.055);
+  position: relative;
+}
+
+/* ── 1. ATMOSPHERE ─────────────────────────────────────────────────────────
+   Rule 1/12: the page ground is never a flat expanse. A single wide, very low
+   opacity coral wash sits behind the page header (the brand hue, felt rather
+   than seen), and the console's own ground is a hair above the app ground so
+   the content column reads as a surface instead of a hole. Both are inert:
+   `pointer-events: none`, `aria-hidden`, and laid out entirely INSIDE the
+   content column so neither can create horizontal overflow. */
+.ag-hero {
+  position: relative;
+  isolation: isolate;
+}
+
+.ag-hero::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  pointer-events: none;
+  left: 0;
+  right: 34%;
+  top: -132px;
+  height: 320px;
+  background: radial-gradient(
+    closest-side at 34% 58%,
+    rgba(255, 107, 53, 0.17),
+    rgba(255, 107, 53, 0.055) 52%,
+    transparent 100%
+  );
+}
+
+/* A second, cooler wash on the far side keeps the fold from leaning one-sided
+   — the same two-light setup the app shell already uses on `body`. */
+.ag-hero::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  pointer-events: none;
+  right: 0;
+  left: 52%;
+  top: -150px;
+  height: 300px;
+  background: radial-gradient(
+    closest-side at 62% 50%,
+    rgba(120, 110, 240, 0.11),
+    transparent 100%
+  );
+}
+
+/* ── 2. HERO MOMENT ────────────────────────────────────────────────────────
+   Rule 3: the ONE confident saturated gesture on this fold. Display weight,
+   tight tracking, coral→amber. `color` is set first so a browser without
+   `background-clip: text` still renders a legible warm title rather than a
+   transparent one. */
+.ag-title {
+  font-size: 34px;
+  line-height: 1.04;
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  color: #ffb07a;
+  /* Stops are placed for a SHORT string: over ~280px the coral has to hand
+     over to amber early or the whole title reads as one flat orange. */
+  background-image: linear-gradient(
+    96deg,
+    #ff5c2b 0%,
+    var(--ag-coral) 18%,
+    #ff8f3c 48%,
+    var(--ag-amber) 78%,
+    #ffcd7d 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  /* A gradient clipped to glyphs has no descender slack of its own. */
+  padding-bottom: 0.06em;
+}
+
+@media (max-width: 640px) {
+  .ag-title {
+    font-size: 27px;
+  }
+}
+
+/* The header's supporting line: mono, tabular, quiet — the Linear register. */
+.ag-subline {
+  font-size: 11.5px;
+  letter-spacing: 0.01em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── 3. SECTION RHYTHM ─────────────────────────────────────────────────────
+   Rule 12: sections are separated by a luminance band and a typographic
+   eyebrow, not by yet another bordered box. The trailing hairline is the
+   Mercury/Linear "rule that runs out of the label" detail. */
+.ag-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #8b8ba3;
+}
+
+.ag-eyebrow::after {
+  content: "";
+  flex: 1 1 auto;
+  height: 1px;
+  min-width: 24px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.01) 78%, transparent);
+}
+
+/* ── 4. THE CARD SHELL ─────────────────────────────────────────────────────
+   Rule 15: ONE shell everywhere, hierarchy carried by density and colour.
+   Three ingredients make it read as a surface instead of a grey rectangle:
+   a 1px hairline, a top-edge highlight (`inset 0 1px 0`), and a soft top-light
+   wash so the card is fractionally brighter where the light would fall. */
+.ag-panel {
+  position: relative;
+  border-radius: 14px;
+  border: 1px solid var(--hairline);
+  background-image:
+    radial-gradient(130% 78% at 50% -24%, rgba(255, 255, 255, 0.05), transparent 62%),
+    linear-gradient(180deg, var(--ag-panel-top), var(--ag-panel-bottom));
+  box-shadow:
+    inset 0 1px 0 0 var(--ag-lift),
+    0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+/* The data-bearing shell: a touch darker than `.ag-panel` so a table reads as
+   content sitting IN a surface rather than as another floating card. */
+.ag-panel-sunken {
+  position: relative;
+  border-radius: 14px;
+  border: 1px solid var(--hairline);
+  background-image: linear-gradient(180deg, #0e0e15, #0a0a10);
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.035);
+}
+
+/* ── 5. NUMERALS ───────────────────────────────────────────────────────────
+   Rule 4: dashboards give numbers more typographic care than body copy gets.
+   Big tabular figure, small grey label beneath, unit demoted to a smaller
+   raised-weight suffix (the Mercury superscript-cents idea, generalised). */
+.ag-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.ag-stat-figure {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 25px;
+  line-height: 1.05;
+  font-weight: 600;
+  letter-spacing: -0.028em;
+  font-variant-numeric: tabular-nums;
+  display: flex;
+  align-items: baseline;
+  gap: 1px;
+}
+
+.ag-stat-unit {
+  font-size: 0.56em;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.ag-stat-label {
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* Zero-specificity defaults — any `text-*` utility on the element wins. */
+:where(.ag-stat-figure) {
+  color: #f4f4f8;
+}
+
+:where(.ag-stat-unit),
+:where(.ag-stat-label) {
+  color: #8b8ba3;
+}
+
+/* The run-health rail: a band, not a card (rule 12) — hairline top and bottom,
+   generous internal rhythm, no bounding box competing with the map below it. */
+.ag-rail {
+  position: relative;
+  border-radius: 14px;
+  border: 1px solid var(--hairline);
+  /* Opaque for the same reason as `.ag-node` — see the note there. */
+  background-color: #0e0e15;
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.008));
+  box-shadow: inset 0 1px 0 0 var(--ag-lift);
+}
+
+.ag-rail-sep {
+  width: 1px;
+  align-self: stretch;
+  background: linear-gradient(180deg, transparent, rgba(255, 255, 255, 0.1), transparent);
+}
+
+/* ── 6. NODES ──────────────────────────────────────────────────────────────
+   Rule 15 again, at node scale — plus the one place motion is allowed. */
+/*
+ * OPAQUE BY DESIGN, and that is load-bearing rather than cosmetic.
+ *
+ * `body` paints two `background-attachment: fixed` radial washes, one of them
+ * coral. A card with no `background-color` lets that wash through — which put
+ * a coral tint and a coral-looking border on whichever node happened to sit
+ * over the wash as the page scrolled. On 2026-08-14 that was the *completed*
+ * "Stories" node, rendered in the same hue the map reserves for a live run
+ * (captured in beauty1/before-vs-after evidence). An opaque base makes a
+ * node's colour a function of its STATE and nothing else.
+ *
+ * #13131b is ~5 luminance points above the console ground — the tight surface
+ * ladder Linear (`#08090a` → `#0f1011`) and Mercury (`#171721` → `#1e1d28`)
+ * both use (reference-pack rule 1), not a visibly separate grey box.
+ */
+.ag-node {
+  position: relative;
+  border-radius: 11px;
+  border: 1px solid var(--hairline);
+  background-color: #13131b;
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.014));
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.05);
+  transition:
+    border-color var(--dur) var(--ease),
+    background-color var(--dur) var(--ease),
+    box-shadow var(--dur) var(--ease),
+    transform var(--dur) var(--ease);
+}
+
+/* `:not(.ag-node-planned)` matters: hover must never lift a roadmap stage onto
+   a real surface — a planned agent has nothing behind it to light up. */
+.ag-node:not(.ag-node-planned):hover {
+  border-color: var(--hairline-strong);
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.078), rgba(255, 255, 255, 0.026));
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.07),
+    0 6px 18px -10px rgba(0, 0, 0, 0.9);
+}
+
+/* A planned (roadmap) node stays deliberately flat and dashed: it is not a
+   surface with anything behind it, and it must never read as live. */
+.ag-node-planned {
+  border-style: dashed;
+  border-color: var(--hairline-strong);
+  background-image: none;
+  /* BELOW the ground, not above it: a roadmap stage is a hole in the map, not
+     a surface. Opaque for the same reason as `.ag-node` above. */
+  background-color: #0b0b11;
+  box-shadow: none;
+}
+
+.ag-node-focused {
+  border-color: rgba(255, 107, 53, 0.5);
+  background-image: linear-gradient(180deg, rgba(255, 107, 53, 0.1), rgba(255, 107, 53, 0.022));
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.07),
+    0 0 0 1px rgba(255, 107, 53, 0.16);
+}
+
+/*
+ * THE GLOW. `data-motion="pulse"` is set by `OrchestrationMap.tsx` on exactly
+ * one condition — a genuinely in-flight, non-stalled run — and nowhere else.
+ * A stalled run is rendered inert, so no bloom can ever imply activity that is
+ * not happening. Under `prefers-reduced-motion: reduce` the global block in
+ * globals.css collapses the animation to a single 0.01ms pass, which settles
+ * on the 100% keyframe — a STATIC bloom, so the "this one is live" signal
+ * survives the stillness (the badge word beside it carries the fact regardless).
+ */
+@keyframes ag-node-bloom {
+  0%,
+  100% {
+    box-shadow:
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.08),
+      0 0 0 1px rgba(255, 107, 53, 0.34),
+      0 0 26px -6px rgba(255, 107, 53, 0.72);
+  }
+  50% {
+    box-shadow:
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.08),
+      0 0 0 1px rgba(255, 107, 53, 0.5),
+      0 0 40px 1px rgba(255, 107, 53, 0.95);
+  }
+}
+
+.ag-node[data-motion="pulse"] {
+  border-color: rgba(255, 107, 53, 0.46);
+  background-image: linear-gradient(180deg, rgba(255, 107, 53, 0.12), rgba(255, 107, 53, 0.025));
+  animation: ag-node-bloom 2.6s var(--ease) infinite;
+}
+
+/*
+ * A LIVE node's badge takes the brand hue rather than success-green.
+ *
+ * The map's own legend defines coral as "live run — the only thing that moves",
+ * the node's dot is coral, its bloom is coral and the map header's running
+ * count is coral — but the badge beside all of that was green, so one node
+ * carried two different colours for one state. Rule D-8 is untouched: the WORD
+ * ("Running") still carries the meaning and colour is only reinforcement, so
+ * recolouring it costs no information and removes a contradiction. Scoped to a
+ * pulsing node, so no other `ok` badge anywhere is affected.
+ */
+.ag-node[data-motion="pulse"] [data-tone="ok"] {
+  color: #ff8a4c;
+  border-color: rgba(255, 107, 53, 0.5);
+  background-color: rgba(255, 107, 53, 0.08);
+}
+
+/* The stage column label — the map's smallest type, so it gets the most
+   tracking and the least weight competition with the node names below it. */
+.ag-stage-label {
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: #7d7d95;
+}
+
+/* ── 7. DATA ROWS ──────────────────────────────────────────────────────────
+   Rule 6 + rule 13. Hairline separators only — no zebra, no cell borders —
+   and padding tuned so a row lands inside the 28–48px band that every real
+   dashboard in the reference set uses. */
+.ag-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.ag-table thead th {
+  padding: 9px 14px;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #8b8ba3;
+  background: rgba(255, 255, 255, 0.018);
+  border-bottom: 1px solid var(--hairline-strong);
+  white-space: nowrap;
+}
+
+.ag-table tbody td {
+  padding: 7px 14px;
+  vertical-align: top;
+  border-bottom: 1px solid var(--hairline);
+}
+
+.ag-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.ag-table tbody tr {
+  transition: background-color var(--dur-fast) var(--ease);
+}
+
+.ag-table tbody tr:hover {
+  background-color: rgba(255, 255, 255, 0.032);
+}
+
+/* ── 8. DISCLOSURE ─────────────────────────────────────────────────────────
+   The density fix (SUI1-P1). A run's policy text is a paragraph; twenty of
+   them turned each row into a 359px slab. Clamped to ONE line with a real
+   `<details>` expander — the full text stays in the DOM, in `title`, and one
+   click away. Nothing is deleted, softened or reworded. */
+.ag-disc > summary {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  cursor: pointer;
+  list-style: none;
+  outline: none;
+  border-radius: 5px;
+}
+
+.ag-disc > summary::-webkit-details-marker {
+  display: none;
+}
+
+.ag-disc > summary::marker {
+  content: "";
+}
+
+.ag-disc > summary:focus-visible {
+  box-shadow: 0 0 0 2px rgba(255, 107, 53, 0.7);
+}
+
+.ag-disc-caret {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  font-size: 8px;
+  line-height: 1.5;
+  color: #6f6f88;
+  transition: transform var(--dur) var(--ease), color var(--dur) var(--ease);
+}
+
+.ag-disc[open] > summary .ag-disc-caret {
+  transform: rotate(90deg);
+}
+
+.ag-disc > summary:hover .ag-disc-caret {
+  color: #a0a0b8;
+}
+
+/* Clamped closed, whole when open — one copy of the text, never two. */
+.ag-disc-line {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.ag-disc[open] .ag-disc-line {
+  display: block;
+  overflow: visible;
+}
+
+.ag-disc-more {
+  padding-left: 14px;
+  margin-top: 3px;
+}
+
+/* ── 9. LOG ROWS ───────────────────────────────────────────────────────────
+   Raycast's metadata list: muted label column, value column, no borders — the
+   line-height does the separating. */
+.ag-log-row {
+  display: grid;
+  /* 58px, not 44: a 12-hour "07:25 AM" stamp wrapped onto a second line at
+     44px and stretched the panel by a third. */
+  grid-template-columns: 30px 58px minmax(0, 1fr);
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 0;
+  border-radius: 4px;
+}
+
+.ag-log-row + .ag-log-row {
+  border-top: 1px solid rgba(255, 255, 255, 0.045);
+}
+
+/* ── 10. QUEUE METER ───────────────────────────────────────────────────────
+   Thinner, inset, and with a recessed track so the fill reads as a measured
+   quantity rather than a decorative bar. */
+.ag-meter {
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+  box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+
+.ag-meter > * {
+  height: 100%;
+  border-radius: 999px;
+}
