@@ -173,8 +173,18 @@ class TestNoClaimWithoutTransmissionEvidence:
     def test_bookkeeping_only_run_cannot_claim_submitted(
         self, db_session, user_id
     ):
-        """THE pin. Tracker write, no published recipient, nothing sent ->
-        the agent may not say "Submitted" and may not report transmitted."""
+        """THE pin. No published recipient, nothing sent -> the agent may not
+        say "Submitted" and may not report transmitted.
+
+        U5d-2 CONTRACT CHANGE (deliberate, FORENSICS.md §4.2 recommendation
+        (a)): this seed's posting is an ``example.com`` URL, i.e. an employer's
+        own form — an ASSISTED channel by ORCHESTRATOR RULING U5-F3. The agent
+        no longer performs tracker bookkeeping AT ALL (that write, over a row
+        nothing had transmitted, was itself the 346-row falsehood), so the row
+        stays a draft and the honest terminal state is the persisted, actionable
+        manual step. Every invariant this test was written to pin is asserted
+        below unchanged, and the assertions are STRENGTHENED: the row must now
+        prove it was not silently promoted either."""
         job_id = _seed_job(db_session, user_id)
         resume_id = _seed_resume(db_session, user_id, source_job_id=job_id)
         app_id = _seed_application(db_session, user_id, job_id, resume_id)
@@ -182,16 +192,18 @@ class TestNoClaimWithoutTransmissionEvidence:
         result = _run_agent(user_id)
 
         assert result.transmitted is False
-        assert result.submissionState == "recorded_not_transmitted"
+        assert result.submissionState == "manual_step_required"
         assert result.applicationId == app_id
         # The word the production runs used, over a row that was never sent.
         assert "Submitted your application" not in result.message
         assert not re.search(r"\bsubmitted\b", result.message, re.I)
         assert "not transmitted" in result.message.lower()
-        # …and the persisted row agrees: no evidence, therefore no claim.
+        # …and the persisted row agrees: no evidence, therefore no claim, and
+        # (U5d-2) no promotion either.
         row = _application_row(db_session, app_id)
         assert row["transmittedAt"] is None
-        assert row["status"] == "submitted"  # tracker bookkeeping is real
+        assert row["status"] == "draft"
+        assert row["manualStepReason"] == "assisted_manual_submit"
 
     def test_transmitted_claim_is_read_back_from_the_row_not_control_flow(
         self, db_session, user_id
@@ -330,16 +342,24 @@ class TestProductionRegression:
         assert after["updatedAt"] == before["updatedAt"]
 
     def test_backend_reason_is_propagated_not_discarded(self, db_session, user_id):
-        """``outcome["submission"]["reason"]`` — the backend's own honest
-        verdict — must reach the run record instead of being thrown away."""
+        """The engine's own honest machine-readable verdict must reach the run
+        record instead of being thrown away (the production agent discarded it).
+
+        U5d-2: the verdict now comes from the U5 apply engine's OWN
+        ``apply_sweep.no_channel_reason`` — the same function, so the sweep and
+        the agent can never tell a user two different stories about one posting
+        — instead of from ``submit_application_for_job``'s W-SUB report. The
+        invariant is unchanged and is additionally strengthened: the verdict
+        must also be PERSISTED on the row, not merely returned."""
         job_id = _seed_job(db_session, user_id)
         resume_id = _seed_resume(db_session, user_id, source_job_id=job_id)
-        _seed_application(db_session, user_id, job_id, resume_id)
+        app_id = _seed_application(db_session, user_id, job_id, resume_id)
 
         result = _run_agent(user_id)
 
-        assert result.reason == "no_published_recipient"
+        assert result.reason == "assisted_manual_submit"
         assert result.nextStep
+        assert _application_row(db_session, app_id)["manualStepReason"] == result.reason
 
 
 # ---------------------------------------------------------------------------
@@ -349,6 +369,14 @@ class TestProductionRegression:
 
 class TestRunRecordTellsTheTruth:
     def test_counts_are_four_distinct_states(self, db_session, user_id):
+        """The four buckets stay DISTINCT and exactly one is filled.
+
+        U5d-2: this seed's ASSISTED posting now lands in ``manualStep`` rather
+        than ``recordedOnly``, because the agent stopped doing the bookkeeping
+        write that ``recordedOnly`` counted. The property under test — a run is
+        counted in exactly one bucket, never two, never zero-with-a-claim — is
+        unchanged and is asserted more strictly here (a sum, not four
+        hand-written zeroes)."""
         job_id = _seed_job(db_session, user_id)
         resume_id = _seed_resume(db_session, user_id, source_job_id=job_id)
         _seed_application(db_session, user_id, job_id, resume_id)
@@ -358,10 +386,11 @@ class TestRunRecordTellsTheTruth:
         assert set(result.counts) == {
             "transmitted", "assisted", "manualStep", "recordedOnly",
         }
-        assert result.counts["recordedOnly"] == 1
+        assert result.counts["manualStep"] == 1
         assert result.counts["transmitted"] == 0
         assert result.counts["assisted"] == 0
-        assert result.counts["manualStep"] == 0
+        assert result.counts["recordedOnly"] == 0
+        assert sum(result.counts.values()) == 1
 
     def test_manual_step_row_is_reported_as_manual_step(self, db_session, user_id):
         """A row the executor already marked as needing a human step is an
@@ -408,7 +437,11 @@ class TestRunRecordTellsTheTruth:
         card = next(c for c in cards if c["key"] == "submission")
         tip = card["tip"]
         assert not tip.startswith("Submits ")
-        assert "records" in tip.lower() or "tracker" in tip.lower()
+        # U5d-2: the card no longer describes tracker bookkeeping (the agent no
+        # longer does any). What it must still never do is promise a
+        # transmission — so the tip has to name what actually gates one.
+        assert "transmits NOTHING itself" in tip
+        assert "approv" in tip.lower()
         assert "transmit" in tip.lower()
 
 

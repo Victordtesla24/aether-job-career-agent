@@ -457,6 +457,21 @@ class ApprovalRepository:
                     str(transition["jobId"]),
                     str(transition["resumeId"]) if transition["resumeId"] else None,
                 )
+            if transition["toStatus"] == "submitted":
+                # U5d-2 WRITE-TIME TRUTH MARKER. This promotion is bookkeeping:
+                # an approval decision, not a transmission. Stamp that on the
+                # row in the same request, so a claimed-submitted row with no
+                # proof and no marker is a bug rather than an ambiguity the
+                # U5d census has to interpret after the fact. Guarded on
+                # ``transmittedAt IS NULL`` inside the helper, so a row that
+                # already carries real evidence is never mislabelled.
+                from app.services.submission_truth import (
+                    mark_recorded_not_transmitted,
+                )
+
+                mark_recorded_not_transmitted(
+                    user_id, str(transition["applicationId"])
+                )
         return approval
 
     @staticmethod
@@ -523,6 +538,29 @@ class ApprovalRepository:
         if not application_id:
             return None
         new_status = "submitted" if approval["status"] == "approved" else "rejected"
+        if new_status == "submitted":
+            from app.services.application_submission import is_site_apply_payload
+
+            if is_site_apply_payload(ApprovalRepository._payload_dict(approval)):
+                # U5d-2. For a SITE-APPLY card, approving is AUTHORISATION to
+                # attempt a submission — it is not evidence that one happened.
+                # Promoting the tracker here would mint exactly the state this
+                # workstream exists to remove (346 production rows reading
+                # 'submitted' with no transmission proof), and it would do it
+                # BEFORE the browser had even opened the page — so an attempt
+                # that then hits a CAPTCHA would leave the user's board
+                # asserting a submission that never occurred.
+                #
+                # The promotion for this card shape belongs to
+                # ``apply_executor._record_site_transmission``, which writes
+                # ``status='submitted'`` and ``transmittedAt`` in the SAME
+                # statement: proof and claim, or neither.
+                #
+                # Narrow BY CONSTRUCTION: no pre-U5d-2 approval carries this
+                # payload shape (0 of 556 in production), so every existing
+                # card — including every W-SUB email card — is byte-for-byte
+                # unchanged.
+                return None
         cur.execute(
             '''
             UPDATE "Application"
