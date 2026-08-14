@@ -25,6 +25,8 @@ import io
 import re
 import zipfile
 
+import pytest
+
 from app.repositories.career_profile import CareerProfileRepository
 from app.services import career_data
 from app.services.career_data import (
@@ -254,6 +256,46 @@ def test_single_known_csv_upload_ingests(client, auth_headers, test_user_id):
     body = resp.json()
     assert body["ingestedCounts"]["skills"] == 3
     assert "Program Management" in body["source"]["summary"]
+
+
+# ---------------------------------------------------------------------------
+# (6) A zip whose declared/compressed size is small but whose contents
+#     DECOMPRESS to something huge (a "zip bomb") is rejected 422, never
+#     fully materialized in memory. DEFLATE lets a small compressed payload
+#     named Profile.csv explode to gigabytes on read — a memory-exhaustion
+#     DoS an authenticated user could trigger through this exact endpoint.
+# ---------------------------------------------------------------------------
+
+
+def _zip_bomb_bytes() -> bytes:
+    """A LinkedIn-shaped zip whose Profile.csv decompresses to >10MB while
+    the archive itself stays far under the 10MB raw-upload cap — the same
+    kind of payload a hostile "export" could smuggle past that gate to
+    exhaust server memory on decompression."""
+    huge_payload = b"A" * (12 * 1024 * 1024)  # 12MB of highly-compressible data
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("Profile.csv", huge_payload)
+    return buf.getvalue()
+
+
+def test_zip_bomb_profile_csv_rejected_422_not_persisted(client, auth_headers, test_user_id):
+    bomb = _zip_bomb_bytes()
+    # The whole point of a zip bomb: tiny on the wire, huge decompressed.
+    # Confirm this precondition so the test actually exercises the
+    # decompressed-size guard, not the pre-existing raw-upload-size gate
+    # (which requires the COMPRESSED bytes to exceed 10MB).
+    assert len(bomb) < 1 * 1024 * 1024, f"bomb compressed size unexpectedly large: {len(bomb)}"
+
+    resp = _upload(client, auth_headers, "Complete_LinkedInDataExport.zip", bomb)
+    assert resp.status_code == 422, f"status={resp.status_code} body[:300]={resp.text[:300]!r}"
+    assert CareerProfileRepository().get(test_user_id, "linkedin") is None
+
+
+def test_parse_linkedin_export_zip_raises_on_decompression_bomb():
+    bomb = _zip_bomb_bytes()
+    with pytest.raises(zipfile.BadZipFile):
+        parse_linkedin_export_zip(bomb)
 
 
 # ---------------------------------------------------------------------------
