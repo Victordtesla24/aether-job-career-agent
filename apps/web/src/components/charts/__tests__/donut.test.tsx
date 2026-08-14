@@ -84,6 +84,23 @@ describe("legend", () => {
     });
   });
 
+  it("never gives a measured source the neutral swatch reserved for 'not measured'", () => {
+    const root = renderChart(
+      <Donut title="Source mix" windowLabel="1,000 jobs found" segments={SEGMENTS} />,
+    );
+    const lever = root.querySelector(
+      '[data-segment="Lever"] [data-testid="legend-swatch"]',
+    ) as HTMLElement;
+    const other = root.querySelector(
+      '[data-segment="Other"] [data-testid="legend-swatch"]',
+    ) as HTMLElement;
+    // Lever is grouped into Other, but it is still a MEASURED source: it wears
+    // Other's colour. state-neutral means "no data" (Rule D-1) and must never
+    // land on a source that returned 12 jobs.
+    expect(lever.style.backgroundColor).not.toBe("rgb(139, 139, 163)");
+    expect(lever.style.backgroundColor).toBe(other.style.backgroundColor);
+  });
+
   it("shows the absolute count next to every percentage", () => {
     const root = renderChart(
       <Donut title="Source mix" windowLabel="1,000 jobs found" segments={SEGMENTS} />,

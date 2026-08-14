@@ -114,7 +114,12 @@ export function Donut({
           <ul className="flex flex-col gap-1">
             {segments.map((segment) => {
               const grouped = small.some((s) => s.label === segment.label);
-              const colour = arcs.find((a) => a.label === segment.label)?.colour;
+              // A grouped source is still MEASURED, so it wears the colour of
+              // the arc it was folded into. state-neutral means "no data"
+              // (Rule D-1) and may never land on a source that returned jobs.
+              const colour =
+                arcs.find((a) => a.label === segment.label)?.colour ??
+                (grouped ? arcs[arcs.length - 1]?.colour : undefined);
               const unmeasured = typeof segment.value !== "number";
               const zero = segment.value === 0;
               return (
@@ -136,8 +141,8 @@ export function Donut({
                     aria-hidden="true"
                     className="h-2 w-2 shrink-0 rounded-full"
                     style={{
-                      backgroundColor: unmeasured || zero ? "transparent" : (colour ?? STATE.neutral),
-                      border: unmeasured || zero ? `1px solid ${STATE.neutral}` : undefined,
+                      backgroundColor: unmeasured || zero || !colour ? "transparent" : colour,
+                      border: unmeasured || zero || !colour ? `1px solid ${STATE.neutral}` : undefined,
                     }}
                   />
                   <span className="flex-1 truncate text-aether-muted">{segment.label}</span>

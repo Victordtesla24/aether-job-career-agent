@@ -112,4 +112,4 @@ series.
 - `motion.ts` — the reveal phases and reduced-motion contract
 - `primitives.tsx` — gridlines, axis labels, zero tick, unmeasured mark, threshold line, empty plot
 - `tokens.ts` — palette, heat ramp, state colours, hairlines, durations
-- `__tests__/` — 117 assertions, no pixel snapshots: every test queries DOM/SVG structure
+- `__tests__/` — 119 assertions, no pixel snapshots: every test queries DOM/SVG structure

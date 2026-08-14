@@ -121,7 +121,7 @@ export function Funnel({
                 className="flex items-center gap-3"
               >
                 <span
-                  className="w-32 shrink-0 truncate text-[13px] leading-[1.5] text-aether-muted sm:w-40"
+                  className="w-24 shrink-0 truncate text-[13px] leading-[1.5] text-aether-muted sm:w-40"
                   title={step.label}
                 >
                   {step.label}
@@ -171,15 +171,17 @@ export function Funnel({
                 <span
                   data-testid="funnel-value"
                   data-tone={kind === "value" ? "series" : "neutral"}
-                  className="w-20 shrink-0 text-right font-mono text-[13px] tabular-nums"
+                  className="w-16 shrink-0 text-right font-mono text-[13px] tabular-nums sm:w-20"
                   style={{ color: kind === "value" ? undefined : STATE.neutral }}
                 >
                   {numeral}
                 </span>
 
+                {/* The conversion % is a truth column, not a desktop luxury: it
+                    narrows at 390px, it never disappears. */}
                 <span
                   data-testid="funnel-conversion"
-                  className="hidden w-28 shrink-0 text-right text-[11px] text-aether-muted-dim sm:block"
+                  className="w-12 shrink-0 text-right text-[11px] text-aether-muted-dim sm:w-28"
                   title={index === 0 ? undefined : "share of the step above"}
                 >
                   {conversion}

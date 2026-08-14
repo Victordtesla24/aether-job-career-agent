@@ -38,6 +38,12 @@ describe("readability", () => {
     expect(rows[1]?.textContent).toContain("3.4%");
   });
 
+  it("keeps the conversion column on screen at 390px — a truth column is not a desktop luxury", () => {
+    const root = renderChart(<Funnel title="Funnel" windowLabel="all time" steps={STEPS} />);
+    const conversion = root.querySelectorAll('[data-testid="funnel-conversion"]')[1] as HTMLElement;
+    expect(conversion.className).not.toMatch(/(^|\s)hidden(\s|$)/);
+  });
+
   it("puts the numeral outside the fill, in its own tabular-nums column", () => {
     const root = renderChart(<Funnel title="Funnel" windowLabel="all time" steps={STEPS} />);
     const numeral = root.querySelectorAll('[data-testid="funnel-value"]')[1];
