@@ -17,6 +17,8 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { ApiError } from "../../../../../lib/api/client";
+
 const useParamsMock = vi.fn();
 vi.mock("next/navigation", () => ({
   useParams: () => useParamsMock(),
@@ -220,9 +222,13 @@ describe("entitlement controls", () => {
   });
 });
 
+const WITH_SUB = {
+  subscription: { planId: "pro", status: "active", cancelAtPeriodEnd: false },
+};
+
 describe("Stripe-linked actions route through the billing service", () => {
   it("cancels at period end", async () => {
-    await renderPage(detail());
+    await renderPage(detail(WITH_SUB));
     cancelUserSubscriptionMock.mockResolvedValue({
       userId: USER_ID,
       atPeriodEnd: true,
@@ -245,17 +251,50 @@ describe("Stripe-linked actions route through the billing service", () => {
     await waitFor(() => expect(refundUserSubscriptionMock).toHaveBeenCalledWith(USER_ID));
   });
 
-  it("surfaces the backend's honest refusal instead of swallowing it", async () => {
-    await renderPage(detail());
+  it("surfaces a 409 as the backend's honest refusal, not a generic failure", async () => {
+    // Race case: the subscription lapses between page load and the click. The
+    // 409 must read as "Not applicable" with the server's own explanation.
+    await renderPage(detail(WITH_SUB));
     cancelUserSubscriptionMock.mockRejectedValue(
-      new Error("This user has no Stripe subscription to cancel"),
+      new ApiError("This user has no Stripe subscription to cancel", 409),
     );
     fireEvent.click(screen.getByTestId("admin-cancel-at-period-end"));
-    await waitFor(() =>
-      expect(screen.getByTestId("admin-user-error").textContent).toContain(
-        "no Stripe subscription",
-      ),
+    await waitFor(() => {
+      const text = screen.getByTestId("admin-user-error").textContent ?? "";
+      expect(text).toContain("Not applicable");
+      expect(text).toContain("no Stripe subscription");
+    });
+  });
+});
+
+describe("subscription actions are state-aware (owner-reported 409, 2026-08-14)", () => {
+  // The owner clicked Cancel on their OWN exempt admin account and got a raw
+  // 409 — the buttons must never be offered where the backend can only refuse.
+  it("admin accounts show the exemption note and no cancel/refund buttons", async () => {
+    await renderPage(
+      detail({
+        user: { ...detail().user, isAdmin: true },
+      }),
     );
+    expect(screen.getByTestId("admin-sub-exempt")).toBeTruthy();
+    expect(screen.queryByTestId("admin-cancel-at-period-end")).toBeNull();
+    expect(screen.queryByTestId("admin-cancel-now")).toBeNull();
+    expect(screen.queryByTestId("admin-refund")).toBeNull();
+  });
+
+  it("accounts without a Stripe subscription get the entitlement hint, no cancel, refund kept", async () => {
+    await renderPage(detail());
+    expect(screen.getByTestId("admin-sub-none")).toBeTruthy();
+    expect(screen.queryByTestId("admin-cancel-at-period-end")).toBeNull();
+    expect(screen.queryByTestId("admin-cancel-now")).toBeNull();
+    expect(screen.getByTestId("admin-refund")).toBeTruthy();
+  });
+
+  it("accounts with a live subscription keep both cancel actions", async () => {
+    await renderPage(detail(WITH_SUB));
+    expect(screen.getByTestId("admin-cancel-at-period-end")).toBeTruthy();
+    expect(screen.getByTestId("admin-cancel-now")).toBeTruthy();
+    expect(screen.getByTestId("admin-refund")).toBeTruthy();
   });
 });
 

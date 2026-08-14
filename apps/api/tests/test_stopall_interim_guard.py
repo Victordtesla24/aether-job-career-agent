@@ -132,3 +132,48 @@ class TestDispatchRefusal:
         sentinel = {"ok": True}
         monkeypatch.setattr(agents, "_record_run", lambda *_a, **_k: sentinel)
         assert agents._dispatch("u1", "tailor", {}) is sentinel
+
+
+class TestAsyncEnqueueSeamRefusal:
+    """The async seam (GAP-P7-ASYNC-001) bypasses ``_dispatch`` — the worker
+    body calls ``_execute_reserved_run`` directly — so the guard must ALSO sit
+    at ``_enqueue_single_agent``. Proven live 21:56Z: with the _dispatch-only
+    guard deployed and every AgentConfig row disabled, POST /agents/tailor/run
+    (async, AETHER_ASYNC_GENERATION=true in prod) still enqueued, executed
+    221s on the worker and billed $0.048.
+    """
+
+    def test_paused_agent_is_refused_before_paywall_reserve_or_queue(
+        self, monkeypatch: Any
+    ) -> None:
+        monkeypatch.setattr(agents, "_agent_paused_by_user", lambda *_: True)
+
+        def _must_not_run(*_a: Any, **_k: Any) -> None:
+            raise AssertionError("async seam side effect reached despite pause")
+
+        for seam in (
+            "_require_active_subscription",
+            "_with_quality_policy",
+            "_billing_audit",
+        ):
+            monkeypatch.setattr(agents, seam, _must_not_run)
+
+        with pytest.raises(HTTPException) as exc:
+            agents._enqueue_single_agent("u1", "tailor", {"job_id": "j1"})
+        assert exc.value.status_code == 409
+        assert str(exc.value.detail).startswith("agent_paused")
+
+    def test_enabled_agent_passes_the_guard_into_the_seam(
+        self, monkeypatch: Any
+    ) -> None:
+        monkeypatch.setattr(agents, "_agent_paused_by_user", lambda *_: False)
+
+        class _ReachedPaywall(Exception):
+            pass
+
+        def _paywall_probe(*_a: Any, **_k: Any) -> None:
+            raise _ReachedPaywall
+
+        monkeypatch.setattr(agents, "_require_active_subscription", _paywall_probe)
+        with pytest.raises(_ReachedPaywall):
+            agents._enqueue_single_agent("u1", "tailor", {"job_id": "j1"})
