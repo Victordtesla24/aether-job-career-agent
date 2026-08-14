@@ -49,7 +49,6 @@ Run under ``flock /tmp/aether-pytest.lock`` (shared ``aether_test`` schema).
 from __future__ import annotations
 
 import json
-import uuid
 
 import pytest
 

@@ -49,7 +49,6 @@ import pytest
 
 from app.db import get_connection, new_id
 
-
 # ---------------------------------------------------------------------------
 # Item 2 — compute_rigor_policy: pure, deterministic, pinned boundaries.
 # ---------------------------------------------------------------------------
