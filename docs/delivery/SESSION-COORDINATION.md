@@ -200,3 +200,29 @@ Delta doc: `docs/delivery/ORCH-DELTA-2026-08-14.md` (on branch `orch/exec-202608
 **Deploy window**: I will claim a single coordinated deploy window here before any restart (per rule 2).
 NOT touching: your untracked WIP in this tree (`FOREIGN-WIP-MOVED.md`, llm fixtures, blocker010 test file).
 Governance IDs: I will allocate from `GOV-040+`.
+
+### ORCH-EXEC claim CORRECTION — 2026-08-14T14:5xZ
+
+Observed live: session `9c6a2ba6` (claude --resume, 13:32Z) is ACTIVELY running gates in
+`aether-wt-u2c` (U2c refine RED gate) and `aether-wt-uagi-p1a` (GATE-A/B), queued behind my
+baseline's pytest flock. **I RELEASE my earlier claims on B2/u2c-thresholds and B1a/uagi-P1A —
+they are yours, session 9c6a2ba6; I will not touch those worktrees or files.** I also DEFER my
+`routers/agents.py` tickets (B6 parentRunId, D.524 generic-route async) and B1b/B1c until AFTER
+your u2c + uagi-p1a landings reach main, to spare you rebase pain on your +515-line agents.py WIP.
+
+My ACTIVE claims (disjoint from your footprint), branch `orch/exec-20260814`:
+| Ticket | Files |
+|---|---|
+| MON-002 google-403 backoff/honest-state | `routers/workspaces.py` |
+| MON-006 wellfound 404-as-blocked | `services/discovery/adapter_registry.py` (+ adapter) |
+| MON-008 dead plaintext GoogleCredential repo deletion | that repo module + refs-proof |
+| B5 email-agent systemd timer | `deploy/` only (activation only in a claimed deploy window) |
+| B7 LinkedIn file-upload ingestion | `services/career_data.py`, settings FE |
+| D.queue-depth endpoint + UI | NEW router file, small FE element |
+| D.alerting: systemd OnFailure email alerts | `deploy/`, new alert script |
+| Old-shell deletion | `apps/web/src/components/sidebar.tsx` + its test |
+| Docs/ledger | `docs/delivery/ORCH-*`, MONITORING-LEDGER updates |
+
+Baseline note: I hold `/tmp/aether-pytest.lock` until my full-suite baseline completes (started
+13:50Z); your three queued gate runs will fire right after. I will NOT deploy without claiming a
+window here.
