@@ -117,10 +117,18 @@ done
 # Mirror to durable object storage (bucket/path from this VM's IMDSv2
 # user-data at runtime — never hardcoded; AWS CLI auto-discovers credentials
 # from the same metadata service).
+#
+# MF-5 (S-FIX slice C, round 2): the IMDS user-data document carries
+# `abacus_api_key` and a hosted-DB `database_url`/`role_password` — the same
+# argv-visibility hazard MF-2 fixed for the Postgres DSN, just with a larger
+# payload. Feed it to python3 via an exported env var (never argv), same
+# technique as AETHER_BACKUP_DSN above, and unset it immediately after.
 token="$(curl -s -X PUT "http://169.254.169.254/latest/api/token" -H "X-abacus-vm-metadata-token-ttl-seconds: 300")"
-user_data="$(curl -s -H "X-abacus-vm-metadata-token: $token" http://169.254.169.254/latest/user-data)"
-bucket="$(python3 -c "import sys,json; print(json.loads(sys.argv[1])['storage']['bucket_name'])" "$user_data")"
-base_path="$(python3 -c "import sys,json; print(json.loads(sys.argv[1])['storage']['path'])" "$user_data")"
+AETHER_BACKUP_UD_JSON="$(curl -s -H "X-abacus-vm-metadata-token: $token" http://169.254.169.254/latest/user-data)"
+export AETHER_BACKUP_UD_JSON
+bucket="$(python3 -c "import os,json; print(json.loads(os.environ['AETHER_BACKUP_UD_JSON'])['storage']['bucket_name'])")"
+base_path="$(python3 -c "import os,json; print(json.loads(os.environ['AETHER_BACKUP_UD_JSON'])['storage']['path'])")"
+unset AETHER_BACKUP_UD_JSON token
 
 if [[ -z "$bucket" || -z "$base_path" ]]; then
   echo "$LOG_PREFIX WARNING: could not resolve storage bucket/path from IMDS; local dump kept, S3 mirror skipped." >&2
