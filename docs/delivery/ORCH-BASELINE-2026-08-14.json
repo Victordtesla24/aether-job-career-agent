@@ -1,0 +1,37 @@
+{
+  "produced": "2026-08-14T16:20Z",
+  "producedBy": "session ORCH-EXEC (orchestrator-execution-prompt.md §1.2), branch orch/exec-20260814",
+  "treeCommit": "dda630f (orch/exec-20260814; content == origin/main@d051991 + ORCH docs)",
+  "note": "First run (13:50Z) was killed at 82% by a harness restart; this is the complete 15:0x-16:0xZ run. Suites executed serialized under nice+flock on the 2-CPU production VM per iterative-delivery mandate.",
+  "backend_pytest": {
+    "command": "scripts/run-tests.sh -q -p no:cacheprovider  (full suite, schema=aether_test)",
+    "result": { "failed": 9, "passed": 3228, "skipped": 1, "warnings": 141, "duration_s": 3507.93 },
+    "failures": [
+      "tests/test_gap_p4_002_guard_degrade.py::TestGuardRejectionIsAnHonestCompletedDegrade::test_rejection_still_propagates_so_callers_keep_their_shape",
+      "tests/test_llm_resilience.py::TestRouter503Mapping::test_tailor_returns_503_not_500_when_llm_unavailable",
+      "tests/test_llm_resilience.py::TestRouter503Mapping::test_failed_run_is_audited",
+      "tests/test_ml_nth05_normalizer_pin.py::test_snake_case_cover_letter_unavailable_surfaces_as_camelcase_via_runs_list",
+      "tests/test_ml_w17_application_race_unique_index.py::TestEnsureIndexCreation::test_creates_index_when_no_violations_exist",
+      "tests/test_ml_w17_application_race_unique_index.py::TestEnsureIndexCreation::test_submit_endpoint_creates_index_as_a_side_effect",
+      "tests/test_ml_w17_application_race_unique_index.py::TestEnsureIndexSkipsOnExistingViolations::test_skips_creation_and_logs_warning_when_violations_already_exist",
+      "tests/test_ml_w17_application_race_unique_index.py::TestEnsureIndexSkipsOnExistingViolations::test_promotion_endpoints_stay_healthy_when_violations_already_exist",
+      "tests/test_mv_clstudio_j_residuals.py::test_llm_failure_surfaces_honest_message_and_refunds"
+    ],
+    "failures_adjudication": "PENDING rerun-once in isolation (shared aether_test schema; concurrent session 9c6a2ba6 gate runs preceded this suite — known contention class per aether-shared-test-db-flakiness). Result will be recorded below when the isolated rerun completes.",
+    "rerun_once": null
+  },
+  "web_vitest": {
+    "command": "pnpm vitest run --maxWorkers=2",
+    "result": { "files_passed": 183, "files_failed": 0, "tests_passed": 1465, "tests_failed": 0, "duration_s": 260.62 }
+  },
+  "web_build": {
+    "command": "env -u AETHER_API_PROXY -u NEXT_PUBLIC_API_BASE_URL pnpm build && scripts/verify-web-build.sh",
+    "result": "PASS",
+    "build_id": "X3xj3t5OjxkvfBnf5ujIl",
+    "gate": "[web-build-gate] PASS — build is safe to serve; restart authorised."
+  },
+  "e2e": {
+    "status": "DEFERRED to the final gate (scripts/run-e2e-server.sh) per §5.3 — full suite at gates; e2e budgeted once, at the close, to spare the 2-CPU host during ticket iteration."
+  },
+  "oracle_rule": "Every change in this run is measured against these numbers. A change that turns any 'passed' red is a regression (revert-beats-forward-patch). The 9 recorded failures are the only tolerated reds pending adjudication; they may not grow."
+}
