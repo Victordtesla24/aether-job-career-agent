@@ -11,6 +11,7 @@ import { cleanup } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { DivergingBar } from "../DivergingBar";
+import { ZERO_TICK_WIDTH } from "../geometry";
 import { DIVERGING, HAIRLINE } from "../tokens";
 import { clearMatchMedia, marks, renderChart, stubMatchMedia } from "./testUtils";
 
@@ -80,6 +81,68 @@ describe("C-1 — a row that is genuinely level", () => {
       <DivergingBar title="Market vs you" windowLabel="last 30 days" rows={ROWS} />,
     );
     expect(root.querySelector('[data-row="Time to interview"]')?.textContent).toContain("0 days");
+  });
+});
+
+describe("C-1 — a wide dynamic range cannot invert zero and a real value", () => {
+  /**
+   * The fixture the original tests never had: a dominant row four orders of
+   * magnitude above a real one. Proportional-only maths gives the value:1 row
+   * (1 / 100_000) * 50 = 0.0005% of the track, and the 2dp rounding on the
+   * style then writes a literal "0%" — the row disappears entirely while the
+   * genuinely level (value:0) row keeps its mandated 1px tick. A measured
+   * value must never be LESS visible than a measured nothing.
+   */
+  const WIDE_RANGE = [
+    { label: "Time to interview", value: 0, display: "0 days" },
+    { label: "Response rate", value: 1, display: "+1 pt" },
+    { label: "Median salary", value: 100000, display: "+A$100,000" },
+  ];
+
+  /** jsdom performs no layout, so the bar's percentage is converted at the
+   *  NARROWEST track the kit is reviewed at (390px viewport ⇒ ~100px track,
+   *  S-UI doctrine D-ι). The comparison must hold even there. */
+  const NARROWEST_TRACK_PX = 100;
+
+  it("never rounds a real value's bar down to a literal 0% width", () => {
+    const root = renderChart(
+      <DivergingBar title="Market vs you" windowLabel="last 30 days" rows={WIDE_RANGE} />,
+    );
+    const small = root.querySelector(
+      '[data-row="Response rate"] [data-testid="bar"]',
+    ) as HTMLElement;
+    expect(small).not.toBeNull();
+    expect(small.style.width).not.toBe("0%");
+    expect(Number.parseFloat(small.style.width)).toBeGreaterThan(0);
+  });
+
+  it("renders the value:1 row STRICTLY WIDER than the level row's hairline tick", () => {
+    const root = renderChart(
+      <DivergingBar title="Market vs you" windowLabel="last 30 days" rows={WIDE_RANGE} />,
+    );
+    const tick = marks(root, "zero")[0] as HTMLElement;
+    const small = root.querySelector(
+      '[data-row="Response rate"] [data-testid="bar"]',
+    ) as HTMLElement;
+
+    expect(tick.style.width).toBe(`${ZERO_TICK_WIDTH}px`);
+    const smallPx = (Number.parseFloat(small.style.width) / 100) * NARROWEST_TRACK_PX;
+    expect(smallPx).toBeGreaterThan(ZERO_TICK_WIDTH);
+  });
+
+  it("floors for legibility without rescaling — 100,000 still dwarfs 1", () => {
+    const root = renderChart(
+      <DivergingBar title="Market vs you" windowLabel="last 30 days" rows={WIDE_RANGE} />,
+    );
+    const small = root.querySelector(
+      '[data-row="Response rate"] [data-testid="bar"]',
+    ) as HTMLElement;
+    const dominant = root.querySelector(
+      '[data-row="Median salary"] [data-testid="bar"]',
+    ) as HTMLElement;
+    expect(Number.parseFloat(dominant.style.width)).toBeGreaterThan(
+      Number.parseFloat(small.style.width) * 20,
+    );
   });
 });
 

@@ -14,7 +14,7 @@ import { cleanup } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ChartFrame } from "../ChartFrame";
-import { ZERO_TICK_WIDTH, barLength, markKind } from "../geometry";
+import { MIN_VALUE_LENGTH, ZERO_TICK_WIDTH, barLength, barPercent, markKind } from "../geometry";
 import { ChartLawError, assertChartLaws } from "../laws";
 import { renderChart, silenceConsoleError, stubMatchMedia } from "./testUtils";
 
@@ -63,6 +63,26 @@ describe("C-1 — zero is not a colour", () => {
     const none = barLength({ value: null, max: 100, extent: 400, mode: "linear" });
     expect(none.kind).toBe("unmeasured");
     expect(none.length).toBe(0);
+  });
+
+  it("holds the floor at a 1:100,000 dynamic range, in every mode", () => {
+    for (const mode of ["linear", "log", "share-of-previous"] as const) {
+      const tiny = barLength({ value: 1, max: 100000, extent: 162, mode, previous: 100000 });
+      expect(tiny.kind).toBe("value");
+      expect(tiny.length).toBeGreaterThanOrEqual(MIN_VALUE_LENGTH);
+      expect(tiny.length).toBeGreaterThan(ZERO_TICK_WIDTH);
+    }
+  });
+
+  it("does not let percentage ROUNDING undo the floor a length already earned", () => {
+    // 0.0005% is what a 1-against-100,000 diverging row computes to; rounding
+    // it to 2dp writes a literal "0%" unless the floor is applied first.
+    expect(barPercent(0.0005)).not.toBe("0%");
+    expect(Number.parseFloat(barPercent(0.0005))).toBeGreaterThanOrEqual(MIN_VALUE_LENGTH);
+    // A genuinely absent length (unmeasured) is still allowed to be 0%.
+    expect(barPercent(0)).toBe("0%");
+    // A comfortable length is passed through, rounded only for style stability.
+    expect(barPercent(49.99999)).toBe("50%");
   });
 });
 

@@ -26,9 +26,11 @@ export {
 } from "./laws";
 export {
   DEFAULT_PLOT_WIDTH,
+  MIN_VALUE_LENGTH,
   NOT_MEASURED,
   ZERO_TICK_WIDTH,
   barLength,
+  barPercent,
   formatNumber,
   formatPercent,
   heatStep,

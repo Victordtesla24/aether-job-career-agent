@@ -17,7 +17,14 @@
  * it is legible at every magnitude, and the conversion column carries the
  * percentage that the bar length alone could never prove.
  */
-import { ZERO_TICK_WIDTH, barLength, formatNumber, formatPercent, NOT_MEASURED } from "./geometry";
+import {
+  ZERO_TICK_WIDTH,
+  barLength,
+  barPercent,
+  formatNumber,
+  formatPercent,
+  NOT_MEASURED,
+} from "./geometry";
 import { ChartFrame } from "./ChartFrame";
 import { EmptyPlot } from "./primitives";
 import { useChartMotion } from "./motion";
@@ -138,7 +145,7 @@ export function Funnel({
                       data-mark="value"
                       className="absolute inset-y-0 left-0 rounded-lg"
                       style={{
-                        width: `${Math.round(length * 100) / 100}%`,
+                        width: barPercent(length),
                         background: `linear-gradient(90deg, ${CHART_PALETTE[0]}B3, #7C3AEDB3)`,
                         transformOrigin: "left",
                         transform: motion.atOrigin ? "scaleX(0)" : undefined,

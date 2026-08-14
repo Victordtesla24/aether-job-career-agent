@@ -15,7 +15,7 @@
  * axis in any series colour.
  */
 import { ChartFrame } from "./ChartFrame";
-import { formatNumber, markKind, niceTicks } from "./geometry";
+import { barLength, formatNumber, niceTicks } from "./geometry";
 import { useChartMotion } from "./motion";
 import { AxisLabel, EmptyPlot, Gridlines, UnmeasuredMark, ZeroTickRect } from "./primitives";
 import { CHART_PALETTE } from "./tokens";
@@ -102,18 +102,26 @@ export function Histogram({
 
               {buckets.map((bucket, index) => {
                 const x = plot.x + index * band + (band - barWidth) / 2;
-                const kind = markKind(bucket.count);
+                // Heights come from `barLength` for the same reason the funnel's
+                // widths do: it is the one place that guarantees a real value is
+                // drawn longer than a zero's tick, whatever the dynamic range.
+                const { kind, length } = barLength({
+                  value: bucket.count,
+                  max,
+                  extent: plot.height,
+                  mode: "linear",
+                });
                 const centre = x + barWidth / 2;
 
                 return (
-                  <g key={`${bucket.range}-${index}`}>
+                  <g key={`${bucket.range}-${index}`} data-bucket={bucket.range}>
                     {kind === "value" ? (
                       <rect
                         data-mark="value"
                         x={x}
-                        y={baselineY - ((bucket.count as number) / (max || 1)) * plot.height}
+                        y={baselineY - length}
                         width={barWidth}
-                        height={((bucket.count as number) / (max || 1)) * plot.height}
+                        height={length}
                         rx={2}
                         fill={BAR_COLOUR}
                         fillOpacity={0.6}

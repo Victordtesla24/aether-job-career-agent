@@ -14,7 +14,7 @@
  * a date is a number of unknown age.
  */
 import { ChartFrame } from "./ChartFrame";
-import { NOT_MEASURED, ZERO_TICK_WIDTH, formatNumber, markKind } from "./geometry";
+import { NOT_MEASURED, ZERO_TICK_WIDTH, barLength, barPercent, formatNumber } from "./geometry";
 import { useChartMotion } from "./motion";
 import { EmptyPlot } from "./primitives";
 import { DIVERGING, HAIRLINE, HAIRLINE_STRONG, STATE, TRACK } from "./tokens";
@@ -102,8 +102,16 @@ export function DivergingBar({
           />
           {rows.map((row, index) => {
             const value = rowValue(row);
-            const kind = markKind(value);
-            const width = kind === "value" ? (Math.abs(value as number) / maxAbs) * 50 : 0;
+            // Half the track per side, so `extent` is 50 (percent). The length
+            // comes from `barLength` — the kit's one floor — so a row that is
+            // four orders of magnitude below the widest one is still drawn
+            // longer than the 1px tick that means "level with the market".
+            const { kind, length } = barLength({
+              value,
+              max: maxAbs,
+              extent: 50,
+              mode: "linear",
+            });
             const direction = kind === "value" && (value as number) < 0 ? "negative" : "positive";
             const reason = row.reason;
 
@@ -128,7 +136,7 @@ export function DivergingBar({
                       data-direction={direction}
                       className="absolute inset-y-1 rounded-sm"
                       style={{
-                        width: `${Math.round(width * 100) / 100}%`,
+                        width: barPercent(length),
                         left: direction === "positive" ? "50%" : undefined,
                         right: direction === "negative" ? "50%" : undefined,
                         backgroundColor:

@@ -11,6 +11,7 @@ import { cleanup } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { Histogram } from "../Histogram";
+import { ZERO_TICK_WIDTH } from "../geometry";
 import { CHART_PALETTE, HAIRLINE } from "../tokens";
 import {
   clearMatchMedia,
@@ -113,6 +114,51 @@ describe("C-1 — an empty bucket", () => {
     expect(row?.textContent).toContain("0-19");
     expect(row?.textContent).toContain("0");
     expect(row?.textContent).not.toContain("not measured");
+  });
+});
+
+describe("C-1 — a wide dynamic range cannot invert zero and a real value", () => {
+  /**
+   * The fixture the original five tests never had: a dominant bucket four
+   * orders of magnitude above a real one. Proportional-only maths gives the
+   * count:1 bucket 162 / 100_000 ≈ 0.0016px of height while the count:0 bucket
+   * keeps its mandated 1px tick — a measured value rendered ~600x THINNER than
+   * a measured nothing, which is precisely the inversion C-1 exists to forbid.
+   */
+  const WIDE_RANGE = [
+    { range: "0-19", count: 0 },
+    { range: "20-39", count: 1 },
+    { range: "40-100", count: 100000 },
+  ];
+
+  it("draws a bucket of 1 STRICTLY TALLER than the zero bucket's hairline tick", () => {
+    const root = renderChart(
+      <Histogram title="ATS scores" windowLabel="100,001 scored résumés" buckets={WIDE_RANGE} />,
+    );
+    const zero = marks(root, "zero")[0];
+    const zeroHeight = Number(zero?.getAttribute("height"));
+    const small = root.querySelector('[data-bucket="20-39"] [data-mark="value"]');
+    const smallHeight = Number(small?.getAttribute("height"));
+
+    expect(zeroHeight).toBe(ZERO_TICK_WIDTH);
+    expect(smallHeight).toBeGreaterThan(zeroHeight);
+  });
+
+  it("keeps the tiny bar on the baseline while the dominant bar still scales to the plot", () => {
+    const root = renderChart(
+      <Histogram title="ATS scores" windowLabel="100,001 scored résumés" buckets={WIDE_RANGE} />,
+    );
+    const small = root.querySelector('[data-bucket="20-39"] [data-mark="value"]');
+    const dominant = root.querySelector('[data-bucket="40-100"] [data-mark="value"]');
+    const bottom = (el: Element | null) =>
+      Number(el?.getAttribute("y")) + Number(el?.getAttribute("height"));
+
+    // Same baseline: the floor lifts the bar's TOP, it never floats the bar.
+    expect(bottom(small)).toBeCloseTo(bottom(dominant), 5);
+    // The floor is a legibility minimum, not a rescale — 1 stays far below 100,000.
+    expect(Number(dominant?.getAttribute("height"))).toBeGreaterThan(
+      Number(small?.getAttribute("height")) * 50,
+    );
   });
 });
 

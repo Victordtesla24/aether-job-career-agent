@@ -35,7 +35,7 @@ dashboard). It is never silent.
 
 | Law | What it forbids | Enforced by | Pinned by |
 |---|---|---|---|
-| **C-1 Zero is not a colour** | A zero drawn as a filled coloured mark — the "0 screened / 0-19 ATS" bar that reads as "a few". A zero renders as a **1px hairline tick** at the origin plus a numeral in `state-neutral`. | `geometry.ts` → `markKind()` / `barLength()`, the single place all bar lengths come from; `<ZeroTickRect>` | `laws.test.tsx` › *C-1 — zero is not a colour* (4 cases, incl. "never returns a zero-length bar for a real value"); `funnel.test.tsx` › *C-1 — a zero step*; `histogram.test.tsx` › *C-1 — an empty bucket*; `diverging-bar.test.tsx` › *C-1 — a row that is genuinely level* |
+| **C-1 Zero is not a colour** | A zero drawn as a filled coloured mark — the "0 screened / 0-19 ATS" bar that reads as "a few". A zero renders as a **1px hairline tick** at the origin plus a numeral in `state-neutral`. And the inverse: a real value drawn shorter than that tick. | `geometry.ts` → `markKind()` / `barLength()` / `barPercent()` — the one place **every bar-shaped chart** (`<Funnel>`, `<Histogram>`, `<DivergingBar>`) takes its length from; `<ZeroTickRect>` | `laws.test.tsx` › *C-1 — zero is not a colour* (4 cases, incl. "never returns a zero-length bar for a real value"); `funnel.test.tsx` › *C-1 — a zero step*; `histogram.test.tsx` › *C-1 — an empty bucket* **and** *a wide dynamic range cannot invert zero and a real value*; `diverging-bar.test.tsx` › *C-1 — a row that is genuinely level* **and** *a wide dynamic range cannot invert zero and a real value* |
 | **C-2 Unmeasured ≠ zero** | `null` rendered as 0, or as an empty-looking mark. `null` renders `—` in `state-neutral`, and the hidden data table spells out **"not measured"** plus the reason. `<ChartFrame>` **throws** when a series mixes `0` and `null` without a `nullMeaning` prop. | `laws.ts` → `assertNullMeaning()`; `<UnmeasuredMark>`; `ChartFrame`'s data table | `laws.test.tsx` › *C-2 — unmeasured is not zero* (incl. "makes ChartFrame itself throw in dev on the ambiguous series"); `histogram.test.tsx` › *is refused outright when the caller does not say what null means*; the whole first block of `radar10.test.tsx` |
 | **C-3 The window is part of the chart** | A chart with no stated sample window. `windowLabel` is a required prop (compile time) **and** a runtime assertion, and it renders verbatim in the caption. | `laws.ts` → `assertWindowLabel()` | `laws.test.tsx` › *C-3 — the window is part of the chart* (empty, whitespace-only, dev-throw, verbatim caption) |
 | **C-4 Scale is declared** | A silent log scale or a silently truncated axis. `log` renders a `LOG SCALE` chip, `share-of-previous` renders a `SHARE OF PREVIOUS STEP` chip, and any baseline ≠ 0 must set `truncated: true` — otherwise the frame throws. | `laws.ts` → `assertScaleDeclared()`; `ChartFrame` chip + break glyph | `laws.test.tsx` › *C-4 — scale is declared*; `funnel.test.tsx` › *declares a log scale with a visible chip and never silently log-scales*; `trend-line.test.tsx` › *declares a truncated baseline instead of silently starting above zero* |
@@ -43,6 +43,22 @@ dashboard). It is never silent.
 
 Production behaviour is itself pinned: `laws.test.tsx` › *reports loudly instead
 of throwing, so a violation never white-screens a paying user*.
+
+**What "the one place" covers, exactly.** `barLength()` owns the length of every
+mark whose *length* encodes the value — the three bar-shaped charts named above,
+and nothing else, because nothing else in the kit encodes a value as a length.
+`<Donut>` encodes with arc angle, `<Radar10>` with vertex radius, `<Heatmap>`
+with colour step, `<TrendLine>` with y position; each has its own C-1 rule in
+its own section below. The guarantee `barLength()` provides is two-sided and
+both sides are pinned by tests: a **zero** is exactly `ZERO_TICK_WIDTH` (1px)
+and a **real value** is at least `MIN_VALUE_LENGTH` (1.5) — so a measured value
+can never be drawn shorter than a measured nothing, at any dynamic range.
+`barPercent()` carries that floor through the 2-decimal rounding used on
+percentage-width bars, because rounding is the other way a real value can reach
+`0%`. This was a shipped defect, not a hypothetical: `<Histogram>` and
+`<DivergingBar>` originally did their own proportional maths, and against a
+100,000 dominant a real count of 1 rendered at 0.0016px and 0% respectively —
+both *less* visible than the zero beside them.
 
 ---
 
@@ -108,8 +124,8 @@ series.
 
 - `ChartFrame.tsx` — chrome, laws, summary, hidden data table, scale chips
 - `laws.ts` — `assertChartLaws` and the individual assertions
-- `geometry.ts` — `markKind` / `barLength` (C-1), scales, polar maths, formatting
+- `geometry.ts` — `markKind` / `barLength` / `barPercent` (C-1), scales, polar maths, formatting
 - `motion.ts` — the reveal phases and reduced-motion contract
 - `primitives.tsx` — gridlines, axis labels, zero tick, unmeasured mark, threshold line, empty plot
 - `tokens.ts` — palette, heat ramp, state colours, hairlines, durations
-- `__tests__/` — 119 assertions, no pixel snapshots: every test queries DOM/SVG structure
+- `__tests__/` — 126 assertions, no pixel snapshots: every test queries DOM/SVG structure

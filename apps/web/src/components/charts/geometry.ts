@@ -10,6 +10,16 @@ import type { MarkKind, PlotGeometry, PlotInsets } from "./types";
 /** A zero draws a 1px tick at the origin — never a filled coloured mark. */
 export const ZERO_TICK_WIDTH = 1;
 
+/**
+ * The shortest a REAL value may ever be drawn. Strictly above `ZERO_TICK_WIDTH`
+ * so the reader can never mistake a measured value for a measured nothing —
+ * without this floor a 1-in-100,000 bucket renders at 0.0016px, six hundred
+ * times THINNER than the zero tick, which inverts C-1 rather than obeying it.
+ * The floor buys legibility only; it never rescales the series, so the numeral
+ * column (never the bar) remains what proves the magnitude.
+ */
+export const MIN_VALUE_LENGTH = ZERO_TICK_WIDTH + 0.5;
+
 /** Deterministic viewBox width used on the server and before the first
  *  ResizeObserver measurement. */
 export const DEFAULT_PLOT_WIDTH = 640;
@@ -62,8 +72,20 @@ export function barLength({ value, max, extent, mode, previous }: BarLengthInput
     const safeMax = max > 0 ? max : Math.abs(v);
     fraction = safeMax > 0 ? Math.abs(v) / safeMax : 0;
   }
-  const length = Math.max(ZERO_TICK_WIDTH + 0.5, fraction * extent);
+  const length = Math.max(MIN_VALUE_LENGTH, fraction * extent);
   return { kind: "value", length };
+}
+
+/**
+ * A bar length as a CSS percentage, for the bars measured in percent of their
+ * track rather than in plot pixels. Rounded to 2dp so the style attribute
+ * stays stable, but clamped at `MIN_VALUE_LENGTH` first: rounding is a
+ * presentation step and must never be able to collapse a length the geometry
+ * already decided was visible into a literal "0%".
+ */
+export function barPercent(length: number): string {
+  if (length <= 0) return "0%";
+  return `${Math.max(MIN_VALUE_LENGTH, Math.round(length * 100) / 100)}%`;
 }
 
 /** Round, human axis ticks from 0 to max, always including both ends. */
