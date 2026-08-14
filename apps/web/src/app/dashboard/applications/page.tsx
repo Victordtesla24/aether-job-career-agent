@@ -20,6 +20,9 @@ import { apiRequest } from "../../../lib/api/client";
 import type { Job } from "../../../lib/api/jobs";
 import { downloadResume } from "../../../lib/api/resumes";
 import { downloadCoverLetterPdf } from "../../../components/cover-letters/api";
+import PageHeader from "../../../components/shell/PageHeader";
+import SegmentedControl from "../../../components/ui/SegmentedControl";
+import { button, listCard, scrollBody } from "../../../components/ui/recipes";
 import SankeyFlow from "../../../components/applications/SankeyFlow";
 import SubmissionControl from "../../../components/applications/SubmissionControl";
 import { useRealtimeResources } from "../../../hooks/useRealtime";
@@ -62,6 +65,16 @@ import {
 } from "../../../components/applications/tracker-lib";
 
 type ViewMode = "board" | "sankey" | "timeline" | "applied";
+
+/**
+ * S-UI B2 / X-1 — the board's own scroll band.
+ *
+ * Each kanban column scrolls inside this height instead of stretching the
+ * document to the height of the fullest column (measured before this change:
+ * 6,598px at 1600, 8,042px at 390). `dvh` rather than `vh` so mobile browser
+ * chrome cannot push the bottom of a column out of reach.
+ */
+const BOARD_COLUMN_VIEWPORT = "min(calc(100dvh - 300px), 1120px)";
 
 /** Accessible dropdown for the header Filter / Sort controls. */
 function HeaderMenu<K extends string>({
@@ -109,11 +122,11 @@ function HeaderMenu<K extends string>({
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
-        className={`flex items-center gap-2 rounded-lg border px-3.5 py-2 text-xs font-medium transition max-sm:min-h-[44px] ${
-          active
-            ? "border-aether-coral/30 bg-aether-coral/15 text-aether-coral"
-            : "border-white/10 bg-white/5 hover:bg-white/10"
-        }`}
+        className={button({
+          tone: active ? "primary" : "neutral",
+          size: "sm",
+          class: `h-9 font-medium max-sm:min-h-[44px] ${active ? "bg-aether-coral/15 text-aether-coral hover:bg-aether-coral/25" : ""}`,
+        })}
       >
         <i className={`fa-solid ${icon} text-[10px]`} aria-hidden="true" />
         {active && current ? `${label}: ${current.label}` : label}
@@ -122,7 +135,7 @@ function HeaderMenu<K extends string>({
         <div
           role="menu"
           aria-label={`${label} options`}
-          className="absolute right-0 top-full z-20 mt-1 w-48 rounded-xl border border-white/10 bg-[#16161f] p-1 shadow-xl"
+          className="elev-3 absolute right-0 top-full z-20 mt-1 w-48 rounded-xl p-1"
         >
           {options.map((o) => (
             <button
@@ -134,10 +147,10 @@ function HeaderMenu<K extends string>({
                 onSelect(o.key);
                 setOpen(false);
               }}
-              className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs transition max-sm:min-h-[44px] ${
+              className={`flex w-full items-center justify-between rounded-lg px-3 py-2 text-left text-xs transition-colors duration-[--dur-fast] max-sm:min-h-[44px] ${
                 o.key === value
-                  ? "bg-aether-coral/15 text-aether-coral"
-                  : "text-aether-muted hover:bg-white/5 hover:text-white"
+                  ? "bg-aether-coral/15 font-semibold text-aether-coral"
+                  : "text-aether-muted hover:bg-surface-3 hover:text-aether-text"
               }`}
             >
               {o.label}
@@ -207,7 +220,7 @@ function MoveMenu({
         aria-expanded={open}
         aria-label={`Move ${card.title} at ${card.company} to another stage`}
         onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-1.5 rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-medium text-aether-muted transition hover:bg-white/10 hover:text-white max-sm:min-h-[36px]"
+        className="flex items-center gap-1.5 rounded-md border border-hairline bg-white/[0.04] px-2 py-1 text-[10px] font-medium text-aether-muted transition-colors duration-[--dur-fast] hover:border-hairline-strong hover:bg-surface-3 hover:text-aether-text max-sm:min-h-[36px]"
       >
         <i className="fa-solid fa-arrow-right-arrow-left text-[9px]" aria-hidden="true" />
         Move to…
@@ -821,11 +834,16 @@ export default function ApplicationsPage() {
   const threshold = agentConfig?.matchThreshold ?? 85;
 
   return (
-    <div className="space-y-5">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div className="min-w-0">
-          <h1 className="text-2xl font-bold">Application Tracker</h1>
-          <p className="mono mt-1 text-xs text-aether-muted-dim" data-testid="tracker-subtitle">
+    <div className="flex flex-col gap-5">
+      <section className="atmos-hero">
+      <PageHeader
+        title={
+          <>
+            <span className="text-gradient-brand">Application</span> Tracker
+          </>
+        }
+        footnote={
+          <span className="mono" data-testid="tracker-subtitle">
             {/* MV-adv-A-001: this counts every board card — sourced jobs still
                 pre-application PLUS non-closed applications (incl. drafts) —
                 which is NOT the canonical submitted-application count the
@@ -833,9 +851,10 @@ export default function ApplicationsPage() {
                 a pipeline count so "applications" is never overloaded with
                 two different numbers under the same name. */}
             {activeCount} pipeline item{activeCount === 1 ? "" : "s"} across 8 stages
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
+          </span>
+        }
+        action={
+          <div className="flex flex-wrap items-center gap-2">
           {/* U5d-3 (ADR-SUB-AUTON-1 Pillar 1): the Answer Bank is reached from
               here because this is the screen where its answers get used — a
               card that stops to ask a question is the moment a user wants to
@@ -848,39 +867,6 @@ export default function ApplicationsPage() {
             <i className="fa-solid fa-brain text-[10px]" aria-hidden="true" />
             Answer Bank
           </Link>
-          <div
-            className="flex rounded-lg border border-white/10 bg-white/5 p-0.5"
-            role="tablist"
-            aria-label="Tracker views"
-          >
-            {(
-              [
-                { key: "board", label: "Board View", icon: null },
-                { key: "sankey", label: "Sankey Flow", icon: "fa-diagram-project" },
-                { key: "timeline", label: "Timeline", icon: null },
-                { key: "applied", label: "Applied", icon: "fa-check-circle" },
-              ] as Array<{ key: ViewMode; label: string; icon: string | null }>
-            ).map((v) => (
-              <button
-                key={v.key}
-                type="button"
-                role="tab"
-                aria-selected={view === v.key}
-                data-testid={`view-${v.key}`}
-                onClick={() => setView(v.key)}
-                className={`rounded-md px-3 py-1.5 text-xs font-medium transition max-sm:min-h-[44px] ${
-                  view === v.key
-                    ? "bg-aether-coral/15 text-aether-coral"
-                    : "text-aether-muted hover:text-white"
-                }`}
-              >
-                {v.icon ? (
-                  <i className={`fa-solid ${v.icon} mr-1.5 text-[10px]`} aria-hidden="true" />
-                ) : null}
-                {v.label}
-              </button>
-            ))}
-          </div>
           <HeaderMenu
             icon="fa-filter"
             label="Filter"
@@ -907,49 +893,84 @@ export default function ApplicationsPage() {
               aria-label={`Clear pipeline — archive ${pipelineJobCount} pipeline job${
                 pipelineJobCount === 1 ? "" : "s"
               } in Discovered, Evaluating and Tailoring`}
-              className="flex items-center gap-2 rounded-lg border border-red-500/30 bg-red-500/10 px-3.5 py-2 text-xs font-medium text-red-300 transition hover:bg-red-500/20 hover:text-red-200 max-sm:min-h-[44px]"
+              className={button({ tone: "danger", size: "sm", class: "h-9 max-sm:min-h-[44px]" })}
             >
               <i className="fa-solid fa-trash-can text-[10px]" aria-hidden="true" />
               Clear Pipeline
-              <span className="mono text-[10px] text-red-400/70">{pipelineJobCount}</span>
+              <span className="mono text-[10px] opacity-70">{pipelineJobCount}</span>
             </button>
           ) : null}
-        </div>
-      </header>
+          </div>
+        }
+        controls={
+          /* B2 GLOBAL CONTROLS PASS — the fifth hand-rolled tab strip becomes
+             the ONE `<SegmentedControl>`. `testIdFor` keeps the pinned
+             `view-board` / `view-sankey` / `view-timeline` / `view-applied`
+             testids exactly as the (unmodifiable) tests assert them, so the
+             control adapts to the contract rather than the other way round.
+             Labels, icons, order and `setView` are verbatim. */
+          <SegmentedControl
+            items={[
+              { value: "board" as ViewMode, label: "Board View" },
+              { value: "sankey" as ViewMode, label: "Sankey Flow", icon: "fa-diagram-project" },
+              { value: "timeline" as ViewMode, label: "Timeline" },
+              { value: "applied" as ViewMode, label: "Applied", icon: "fa-check-circle" },
+            ]}
+            value={view}
+            onChange={setView}
+            ariaLabel="Tracker views"
+            idPrefix="tracker-view"
+            testIdFor={(v) => `view-${v}`}
+            testId="tracker-views"
+          />
+        }
+      />
+      </section>
 
-      <div
-        className="flex items-start gap-3 rounded-xl border border-aether-yellow/25 bg-aether-yellow/[0.08] px-4 py-3"
-        data-testid="auto-apply-banner"
-      >
-        <i className="fa-solid fa-shield-halved mt-0.5 text-aether-yellow" aria-hidden="true" />
-        <p className="text-xs leading-relaxed text-aether-muted">
-          <span className="font-semibold text-aether-yellow">
-            Auto-apply is a high-risk action.
-          </span>{" "}
-          Only applications with <span className="mono text-white">Match Score &gt; {threshold}%</span>{" "}
-          and your explicit approval will be submitted. Auto-apply is currently{" "}
-          <span className="font-medium text-white">{autoApplyOn ? "on" : "off"}</span>.
-        </p>
+      {/*
+        THE MERGED ALERT STRIP (§5.4). Two full-width stacked banners became one
+        two-column strip. Neither message shrank and neither lost a word — the
+        auto-apply risk disclosure keeps its warn tone, its threshold number and
+        its live on/off state, and the approvals prompt keeps its own tone and
+        its link. They now sit side by side instead of consuming two bands of
+        vertical space above the board.
+      */}
+      <div className="grid gap-2.5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-stretch">
+        <div
+          className="flex items-start gap-3 rounded-xl border border-state-warn/25 bg-state-warn/[0.08] px-4 py-3"
+          data-testid="auto-apply-banner"
+        >
+          <i className="fa-solid fa-shield-halved mt-0.5 text-state-warn" aria-hidden="true" />
+          <p className="text-xs leading-relaxed text-aether-muted">
+            <span className="font-semibold text-state-warn">
+              Auto-apply is a high-risk action.
+            </span>{" "}
+            Only applications with <span className="mono text-aether-text">Match Score &gt; {threshold}%</span>{" "}
+            and your explicit approval will be submitted. Auto-apply is currently{" "}
+            <span className="font-medium text-aether-text">{autoApplyOn ? "on" : "off"}</span>.
+          </p>
+        </div>
+
+        {pendingCount > 0 ? (
+          <Link
+            href="/dashboard/approvals"
+            data-testid="pending-approvals-banner"
+            className="flex items-center gap-2 rounded-xl border border-aether-amber/40 bg-aether-amber/10 px-4 py-3 text-sm text-aether-amber transition-colors duration-[--dur-fast] hover:bg-aether-amber/20"
+          >
+            <i className="fa-solid fa-bell text-[11px]" aria-hidden="true" />
+            {pendingCount} item{pendingCount === 1 ? "" : "s"} need{pendingCount === 1 ? "s" : ""} your
+            review → open the Approvals queue
+          </Link>
+        ) : null}
       </div>
 
-      {pendingCount > 0 ? (
-        <Link
-          href="/dashboard/approvals"
-          data-testid="pending-approvals-banner"
-          className="block rounded-xl border border-aether-amber/40 bg-aether-amber/10 p-3 text-sm text-aether-amber transition hover:bg-aether-amber/20"
-        >
-          {pendingCount} item{pendingCount === 1 ? "" : "s"} need{pendingCount === 1 ? "s" : ""} your
-          review → open the Approvals queue
-        </Link>
-      ) : null}
-
       {error ? (
-        <div className="flex items-center justify-between gap-3 rounded-xl border border-red-500/30 bg-red-500/10 p-3">
-          <p className="text-sm text-red-300">{error}</p>
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-state-danger/30 bg-state-danger/10 p-3">
+          <p className="text-sm text-state-danger">{error}</p>
           <button
             type="button"
             onClick={() => void load()}
-            className="rounded-lg border border-red-400/40 px-3 py-1.5 text-xs font-semibold text-red-200 transition hover:bg-red-500/20 max-sm:min-h-[44px]"
+            className={button({ tone: "danger", size: "sm", class: "max-sm:min-h-[44px]" })}
           >
             Retry
           </button>
@@ -959,7 +980,7 @@ export default function ApplicationsPage() {
       {detail ? (
         <aside
           data-testid="application-detail-panel"
-          className="glass rounded-2xl border border-aether-violet/40 p-5"
+          className="elev-1 rounded-2xl border-aether-violet/40 p-5"
         >
           <div className="flex items-start justify-between gap-3">
             <div>
@@ -1022,7 +1043,7 @@ export default function ApplicationsPage() {
           {!detail.transmitted && detail.manualStepReason ? (
             <div
               data-testid="application-manual-step-block"
-              className="mt-3 rounded-xl border border-aether-coral/30 bg-aether-coral/10 p-3"
+              className="mt-3 rounded-xl border border-aether-coral/30 bg-aether-coral/[0.10] p-3"
             >
               <p className="flex items-center gap-1.5 text-xs font-semibold text-aether-coral">
                 <i className="fa-solid fa-triangle-exclamation text-[10px]" aria-hidden="true" />
@@ -1133,7 +1154,7 @@ export default function ApplicationsPage() {
               <h3 className="text-xs font-semibold uppercase tracking-wide text-aether-muted">
                 Cover letter
               </h3>
-              <p className="mt-1 max-h-56 overflow-y-auto whitespace-pre-line rounded-lg border border-white/10 bg-white/5 p-3 text-sm text-aether-muted">
+              <p className="mt-1 max-h-56 overflow-y-auto overscroll-contain whitespace-pre-line rounded-lg border border-hairline bg-white/[0.04] p-3 text-sm text-aether-muted">
                 {detail.coverLetter}
               </p>
             </div>
@@ -1146,37 +1167,49 @@ export default function ApplicationsPage() {
       {apps === null ? (
         <div className="grid gap-4 md:grid-cols-4" aria-busy="true" data-testid="board-skeleton">
           {[0, 1, 2, 3].map((i) => (
-            <div key={i} className="glass h-64 animate-pulse rounded-2xl border border-white/10" />
+            <div key={i} className="elev-1 h-64 animate-pulse rounded-2xl" />
           ))}
         </div>
       ) : view === "board" ? (
         <>
-          <div className="overflow-x-auto pb-2" data-testid="applications-kanban">
-            <div className="flex w-max gap-4">
+          {/*
+            THE BOARD (§5.4 / X-1). Before: five columns each as tall as its own
+            content, so the DOCUMENT was as tall as the fullest column — 6,598px
+            at 1600 and 8,042px at 390, against a ~2,500px doctrine. Now each
+            column is its own scroll container under a sticky `elev-2` header,
+            so the board occupies a fixed band and the deepest column scrolls
+            inside it. Drag-and-drop, `onColumnDrop`, the 25-card cap and the
+            "+N more" line are untouched.
+          */}
+          <div className="overflow-x-auto overscroll-x-contain pb-2" data-testid="applications-kanban">
+            <div className="flex w-max gap-3">
               {stages.map((stage) => (
                 <section
                   key={stage.key}
                   data-testid={`kanban-column-${stage.key}`}
                   aria-label={`${stage.label} stage, ${stage.cards.length} cards`}
-                  className="w-[260px] shrink-0"
+                  className="flex w-[268px] shrink-0 flex-col rounded-2xl border border-hairline bg-white/[0.012]"
                   onDragOver={(e) => {
                     e.preventDefault();
                     e.dataTransfer.dropEffect = "move";
                   }}
                   onDrop={(e) => onColumnDrop(e, stage.key)}
                 >
-                  <header className="mb-3 flex items-center justify-between px-1">
-                    <div className="flex items-center gap-2">
-                      <span className={`h-2 w-2 rounded-full ${stage.dotClass}`} aria-hidden="true" />
-                      <h2 className="text-xs font-semibold">{stage.label}</h2>
+                  <header className="elev-2 sticky top-0 z-10 flex items-center justify-between rounded-t-2xl px-3 py-2.5">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className={`h-2 w-2 shrink-0 rounded-full ${stage.dotClass}`} aria-hidden="true" />
+                      <h2 className="type-section truncate !text-[11px] !text-aether-text">{stage.label}</h2>
                     </div>
                     <span className="mono text-[11px] text-aether-muted-dim">
                       {stage.cards.length}
                     </span>
                   </header>
-                  <div className="flex flex-col gap-2.5">
+                  <div
+                    className={scrollBody({ class: "flex flex-col gap-2 p-2" })}
+                    style={{ maxHeight: BOARD_COLUMN_VIEWPORT }}
+                  >
                     {stage.cards.length === 0 ? (
-                      <p className="glass rounded-xl border border-dashed border-white/10 px-1 py-6 text-center text-xs text-aether-muted-dim">
+                      <p className="rounded-xl border border-dashed border-hairline px-1 py-6 text-center text-xs text-aether-muted-dim">
                         Empty
                       </p>
                     ) : (
@@ -1189,19 +1222,40 @@ export default function ApplicationsPage() {
                             draggable
                             onDragStart={(e) => onCardDragStart(e, card, stage.key)}
                             onClick={clickable ? () => void openDetail(card.app!.id) : undefined}
-                            className={`glass rounded-xl border p-3.5 transition ${
+                            /*
+                              `shrink-0` is load-bearing, not cosmetic.
+
+                              This column is `display:flex; flex-direction:column`
+                              with a `max-height` (BOARD_COLUMN_VIEWPORT), so every
+                              card is a flex item — and a flex item's default
+                              `flex-shrink: 1` means that once the cards' natural
+                              height exceeds the column, the browser COMPRESSES them
+                              to fit instead of letting the column scroll. Combined
+                              with `listCard`'s `overflow-hidden`, that rendered the
+                              deep columns (Evaluating 3,642 / Ready to Apply 253 /
+                              Submitted) as ~100px slivers with the title and company
+                              sliced mid-glyph, while the shallow columns (Tailoring
+                              6, Discovered 7) looked fine because they never needed
+                              to shrink. Evidence: b2/after/ (pre-fix capture) and
+                              b2/nits/kanban-card-crush-*.json.
+
+                              `shrink-0` restores the intent of the scroll container:
+                              cards keep their natural height and the COLUMN scrolls.
+                            */
+                            className={`${listCard({ interactive: clickable, class: "shrink-0 p-3" })} ${
                               stage.key === "tailoring"
                                 ? "border-aether-coral/25"
                                 : stage.key === "offer"
-                                  ? "border-aether-green/30 bg-white/[0.05]"
+                                  ? "border-state-ok/30"
                                   : stage.key === "interview"
-                                    ? "border-aether-amber/25"
-                                    : "border-white/10"
-                            } ${clickable ? "cursor-pointer hover:border-white/25" : "hover:border-white/15"}`}
+                                    ? "border-state-warn/25"
+                                    : ""
+                            }`}
                           >
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2">
-                                <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-white/10 text-[10px] font-bold">
+                            {/* ZONE 1 — identity + the two scores, on one line. */}
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex min-w-0 items-center gap-2">
+                                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/[0.07] text-[10px] font-bold">
                                   {initials(card.company)}
                                 </span>
                                 {card.fit != null ? (
@@ -1223,7 +1277,7 @@ export default function ApplicationsPage() {
                                 ) : null}
                               </div>
                               <span
-                                className={`flex h-5 w-5 items-center justify-center rounded-full ${stage.iconClass}`}
+                                className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${stage.iconClass}`}
                                 title={stage.label}
                               >
                                 <i
@@ -1232,6 +1286,7 @@ export default function ApplicationsPage() {
                                 />
                               </span>
                             </div>
+                            {/* ZONE 2 — what it is. */}
                             <h3 className="mt-2.5 text-xs font-semibold leading-tight">
                               {clickable ? (
                                 /* Keyboard path for opening details — the card
@@ -1253,7 +1308,10 @@ export default function ApplicationsPage() {
                                 card.title
                               )}
                             </h3>
-                            <p className="text-[11px] text-aether-muted-dim">{card.company}</p>
+                            <p className="truncate text-[11px] text-aether-muted-dim">{card.company}</p>
+                            {/* ZONE 3 — state and actions. `CardMeta` and
+                                `SubmissionControl` are U5d-2 surfaces: their
+                                states, copy and wiring are untouched here. */}
                             <CardMeta
                               card={card}
                               stageKey={stage.key}
@@ -1311,7 +1369,7 @@ export default function ApplicationsPage() {
             </div>
           </div>
           {closed.length > 0 ? (
-            <section className="glass rounded-2xl border border-white/10 p-4" data-testid="closed-strip">
+            <section className="elev-1 rounded-2xl p-4" data-testid="closed-strip">
               <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-aether-muted-dim">
                 Closed ({closed.length})
               </h2>
@@ -1321,7 +1379,7 @@ export default function ApplicationsPage() {
                     key={a.id}
                     type="button"
                     onClick={() => void openDetail(a.id)}
-                    className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1.5 text-xs text-aether-muted-dim transition hover:border-white/25 hover:text-white max-sm:min-h-[44px]"
+                    className="rounded-lg border border-hairline bg-white/[0.04] px-2.5 py-1.5 text-xs text-aether-muted-dim transition-colors duration-[--dur-fast] hover:border-hairline-strong hover:text-aether-text max-sm:min-h-[44px]"
                   >
                     {a.jobTitle} · {a.company} · {a.status}
                   </button>
@@ -1361,13 +1419,13 @@ export default function ApplicationsPage() {
             </div>
           ) : (
             <div
-              className="glass mt-4 h-72 animate-pulse rounded-2xl border border-white/10"
+              className="elev-1 mt-4 h-72 animate-pulse rounded-2xl"
               aria-busy="true"
             />
           )}
         </section>
       ) : view === "applied" ? (
-        <section className="glass rounded-2xl border border-white/10 p-5" data-testid="applied-view">
+        <section className="elev-1 rounded-2xl p-5" data-testid="applied-view">
           <div className="flex items-center gap-2.5 mb-4">
             <i className="fa-solid fa-check-circle text-sm text-aether-green" aria-hidden="true" />
             <h2 className="text-[15px] font-semibold">Applied Jobs</h2>
@@ -1377,7 +1435,7 @@ export default function ApplicationsPage() {
           </div>
           {appliedApps === null ? (
             <div
-              className="glass h-48 animate-pulse rounded-2xl border border-white/10"
+              className="elev-1 h-48 animate-pulse rounded-2xl"
               aria-busy="true"
             />
           ) : appliedError ? (
@@ -1401,7 +1459,7 @@ export default function ApplicationsPage() {
               {appliedApps.map((a) => (
                 <article
                   key={a.id}
-                  className="glass rounded-xl border border-white/10 p-3.5 cursor-pointer hover:border-white/25 transition"
+                  className={listCard({ class: "p-3" })}
                   onClick={() => void openDetail(a.id)}
                 >
                   <div className="flex items-center justify-between">
@@ -1460,7 +1518,7 @@ export default function ApplicationsPage() {
           )}
         </section>
       ) : (
-        <section className="glass rounded-2xl border border-white/10 p-5" data-testid="timeline-view">
+        <section className="elev-1 rounded-2xl p-5" data-testid="timeline-view">
           <h2 className="mb-4 text-[15px] font-semibold">Timeline</h2>
           {(apps ?? []).length === 0 ? (
             <p className="text-sm text-aether-muted-dim">No applications yet.</p>
@@ -1499,7 +1557,7 @@ export default function ApplicationsPage() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="clearGateTitle"
-            className="glass-raised relative w-[520px] max-w-[92vw] rounded-2xl border border-red-500/40 p-6 shadow-2xl"
+            className="elev-3 relative w-[520px] max-w-[92vw] rounded-2xl border-state-danger/40 p-6"
           >
             <div className="flex items-start gap-3">
               <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-red-500/30 bg-red-500/15 text-red-400">
@@ -1546,7 +1604,7 @@ export default function ApplicationsPage() {
                   type="button"
                   data-testid="clear-pipeline-cancel"
                   onClick={closeClearGate}
-                  className="glass-raised rounded-xl px-4 py-2.5 text-[13px] transition hover:border-white/20"
+                  className={button({ tone: "neutral", size: "md", class: "rounded-xl" })}
                 >
                   Cancel
                 </button>

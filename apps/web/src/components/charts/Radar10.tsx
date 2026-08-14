@@ -95,14 +95,14 @@ export function Radar10({
         unmeasuredCount > 0 || shortfall > 0 ? (
           <div className="flex flex-col gap-0.5 text-[11px]" style={{ color: STATE.neutral }}>
             {unmeasuredCount > 0 ? (
-              <p data-testid="radar-unmeasured-note">
+              <p data-prose="legend" data-testid="radar-unmeasured-note">
                 {`${formatNumber(unmeasuredCount)} ${
                   unmeasuredCount === 1 ? "dimension is" : "dimensions"
                 } not measured — shown as a hollow marker on the axis, not as a zero. See notes.`}
               </p>
             ) : null}
             {shortfall > 0 ? (
-              <p data-testid="radar-shortfall">
+              <p data-prose="legend" data-testid="radar-shortfall">
                 {`Only ${formatNumber(dimensions.length)} of ${formatNumber(
                   expectedDimensions,
                 )} dimensions were returned for this job.`}

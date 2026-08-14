@@ -41,6 +41,8 @@ export interface HistogramProps {
   height?: number;
   footnote?: string;
   className?: string;
+  /** Rendered to the right of the chart's own heading (e.g. an info tooltip). */
+  action?: React.ReactNode;
 }
 
 const BAR_COLOUR = CHART_PALETTE[4]; // c5 violet-300
@@ -54,6 +56,7 @@ export function Histogram({
   height = 200,
   footnote,
   className,
+  action,
 }: HistogramProps) {
   const motion = useChartMotion();
   const data: ChartDatum[] = buckets.map((b) => ({
@@ -73,6 +76,7 @@ export function Histogram({
       height={height}
       footnote={footnote}
       className={className}
+      action={action}
     >
       {buckets.length === 0 ? (
         <EmptyPlot
