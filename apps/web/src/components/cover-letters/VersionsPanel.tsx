@@ -13,10 +13,10 @@ export function VersionsPanel({
   onSelect: (letterId: string) => void;
 }) {
   return (
-    <section className="glass rounded-2xl border border-white/10 p-5" data-testid="versions-panel">
+    <section className="elev-1 rounded-2xl p-5" data-testid="versions-panel">
       <div className="mb-3 flex items-center gap-2">
-        <i className="fa-solid fa-clock-rotate-left text-sm text-aether-violet" aria-hidden="true" />
-        <h2 className="text-sm font-semibold">Versions</h2>
+        <i className="fa-solid fa-clock-rotate-left text-sm text-state-info" aria-hidden="true" />
+        <h2 className="text-[13px] font-semibold tracking-[-0.01em]">Versions</h2>
       </div>
       {loading ? (
         <div className="flex gap-2" aria-busy="true">
@@ -40,7 +40,7 @@ export function VersionsPanel({
                 className={
                   active
                     ? "mono min-h-[44px] rounded-lg border border-aether-coral/25 bg-aether-coral/15 px-3 py-1.5 text-[11px] font-semibold text-aether-coral"
-                    : "mono min-h-[44px] rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] font-medium transition hover:bg-white/10"
+                    : "mono min-h-[44px] rounded-lg border border-hairline bg-white/5 px-3 py-1.5 text-[11px] font-medium transition hover:bg-white/[0.07]"
                 }
               >
                 v{v.version}

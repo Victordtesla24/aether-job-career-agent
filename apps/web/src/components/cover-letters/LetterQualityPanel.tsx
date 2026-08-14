@@ -27,9 +27,9 @@ function Bar({ label, value }: { label: string; value: number }) {
         <span>{label}</span>
         <span className="mono text-white">{value}%</span>
       </div>
-      <div className="mt-1 h-1.5 rounded-full bg-white/10">
+      <div className="mt-1 h-1.5 rounded-full bg-white/[0.07]">
         <div
-          className="h-1.5 rounded-full bg-aether-violet"
+          className="h-1.5 rounded-full bg-state-info"
           style={{ width: `${Math.max(0, Math.min(100, value))}%` }}
         />
       </div>
@@ -46,12 +46,12 @@ export function LetterQualityPanel({
 }) {
   return (
     <section
-      className="glass rounded-2xl border border-white/10 p-5"
+      className="elev-1 rounded-2xl p-5"
       data-testid="letter-quality-panel"
     >
       <div className="mb-3 flex items-center gap-2">
-        <i className="fa-solid fa-gauge-high text-sm text-aether-violet" aria-hidden="true" />
-        <h2 className="text-sm font-semibold">Letter Quality</h2>
+        <i className="fa-solid fa-gauge-high text-sm text-state-info" aria-hidden="true" />
+        <h2 className="text-[13px] font-semibold tracking-[-0.01em]">Letter Quality</h2>
       </div>
 
       {loading ? (
@@ -67,7 +67,7 @@ export function LetterQualityPanel({
             First draft:{" "}
             <span className="mono font-semibold text-white">{quality.initialScore}%</span> →
             Shipped:{" "}
-            <span className="mono font-semibold text-aether-green">{quality.finalScore}%</span>
+            <span className="mono font-semibold text-state-ok">{quality.finalScore}%</span>
             <span className="ml-2 text-xs text-aether-muted-dim">
               ({quality.delta >= 0 ? "+" : ""}
               {quality.delta} pts)
@@ -75,7 +75,7 @@ export function LetterQualityPanel({
           </p>
           <p className="mt-1 text-xs" data-testid="letter-quality-target">
             {quality.reachedTarget ? (
-              <span className="text-aether-green">
+              <span className="text-state-ok">
                 Reached the {quality.targetScore}% quality target.
               </span>
             ) : (
