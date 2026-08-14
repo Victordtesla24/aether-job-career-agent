@@ -358,6 +358,13 @@ model AgentRun {
   jobId          String?
   policyTier     String?
   metricSnapshot Json?
+  // B6 (migration 0029). The id of the AgentRun that CAUSED this one — e.g.
+  // every step _pipeline_core dispatches carries the pipeline's supervisor
+  // run's id, so the agents-console orchestration map can draw a real causal
+  // edge instead of only the stage-order one. Plain nullable column, not an
+  // enforced FK (same audit-row rule as jobId/applicationId above). NULL on
+  // every run predating this column — never backfilled.
+  parentRunId String?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -365,4 +372,5 @@ model AgentRun {
   @@index([status])
   @@index([status, heartbeatAt])
   @@index([jobId])
+  @@index([parentRunId])
 }
