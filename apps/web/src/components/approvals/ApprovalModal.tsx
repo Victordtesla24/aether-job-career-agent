@@ -20,9 +20,11 @@ import {
   FIDELITY_CHECKING,
   FIDELITY_FETCH_FAILED,
   type LiveFidelity,
+  describeDimension,
   isExpired,
   metaLine,
   parseApprovalPayload,
+  parseQualityGate,
   payloadKind,
   previewLabel,
   withLiveFidelity,
@@ -70,6 +72,13 @@ export function ApprovalModal({ approval, onClose, onDecide }: ApprovalModalProp
   );
   const [busy, setBusy] = useState<"approve" | "reject" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // U2c: the artifact's own 80%-across-all-dimensions verdict, read off the
+  // payload the agent stamped it on. `null` = never gated (every approval
+  // predating the gate) — the modal then says nothing and blocks nothing,
+  // because claiming a verdict that was never computed is its own lie.
+  const qualityGate = parseQualityGate(approval);
+  const belowFloor = qualityGate !== null && !qualityGate.passed;
+  const [acknowledgedBelowFloor, setAcknowledgedBelowFloor] = useState(false);
 
   // ML-U2B-approval-honesty ruling 2: a PENDING resume_tailor approval's
   // "Original layout" reasoning line is superseded by the résumé's LIVE,
@@ -176,6 +185,11 @@ export function ApprovalModal({ approval, onClose, onDecide }: ApprovalModalProp
     setError(null);
     try {
       const context: DecisionContext = { trustAgent };
+      if (decision === "approve" && belowFloor) {
+        // Only ever sent with an APPROVE: rejecting a below-floor artifact is
+        // the safe direction and is never gated.
+        context.acknowledgeBelowFloor = acknowledgedBelowFloor;
+      }
       if (decision === "approve" && editing && editedPreview !== (details.preview ?? "")) {
         context.editedPreview = editedPreview;
       }
@@ -189,6 +203,9 @@ export function ApprovalModal({ approval, onClose, onDecide }: ApprovalModalProp
   };
 
   const approveLabel = editing ? "Approve with edits" : "Approve";
+  // A below-floor artifact is never WITHHELD — it is readable, editable and
+  // approvable. What it may not be is approved by accident.
+  const approveBlocked = belowFloor && !acknowledgedBelowFloor;
 
   return (
     <div
@@ -349,6 +366,40 @@ export function ApprovalModal({ approval, onClose, onDecide }: ApprovalModalProp
             </div>
           ) : null}
 
+          {/* U2c — below the quality floor: the failing dimensions, verbatim */}
+          {belowFloor && qualityGate ? (
+            <div
+              data-testid="modal-quality-floor"
+              className="rounded-xl border border-amber-400/40 bg-amber-400/10 p-3 text-xs text-amber-100"
+            >
+              <p className="font-semibold">
+                Below Aether&apos;s {qualityGate.floor.toFixed(0)}% quality floor
+              </p>
+              <ul className="mt-2 space-y-1">
+                {qualityGate.failing.map((dimension) => (
+                  <li key={dimension.key}>{describeDimension(dimension)}</li>
+                ))}
+              </ul>
+              <p className="mt-2 text-amber-200/80">
+                This is the real, measured result — nothing was inflated, and no claim
+                your evidence does not support was added to reach the floor. You can
+                still read, edit and approve it.
+              </p>
+              {pending ? (
+                <label className="mt-3 flex min-h-[44px] cursor-pointer items-center gap-2.5 font-medium text-amber-50">
+                  <input
+                    type="checkbox"
+                    data-testid="below-floor-ack-checkbox"
+                    checked={acknowledgedBelowFloor}
+                    onChange={(event) => setAcknowledgedBelowFloor(event.target.checked)}
+                    className="h-4 w-4 rounded accent-amber-400"
+                  />
+                  {qualityGate.acknowledgementLabel}
+                </label>
+              ) : null}
+            </div>
+          ) : null}
+
           {/* Trust checkbox */}
           {pending ? (
             <label className="flex min-h-[44px] cursor-pointer items-center gap-2.5 text-xs text-aether-muted">
@@ -418,7 +469,7 @@ export function ApprovalModal({ approval, onClose, onDecide }: ApprovalModalProp
             type="button"
             data-testid="modal-approve-btn"
             onClick={() => void decide("approve")}
-            disabled={!pending || busy !== null}
+            disabled={!pending || busy !== null || approveBlocked}
             className={button({ tone: "ok", size: "md", class: "rounded-xl px-6 py-2.5" })}
           >
             <i className="fa-solid fa-check mr-2 text-xs" aria-hidden="true" />
@@ -432,7 +483,7 @@ export function ApprovalModal({ approval, onClose, onDecide }: ApprovalModalProp
             type="button"
             data-testid="modal-approve-btn-mobile"
             onClick={() => void decide("approve")}
-            disabled={!pending || busy !== null}
+            disabled={!pending || busy !== null || approveBlocked}
             className={button({ tone: "ok", size: "md", class: "w-full rounded-2xl py-3.5" })}
           >
             <i className="fa-solid fa-check mr-2 text-xs" aria-hidden="true" />

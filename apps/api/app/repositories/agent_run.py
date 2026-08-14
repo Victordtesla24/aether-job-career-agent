@@ -73,6 +73,7 @@ def ensure_heartbeat_column() -> None:
 
 _link_columns_ready = False
 _policy_columns_ready = False
+_quality_columns_ready = False
 
 
 def ensure_agent_run_link_columns() -> None:
@@ -136,6 +137,104 @@ def ensure_agent_run_policy_columns() -> None:
             )
         conn.commit()
     _policy_columns_ready = True
+
+
+def ensure_agent_run_quality_columns() -> None:
+    """Additive, idempotent DDL for the U2c quality-gate instrumentation.
+
+    ``qualityAttempts`` (jsonb) is the per-attempt trail of ONE run — how many
+    attempts it made, each attempt's own real score and gate verdict, how many
+    of those were the gate's bounded extra attempts, and why it stopped.
+    ``qualityGateState`` (text) is the run's terminal gate state — ``passed``,
+    ``below_floor``, or NULL for a run the gate never judged.
+
+    Why a column and not just ``AgentRun.output``: the Supervisor's directive
+    loop (ADR-AGI-2) selects runs BY this state ("show me every run that
+    terminated below the floor, and what it tried"), which a nested key inside
+    a free-form output blob cannot serve without scanning every row.
+
+    NULL on every pre-existing row is correct and is what the "no gate, no
+    claim" test pins: those runs predate the gate, and stamping them with a
+    state would assert a judgement that was never made. No backfill.
+    """
+    global _quality_columns_ready
+    if _quality_columns_ready:
+        return
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'ALTER TABLE "AgentRun" '
+                'ADD COLUMN IF NOT EXISTS "qualityAttempts" jsonb'
+            )
+            cur.execute(
+                'ALTER TABLE "AgentRun" '
+                'ADD COLUMN IF NOT EXISTS "qualityGateState" text'
+            )
+        conn.commit()
+    _quality_columns_ready = True
+
+
+#: Terminal gate states stamped on ``AgentRun.qualityGateState``.
+GATE_STATE_PASSED = "passed"
+GATE_STATE_BELOW_FLOOR = "below_floor"
+
+
+def quality_instrumentation(output: dict[str, Any] | None) -> dict[str, Any] | None:
+    """The per-attempt trail + terminal state for ONE run's output, or ``None``.
+
+    PURE: reads only what the agent already produced. It never re-scores, never
+    re-judges and never fills a gap with a placeholder — a run whose output
+    carries no gate verdict yields ``None``, and the columns stay NULL.
+
+    Both artifact families are read from the shape their agent already returns:
+    the tailoring agent's ``iterations`` + ``tailoringSummary``, and the
+    cover-letter agent's ``quality.passes`` + ``quality.qualityGate``.
+    """
+    out = output or {}
+    summary = out.get("tailoringSummary")
+    quality = out.get("quality")
+    attempts_raw: list[Any] = []
+    # ``belowQualityFloor`` is the marker that the gate actually JUDGED this
+    # run — it is written by the same builder that writes the verdict, and only
+    # by it. Its ABSENCE (a discovery run, a legacy output shape) is what keeps
+    # the columns NULL instead of inventing a state.
+    if isinstance(summary, dict) and "belowQualityFloor" in summary:
+        source, gate_summary = out.get("iterations"), summary
+    elif isinstance(quality, dict) and "belowQualityFloor" in quality:
+        source, gate_summary = quality.get("passes"), quality
+    else:
+        return None
+    if isinstance(source, list):
+        attempts_raw = source
+
+    per_attempt: list[dict[str, Any]] = []
+    for index, attempt in enumerate(attempts_raw, start=1):
+        if not isinstance(attempt, dict):
+            continue
+        gate = attempt.get("qualityGate")
+        gate = gate if isinstance(gate, dict) else {}
+        per_attempt.append(
+            {
+                "iteration": attempt.get("iteration", index),
+                "stage": attempt.get("stage"),
+                "score": attempt.get("score", attempt.get("overall")),
+                "gatePassed": gate.get("passed"),
+                "failingLabels": gate.get("failingLabels") or [],
+            }
+        )
+
+    below = bool(gate_summary.get("belowQualityFloor"))
+    return {
+        "state": GATE_STATE_BELOW_FLOOR if below else GATE_STATE_PASSED,
+        "payload": {
+            "attempts": len(per_attempt),
+            "perAttempt": per_attempt,
+            "stopReason": gate_summary.get("stopReason"),
+            "gateAttemptsUsed": gate_summary.get("gateAttemptsUsed", 0),
+            "belowQualityFloor": below,
+            "failingDimensions": gate_summary.get("failingDimensions") or [],
+        },
+    }
 
 
 def run_link_fields(input_: dict[str, Any] | None) -> tuple[str | None, str | None]:
@@ -305,6 +404,34 @@ class AgentRunRepository:
                 rows = rows_to_dicts(cur)
             conn.commit()
         return rows[0] if rows else None
+
+    def record_quality_instrumentation(
+        self, run_id: str, output: dict[str, Any] | None
+    ) -> bool:
+        """Stamp this run's quality-gate trail + terminal state. Additive.
+
+        Returns True iff something was written. A run whose output carries no
+        gate verdict writes NOTHING — the columns stay NULL rather than
+        recording a state nobody measured.
+        """
+        instrumentation = quality_instrumentation(output)
+        if instrumentation is None:
+            return False
+        ensure_agent_run_quality_columns()
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    'UPDATE "AgentRun" SET "qualityAttempts" = %s::jsonb, '
+                    '"qualityGateState" = %s WHERE "id" = %s',
+                    (
+                        json.dumps(instrumentation["payload"]),
+                        instrumentation["state"],
+                        run_id,
+                    ),
+                )
+                written = cur.rowcount > 0
+            conn.commit()
+        return written
 
     def heartbeat(self, run_id: str) -> bool:
         """Stamp liveness for a RUNNING run. Returns False once it is terminal.

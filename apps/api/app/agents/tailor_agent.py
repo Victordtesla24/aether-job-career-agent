@@ -22,6 +22,12 @@ from app.repositories.story import StoryRepository
 from app.services.ats_engine import ATSEngine
 from app.services.career_data import build_career_corpus
 from app.services.evidence_corpus import build_corpus_evidence, corpus_items_to_evidence_text
+from app.services.quality_gate import (
+    QUALITY_FLOOR,
+    failing_labels,
+    gate_extra_attempts,
+    is_below_floor,
+)
 from app.services.resume_format import FormatFidelity, describe_fidelity, pending_fidelity
 from app.services.resume_grounding import MissingResumeError
 from app.services.resume_parser import parse_resume_pdf
@@ -464,8 +470,14 @@ class TailorRunResult:
     #: response and a later page load can never tell different stories.
     #: Keys: targetScore, bestScore, bestIteration, iterationsRun,
     #: reachedTarget, stopReason, requiresReview, warning,
-    #: unreachableKeywords, gapKeywords, netChanges.
+    #: unreachableKeywords, gapKeywords, netChanges, qualityGate,
+    #: belowQualityFloor, failingDimensions, gateAttemptsUsed.
     tailoringSummary: dict[str, Any] = field(default_factory=dict)
+    #: U2c: the 80%-all-dimensions verdict for the SHIPPED version — the same
+    #: object inside ``tailoringSummary`` and on the approval, lifted to the
+    #: top level so the run card can read it without unpacking the summary.
+    #: ``None`` only when the gate was never armed for this run.
+    qualityGate: dict[str, Any] | None = None
 
 
 def resolve_loop_knobs(policy_knobs: "Mapping[str, Any] | None") -> tuple[int, float]:
@@ -489,6 +501,54 @@ def resolve_loop_knobs(policy_knobs: "Mapping[str, Any] | None") -> tuple[int, f
         DEFAULT_TARGET_SCORE,
     )
     return max_iterations, target_score
+
+
+def build_tailoring_summary(
+    *,
+    target_score: float,
+    best_score: float,
+    best_iteration: int,
+    iterations_run: int,
+    reached_target: bool,
+    stop_reason: str,
+    requires_review: bool,
+    warning: str | None,
+    unreachable_keywords: list[str],
+    gap_keywords: list[str],
+    net_changes: int,
+    quality_gate: dict[str, Any] | None = None,
+    gate_attempts_used: int = 0,
+) -> dict[str, Any]:
+    """The run's honest verdict, in ONE shape.
+
+    Persisted to ``Resume.sections["tailoringSummary"]`` AND returned on the
+    API response AND copied onto the approval, so a reload, a card and a review
+    modal cannot tell three different stories about the same run.
+
+    U2c adds the quality-gate half. ``belowQualityFloor`` is derived from the
+    stored verdict via ``quality_gate.is_below_floor`` rather than recomputed:
+    an artifact produced before the gate existed carries ``None`` and is NOT
+    below the floor — reporting it as such would claim a judgement that was
+    never made — while a real failing verdict is reported verbatim, with the
+    failing dimension LABELS the card and Studio render.
+    """
+    return {
+        "targetScore": target_score,
+        "bestScore": best_score,
+        "bestIteration": best_iteration,
+        "iterationsRun": iterations_run,
+        "reachedTarget": reached_target,
+        "stopReason": stop_reason,
+        "requiresReview": requires_review,
+        "warning": warning,
+        "unreachableKeywords": unreachable_keywords,
+        "gapKeywords": gap_keywords,
+        "netChanges": net_changes,
+        "qualityGate": quality_gate,
+        "belowQualityFloor": is_below_floor(quality_gate),
+        "failingDimensions": failing_labels(quality_gate),
+        "gateAttemptsUsed": gate_attempts_used,
+    }
 
 
 class TailoringAgent:
@@ -685,11 +745,23 @@ class TailoringAgent:
         # inside ``self._service`` runs unmodified on every iteration; closing
         # a keyword gap never means inventing experience the candidate lacks.
         max_iterations, target_score = resolve_loop_knobs(policy_knobs)
+        # U2c RULES item 1: the 80%-across-ALL-dimensions floor is ENFORCED
+        # here, at the one seam that owns the tailoring decision. The loop may
+        # spend a small, env-capped number of extra attempts closing a
+        # dimension it has already scored above the ATS target on, and then
+        # terminates HONESTLY: the résumé is still created and returned, with
+        # the failing dimensions named verbatim from the real scores. The
+        # fabrication/entailment guards inside ``self._service`` are untouched
+        # and adjudicate every one of those attempts unchanged — a claim the
+        # evidence does not support is rejected even when it would close the
+        # gap, which is why a below-floor terminal exists at all.
         loop = TailoringLoop(
             service=self._service,
             ats_engine=self._ats_engine,
             max_iterations=max_iterations,
             target_score=target_score,
+            dimension_floor=QUALITY_FLOOR,
+            gate_extra_attempts=gate_extra_attempts(),
         )
         loop_result = loop.run(
             resume_text, jd, originals=parent_bullets, evidence_extra=evidence_extra
@@ -765,19 +837,21 @@ class TailoringAgent:
         )
         # The run's honest verdict, persisted alongside the numbers so a
         # reload can repeat it word for word instead of showing a bare score.
-        tailoring_summary = {
-            "targetScore": loop.target_score,
-            "bestScore": loop_result.best_score,
-            "bestIteration": loop_result.best_iteration,
-            "iterationsRun": len(loop_result.iterations),
-            "reachedTarget": loop_result.success,
-            "stopReason": loop_result.stop_reason,
-            "requiresReview": loop_result.requires_review,
-            "warning": loop_result.warning,
-            "unreachableKeywords": loop_result.unreachable_keywords,
-            "gapKeywords": best["gapKeywords"],
-            "netChanges": net_changes,
-        }
+        tailoring_summary = build_tailoring_summary(
+            target_score=loop.target_score,
+            best_score=loop_result.best_score,
+            best_iteration=loop_result.best_iteration,
+            iterations_run=len(loop_result.iterations),
+            reached_target=loop_result.success,
+            stop_reason=loop_result.stop_reason,
+            requires_review=loop_result.requires_review,
+            warning=loop_result.warning,
+            unreachable_keywords=loop_result.unreachable_keywords,
+            gap_keywords=best["gapKeywords"],
+            net_changes=net_changes,
+            quality_gate=loop_result.quality_gate,
+            gate_attempts_used=loop_result.gate_attempts_used,
+        )
         # MV-resume-studio-001: a freshly tailored version is created ``pending`` —
         # it stays under human review until its ApprovalRequest (below) is
         # approved, at which point ApprovalRepository flips it to ``approved``.
@@ -839,6 +913,11 @@ class TailoringAgent:
                 # than the application_submit defaults.
                 "agent": "Tailoring Agent",
                 "action": "apply a tailored résumé",
+                # U2c: the SAME verdict the artifact carries, so the review
+                # modal's "Approve anyway — N dimensions below floor" gate and
+                # the Studio banner quote one computation, not two. The
+                # approve endpoint reads THIS key (never a recomputed one).
+                "qualityGate": tailoring_summary["qualityGate"],
                 **build_tailor_approval_extras(loop_as_result, job, evidence_corpus, fidelity),
             },
         )
@@ -859,4 +938,5 @@ class TailoringAgent:
             iterations=loop_result.iterations,
             gapKeywords=best["gapKeywords"],
             tailoringSummary=tailoring_summary,
+            qualityGate=loop_result.quality_gate,
         )

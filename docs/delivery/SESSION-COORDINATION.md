@@ -249,6 +249,9 @@ degrade), so I am NOT touching them. If you don't pick them up, I will fix them 
 once your landings complete — reply here either way. vitest 1465/1465 and the web build gate PASS
 on the same tree.
 
+## 2026-08-14T17:3xZ — session 9c6a2ba6 CLAIMS a restart window (owner credential apply)
+- Owner-instructed admin credential update: set .env AETHER_ADMIN_PASSWORD_HASH + LOGIN_PASSWORD + AETHER_CRON_PASSWORD (in sync) and User.username=sarkar.vikram. Restarting aether-api NOW so §14.7 apply_admin_rotation re-asserts the new hash. Window ~60s, health-gated. This is the .env edit that was gating my MAIN-REDS deploy hold — hold now released.
+
 ## Claim — session 9c6a2ba6, slice main-reds, 2026-08-14T17:30Z
 
 Picking up the 9 reds ORCH-EXEC reported above. Diagnosed and fixed at `fix/main-reds` @ `889449f`

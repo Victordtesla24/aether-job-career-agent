@@ -25,6 +25,7 @@ from conftest import seed_own_resume
 from app.agents.cover_letter_agent import (
     CoverLetterAgent,
     extract_injection_payloads,
+    gate_pass_labels,
     sanitize_untrusted_text,
     wrap_untrusted_block,
 )
@@ -72,11 +73,15 @@ class _EchoLLM:
         self.calls = 0
         self.last_prompt: str | None = None
         self.last_system: str | None = None
+        #: U2c: the agent's own label for WHY each draft was made — "default",
+        #: a guard-forced corrective "retry", or a "quality" quality-gate pass.
+        self.fixture_keys: list[str] = []
 
     def complete_json(self, prompt_name, system, user, **kwargs):
         self.calls += 1
         self.last_prompt = user
         self.last_system = system
+        self.fixture_keys.append(str(kwargs.get("fixture_key") or "default"))
         # NB: "backend" was dropped from this stub claim — it is a term from the
         # job TITLE ("Backend Engineer") absent from the bundled résumé, so the
         # GAP-P6-COV-001 claim guard now (correctly) rejects it as an unsupported
@@ -199,5 +204,11 @@ class TestOutputSideInjectionGuard:
         # The guard only ran on the FIRST draft: FabricationGuard alone would
         # have passed this body (the raw description is part of its own
         # evidence corpus), proving the extra output-side guard did the work.
-        assert llm.calls == 1
+        # U2c: asserted on the draft STAGE rather than the call count — the
+        # quality gate may separately spend its bounded budget on this letter,
+        # and counting calls would misread that as a guard rejection.
+        assert [k for k in llm.fixture_keys if k.startswith("retry")] == [], (
+            llm.fixture_keys
+        )
+        assert llm.calls <= 1 + len(gate_pass_labels()), llm.fixture_keys
         assert result.flagged == []

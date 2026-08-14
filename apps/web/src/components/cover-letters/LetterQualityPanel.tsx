@@ -16,6 +16,8 @@
  *    labelled as such — they are not presented as a shortfall the user could
  *    fix by rewriting, because closing them would mean fabricating.
  */
+import { QualityFloorNotice } from "../quality/QualityFloorNotice";
+import { qualityGateFrom } from "../../lib/quality-gate";
 import type { LetterInsights } from "./api";
 
 type Quality = NonNullable<LetterInsights["quality"]>;
@@ -119,6 +121,15 @@ export function LetterQualityPanel({
               </p>
             </div>
           ) : null}
+
+          {/* U2c — the 80%-across-all-dimensions floor, verbatim. This is a
+              STRICTER gate than the `reachedTarget` line above: a letter can
+              clear the headline target while one dimension sits below the
+              floor, which is exactly the case that used to ship unflagged. */}
+          <QualityFloorNotice
+            gate={qualityGateFrom(quality.qualityGate)}
+            testId="letter-quality-floor"
+          />
 
           <p className="mt-3 text-[11px] leading-relaxed text-aether-muted-dim">
             {quality.methodology}
