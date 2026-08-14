@@ -749,7 +749,12 @@ def _refine_cover_letter_body(
     # target company — and the job description/title are risk vocabulary
     # only, never evidence (GAP-P6-COV-001 / ML-W23).
     career_corpus = build_career_corpus(user_id)
-    story_evidence = build_story_evidence(user_id)
+    # U-STORY-1 step 1: same JD-scoped, budgeted Story Bank selection the main
+    # generation path uses — the two must never fork (see the ML-W26 note
+    # above). The sanitized description is the relevance signal only; the job
+    # description remains risk vocabulary, never evidence.
+    story_jd = f"{job['title']} at {job['company']}. {sanitized_description}"
+    story_evidence = build_story_evidence(user_id, job_description=story_jd)
     claim_evidence = " ".join(
         p
         for p in (resume_text, career_corpus, story_evidence, signer, position, job["company"])

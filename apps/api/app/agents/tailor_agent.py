@@ -143,6 +143,59 @@ def _compute_conversion_metrics(
     }
 
 
+#: Default cap on the Story Bank text folded into ONE prompt. Deliberately the
+#: same number as ``evidence_corpus._DEFAULT_MAX_CHARS``: the two evidence
+#: producers that share a single tailoring/cover prompt must share one
+#: budgeting discipline, or the unbounded one silently crowds out the bounded
+#: one. Overridable without a deploy via ``AETHER_STORY_EVIDENCE_MAX_CHARS``.
+_DEFAULT_STORY_EVIDENCE_MAX_CHARS = 4000
+
+#: Generation-time relevance floor for Story Bank selection (U-STORY-1 step 1).
+#:
+#: ``story_relevance_score`` is the share of the POSTING's term-frequency
+#: weighted vocabulary that ONE story proves, so its realistic ceiling is small:
+#: measured against a full-length posting, a squarely on-point story scores
+#: ~0.20 and a genuinely unrelated one scores exactly 0.0
+#: (``uat/reports/evidence/market-perf/u-story/s1/relevance-range.json``). The
+#: §7.3.5 default of 0.4 that ``story_relevance.relevance_threshold()`` returns
+#: is therefore unreachable for ANY single story, and applying it here would
+#: drop the candidate's entire Story Bank from the prompt — deleting the very
+#: candidate-own evidence the cover-letter claim guard needs and turning true
+#: claims into rejections. That threshold has never been exercised as a
+#: selection floor anywhere (``GET /stories?job_id=`` reports the score, it does
+#: not filter on it), so this is its first live calibration, not a relaxation of
+#: a shipped guard: no fabrication or entailment guard reads this value, and a
+#: WIDER set of the candidate's own TRUE stories can only ever make the guards
+#: more permissive about things the candidate genuinely did.
+#:
+#: The floor kept here is "proves at least something this posting asks for" —
+#: the one magnitude with an evidence-grounded meaning rather than a guessed
+#: one. Bounding is then done by RANK + CHARACTER BUDGET, exactly as the corpus
+#: path does it (``evidence_corpus.build_corpus_evidence``). Overridable via
+#: ``AETHER_STORY_EVIDENCE_MIN_RELEVANCE``.
+_DEFAULT_STORY_EVIDENCE_MIN_RELEVANCE = 0.01
+
+
+def _story_evidence_max_chars() -> int:
+    try:
+        value = int(os.environ.get("AETHER_STORY_EVIDENCE_MAX_CHARS", ""))
+    except ValueError:
+        return _DEFAULT_STORY_EVIDENCE_MAX_CHARS
+    return value if value > 0 else _DEFAULT_STORY_EVIDENCE_MAX_CHARS
+
+
+def _story_evidence_min_relevance() -> float:
+    try:
+        return float(
+            os.environ.get(
+                "AETHER_STORY_EVIDENCE_MIN_RELEVANCE",
+                str(_DEFAULT_STORY_EVIDENCE_MIN_RELEVANCE),
+            )
+        )
+    except (TypeError, ValueError):
+        return _DEFAULT_STORY_EVIDENCE_MIN_RELEVANCE
+
+
 def build_story_evidence(
     user_id: str,
     repo: StoryRepository | None = None,
@@ -166,14 +219,46 @@ def build_story_evidence(
     ``relevance_threshold()`` against this specific job. This can only ever
     NARROW which of the candidate's own TRUE stories are included — it never
     adds, rewrites, or invents story content, so the anti-fabrication
-    entailment guard downstream is unaffected."""
+    entailment guard downstream is unaffected.
+
+    Selection and bounding mirror the corpus path
+    (``services/evidence_corpus.build_corpus_evidence``) so the two producers
+    that share one prompt behave the same way:
+
+    * with a ``job_description``, stories that prove nothing the posting asks
+      for are dropped (:func:`~app.services.story_relevance.filter_stories_by_relevance`
+      at :data:`_DEFAULT_STORY_EVIDENCE_MIN_RELEVANCE`) and the survivors are
+      ordered strongest-first;
+    * with or without one, the rendered text is truncated to a character budget
+      (:func:`_story_evidence_max_chars`). Before U-STORY-1 this path was the
+      only unbounded evidence producer in the tailoring prompt — a 40-story
+      bank was folded whole into every job's prompt.
+    """
     repo = repo or StoryRepository()
     stories = repo.list_by_user(user_id)
     if job_description:
-        from app.services.story_relevance import filter_stories_by_relevance
+        from app.services.story_relevance import (
+            filter_stories_by_relevance,
+            story_relevance_score,
+        )
 
-        stories = filter_stories_by_relevance(stories, job_description)
+        stories = filter_stories_by_relevance(
+            stories, job_description, threshold=_story_evidence_min_relevance()
+        )
+        # Strongest evidence first, so what the character budget below keeps is
+        # the evidence most able to move THIS application — never an arbitrary
+        # prefix of the bank. The id tiebreak keeps the order deterministic
+        # when two stories score identically.
+        stories = sorted(
+            stories,
+            key=lambda s: (
+                -story_relevance_score(s, job_description),
+                str(s.get("id") or ""),
+            ),
+        )
+    budget = _story_evidence_max_chars()
     parts: list[str] = []
+    used = 0
     for story in stories:
         fields = [str(story.get("title") or ""), " ".join(story.get("tags") or [])]
         for key in ("situation", "task", "action", "result"):
@@ -182,8 +267,15 @@ def build_story_evidence(
         if isinstance(metrics, dict):
             fields.extend(f"{k} {v}" for k, v in metrics.items())
         text = " ".join(f for f in fields if f).strip()
-        if text:
-            parts.append(text)
+        if not text:
+            continue
+        # ``continue`` rather than ``break`` (mirrors ``build_corpus_evidence``):
+        # one oversized story must not evict every shorter one behind it.
+        cost = len(text) + (2 if parts else 0)
+        if used + cost > budget:
+            continue
+        parts.append(text)
+        used += cost
     return "\n\n".join(parts)
 
 
@@ -543,7 +635,14 @@ class TailoringAgent:
         # GAP-P6-TAIL-001: the Story Bank is real, evidence-grounded career
         # signal usually absent from the polished résumé text — the source of
         # truthful JD keywords the tailor can surface for a genuine ATS lift.
-        story_evidence = build_story_evidence(user_id, self._stories)
+        # U-STORY-1 step 1: scoped to THIS posting. Without ``job_description``
+        # every story the user owns was folded into every job's prompt,
+        # unranked and unbounded — the largest unpriced token load in the
+        # tailoring prompt on a large bank. Relevance selection can only NARROW
+        # the candidate's own true stories, so no guard semantics change.
+        story_evidence = build_story_evidence(
+            user_id, self._stories, job_description=jd
+        )
         # U2b/U2c-0: the provenance-tagged evidence corpus (baseline résumé +
         # portfolio + public repos, each claim carrying its source, epistemic
         # status and confidence). Ranked against THIS job description and

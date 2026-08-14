@@ -1554,7 +1554,17 @@ class CoverLetterAgent:
         # is NEVER evidence: a claim backed only by the posting is a fabrication
         # about the candidate. The job TITLE is the risk signal for the tempting
         # role-specialty terms a draft is most likely to over-claim ('intake').
-        story_evidence = build_story_evidence(user_id, self._stories)
+        # U-STORY-1 step 1: the Story Bank is selected against THIS posting
+        # (same scorer ``GET /stories?job_id=`` already exposes) and bounded by
+        # the same character budget the corpus path uses. The job description
+        # is used here as a RELEVANCE signal over the candidate's own stories
+        # only — it is still never EVIDENCE (see ``claim_evidence`` below), and
+        # the SANITIZED form is used so an injection clause cannot even steer
+        # which true stories are selected.
+        story_jd = f"{job['title']} at {job['company']}. {sanitized_description}"
+        story_evidence = build_story_evidence(
+            user_id, self._stories, job_description=story_jd
+        )
         claim_evidence = " ".join(
             p
             for p in (
