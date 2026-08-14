@@ -650,21 +650,26 @@ export default function AnalyticsPage() {
           className={`elev-1 rounded-2xl p-5 ${policy ? "xl:col-span-7" : "xl:col-span-12"}`}
           data-testid="ats-distribution"
         >
-          <h2 className="flex items-center gap-1.5">
-            <MetricTooltip
-              label="ATS score distribution"
-              value=""
-              tooltip="How your scored jobs are spread across ATS/AI fit-score bands (0–100) — higher bands mean stronger keyword and experience matches."
-            />
-            {/* This panel has no period support server-side (MV-analytics-004)
-                — say so honestly instead of silently ignoring the selector
-                above like it applies here too. */}
-            <span className="type-meta font-normal normal-case">
-              (all time — not affected by the period selector)
-            </span>
-          </h2>
+          {/*
+            B2 NIT — DUPLICATE HEADING, REMOVED.
+            This section printed "ATS score distribution" as its own <h2> and
+            then `<Histogram>`'s `<ChartFrame>` printed the identical string
+            again as an <h3> directly beneath it — two visible headings, same
+            words, ~28px apart. Worse, the <h2>'s parenthetical "(all time — not
+            affected by the period selector)" was a second copy of the chart's
+            own `windowLabel`, which states it more precisely ("all time — N
+            scored jobs, not affected by the period selector").
+
+            Both duplicates are gone and NOTHING is lost: `<ChartFrame>` is now
+            the section's single heading (and its `aria-labelledby` target), the
+            period disclosure lives in the chart's `<figcaption>` where every
+            other chart on this page carries it, and the explanatory
+            `MetricTooltip` moves into the frame's `action` slot beside the
+            title. The `all time` string the page test asserts inside
+            `[data-testid="ats-distribution"]` is still present, in the caption.
+          */}
           {ats === null ? (
-            <div className="mt-4 h-40 animate-pulse rounded-lg bg-white/5" aria-busy="true" />
+            <div className="h-40 animate-pulse rounded-lg bg-white/5" aria-busy="true" />
           ) : (
             /*
              * On the chart kit — three defects closed at once:
@@ -675,14 +680,19 @@ export default function AnalyticsPage() {
              *  - there were no gridlines and no y-axis at all, which is the
              *    reference pack's rule-5 violation the audit filed by name.
              */
-            <div className="mt-4">
-              <Histogram
-                title="ATS score distribution"
-                windowLabel={`all time — ${ats.total} scored ${ats.total === 1 ? "job" : "jobs"}, not affected by the period selector`}
-                buckets={atsBuckets(ats)}
-                itemNoun="jobs"
-              />
-            </div>
+            <Histogram
+              title="ATS score distribution"
+              windowLabel={`all time — ${ats.total} scored ${ats.total === 1 ? "job" : "jobs"}, not affected by the period selector`}
+              buckets={atsBuckets(ats)}
+              itemNoun="jobs"
+              action={
+                <MetricTooltip
+                  label=""
+                  value=""
+                  tooltip="How your scored jobs are spread across ATS/AI fit-score bands (0–100) — higher bands mean stronger keyword and experience matches."
+                />
+              }
+            />
           )}
         </section>
 
