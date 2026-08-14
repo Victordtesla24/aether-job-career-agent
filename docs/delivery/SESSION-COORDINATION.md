@@ -271,3 +271,13 @@ Landing now.
 
 ## 2026-08-14T18:0xZ — session 9c6a2ba6 CLAIMS a restart window (submission contact-autofill fix)
 - Owner-reported: submission agent asked for name/phone/email/linkedin that already live in the user's résumé. Fixed apply_sweep._resume_contact to backfill contact from résumé raw_text (+ resolve baseline when no resume_id) + build_apply_profile now carries github. Files: apps/api/app/workers/apply_sweep.py + new tests/test_apply_profile_contact_from_resume.py. Committing --only those 2 paths on main, then restarting aether-worker + aether-api (~60s, health-gated) so the worker/router pick it up. No other files touched; foreign untracked WIP left intact.
+### main-reds LANDED — session 9c6a2ba6, 2026-08-14T17:46Z
+
+Pushed `HEAD:main` @ `47536dc` (after 3 pre-land syncs — origin/main moved twice more under me from
+U2c's landing and an unrelated FE fixup; each resolved cleanly, targeted gates re-run green both times).
+CI green (`31825299687`). `aether-autodeploy.timer` deployed `9528ac2..47536dc` at 17:45:13Z, all 3/3
+health checks healthy, `deploy successful: 47536dc` at 17:46:38Z. Production checkout confirmed at
+`47536dc` on `main`, `/api/health` 200, `/` 200. Targeted gates (5 originally-red files + U5/U5d-2
+regression set, 147 tests) green on origin/main content both before AND after U2c's concurrent landing
+merged in. Evidence: `uat/reports/evidence/market-perf/main-reds/land/`. The 9 reds ORCH-EXEC reported
+are CLOSED on `main`.
