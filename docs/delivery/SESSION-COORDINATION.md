@@ -313,3 +313,35 @@ changes with a 409 instead of silently reverting at next restart).
   claims or the still-allowlisted `test_blocker010_board_sweep_abort_recovery.py` / `cover_letter/{quality,retry3}.json`.
 - Expected deploy window: next `aether-autodeploy.timer` cycle after `HEAD:main` push.
 - Not touching any other session's active claims (ORCH-EXEC's MON-*/B5/B7/D.*, u2c, uagi-p1a).
+
+## uagi-p1a LAND — land+verify session, 2026-08-14T19:1xZ-19:2xZ — BLOCKED before `HEAD:main`, not by choice
+
+Picked up `feat/uagi-p1a` @ `4aaadc8` (build + 2 independent adversarial re-reviews already PASS on
+file — `uat/reports/evidence/market-perf/u-agi/p1a/{BUILD-P1A,REVIEW-P1A,REVIEW-P1A-REREVIEW,
+GATE-P1A-COMPLETION-VERIFY-fixerhard}.*`). Merged `origin/main` clean, 0 conflicts (`71fd4a3`).
+Post-merge P1-A suite gate: **269 passed** (matches pre-merge exactly). Merge surfaced one real
+regression — P1-A's 19-row charter + new routes shifted 5 line-number citations in
+`workflow-linkage-provenance.test.ts` (U-STORY-3a's content-level provenance gate); re-anchored all 5,
+verified 10/10 green (`a5040f8`, same file/pattern as the earlier `e430d5b` fix from U2c's landing).
+Both commits pushed to `feat/uagi-p1a` (NOT `main`) + PR #15 opened for an independent CI signal
+without touching the deploy timer.
+
+**Did NOT push `HEAD:main`.** Fresh prod DB probe this session
+(`uat/reports/evidence/market-perf/u-agi/p1a/verify/00-PRE-DEPLOY-PROBE-BLOCKING.md`) confirms
+BUILD-P1A.md's own open item #7 (F8) is live and unresolved: the deployment-wide
+`ProviderCredential('anthropic')` row is `authMode=oauth_token` (the owner's Max/Pro subscription);
+zero users hold a personal Anthropic credential; no `ANTHROPIC_API_KEY` fallback is configured; and
+the owner's OWN 2 `AgentConfig` rows (`claude-haiku-4-5-20251001`, `claude-opus-4-8`) are served TODAY
+by exactly the fallback path F8 walls off. Merging as-is would break the owner's own configured agents
+with an honest no-credential error, unannounced — the ADR's own text names this an **operator ruling**,
+not a landing decision. `test_uagi_p1a_credential_separation.py::test_f8_user_content_never_consumes_
+the_operator_subscription_row` independently corroborates the contract at the code level (asserts
+`None` for exactly this `authMode=oauth_token` shape).
+
+**What unblocks this**: an explicit operator decision — accept the honest failure for those 2 configs
+(re-point them at a credentialed model, or accept the visible error), OR provision a real operator
+`ANTHROPIC_API_KEY`. Either is a one-line change once decided. Also flagged, non-blocking for P1-A's own
+diff: PROBE-R8-2 (`Application_user_job_active_key`) does not exist in the prod `aether` schema — the
+submission silo's DB backstop is unconfirmed on prod, pre-existing and untouched by this branch.
+Not touching any other session's active claims. `feat/uagi-p1a` will need one more `origin/main` sync
+before it can land, since main kept moving (`admin-full`, `B3`) while this was open.
