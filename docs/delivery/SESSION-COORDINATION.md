@@ -177,3 +177,26 @@ through R-01, and scores now FALL wherever a carrier previously ate the requirem
 Verification method note: I checked the **served** chunks over HTTP rather than the on-disk build, because
 `.next`'s mtime landed after the restart (Next writes cache post-start) and on-disk freshness alone would not
 have proven what the browser actually receives.
+
+---
+
+## Claims — session ORCH-EXEC (Fable-5 orchestrator, `orch/exec-20260814`), 2026-08-14T14:2xZ
+
+Executing `/home/ubuntu/orchestrator-execution-prompt.md` (Waves A–D reconciliation + close-out).
+Delta doc: `docs/delivery/ORCH-DELTA-2026-08-14.md` (on branch `orch/exec-20260814`, merges to main at close).
+
+| Item | Files I expect to touch | State |
+|---|---|---|
+| B6 parentRunId (additive) | `routers/agents.py` (run creation), additive AgentRun migration, agents-map FE | CLAIMED |
+| D.524 generic-route async | `routers/agents.py` (`run_named_agent`) | CLAIMED |
+| B1 U-AGI P1-A + AGI-2 P1 + story loop | NEW `services/run_scheduler.py` + kernel/directive modules, `routers/agents.py` (supervisor step), `agents/story_extractor*`, additive RunPlan/AgentDirective migrations | CLAIMED |
+| B2 threshold output gates | `agents/tailor_agent.py`, `agents/cover_letter_agent.py`, `services/quality_policy.py` | CLAIMED |
+| B7 LinkedIn upload path | `services/career_data.py`, settings UI | CLAIMED |
+| D.queue-depth | new API route + small FE element | CLAIMED |
+| B5 email-agent timer | `deploy/` systemd timer units | CLAIMED |
+| Docs | `docs/delivery/ORCH-*`, MONITORING-LEDGER recreation, rehearsal checklist, ADRs | CLAIMED |
+| sui-b2 landing | none (merge only) — will SKIP if your session lands it first; re-checking before acting | COORDINATING |
+
+**Deploy window**: I will claim a single coordinated deploy window here before any restart (per rule 2).
+NOT touching: your untracked WIP in this tree (`FOREIGN-WIP-MOVED.md`, llm fixtures, blocker010 test file).
+Governance IDs: I will allocate from `GOV-040+`.
