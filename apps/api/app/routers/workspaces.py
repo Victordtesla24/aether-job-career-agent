@@ -7,6 +7,7 @@ fixtures, no in-process dictionaries, no demo personas.
 from __future__ import annotations
 
 import logging
+import threading
 import time
 from typing import Annotated, Any
 
@@ -38,9 +39,15 @@ logger = logging.getLogger(__name__)
 # entirely instead of hammering Gmail with a credential that is known-bad.
 # ``value = (deadline_monotonic, account_ids_in_backoff)`` — mirrors the
 # existing ``_cache: dict[str, tuple[float, ...]]`` TTL-cache idiom in
-# ``app.services.apply_channel_resolver``.
+# ``app.services.apply_channel_resolver``, INCLUDING its ``threading.Lock()``
+# guard (apply_channel_resolver.py:171-197): ``email_inbox`` is a sync ``def``
+# route, which Starlette dispatches on its threadpool, so two concurrent
+# requests for the same user really can race this check-then-act state.
+# Every read/write below holds ``_gmail_sync_backoff_lock`` — narrowly, never
+# across the Gmail network call itself, only around the dict access.
 _GMAIL_SYNC_BACKOFF_SECONDS = 15 * 60
 _gmail_sync_backoff: dict[str, tuple[float, frozenset[Any]]] = {}
+_gmail_sync_backoff_lock = threading.Lock()
 
 
 def _email_provider_connected(user_id: str) -> bool:
@@ -502,13 +509,14 @@ def email_inbox(
         # Gmail every poll. An expired entry is dropped so the next attempt
         # below can retry (and clear it on success, or re-arm it on another
         # failure).
-        backoff_entry = _gmail_sync_backoff.get(uid)
         backoff_account_ids: frozenset[Any] = frozenset()
-        if backoff_entry is not None:
-            deadline, backoff_account_ids = backoff_entry
-            if time.monotonic() >= deadline:
-                _gmail_sync_backoff.pop(uid, None)
-                backoff_account_ids = frozenset()
+        with _gmail_sync_backoff_lock:
+            backoff_entry = _gmail_sync_backoff.get(uid)
+            if backoff_entry is not None:
+                deadline, backoff_account_ids = backoff_entry
+                if time.monotonic() >= deadline:
+                    _gmail_sync_backoff.pop(uid, None)
+                    backoff_account_ids = frozenset()
 
         for acc in account_rows:
             # W-6 TTL gate: one sync is threads().list() + up to 25
@@ -535,11 +543,16 @@ def email_inbox(
                 # to fall through to the silent `except Exception: pass`
                 # below and get retried on every single poll.
                 auth_failed_account_ids.add(acc_id)
-                already_backed_off = uid in _gmail_sync_backoff
-                _gmail_sync_backoff[uid] = (
-                    time.monotonic() + _GMAIL_SYNC_BACKOFF_SECONDS,
-                    frozenset(auth_failed_account_ids),
-                )
+                with _gmail_sync_backoff_lock:
+                    # The log-once decision MUST be made inside the same
+                    # locked section that writes the entry — otherwise two
+                    # concurrent requests can both read "not yet backed off"
+                    # before either writes, and both log.
+                    already_backed_off = uid in _gmail_sync_backoff
+                    _gmail_sync_backoff[uid] = (
+                        time.monotonic() + _GMAIL_SYNC_BACKOFF_SECONDS,
+                        frozenset(auth_failed_account_ids),
+                    )
                 if not already_backed_off:
                     # One structured warning on ENTERING backoff, not one per
                     # request — subsequent polls within the window hit the
@@ -556,7 +569,8 @@ def email_inbox(
             else:
                 # A successful sync proves the credential is good again —
                 # clear any backoff this user was previously in.
-                _gmail_sync_backoff.pop(uid, None)
+                with _gmail_sync_backoff_lock:
+                    _gmail_sync_backoff.pop(uid, None)
 
     # The inbox query reads/joins on the additive Gmail linkage columns plus the
     # additive aiScore column; ensure they exist even for a user who has never
