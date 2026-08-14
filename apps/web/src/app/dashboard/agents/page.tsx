@@ -34,6 +34,11 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+// S-UI AESTHETICS BAR — the console's page-scoped presentation layer. Every
+// selector in it is `ag-`-prefixed and anchored under `.ag-console`, so it
+// cannot restyle another route; nothing in it changes what this page says.
+import "./agents-console.css";
+
 import {
   fetchAgentRuns,
   fetchAgents,
@@ -772,11 +777,16 @@ export default function AgentsPage() {
   });
 
   return (
-    <div className="space-y-6">
-      <header className="flex flex-wrap items-start justify-between gap-4">
+    <div className="ag-console space-y-7">
+      {/* `ag-hero` carries the fold's atmosphere: a wide, very low-opacity
+          coral wash behind the title and a cooler counter-light opposite it,
+          both inert (`pointer-events:none`, laid out inside the content
+          column) so neither can be clicked or scrolled into. */}
+      <header className="ag-hero flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
-          <h1 className="text-[26px] font-bold leading-tight tracking-[-0.02em]">Manage Agents</h1>
-          <p className="mt-0.5 font-mono text-[11px] tabular-nums text-aether-muted-dim">
+          {/* Rule 3 — the ONE saturated gesture on this fold. */}
+          <h1 className="ag-title">Manage Agents</h1>
+          <p className="ag-subline mt-1.5 font-mono text-aether-muted-dim">
             {agentCount} agents · {providerCount} AI providers · configure models &amp; connections
           </p>
         </div>
@@ -1029,37 +1039,56 @@ export default function AgentsPage() {
             announced without stealing focus. No fabricated uptime %: this
             product has no uptime signal, so the strip reports only what is
             genuinely measured — agents online, live runs, stalled runs. */}
+        {/* Rule 4 (numerals get their own typographic treatment): the three
+            counts are now the Mercury/Amplitude figure-over-label pair — a big
+            tabular figure with a small grey caption — instead of three 13px
+            runs of body copy. The dots, the words and the sample-window
+            disclosure are unchanged. */}
         <div
           data-testid="agents-run-health"
           role="status"
           aria-live="polite"
-          className="elev-2 flex flex-wrap items-center gap-x-6 gap-y-2 rounded-xl px-4 py-3"
+          className="ag-rail flex flex-wrap items-center gap-x-7 gap-y-4 px-5 py-4"
         >
-          <span className="flex items-center gap-2 text-[13px]">
-            <span className="h-2 w-2 rounded-full bg-state-ok" aria-hidden="true" />
-            <span className="font-mono tabular-nums">{agentsOnline}</span>
-            <span className="text-aether-muted">online</span>
+          <span className="ag-stat">
+            <span className="ag-stat-figure">
+              <span className="mr-2.5 inline-block h-1.5 w-1.5 rounded-full bg-state-ok align-middle" aria-hidden="true" />
+              {agentsOnline}
+            </span>
+            <span className="ag-stat-label">online</span>
           </span>
-          <span className="flex items-center gap-2 text-[13px]">
-            {liveRunCount > 0 ? (
-              <span className="live-dot h-2 w-2 rounded-full bg-aether-coral" aria-hidden="true" />
-            ) : (
-              <span className="h-2 w-2 rounded-full bg-state-neutral" aria-hidden="true" />
-            )}
-            <span className="font-mono tabular-nums">{liveRunCount}</span>
-            <span className="text-aether-muted">running</span>
+          <span className="ag-rail-sep" aria-hidden="true" />
+          <span className="ag-stat">
+            <span className="ag-stat-figure">
+              {liveRunCount > 0 ? (
+                <span
+                  className="live-dot mr-2.5 inline-block h-1.5 w-1.5 rounded-full bg-aether-coral align-middle"
+                  aria-hidden="true"
+                />
+              ) : (
+                <span
+                  className="mr-2.5 inline-block h-1.5 w-1.5 rounded-full bg-state-neutral align-middle"
+                  aria-hidden="true"
+                />
+              )}
+              {liveRunCount}
+            </span>
+            <span className="ag-stat-label">running</span>
           </span>
-          <span
-            className={`flex items-center gap-2 text-[13px] ${stalledRuns.length > 0 ? "text-state-warn" : ""}`}
-          >
-            <span
-              className={`h-2 w-2 rounded-full ${stalledRuns.length > 0 ? "bg-state-warn" : "bg-state-neutral"}`}
-              aria-hidden="true"
-            />
-            <span className="font-mono tabular-nums">{stalledRuns.length}</span>
-            <span className={stalledRuns.length > 0 ? "" : "text-aether-muted"}>stalled</span>
+          <span className="ag-rail-sep" aria-hidden="true" />
+          <span className={`ag-stat ${stalledRuns.length > 0 ? "text-state-warn" : ""}`}>
+            <span className={`ag-stat-figure ${stalledRuns.length > 0 ? "text-state-warn" : ""}`}>
+              <span
+                className={`mr-2.5 inline-block h-1.5 w-1.5 rounded-full align-middle ${stalledRuns.length > 0 ? "bg-state-warn" : "bg-state-neutral"}`}
+                aria-hidden="true"
+              />
+              {stalledRuns.length}
+            </span>
+            <span className={`ag-stat-label ${stalledRuns.length > 0 ? "text-state-warn" : ""}`}>
+              stalled
+            </span>
           </span>
-          <span className="ml-auto text-[11px] text-aether-muted-dim">
+          <span className="ml-auto max-w-[280px] text-right text-[11px] leading-[1.5] text-aether-muted-dim">
             Counted from the {runs.length.toLocaleString()} most recent run
             {runs.length === 1 ? "" : "s"} this console loaded.
           </span>
@@ -1071,12 +1100,12 @@ export default function AgentsPage() {
             trend. DISTINCT from the live run monitor below. `runs` is passed
             so an edge can pulse ONLY where a run is genuinely in flight. */}
         {orchestrationMap ? (
-          <section className="space-y-3">
+          <section className="space-y-3.5">
             <div>
-              <h2 className="text-[13px] font-semibold uppercase tracking-[0.08em] text-aether-muted-dim">
-                Agent Orchestration — Workflow Maps
+              <h2 className="ag-eyebrow">
+                <span>Agent Orchestration — Workflow Maps</span>
               </h2>
-              <p className="mt-0.5 text-[13px] leading-[1.5] text-aether-muted">
+              <p className="mt-2 max-w-[86ch] text-[13px] leading-[1.6] text-aether-muted">
                 Every agent in the catalog, placed in the workflow it actually plays a part in —
                 real agents show what they consume and improve on; planned agents are labelled
                 roadmap stages, never shown as running.
@@ -1088,38 +1117,40 @@ export default function AgentsPage() {
 
         <Orchestration agents={agents} runs={runs} />
 
-        <section className="space-y-3">
-          <h2 className="text-[13px] font-semibold uppercase tracking-[0.08em] text-aether-muted-dim">
-            Recent runs
+        <section className="space-y-3.5">
+          <h2 className="ag-eyebrow">
+            <span>Recent runs</span>
           </h2>
           {runs.length === 0 ? (
-            <div className="elev-1 rounded-2xl p-6 text-center text-[13px] text-aether-muted">
+            <div className="ag-panel p-6 text-center text-[13px] text-aether-muted">
               No agent runs recorded yet.
             </div>
           ) : (
-            <div className="elev-1 overflow-x-auto rounded-2xl">
-              <table className="w-full text-left text-sm" data-testid="agent-runs-table">
-              <thead className="text-[13px] font-semibold uppercase tracking-[0.08em] text-aether-muted-dim">
-                <tr className="border-b border-hairline-strong">
-                  <th className="px-4 py-3">Agent</th>
-                  <th className="px-4 py-3">Status</th>
-                  <th className="px-4 py-3">Started</th>
-                  <th className="px-4 py-3">Error</th>
+            <div className="ag-panel-sunken overflow-x-auto">
+              {/* Rule 6/13: hairline row separators only, and row heights back
+                  inside the 28–48px band every real dashboard in the reference
+                  set uses. The measured before-state was 359px per row —
+                  twenty paragraph-height slabs — caused entirely by the policy
+                  column below. */}
+              <table className="ag-table text-left text-[13px]" data-testid="agent-runs-table">
+              <thead>
+                <tr>
+                  <th>Agent</th>
+                  <th>Status</th>
+                  <th>Started</th>
+                  <th>Error</th>
                   {/* U-AX item 2(b)/5: per-run "policy inputs consumed" — the
                       metric snapshot the agent sourced and the resulting
                       rigor level, honest "not recorded" for pre-instrumentation
                       runs. */}
-                  <th className="px-4 py-3">Policy</th>
+                  <th>Policy</th>
                 </tr>
               </thead>
               <tbody>
                 {runs.slice(0, 20).map((run) => (
-                  <tr
-                    key={run.id}
-                    className="border-b border-hairline transition-colors duration-[var(--dur-fast)] last:border-0 hover:bg-white/[0.04]"
-                  >
-                    <td className="px-4 py-2.5 font-medium">{run.agentName}</td>
-                    <td className="px-4 py-2.5">
+                  <tr key={run.id}>
+                    <td className="whitespace-nowrap font-medium">{run.agentName}</td>
+                    <td className="whitespace-nowrap">
                       {coverLetterDegraded(run) ? (
                         // QA3-F-03: a letterless coverLetter degrade is
                         // recorded status='completed' (GAP-P4-002 — the
@@ -1150,7 +1181,7 @@ export default function AgentsPage() {
                         </span>
                       )}
                     </td>
-                    <td className="whitespace-nowrap px-4 py-2.5 font-mono text-[11px] tabular-nums text-aether-muted">
+                    <td className="whitespace-nowrap font-mono text-[11px] tabular-nums text-aether-muted">
                       {/* parseServerTime, not `new Date`: the API's naive UTC
                           stamps carry no timezone designator, so a bare parse
                           renders them in the viewer's offset — ten hours out
@@ -1160,18 +1191,21 @@ export default function AgentsPage() {
                         : "—"}
                     </td>
                     {/* S-UI §3.4: a raw error string used to run the full width
-                        of the viewport. Clamped to two lines with the full text
-                        in `title` — clamped, never truncated away. */}
-                    <td className="max-w-[320px] px-4 py-2.5 text-[11px] text-aether-muted-dim">
+                        of the viewport. Clamped with the full text in `title` —
+                        clamped, never truncated away. */}
+                    <td className="max-w-[280px] text-[11px] leading-[1.45] text-aether-muted-dim">
                       <span
                         title={humanizeActivityMessage(run.error) || undefined}
-                        className="line-clamp-2 block"
+                        className="line-clamp-1 block"
                       >
                         {humanizeActivityMessage(run.error) || "—"}
                       </span>
                     </td>
-                    <td className="max-w-[220px] px-4 py-2.5">
-                      <RunPolicyInputs run={run} />
+                    <td className="max-w-[340px]">
+                      {/* SUI1-P1 density fix: the policy paragraph is CLAMPED to
+                          one line and given a real disclosure — every word stays
+                          in the DOM, in `title`, and one click away. */}
+                      <RunPolicyInputs run={run} variant="row" />
                     </td>
                   </tr>
                 ))}

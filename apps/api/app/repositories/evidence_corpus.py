@@ -144,6 +144,30 @@ class EvidenceCorpusRepository:
             conn.commit()
         return len(rows)
 
+    def delete_items(self, user_id: str, item_ids: Iterable[str]) -> int:
+        """Drop specific items of ``user_id`` by their own ids.
+
+        The single-row counterpart of :meth:`delete_sources`, added for the
+        Story Bank mirror (U-STORY-1 step 5): deleting ONE story must retract
+        exactly that story's evidence, while ``delete_sources`` would retract
+        every story the user has. Retraction has to be as precise as the write,
+        or a deleted story stays citable.
+        """
+        ids = [i for i in item_ids if i]
+        if not ids:
+            return 0
+        self._ensure_table()
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    'DELETE FROM "EvidenceCorpusItem" '
+                    'WHERE "userId" = %s AND "itemId" = ANY(%s)',
+                    (user_id, ids),
+                )
+                deleted = cur.rowcount or 0
+            conn.commit()
+        return deleted
+
     def delete_sources(self, user_id: str, sources: Iterable[str]) -> int:
         """Drop a user's items for the named sources (a refresh's first half).
 

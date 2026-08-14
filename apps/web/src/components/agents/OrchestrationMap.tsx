@@ -338,18 +338,18 @@ function NodeCard({
           }
         }}
         style={{ height: NODE_H }}
-        className={`group relative flex w-full flex-col justify-between rounded-xl p-3 text-left outline-none transition-[border-color,background-color] duration-[var(--dur)] focus-visible:ring-2 focus-visible:ring-aether-coral/70 ${
-          isPlanned
-            ? "border border-dashed border-hairline-strong bg-surface-0 opacity-75"
-            : focused
-              ? "border border-aether-coral/50 bg-surface-3"
-              : "elev-1 hover:border-hairline-strong hover:bg-surface-2"
+        // `.ag-node` (agents-console.css) carries the shell: 1px hairline, a
+        // top-edge highlight, a soft top-light wash, and — for a node whose
+        // `data-motion` is "pulse", i.e. a genuinely in-flight non-stalled run
+        // and nothing else — the breathing coral bloom.
+        className={`ag-node group relative flex w-full flex-col justify-between p-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-aether-coral/70 ${
+          isPlanned ? "ag-node-planned opacity-75" : focused ? "ag-node-focused" : ""
         }`}
       >
         <span className="flex shrink-0 items-start justify-between gap-2">
-          <span className="flex min-w-0 items-center gap-1.5">
+          <span className="flex min-w-0 items-start gap-1.5">
             <i
-              className={`fa-solid fa-circle-nodes shrink-0 text-[11px] ${
+              className={`fa-solid fa-circle-nodes mt-[3px] shrink-0 text-[10px] ${
                 node.state === "live"
                   ? "text-aether-coral"
                   : node.state === "stalled"
@@ -360,9 +360,13 @@ function NodeCard({
               }`}
               aria-hidden="true"
             />
+            {/* Two lines, not one truncated one: at the map's narrowest column
+                "Job Discovery Agent" / "ATS Optimization Agent" were being cut
+                to "Job Discovery A…". The card height is unchanged (NODE_H) —
+                the second line fits inside the existing budget. */}
             <span
               title={agent.name}
-              className="min-w-0 truncate text-[12px] font-semibold text-aether-text"
+              className="line-clamp-2 min-w-0 text-[12px] font-semibold leading-[1.25] tracking-[-0.01em] text-aether-text"
             >
               {agent.name}
             </span>
@@ -736,9 +740,7 @@ function MapGraph({ model, allowGl }: { model: MapModel; allowGl: boolean }) {
                 data-testid={`orchestration-stage-${slugifyStage(stage.stage)}`}
                 className="min-w-0 snap-start"
               >
-                <h4 className="mb-2 truncate text-[11px] font-semibold uppercase tracking-[0.08em] text-aether-muted-dim">
-                  {stage.stage}
-                </h4>
+                <h4 className="ag-stage-label mb-2.5 truncate">{stage.stage}</h4>
                 <ol className="space-y-3">
                   {stage.nodes.map((node) => (
                     <li key={node.agent.agentKey}>
@@ -789,9 +791,12 @@ function MapGraph({ model, allowGl }: { model: MapModel; allowGl: boolean }) {
       ) : null}
 
       {/* ---- Legend + the required, always-visible honesty footnote ---- */}
-      <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-hairline pt-3 text-[11px] text-aether-muted-dim">
-        <span className="flex items-center gap-1.5">
-          <span className="h-1.5 w-1.5 rounded-full bg-aether-coral" aria-hidden="true" />
+      <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-1.5 border-t border-hairline pt-3.5 text-[11px] leading-[1.5] text-aether-muted-dim">
+        <span className="flex items-center gap-2">
+          <span
+            className="h-1.5 w-1.5 rounded-full bg-aether-coral shadow-[0_0_8px_1px_rgba(255,107,53,0.8)]"
+            aria-hidden="true"
+          />
           live run — the only thing that moves
         </span>
         <span className="flex items-center gap-1.5">
@@ -856,20 +861,26 @@ export default function OrchestrationMap({
         <section
           key={model.key}
           data-testid={`orchestration-map-${model.key}`}
-          className="elev-1 relative overflow-hidden rounded-2xl p-5"
+          className="ag-panel relative overflow-hidden p-5"
         >
-          <header className="mb-4 flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
+          <header className="mb-5 flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
             <div className="min-w-0">
-              <h3 className="text-[15px] font-semibold tracking-[-0.01em]">{model.name}</h3>
+              <h3 className="text-[16px] font-semibold leading-tight tracking-[-0.022em]">
+                {model.name}
+              </h3>
               {model.subtitle ? (
-                <p className="mt-0.5 text-[13px] leading-[1.5] text-aether-muted">{model.subtitle}</p>
+                <p className="mt-1 max-w-[70ch] text-[12.5px] leading-[1.55] text-aether-muted">
+                  {model.subtitle}
+                </p>
               ) : null}
             </div>
             <p className="shrink-0 font-mono text-[11px] tabular-nums text-aether-muted-dim">
               {model.stages.length} stage{model.stages.length === 1 ? "" : "s"} ·{" "}
               {model.stages.reduce((n, s) => n + s.nodes.length, 0)} agents
               {model.liveCount > 0 ? (
-                <span className="text-state-ok"> · {model.liveCount} running</span>
+                // The map header's live count is the one place a running total
+                // gets the brand hue — it points at the node that is blooming.
+                <span className="font-semibold text-aether-coral"> · {model.liveCount} running</span>
               ) : null}
               {model.stalledCount > 0 ? (
                 <span className="text-state-warn"> · {model.stalledCount} stalled</span>

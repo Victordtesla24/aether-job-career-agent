@@ -50,6 +50,7 @@ from app.repositories.job import JobRepository
 from app.repositories.story import StoryRepository
 from app.repositories.user import UserRepository
 from app.services.career_data import build_career_corpus
+from app.services.evidence_corpus import build_corpus_evidence
 from app.services.fabrication_guard import FabricationGuard
 from app.services.llm_client import (
     LLMClient,
@@ -725,17 +726,6 @@ def _refine_cover_letter_body(
     # The letter date, signer and current position are system/profile ground
     # truth, so they join the guard's evidence corpus (mirrors the agent).
     sanitized_description = sanitize_untrusted_text(raw_description)
-    corpus = " ".join(
-        [
-            resume_text,
-            job["title"],
-            job["company"],
-            sanitized_description,
-            letter_date(),
-            signer,
-            position,
-        ]
-    )
     # ML-W26: the refine path's own draft loop ran ONLY the FabricationGuard
     # above — never the §9 claim guard (``unsupported_claim_tokens``) the main
     # generation path wires through ``CoverLetterAgent._draft``/``run()``. The
@@ -749,10 +739,48 @@ def _refine_cover_letter_body(
     # target company — and the job description/title are risk vocabulary
     # only, never evidence (GAP-P6-COV-001 / ML-W23).
     career_corpus = build_career_corpus(user_id)
-    story_evidence = build_story_evidence(user_id)
+    # U-STORY-1 step 1: same JD-scoped, budgeted Story Bank selection the main
+    # generation path uses — the two must never fork (see the ML-W26 note
+    # above). The sanitized description is the relevance signal only; the job
+    # description remains risk vocabulary, never evidence.
+    story_jd = f"{job['title']} at {job['company']}. {sanitized_description}"
+    story_evidence = build_story_evidence(user_id, job_description=story_jd)
+    # U-STORY-1 step 3: the provenance-tagged evidence corpus the tailor
+    # already reads — same door, same JD ranking, same character budget — so a
+    # claim citable in the tailored résumé is citable in the REVISION of that
+    # application's letter too. Empty for a user with no ingested corpus.
+    corpus_evidence = build_corpus_evidence(user_id, story_jd)
+    # U-STORY-1 step 2 (U-STORY-DISCOVERY.md §2.2): the FabricationGuard corpus
+    # carries the Story Bank here too — the main generation path's §2.2
+    # asymmetry existed verbatim on this path, and the two must never fork. The
+    # letter date, signer and current position are system/profile ground truth,
+    # so they join it as before. Strict widening with candidate-own evidence:
+    # an entity nothing supports is still flagged.
+    #
+    # Deliberately NOT widened here: ``career_corpus`` is in the generation
+    # path's FabricationGuard corpus (cover_letter_agent.py:1548) and still is
+    # not in this one. That is a SECOND, pre-existing asymmetry of the same
+    # class, outside the U-STORY-1 brief — reported for an orchestrator ruling
+    # rather than silently changed under a story-evidence commit.
+    corpus = " ".join(
+        [
+            resume_text,
+            job["title"],
+            job["company"],
+            sanitized_description,
+            letter_date(),
+            signer,
+            position,
+        ]
+        + ([story_evidence] if story_evidence else [])
+        + ([corpus_evidence] if corpus_evidence else [])
+    )
     claim_evidence = " ".join(
         p
-        for p in (resume_text, career_corpus, story_evidence, signer, position, job["company"])
+        for p in (
+            resume_text, career_corpus, story_evidence, corpus_evidence,
+            signer, position, job["company"],
+        )
         if p
     )
     jd_risk = job["title"]
