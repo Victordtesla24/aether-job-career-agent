@@ -135,6 +135,25 @@ export interface LiveFidelity {
 }
 
 /**
+ * Client-side sentinel for when ``GET /resumes/{id}/fidelity`` itself FAILS
+ * (network error, 5xx, etc.) — distinct from ``live === null`` ("the fetch
+ * has not resolved yet"). MF-1 (round-4 re-review): a fetch failure used to
+ * leave the modal's state at ``null`` forever, which ``withLiveFidelity``
+ * treats as a no-op — so the frozen "Original layout preserved" claim kept
+ * rendering as a green "Verified" check on every failure, live-reachable in
+ * production against 2 real pending approvals. A failure must instead
+ * downgrade the line the same way a genuinely-unknown server report would:
+ * this sentinel's ``preserved: null`` takes the existing "not proven true"
+ * branch below (kind "warning"), and its ``note`` names the fetch failure
+ * specifically so it is never mistaken for the server's own
+ * ``source_resolved=False`` wording.
+ */
+export const FIDELITY_FETCH_FAILED: LiveFidelity = {
+  preserved: null,
+  note: "Layout fidelity could not be verified right now — do not rely on the frozen claim.",
+};
+
+/**
  * Supersede the frozen "Original layout" reasoning line the tailoring agent
  * wrote at approval-creation time with the résumé's LIVE fidelity
  * (ML-U2B-approval-honesty ruling 2). A tailoring approval's reasoning is
@@ -148,9 +167,12 @@ export interface LiveFidelity {
  * Scoped to PENDING ``resume_tailor`` approvals only: a resolved/rejected
  * approval is historical record and keeps its frozen text verbatim, and
  * every other approval kind has no layout-preservation line to supersede.
- * ``live === null`` (fetch not yet resolved, or it failed) is a no-op — the
- * frozen line is shown as written rather than hidden, since "we don't know
- * yet" is not a reason to blank the agent's own reasoning.
+ * ``live === null`` (fetch not yet resolved) is a no-op — the frozen line is
+ * shown as written while we wait, since "we don't know yet" is not a reason
+ * to blank the agent's own reasoning. A fetch FAILURE is never represented
+ * as ``null``: callers pass ``FIDELITY_FETCH_FAILED`` instead, so it takes
+ * the same honest-unknown "warning" branch as any other unresolved report
+ * rather than leaving (or reverting to) the frozen claim on screen.
  */
 export function withLiveFidelity(
   approval: Approval,

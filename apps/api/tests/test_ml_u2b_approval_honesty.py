@@ -19,8 +19,14 @@ ORCHESTRATOR RULING (U2b approval-honesty, 2026-08-14):
    unconditional claim. Locked here.
 2. PENDING ``resume_tailor`` approvals render fidelity LIVE from the
    résumé's own fidelity data where the reasoning is displayed (frozen line
-   superseded on display) — locked in
-   apps/web/src/components/approvals/__tests__/lib.test.ts and
+   superseded on display), and a FAILED live-fidelity fetch renders an
+   honest-unknown warning rather than letting the frozen claim stand
+   (MF-1, round-4 re-review) — the pure supersession logic is locked in
+   apps/web/src/components/approvals/__tests__/lib.test.ts, and the
+   component-level wiring (the effect fires for the right kind/status, is
+   keyed by payload.resume_id, supersedes the rendered DOM on success,
+   degrades honestly on fetch failure, and never fires for resolved/other
+   approvals) is locked in
    apps/web/src/components/approvals/__tests__/live-fidelity.test.tsx.
 3. The 199 historical RESOLVED rows stay frozen (not rewritten) — see this
    slice's evidence note documenting the era boundary.

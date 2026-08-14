@@ -15,6 +15,7 @@ import type { Approval } from "../../lib/api/approvals";
 import { fetchResumeFidelity } from "../../lib/api/resumes";
 import type { DecisionContext } from "./api";
 import {
+  FIDELITY_FETCH_FAILED,
   type LiveFidelity,
   isExpired,
   metaLine,
@@ -72,8 +73,13 @@ export function ApprovalModal({ approval, onClose, onDecide }: ApprovalModalProp
         if (!cancelled) setLiveFidelity({ preserved: fidelity.formatPreserved, note: fidelity.note });
       })
       .catch(() => {
-        // Honest degrade: the modal keeps showing the frozen reasoning line
-        // rather than blocking on a fidelity-endpoint failure.
+        // MF-1 (round-4 re-review): a failed fidelity fetch must NOT leave
+        // the frozen "Original layout preserved" claim rendering as a green
+        // "Verified" check — that silently restores the exact false-claim
+        // pattern this slice exists to kill. Downgrade to the honest-unknown
+        // warning instead of a no-op (`null` would keep showing the frozen
+        // line unchanged; see withLiveFidelity's docstring).
+        if (!cancelled) setLiveFidelity(FIDELITY_FETCH_FAILED);
       });
     return () => {
       cancelled = true;
