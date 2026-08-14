@@ -6,6 +6,7 @@ from typing import Any
 
 from app.db import (
     ensure_admin_user_columns,
+    ensure_password_reset_columns,
     ensure_user_profile_columns,
     get_connection,
     new_id,
@@ -93,20 +94,42 @@ class UserRepository:
         """User row plus the additive admin/security flags for the auth guard.
 
         Projects ``isAdmin`` + ``suspended`` (default ``false``) so the auth
-        dependency can enforce suspension (403) and admin gating in one query.
-        ``ensure_admin_user_columns`` keeps the read safe on the older test
-        schema that predates the columns.
+        dependency can enforce suspension (403) and admin gating in one query,
+        plus ``passwordChangedAt`` (O-4) so it can invalidate any session token
+        minted before the user's last password reset. ``ensure_admin_user_columns``
+        / ``ensure_password_reset_columns`` keep the read safe on the older test
+        schema that predates these columns.
         """
         ensure_admin_user_columns()
+        ensure_password_reset_columns()
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    f'SELECT {_USER_COLUMNS}, "isAdmin", "suspended" '
+                    f'SELECT {_USER_COLUMNS}, "isAdmin", "suspended", "passwordChangedAt" '
                     'FROM "User" WHERE "id" = %s',
                     (user_id,),
                 )
                 rows = rows_to_dicts(cur)
         return rows[0] if rows else None
+
+    def set_password(self, user_id: str, password_hash: str) -> None:
+        """Set a new password hash and stamp ``passwordChangedAt`` (O-4).
+
+        Used by ``POST /auth/reset-password``. Stamping the timestamp is the
+        session-invalidation mechanism: every JWT issued before this moment
+        carries an ``iat`` earlier than the new value and is rejected by
+        ``app.middleware.auth.get_current_user`` on its next use, forcing a
+        fresh ``/login`` with the new password.
+        """
+        ensure_password_reset_columns()
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    'UPDATE "User" SET "passwordHash"=%s, "passwordChangedAt"=now(),'
+                    ' "updatedAt"=now() WHERE "id"=%s',
+                    (password_hash, user_id),
+                )
+            conn.commit()
 
     def touch_last_login(self, user_id: str) -> None:
         """Best-effort stamp of the user's last successful login (§15 list).

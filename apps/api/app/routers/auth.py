@@ -1,6 +1,7 @@
 """Auth router — register + login with bcrypt hashing and JWT (P2-S01)."""
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from typing import Any
 
@@ -10,10 +11,14 @@ from pydantic import BaseModel, EmailStr, field_validator
 from app.db import ensure_user_profile_columns, get_connection, rows_to_dicts
 from app.middleware.auth import CurrentUser
 from app.rate_limit import (
+    guard_forgot_password_attempt,
     guard_login_attempt,
     guard_register_attempt,
+    guard_reset_password_attempt,
     record_login_failure,
+    record_reset_password_failure,
     reset_login_failures,
+    reset_reset_password_failures,
 )
 from app.repositories.user import (
     DuplicateEmailError,
@@ -21,6 +26,8 @@ from app.repositories.user import (
     validate_password_policy,
 )
 from app.security import create_access_token, hash_password, verify_password
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -198,3 +205,125 @@ def me(current_user: CurrentUser) -> dict[str, Any]:
         # (resolved live from the row by the auth dependency).
         "isAdmin": bool(current_user.get("isAdmin")),
     }
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ForgotPasswordResponse(BaseModel):
+    # Always ``True``: the request was accepted (anti-enumeration — this
+    # response shape is IDENTICAL whether or not an account exists for the
+    # submitted email). ``emailSendingEnabled`` is the one honest signal
+    # returned: ``False`` means no outbound-email provider is configured
+    # today, so no email was ever attempted for ANY address — the frontend
+    # renders that plainly rather than claiming a link was sent.
+    ok: bool = True
+    emailSendingEnabled: bool
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    password: str
+
+    @field_validator("password")
+    @classmethod
+    def _enforce_policy(cls, value: str) -> str:
+        problems = validate_password_policy(value)
+        if problems:
+            raise ValueError("; ".join(problems))
+        return value
+
+
+class ResetPasswordResponse(BaseModel):
+    ok: bool = True
+
+
+@router.post(
+    "/forgot-password",
+    response_model=ForgotPasswordResponse,
+)
+def forgot_password(request: Request, body: ForgotPasswordRequest) -> ForgotPasswordResponse:
+    """O-4 — start a password reset. Always 200; never reveals account existence.
+
+    Rate-limited per submitted email (every accepted call counts, matching
+    ``guard_register_attempt``'s shape — an anti-enumeration response must not
+    let a caller distinguish "known" from "unknown" by rate either).
+
+    When a real, password-having account matches the email, a single-use
+    hashed token is minted and an email is attempted via
+    ``app.services.email_sender`` (SMTP or a Resend-style HTTPS API —
+    whichever is configured). When NEITHER provider is configured, the token
+    is still minted (so turning on a provider later works retroactively for
+    any link the operator might have relayed manually) but no send is
+    attempted; either way the response's ``emailSendingEnabled`` flag tells
+    the frontend the honest truth instead of claiming a link was sent when it
+    was not.
+    """
+    from app.services import email_sender
+    from app.services.password_reset import build_reset_email_body, create_reset_token
+    from app.services.stripe_gateway import app_base_url
+
+    guard_forgot_password_attempt(request, body.email)
+
+    email_enabled = email_sender.is_configured()
+    user = UserRepository().get_by_email(body.email)
+    if user is not None and user.get("passwordHash"):
+        raw_token = create_reset_token(user["id"])
+        if email_enabled:
+            reset_url = f"{app_base_url()}/reset-password?token={raw_token}"
+            sent = email_sender.send_email(
+                user["email"],
+                "Reset your Aether password",
+                build_reset_email_body(reset_url),
+            )
+            if not sent:
+                logger.info(
+                    "forgot-password: provider configured but send failed for "
+                    "userId=%s — operator should verify provider credentials "
+                    "(see docs/delivery/EMAIL-SETUP.md)",
+                    user["id"],
+                )
+        else:
+            logger.info(
+                "forgot-password: no outbound email provider configured — a "
+                "reset token was minted for userId=%s but NOT delivered. See "
+                "docs/delivery/EMAIL-SETUP.md to enable self-service reset.",
+                user["id"],
+            )
+    else:
+        logger.info(
+            "forgot-password: requested for an address with no local "
+            "password account (anti-enumeration 200; no token minted)"
+        )
+    return ForgotPasswordResponse(emailSendingEnabled=email_enabled)
+
+
+@router.post(
+    "/reset-password",
+    response_model=ResetPasswordResponse,
+)
+def reset_password(request: Request, body: ResetPasswordRequest) -> ResetPasswordResponse:
+    """O-4 — complete a password reset with a single-use token.
+
+    Rate-limited per submitted token (only failures count, mirroring
+    ``guard_login_attempt``'s shape). A rejected token — unknown, expired, or
+    already used — is a generic 400 that reveals nothing about WHY it failed.
+    On success, ``UserRepository.set_password`` stamps ``passwordChangedAt``,
+    which invalidates every session token minted before this moment (see
+    ``app.middleware.auth.get_current_user``) — the caller must sign in again
+    with the new password.
+    """
+    from app.services.password_reset import consume_reset_token
+
+    guard_reset_password_attempt(request, body.token)
+    user_id = consume_reset_token(body.token)
+    if user_id is None:
+        record_reset_password_failure(request, body.token)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="This reset link is invalid or has expired. Request a new one.",
+        )
+    reset_reset_password_failures(request, body.token)
+    UserRepository().set_password(user_id, hash_password(body.password))
+    return ResetPasswordResponse()

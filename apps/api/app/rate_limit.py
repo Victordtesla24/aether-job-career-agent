@@ -47,6 +47,22 @@ DEFAULT_LOGIN_WINDOW_SECONDS = 15 * 60.0
 DEFAULT_REGISTER_MAX = 3
 DEFAULT_REGISTER_WINDOW_SECONDS = 60 * 60.0
 
+#: Forgot-password (O-4): at most 3 requests per email per hour — mirrors
+#: register's "every attempt counts" shape (an anti-enumeration 200 must not
+#: leak a distinguishable rate, so successes and no-ops count identically).
+DEFAULT_FORGOT_PASSWORD_MAX = 3
+DEFAULT_FORGOT_PASSWORD_WINDOW_SECONDS = 60 * 60.0
+
+#: Reset-password (O-4): at most 5 FAILED attempts per submitted token per
+#: 15-minute window — mirrors login's "only failures count" shape. Keyed on
+#: the token itself (never IP, same ADR D-0033 rationale as login/register):
+#: each token is single-use and random (32 bytes via secrets.token_urlsafe),
+#: so this caps hammering of one guessed/leaked token; it does not by itself
+#: rate-limit an attacker trying many DIFFERENT token guesses — that residual
+#: is accepted the same way the login/register limiters accept theirs.
+DEFAULT_RESET_PASSWORD_MAX_FAILURES = 5
+DEFAULT_RESET_PASSWORD_WINDOW_SECONDS = 15 * 60.0
+
 
 def normalize_identifier(identifier: str) -> str:
     """Canonical rate-limit key for an email/username: trimmed + lowercased.
@@ -198,6 +214,38 @@ def build_register_rate_limiter() -> SlidingWindowRateLimiter:
     )
 
 
+def build_forgot_password_rate_limiter() -> SlidingWindowRateLimiter:
+    """Forgot-password attempt limiter (O-4), honouring optional env overrides.
+
+    ``AUTH_FORGOT_PASSWORD_MAX`` / ``AUTH_FORGOT_PASSWORD_WINDOW_SECONDS`` tune
+    per environment; malformed values fall back to defaults.
+    """
+    return SlidingWindowRateLimiter(
+        max_calls=_int_env("AUTH_FORGOT_PASSWORD_MAX", DEFAULT_FORGOT_PASSWORD_MAX),
+        window_seconds=_float_env(
+            "AUTH_FORGOT_PASSWORD_WINDOW_SECONDS",
+            DEFAULT_FORGOT_PASSWORD_WINDOW_SECONDS,
+        ),
+    )
+
+
+def build_reset_password_rate_limiter() -> SlidingWindowRateLimiter:
+    """Reset-password FAILURE limiter (O-4), honouring optional env overrides.
+
+    ``AUTH_RESET_PASSWORD_MAX_FAILURES`` / ``AUTH_RESET_PASSWORD_WINDOW_SECONDS``
+    tune per environment; malformed values fall back to defaults.
+    """
+    return SlidingWindowRateLimiter(
+        max_calls=_int_env(
+            "AUTH_RESET_PASSWORD_MAX_FAILURES", DEFAULT_RESET_PASSWORD_MAX_FAILURES
+        ),
+        window_seconds=_float_env(
+            "AUTH_RESET_PASSWORD_WINDOW_SECONDS",
+            DEFAULT_RESET_PASSWORD_WINDOW_SECONDS,
+        ),
+    )
+
+
 def _raise_429(retry_after: int, message: str) -> None:
     raise HTTPException(
         status_code=status.HTTP_429_TOO_MANY_REQUESTS,
@@ -269,3 +317,79 @@ def guard_register_attempt(request: Request, email: str) -> None:
             "Too many registration attempts for this email. "
             "Please wait and try again.",
         )
+
+
+# --- Forgot-password: count every attempt, keyed by email (O-4) ------------
+
+
+def guard_forgot_password_attempt(request: Request, email: str) -> None:
+    """Record this forgot-password request; 429 once the per-email cap is hit.
+
+    Mirrors ``guard_register_attempt`` exactly: every accepted call counts
+    (not just ones for a real account), so the rate stays anti-enumeration —
+    an unknown email is throttled at the same pace as a known one. A missing
+    limiter (defensive) degrades to a no-op.
+    """
+    limiter: SlidingWindowRateLimiter | None = getattr(
+        request.app.state, "forgot_password_rate_limiter", None
+    )
+    if limiter is None:
+        return
+    key = normalize_identifier(email)
+    if not limiter.allow(key):
+        _raise_429(
+            limiter.retry_after(key),
+            "Too many password-reset requests for this email. "
+            "Please wait and try again.",
+        )
+
+
+# --- Reset-password: count only FAILED attempts, keyed by token (O-4) ------
+
+
+def _normalize_token(token: str) -> str:
+    return token.strip()
+
+
+def guard_reset_password_attempt(request: Request, token: str) -> None:
+    """429 when this token has already hit its failed-attempt cap.
+
+    Mirrors ``guard_login_attempt``: called before consuming the token, so
+    the check itself never records a hit. A missing limiter (defensive)
+    degrades to a no-op.
+    """
+    limiter: SlidingWindowRateLimiter | None = getattr(
+        request.app.state, "reset_password_rate_limiter", None
+    )
+    if limiter is None:
+        return
+    key = _normalize_token(token)
+    if limiter.is_blocked(key):
+        _raise_429(
+            limiter.retry_after(key),
+            "Too many attempts for this reset link. Please wait and try again.",
+        )
+
+
+def record_reset_password_failure(request: Request, token: str) -> None:
+    """Count one failed reset attempt against this token's bucket."""
+    limiter: SlidingWindowRateLimiter | None = getattr(
+        request.app.state, "reset_password_rate_limiter", None
+    )
+    if limiter is None:
+        return
+    limiter.record(_normalize_token(token))
+
+
+def reset_reset_password_failures(request: Request, token: str) -> None:
+    """Clear this token's failure bucket after a successful reset.
+
+    A used token can never succeed again (single-use), so this mainly keeps
+    the in-memory map from holding a dead entry longer than its own window.
+    """
+    limiter: SlidingWindowRateLimiter | None = getattr(
+        request.app.state, "reset_password_rate_limiter", None
+    )
+    if limiter is None:
+        return
+    limiter.reset(_normalize_token(token))
