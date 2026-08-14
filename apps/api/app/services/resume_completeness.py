@@ -38,7 +38,7 @@ per-change verifier follows.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Sequence
 
 from app.services.format_verification import (
     _APPLIED_COVERAGE,
@@ -169,6 +169,46 @@ def baseline_record(
         {"text": text} for text in baseline_bullets(resume, parent)
     ]
     return {**parent, "sections": payload}
+
+
+def build_applied_content(
+    parent: dict[str, Any], applied_changes: Sequence[tuple[str, str]]
+) -> ResumeContent:
+    """The completeness contract for an IN-PLACE render (MODELS-LIVE R-FMT §2/§3).
+
+    An in-place splice / native rewrite starts from the user's WHOLE original
+    document (the ``parent``) and edits only the reworded slots it could place.
+    A rewrite it could NOT place keeps the parent's original wording — which is
+    still the user's own résumé content — so the render is content-complete as
+    long as it still carries the whole original document with the placed rewrites
+    substituted. Measuring such a render against the fully-tailored target
+    (:func:`build_resume_content`) would flag the ORIGINAL wording of an
+    unplaceable rewrite as "missing content" and force the whole layout to be
+    dropped to the branded template over a single out-of-scope region — the
+    exact all-or-nothing failure this slice removes.
+
+    So the contract is the parent's own document with ONLY the rewrites that
+    ACTUALLY landed mapped in (``applied_changes`` — the ``(before, after)``
+    pairs the post-render verifier confirmed present). A genuine content loss —
+    a dropped heading, a vanished contact line, an eaten untracked bullet — is
+    still caught, because it is neither in the parent's document as-is nor a
+    placed rewrite, and still routes to the content-complete branded render.
+    """
+    from app.services.format_verification import _normalize as _fold
+
+    applied = {_fold(before): after for before, after in applied_changes if before}
+    document = parse_resume_document(parent)
+
+    def _sub(text: str) -> str:
+        return applied.get(_fold(text), text)
+
+    return ResumeContent(
+        headings=document.headings,
+        bullets=tuple(_sub(bullet) for bullet in document.bullets),
+        contact=document.contact,
+        lines=tuple(_sub(line) for line in document.lines),
+        name=document.name,
+    )
 
 
 def build_resume_content(

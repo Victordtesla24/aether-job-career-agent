@@ -700,6 +700,83 @@ def _tailoring_changes(
     return changes
 
 
+def _inplace_render_or_fallback(
+    rendered: bytes,
+    media_type: str,
+    filename: str,
+    changes: list[tuple[str, str]],
+    source: dict[str, Any],
+    base_report: Any,
+    *,
+    stored_original: bool,
+) -> tuple[_RenderedResume | None, Any]:
+    """Decide whether an in-place render ships, or falls to the branded render.
+
+    MODELS-LIVE R-FMT §2/§3 — the format-preservation ruling that replaces the
+    U2b all-or-nothing gate. An in-place render (PDF splice / DOCX-native /
+    text-native) reproduces the user's OWN document, so it SHIPS with every
+    rewrite it could place; a rewrite it could not place keeps the baseline
+    wording and is disclosed as residue (``changesDropped`` + the honest note),
+    NEVER a reason to drop the whole preserved layout to the branded template.
+
+    It falls back to the branded render in exactly two honest cases, both of
+    which the branded (content-complete) render handles better than a preserved
+    layout would:
+
+    * the produced file cannot be re-read at all (corruption we did not cause);
+    * the render lost part of the user's WHOLE original document — a dropped
+      heading, a vanished contact line, an eaten untracked bullet. That is
+      measured against the parent's own document with only the PLACED rewrites
+      substituted (:func:`build_applied_content`), so an unplaceable rewrite
+      whose original wording still stands is NOT mistaken for content loss (the
+      false positive that used to nuke the layout), while a genuine loss still
+      routes to the complete branded render — the U2b CRITICAL guarantee, intact.
+
+    Returns ``(rendered_resume, None)`` to ship, or ``(None, fallback_report)``
+    to continue to the branded render with an honest reason.
+    """
+    from app.services.format_verification import verify_changes
+    from app.services.resume_completeness import (
+        build_applied_content,
+        verify_completeness,
+    )
+    from app.services.resume_format import native_fallback_fidelity, verified_fidelity
+
+    verification = verify_changes(rendered, media_type, changes)
+    if not verification.text_extracted:
+        return None, native_fallback_fidelity(
+            unreadable=True, stored_original=stored_original
+        )
+    applied_changes = [
+        (outcome.before, outcome.after)
+        for outcome in verification.outcomes
+        if outcome.applied
+    ]
+    completeness = verify_completeness(
+        rendered, media_type, build_applied_content(source, applied_changes)
+    )
+    if not completeness.complete:
+        # TRUE whole-document loss (not a mere unplaceable rewrite) → the branded
+        # render carries this version's complete content; ship that instead.
+        return None, native_fallback_fidelity(
+            content_incomplete=True, stored_original=stored_original
+        )
+    return (
+        _RenderedResume(
+            content=rendered,
+            media_type=media_type,
+            filename=filename,
+            fidelity=verified_fidelity(
+                base_report,
+                verification,
+                completeness=completeness,
+                partial_preserves_format=True,
+            ),
+        ),
+        None,
+    )
+
+
 def _render_resume(resume_id: str, user_id: str) -> _RenderedResume:
     """Produce a résumé download AND verify the fidelity claim made about it.
 
@@ -794,20 +871,17 @@ def _render_resume(resume_id: str, user_id: str) -> _RenderedResume:
                         ),
                     )
                 rendered, _applied = render_tailored_docx_report(data, changes)
-                verification = verify_changes(rendered, DOCX_CONTENT_TYPE, changes)
-                completeness = verify_completeness(rendered, DOCX_CONTENT_TYPE, content)
-                if verification.complete and completeness.complete:
-                    return _RenderedResume(
-                        content=rendered,
-                        media_type=DOCX_CONTENT_TYPE,
-                        filename=f"resume-{resume_id[:8]}.docx",
-                        fidelity=verified_fidelity(
-                            native_report, verification, completeness=completeness
-                        ),
-                    )
-                fallback_report = native_fallback_fidelity(
-                    content_incomplete=verification.complete
+                shipped, fallback_report = _inplace_render_or_fallback(
+                    rendered,
+                    DOCX_CONTENT_TYPE,
+                    f"resume-{resume_id[:8]}.docx",
+                    changes,
+                    source,
+                    native_report,
+                    stored_original=True,
                 )
+                if shipped is not None:
+                    return shipped
             except DocxParseError:
                 # Stored bytes that no longer open as a package (they passed the
                 # upload gate, so this is corruption we did not cause): the user
@@ -828,20 +902,17 @@ def _render_resume(resume_id: str, user_id: str) -> _RenderedResume:
                         ),
                     )
                 rewritten, _applied_count = _tailored_text_document(data, changes)
-                verification = verify_changes(rewritten, media_type, changes)
-                completeness = verify_completeness(rewritten, media_type, content)
-                if verification.complete and completeness.complete:
-                    return _RenderedResume(
-                        content=rewritten,
-                        media_type=media_type,
-                        filename=f"resume-{resume_id[:8]}.{suffix}",
-                        fidelity=verified_fidelity(
-                            native_report, verification, completeness=completeness
-                        ),
-                    )
-                fallback_report = native_fallback_fidelity(
-                    content_incomplete=verification.complete
+                shipped, fallback_report = _inplace_render_or_fallback(
+                    rewritten,
+                    media_type,
+                    f"resume-{resume_id[:8]}.{suffix}",
+                    changes,
+                    source,
+                    native_report,
+                    stored_original=True,
                 )
+                if shipped is not None:
+                    return shipped
             except UnicodeDecodeError:
                 fallback_report = native_fallback_fidelity(unreadable=True)
 
@@ -862,27 +933,27 @@ def _render_resume(resume_id: str, user_id: str) -> _RenderedResume:
                 fidelity=verified_fidelity(splice_report, None, byte_identical=True),
             )
         spliced = render_tailored_pdf(original, changes)  # splice in place
-        verification = verify_changes(spliced, _PDF_CONTENT_TYPE, changes)
-        # The SAME completeness rule the DOCX/text paths above apply. The
-        # in-place engine only redraws right-column work bullets, so a rewrite
-        # aimed at the left rail cannot be placed — and live production shipped
-        # exactly that file (1 of 4 changes missing, verify-truthround/,
-        # 2026-08-14). A partial splice is neither the user's baseline nor their
-        # tailored résumé; the honest alternative is the branded render below,
-        # which is built from this version's own tailored text.
-        completeness = verify_completeness(spliced, _PDF_CONTENT_TYPE, content)
-        if verification.complete and completeness.complete:
-            return _RenderedResume(
-                content=spliced,
-                media_type=_PDF_CONTENT_TYPE,
-                filename=f"resume-{resume_id[:8]}.pdf",
-                fidelity=verified_fidelity(
-                    splice_report, verification, completeness=completeness
-                ),
-            )
-        fallback_report = native_fallback_fidelity(
-            stored_original=False, content_incomplete=verification.complete
+        # MODELS-LIVE R-FMT §2/§3 — the format-preservation ruling that replaces
+        # the U2b all-or-nothing gate here. The in-place engine only redraws
+        # right-column work bullets, so a rewrite aimed at the left rail cannot
+        # be placed; under the old gate ONE such rewrite dropped the ENTIRE
+        # two-column layout to the branded single-column template (the live
+        # cfe7a0f→c12187 divergence). The splice preserves the user's own layout
+        # and keeps the baseline wording of any rewrite it could not place, so it
+        # SHIPS with the changes it CAN place and discloses the rest as residue —
+        # falling back to the branded render only when the file is unreadable or
+        # the WHOLE document lost content (measured against the placed rewrites).
+        shipped, fallback_report = _inplace_render_or_fallback(
+            spliced,
+            _PDF_CONTENT_TYPE,
+            f"resume-{resume_id[:8]}.pdf",
+            changes,
+            source,
+            splice_report,
+            stored_original=False,
         )
+        if shipped is not None:
+            return shipped
 
     # No bundled source PDF for this résumé — a user-authored upload/ingest
     # (NF-final-B-005) — or a native/in-place rewrite that could not be

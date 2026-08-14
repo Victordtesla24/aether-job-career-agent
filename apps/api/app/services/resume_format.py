@@ -211,7 +211,9 @@ def describe_fidelity(
         note=(
             "No original document is stored for this version (it was typed or "
             "ingested as text, or uploaded before Aether kept original files), "
-            "so downloads are rendered in the Aether template."
+            "so downloads are rendered in the Aether template. Re-upload your "
+            "résumé (PDF, or a .docx for byte-identical preservation) to enable "
+            "format-preserving tailoring."
         ),
         preserved=False,
     )
@@ -346,6 +348,7 @@ def verified_fidelity(
     *,
     byte_identical: bool = False,
     completeness: Any = None,
+    partial_preserves_format: bool = False,
 ) -> FormatFidelity:
     """``base``, re-stated from what re-reading the produced artifact proved.
 
@@ -357,11 +360,25 @@ def verified_fidelity(
       stored document; the claim is byte identity, not an inference.
     * **every change present** — the mechanism claim stands, and the note says
       how many rewrites were checked in the file itself.
-    * **a change is missing** — confidence drops to ``partial``, the note NAMES
-      the rewrite that could not be applied, and ``preserved`` becomes ``False``
-      whatever the mechanism claimed, because the alternative is handing the
-      user a document that is neither their baseline nor their tailored résumé
-      while telling them it is complete.
+    * **a change is missing** — confidence drops to ``partial`` and the note
+      NAMES the rewrite that could not be applied. What ``preserved`` becomes
+      then depends on ``partial_preserves_format``:
+
+      - default (``False``) — ``preserved`` becomes ``False`` whatever the
+        mechanism claimed, because the alternative is handing the user a
+        document that is neither their baseline nor their tailored résumé while
+        telling them it is complete (the DOCX/text branded-fallback contract).
+      - ``True`` — an IN-PLACE render on the user's OWN document (PDF splice /
+        DOCX-native / text-native), where a rewrite that could not be placed
+        keeps its ORIGINAL wording. The downloaded file is genuinely the
+        baseline with the placeable rewrites applied and the rest left as the
+        user wrote them, so the FORMAT is preserved (``preserved`` stays the
+        mechanism's value); the unplaced rewrites are disclosed as residue, not
+        hidden. This is the MODELS-LIVE R-FMT ruling: preserve the layout, name
+        the rewrites that could not land, and NEVER drop the whole document to
+        the branded template over one out-of-scope region. The caller only
+        passes this once a content-loss check (:func:`build_applied_content`)
+        has proved the render kept the WHOLE original document.
 
     An artifact that cannot be re-read reports ``unverified`` — never a
     guess in either direction, so the mechanism's own ``preserved`` value
@@ -426,6 +443,31 @@ def verified_fidelity(
     excerpt = str(dropped[0].after).strip()
     if len(excerpt) > 120:
         excerpt = f"{excerpt[:117]}…"
+    if partial_preserves_format:
+        # In-place render on the user's OWN document: an unplaceable rewrite
+        # keeps its ORIGINAL wording, so the file IS the baseline with the
+        # placeable rewrites applied — the FORMAT is preserved and the residue
+        # is disclosed. ``preserved`` stays the mechanism's value; the caller
+        # has already proved (via the applied-only completeness contract) that
+        # the whole original document survived.
+        return _with_completeness(FormatFidelity(
+            method=base.method,
+            confidence=CONFIDENCE_PARTIAL,
+            note=(
+                f"{base.note} {len(dropped)} of {requested} reworded "
+                f"{'bullet' if len(dropped) == 1 else 'bullets'} could not be "
+                f"placed in the {surface} and keep the original wording — your "
+                "document's layout is preserved and the full tailored text is in "
+                "this version's change summary in Resume Studio. Not applied: "
+                f"“{excerpt}”."
+            ),
+            preserved=base.preserved,
+            verification=VERIFICATION_POST_RENDER,
+            changes_requested=requested,
+            changes_applied=applied,
+            changes_dropped=len(dropped),
+            dropped_changes=tuple(outcome.as_dict() for outcome in dropped),
+        ), completeness)
     return _with_completeness(FormatFidelity(
         method=base.method,
         confidence=CONFIDENCE_PARTIAL,
