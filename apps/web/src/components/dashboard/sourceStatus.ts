@@ -18,7 +18,13 @@ interface SourceStatusView {
   badgeLabel: string;
   /** Relative last-sync time, or "never synced" when no run has recorded one. */
   lastSyncLabel: string;
-  /** Populated iff the source's last run failed — the real backend error, never fabricated. */
+  /**
+   * The real backend explanation, never fabricated: the humanized adapter
+   * error when the last run FAILED, or the honest quota-pause copy when the
+   * source is paused on a shared API quota (S-FIX-A/S-2). Null otherwise —
+   * including RT-008's structural block, whose reason stays suppressed by
+   * design because nothing the user does changes it.
+   */
   errorText: string | null;
 }
 
@@ -109,6 +115,33 @@ export function humanizeSourceError(raw: string, source?: string): string {
   return `${text.charAt(0).toUpperCase()}${text.slice(1)} — Aether will retry on the next sync.`;
 }
 
+/**
+ * The scout writes `f"{type(exc).__name__}: {exc}"` onto the source row, so a
+ * quota pause arrives as `SourceQuotaError: <curated message>` (S-FIX-A/S-2).
+ */
+const QUOTA_PREFIX = /^SourceQuotaError\s*:\s*/;
+
+/**
+ * The user-facing copy for a quota pause, or `null` when the row is not one.
+ *
+ * The message is written by our own adapter (a short, curated sentence naming
+ * the reset time), so it is shown VERBATIM rather than being re-worded — the
+ * only edit is dropping the exception-class marker, which is plumbing. The
+ * guard mirrors `humanizeSourceError`'s: if a future caller ever puts a raw
+ * dump (URL, stack trace, oversized blob) behind that prefix, it degrades to
+ * the same calm humanized line instead of leaking internals into the pill.
+ */
+function quotaCopy(lastError: string | null | undefined, source?: string): string | null {
+  if (!lastError || !QUOTA_PREFIX.test(lastError.trim())) return null;
+  const text = lastError.trim().replace(QUOTA_PREFIX, "").trim();
+  const looksRaw =
+    text.length === 0 ||
+    text.length > 220 ||
+    /https?:\/\//i.test(text) ||
+    /\n|Traceback|\bFile "/.test(text);
+  return looksRaw ? humanizeSourceError(lastError, source) : text;
+}
+
 /** Map raw per-source status rows to the view model the Sync Status panel renders. */
 export function sourceStatusView(
   rows: ScoutSourceStatus[],
@@ -123,19 +156,30 @@ export function sourceStatusView(
     // a calm neutral "unavailable" pill, never a red error re-alarming on
     // every sync. The real reason stays in the row's lastError via the API.
     const isBlocked = row.status === "blocked";
+    // S-FIX-A/S-2: a QUOTA pause is the opposite of RT-008's structural block —
+    // temporary, self-healing, and the backend's message says exactly when
+    // market data resumes ("… resets at 00:00 UTC"). Suppressing that message
+    // under the generic "blocked by source" pill told a paying subscriber the
+    // board was refusing us. The adapter asserts the distinction by TYPE
+    // (SourceQuotaError extends SourceBlockedError) and the scout stringifies
+    // the class name onto the row, so this reads a class marker the backend
+    // owns — never a guess about what an arbitrary error string means.
+    const quotaMessage = isBlocked ? quotaCopy(row.lastError, row.source) : null;
     const badge: SourceBadge = isError ? "error" : isOk ? "ok" : "neutral";
     const badgeLabel = isError
       ? "error"
       : isOk
         ? `ok, ${count} new`
-        : isBlocked
-          ? "unavailable (blocked by source)"
-          : row.status;
+        : quotaMessage
+          ? "market data paused (API quota)"
+          : isBlocked
+            ? "unavailable (blocked by source)"
+            : row.status;
     const errorText = isError
       ? row.lastError && row.lastError.trim().length > 0
         ? humanizeSourceError(row.lastError, row.source)
         : "Sync failed"
-      : null;
+      : quotaMessage;
     return {
       source: row.source,
       count,

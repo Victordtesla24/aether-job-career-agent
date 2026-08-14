@@ -46,13 +46,14 @@ log() { echo "[discovery-cron $(date -u +%FT%TZ)] $*" >&2; }
 # login flow and uat tooling already use, now loaded above). Refuse to run
 # rather than default to a demo password, mirroring
 # apps/api/scripts/seed_demo.py's _demo_password() pattern.
+#
+# S-FIX-A / S-1: the password is required only by the LEGACY single-account
+# fallback below, which is the only path that logs in as a user. The
+# multi-subscriber sweep authenticates with the system-run secret alone, so the
+# refusal moved down to the fallback branch — demanding one account's password
+# before a sweep that never uses it would block discovery for EVERY subscriber
+# on a deployment that has no cron account configured.
 PASSWORD="${AETHER_CRON_PASSWORD:-${LOGIN_PASSWORD:-}}"
-if [[ -z "$PASSWORD" ]]; then
-  log "FATAL: AETHER_CRON_PASSWORD or LOGIN_PASSWORD must be set (env var, or" \
-      " LOGIN_PASSWORD in the repo-root .env) to authenticate the discovery" \
-      " cron. Refusing to hardcode a default credential."
-  exit 1
-fi
 
 # Explicit HTTP-status handling (ADR-P7-05 / GAP-P7-DISCOVERY-001): curl -sf
 # alone treats ANY non-2xx response the same way -- a genuine network/API
@@ -108,6 +109,66 @@ http_call() {
     exit 1
   done
 }
+
+# S-FIX-A / S-1: EVERY entitled subscriber, not just this one account.
+#
+# The single-account flow below (login as EMAIL -> scout + fit-scorer for that
+# one user) served exactly one customer: every other paying subscriber got zero
+# automatic discovery and had to click Sync themselves. The server-side sweep
+# (POST /agents/discovery/sweep) iterates every entitled subscriber with a
+# usable search target, spacing the runs, and covers THIS account too — so the
+# owner's discovery keeps happening on the same 30-minute cadence, through the
+# same _dispatch/system_run path, with the same AgentRun audit rows.
+#
+# It needs no user password: the sweep is authenticated by the system-run
+# secret alone (the platform has no password for its subscribers). When
+# AETHER_SYSTEM_RUN_SECRET is UNSET the sweep is unreachable by design, so we
+# fall through to the legacy single-account path below unchanged rather than
+# silently discovering for nobody.
+if [[ -n "${AETHER_SYSTEM_RUN_SECRET:-}" ]]; then
+  SWEEP_CONF_DIR="$(mktemp -d "${TMPDIR:-/tmp}/aether-discovery-sweep.XXXXXX")"
+  chmod 700 "$SWEEP_CONF_DIR"
+  trap 'rm -rf "$SWEEP_CONF_DIR"' EXIT
+  SWEEP_CONF="$SWEEP_CONF_DIR/sweep.conf"
+  # MON-005: secret travels in a 0600 config file curl reads itself, never argv.
+  (umask 077; : > "$SWEEP_CONF")
+  printf 'header = "X-Aether-System-Run: %s"\n' "$AETHER_SYSTEM_RUN_SECRET" \
+    > "$SWEEP_CONF"
+  log "discovery sweep: all entitled subscribers"
+  SWEEP=$(http_call POST "$API/agents/discovery/sweep" "" --config "$SWEEP_CONF")
+  # Log a compact per-user summary (never the whole payload): who ran, what
+  # landed, who failed, and how much of the shared Adzuna day-budget went.
+  printf '%s' "$SWEEP" | python3 -c '
+import json, sys
+data = json.load(sys.stdin)
+budget = data.get("adzunaBudget") or {}
+print("swept=%s errors=%s adzuna_used=%s/%s" % (
+    data.get("sweptUsers"),
+    sum(1 for r in data.get("users", []) if r.get("status") == "error"),
+    budget.get("used"), budget.get("budget")))
+for row in data.get("users", []):
+    print("  %s %s persisted=%s updated=%s scored=%s %s" % (
+        row.get("status"), row.get("email") or row.get("userId"),
+        row.get("persisted"), row.get("updated"), row.get("scored"),
+        row.get("error") or ""))
+' >&2
+  exit 0
+fi
+
+log "AETHER_SYSTEM_RUN_SECRET unset: falling back to the single-account" \
+    " discovery path for $EMAIL (other subscribers get NO scheduled" \
+    " discovery until the secret is configured)."
+
+# Never hardcode a real credential in shipped, scheduled tooling (GAP-P4-068):
+# the legacy path refuses to run rather than defaulting to a demo password.
+if [[ -z "$PASSWORD" ]]; then
+  log "FATAL: AETHER_CRON_PASSWORD or LOGIN_PASSWORD must be set (env var, or" \
+      " LOGIN_PASSWORD in the repo-root .env) to authenticate the legacy" \
+      " single-account discovery cron. Refusing to hardcode a default" \
+      " credential. Set AETHER_SYSTEM_RUN_SECRET to use the multi-subscriber" \
+      " sweep instead, which needs no user password."
+  exit 1
+fi
 
 LOGIN_RESP=$(http_call POST "$API/auth/login" \
   "{\"email\":\"$EMAIL\",\"password\":\"$PASSWORD\"}")
