@@ -66,6 +66,7 @@ from typing import Any, Protocol
 
 from app.services.ats_engine import _STOPWORDS as _ATS_STOPWORDS
 from app.services.llm_client import LLMUnavailableError
+from app.services.quality_gate import evaluate_tailoring
 from app.services.resume_tailor import _evidence_index, _stem, strip_bullet_lines
 
 _logger = logging.getLogger(__name__)
@@ -315,12 +316,24 @@ class TailoringLoopResult:
     #: ``keyword_match`` for this résumé/posting pair, not a loop failure.
     #: Order-preserving, taken from the best-scoring iteration.
     unreachable_keywords: list[str] = field(default_factory=list)
-    #: Why the loop stopped: ``"target_reached"``, ``"iteration_cap"``, or
+    #: Why the loop stopped: ``"target_reached"``, ``"iteration_cap"``,
+    #: ``"quality_gate_cap"`` (U2c: the ATS target WAS reached but a dimension
+    #: stayed below the 80% quality floor after every bounded gate attempt), or
     #: ``"llm_budget_exhausted"`` (a live generation ran out of wall-clock
     #: budget part-way through, so fewer passes ran than the cap allowed).
     #: Never a euphemism — a capped-out or cut-short run says so, and the
     #: warning repeats it in words.
     stop_reason: str = "iteration_cap"
+    #: U2c: the winning iteration's 80%-all-dimensions verdict
+    #: (``services.quality_gate.GateVerdict.as_dict``), or ``None`` when the
+    #: caller never armed the gate. A below-floor verdict NEVER suppresses
+    #: ``final_bullets`` — the artifact ships, flagged, with the failing
+    #: dimensions' real numbers.
+    quality_gate: dict[str, Any] | None = None
+    #: How many of the gate's bounded extra attempts this run actually spent.
+    #: 0 for every run whose score target was never reached — the gate cannot
+    #: raise a sub-target run's worst-case LLM spend.
+    gate_attempts_used: int = 0
 
 
 class TailoringLoop:
@@ -340,11 +353,31 @@ class TailoringLoop:
         ats_engine: _ATSEngineLike,
         max_iterations: int = DEFAULT_MAX_ITERATIONS,
         target_score: float = DEFAULT_TARGET_SCORE,
+        dimension_floor: float | None = None,
+        gate_extra_attempts: int = 0,
     ) -> None:
+        """``dimension_floor`` arms the U2c quality gate (U2c RULES item 1).
+
+        When set, an iteration only counts as DONE if it both reaches
+        ``target_score`` AND clears the floor on every measured ATS dimension
+        (``services.quality_gate.evaluate_tailoring``). ``None`` — the default —
+        leaves this loop byte-identical to the shipped behaviour, so arming the
+        gate is opt-in at the one production seam that owns the decision.
+
+        ``gate_extra_attempts`` is the BOUNDED extra budget the gate may spend
+        on top of ``max_iterations``, and only for a run whose score target was
+        already reached: the gate is the reason that run would otherwise have
+        stopped early, so the extra attempts are the gate's own cost. A run
+        that never reaches ``target_score`` has an open SCORE gap, not a
+        dimension-gate problem, and is still bounded by ``max_iterations``
+        alone — arming the gate can never raise every run's worst case.
+        """
         self._service = service
         self._ats = ats_engine
         self.max_iterations = max_iterations
         self.target_score = target_score
+        self.dimension_floor = dimension_floor
+        self.gate_extra_attempts = max(0, int(gate_extra_attempts))
 
     def run(
         self,
@@ -358,6 +391,12 @@ class TailoringLoop:
         best_bullets: list[dict[str, str]] = []
         best_score = -1.0
         best_iteration = 0
+        #: U2c ranking key of the current winner. ``(gate_passed, score)`` when
+        #: the gate is armed, so a draft that actually cleared every dimension
+        #: beats a higher-scoring one that did not — ranking on the raw score
+        #: alone would throw the only compliant draft away. Reduces to the
+        #: score alone when the gate is disarmed (unchanged behaviour).
+        best_rank: tuple[int, float] = (0, -1.0)
 
         current_originals = originals
         current_jd = job_description
@@ -375,8 +414,19 @@ class TailoringLoop:
         supports_rotation = self._service_accepts("already_tailored_refs")
         stop_reason = "iteration_cap"
         llm_error: str | None = None
+        # U2c bounded gate budget. ``budget`` starts at the shipped iteration
+        # cap and is extended ONE attempt at a time, at the cap boundary only,
+        # and only when the ATS target has genuinely been reached and the
+        # quality gate is the sole thing still open. Worst case is therefore
+        # exactly ``max_iterations + gate_extra_attempts`` calls, and a run
+        # that never reaches the target spends none of the extra budget.
+        budget = self.max_iterations
+        gate_attempts_used = 0
+        gate_verdict: dict[str, Any] | None = None
 
-        for i in range(1, self.max_iterations + 1):
+        i = 0
+        while i < budget:
+            i += 1
             extra_kwargs: dict[str, Any] = (
                 {"already_tailored_refs": frozenset(already_tailored)}
                 if supports_rotation
@@ -439,6 +489,17 @@ class TailoringLoop:
             # every iteration (never just the winner) so the caller/UI can
             # see exactly which passes were trustworthy.
             semantic_path = getattr(ats_score, "semantic_path", "untracked")
+            # U2c: this attempt's own 80%-all-dimensions verdict, computed from
+            # the REAL scores it just produced. Recorded on EVERY attempt (not
+            # only the winner) — the Supervisor's directive loop (ADR-AGI-2)
+            # consumes the per-attempt trail, and a user reading the progress
+            # list must see which pass closed which dimension.
+            iteration_gate = (
+                evaluate_tailoring(ats_score, floor=self.dimension_floor).as_dict()
+                if self.dimension_floor is not None
+                else None
+            )
+            gate_ok = iteration_gate is None or bool(iteration_gate["passed"])
 
             iterations.append({
                 "iteration": i,
@@ -453,16 +514,49 @@ class TailoringLoop:
                 "unsupportedGapKeywords": unsupported_gaps,
                 "rejected": tailor_result.rejected,
                 "semanticPath": semantic_path,
+                "qualityGate": iteration_gate,
             })
 
-            if ats_score.overall > best_score:
+            rank = (1 if gate_ok else 0, ats_score.overall)
+            if rank > best_rank:
+                best_rank = rank
                 best_score = ats_score.overall
                 best_bullets = tailor_result.bullets
                 best_iteration = i
+                gate_verdict = iteration_gate
 
-            if ats_score.overall >= self.target_score:
+            reached_target = ats_score.overall >= self.target_score
+            if reached_target and gate_ok:
                 stop_reason = "target_reached"
                 break
+            if (
+                reached_target
+                and iteration_gate is not None
+                and not gate_ok
+                and not iteration_gate["closable"]
+            ):
+                # Every failing dimension is one that could not be MEASURED —
+                # a degraded semantic score, not a weak draft. No rewrite can
+                # move it, so iterating is paid effort bought for nothing (the
+                # same reasoning ``split_gap_keywords`` applies to unreachable
+                # keywords). Stop, and let the verdict below report it honestly
+                # — the run is NOT a pass (``success`` stays False below), it
+                # is a run whose quality could not be certified.
+                stop_reason = "quality_gate_unmeasurable"
+                break
+            if reached_target and i >= budget:
+                # U2c bounded gate budget. The score target is met, so without
+                # the gate this run would already be finished — every further
+                # attempt exists solely to close a dimension, and is paid for
+                # out of the gate's own small, env-capped budget. Extended one
+                # attempt at a time so the worst case is exactly
+                # ``max_iterations + gate_extra_attempts``.
+                if gate_attempts_used < self.gate_extra_attempts:
+                    budget += 1
+                    gate_attempts_used += 1
+                else:
+                    stop_reason = "quality_gate_cap"
+                    break
 
             # Prepare the next pass. Seed it with the BEST draft so far, not
             # simply the latest: when an iteration scores WORSE than an earlier
@@ -474,10 +568,10 @@ class TailoringLoop:
             # under DIRECTIVE_MARKER — a pass that cannot see the job
             # description can neither mirror its terminology nor let the top-K
             # selector rank bullets against the actual role.
-            current_jd = (
-                f"{job_description}\n\n"
-                f"{self._build_directive(ats_score.overall, supported_gaps, unsupported_gaps)}"
+            directive = self._build_directive(
+                ats_score.overall, supported_gaps, unsupported_gaps, iteration_gate
             )
+            current_jd = f"{job_description}\n\n{directive}"
 
         # ADR-GMV4-001 (CONVERGE-BUT-FLAG): a degraded iteration's `overall`
         # is 40% a neutral placeholder, not a measurement, so it can never be
@@ -508,11 +602,39 @@ class TailoringLoop:
         any_degraded = any(it.get("semanticPath") == "degraded" for it in iterations)
         degraded_count = sum(1 for it in iterations if it.get("semanticPath") == "degraded")
         reached_target = best_score >= self.target_score
-        success = reached_target and not any_degraded
+        # U2c ENFORCEMENT: the 80%-all-dimensions floor is now a CONDITION of
+        # success, not a number printed beside it. A run that clears the
+        # headline ATS target with a dimension below the floor is honestly
+        # sub-standard, and says so — the artifact still ships (below), but the
+        # automated verdict is withheld exactly as it is for a degraded score.
+        gate_passed = gate_verdict is None or bool(gate_verdict["passed"])
+        success = reached_target and not any_degraded and gate_passed
         requires_review = not success
         warning = None
         if requires_review:
-            if any_degraded and reached_target:
+            if reached_target and not gate_passed and gate_verdict is not None:
+                gate_summary = str(gate_verdict["summary"])
+                # The failing dimensions, verbatim from the winning attempt's
+                # REAL scores — never a rounded restatement, never a euphemism.
+                warning = (
+                    f"Best score achieved: {best_score:.1f}/100, which reaches "
+                    f"the target of {self.target_score:.0f}/100 — but this "
+                    f"résumé is {gate_summary[0].lower()}{gate_summary[1:]} "
+                    f"Tailoring ran {len(iterations)} attempt(s), including "
+                    f"{gate_attempts_used} extra attempt(s) spent trying to "
+                    "close those dimensions truthfully. The result is "
+                    "delivered as-is: nothing was inflated, and no claim your "
+                    "evidence does not support was added to reach the floor. "
+                    "Please review it before submitting."
+                )
+                if any_degraded:
+                    warning += (
+                        f" Note: semantic scoring was also DEGRADED on "
+                        f"{degraded_count} of {len(iterations)} iteration(s), "
+                        "so part of the score above is a placeholder rather "
+                        "than a measurement."
+                    )
+            elif any_degraded and reached_target:
                 warning = (
                     f"Best score achieved: {best_score:.1f}/100, which reaches "
                     f"the target of {self.target_score:.0f}/100 — but semantic "
@@ -558,6 +680,8 @@ class TailoringLoop:
                         f"{degraded_count} of {len(iterations)} iteration(s), "
                         "so even this best score is only partially genuine."
                     )
+                if gate_verdict is not None and not gate_passed:
+                    warning += f" {gate_verdict['summary']}"
 
         return TailoringLoopResult(
             iterations=iterations,
@@ -569,6 +693,8 @@ class TailoringLoop:
             warning=warning,
             unreachable_keywords=unreachable_keywords,
             stop_reason=stop_reason,
+            quality_gate=gate_verdict,
+            gate_attempts_used=gate_attempts_used,
         )
 
     # -- internals -------------------------------------------------------
@@ -610,6 +736,7 @@ class TailoringLoop:
         score: float,
         supported_gaps: list[str],
         unsupported_gaps: list[str],
+        gate: dict[str, Any] | None = None,
     ) -> str:
         """The retry directive appended BELOW the verbatim job description.
 
@@ -618,6 +745,14 @@ class TailoringLoop:
         support are listed explicitly as forbidden, so the model is told not
         to reach for them rather than being left to guess (which previously
         produced a steady stream of rewrites the entailment guard rejected).
+
+        U2c: when the quality gate is armed, the directive additionally names
+        the DIMENSIONS still under the floor with their real numbers. Telling
+        the model "keyword match is 61% and must exceed 80%" is a concrete,
+        checkable objective; leaving it to infer that from a keyword list is
+        how a pass wanders. The prohibition below is restated either way —
+        naming a target a rewrite must hit never licenses inventing the
+        evidence to hit it, and the guard adjudicates the result unchanged.
         """
         gap = max(0.0, self.target_score - score)
         lines = [
@@ -628,6 +763,20 @@ class TailoringLoop:
             f"target of {self.target_score:.0f}/100 (a gap of {gap:.1f} "
             "points).",
         ]
+        if gate is not None and not gate.get("passed"):
+            failing = [
+                d for d in (gate.get("failing") or []) if d.get("measured")
+            ]
+            if failing:
+                lines.append(
+                    "These quality dimensions are still below the "
+                    f"{gate['floor']:.0f}% floor and are what this pass must "
+                    "raise: "
+                    + "; ".join(
+                        f"{d['label']} {float(d['score']):.1f}%" for d in failing
+                    )
+                    + "."
+                )
         if supported_gaps:
             lines.append(
                 "Close the gap by TRUTHFULLY surfacing these still-missing, "
