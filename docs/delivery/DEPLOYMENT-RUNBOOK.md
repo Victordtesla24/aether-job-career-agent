@@ -1601,13 +1601,27 @@ requested"). The guard added afterwards (conftest schema-pin + prod-DSN abort in
 that incident (a test suite truncating prod) — it gives zero protection against a bad migration, a
 future deploy-script bug, hardware failure, or a DB-provider-side incident.
 
-What exists now (as of 2026-08-14) is **scheduled logical backups**, not provider-side
-point-in-time recovery (PITR). This is a deliberate, honest tradeoff: PITR requires a toggle on the
-hosted-DB provider's side (hosteddb.reai.io) that this VM cannot enable from inside the guest, and
-was not confirmed enabled during this pass. `pg_dump` every 6 hours gives:
+> **Current install status (MF-3, S-FIX slice C, verified 2026-08-14T02:07Z):** the backup
+> *mechanism* below has been built and proven — one real dump has been taken and a full restore
+> drill run against it (§10.3) — but the recurring **`aether-backup.timer` is NOT YET enabled on
+> the production host** (`systemctl list-timers | grep -i backup` returns nothing;
+> `/etc/systemd/system/` has no `aether-backup.*` unit). `/home/ubuntu/aether-backups/db/` holds
+> exactly one file: the manual dump taken during the drill. Until the Install step (§10.1) is run,
+> **there is no 6-hourly schedule and no bounded RPO** — the only backup that exists is that one
+> manual dump, and the true recovery point is "whenever someone last ran the script by hand". A
+> PASS on this section must not be read as "backups are running now" — they are not, until §10.1's
+> `systemctl enable --now` has actually been executed and `systemctl list-timers
+> aether-backup.timer` shows it active.
 
-* **RPO (Recovery Point Objective):** ~6 hours — worst case, up to 6 hours of writes since the
-  last successful dump could be lost in a full-loss scenario.
+Once installed (§10.1), what this mechanism provides is **scheduled logical backups**, not
+provider-side point-in-time recovery (PITR). This is a deliberate, honest tradeoff: PITR requires a
+toggle on the hosted-DB provider's side (hosteddb.reai.io) that this VM cannot enable from inside
+the guest, and was not confirmed enabled during this pass. `pg_dump` every 6 hours, once the timer
+is enabled, will give:
+
+* **RPO (Recovery Point Objective):** ~6 hours once the timer is enabled — worst case, up to 6
+  hours of writes since the last successful dump could be lost in a full-loss scenario. **Not yet
+  in effect** — see the install-status callout above.
 * **RTO (Recovery Time Objective):** dominated by the size of the `aether` schema at restore time
   (the drill below restored a ~9.6 MB compressed dump, ~31 tables, in well under a minute); scales
   roughly linearly with data volume.
@@ -1617,7 +1631,9 @@ was not confirmed enabled during this pass. `pg_dump` every 6 hours gives:
 
 Confirming/enabling true provider-side PITR with hosteddb.reai.io remains a recommended follow-up
 that only the operator can action (requires provider-side access this VM does not have); this
-6-hourly logical-backup mechanism is what is actually achievable and installed today.
+6-hourly logical-backup mechanism is what is actually achievable — the script and restore recipe
+are proven to work (§10.3), but the recurring schedule itself is only "installed" once an operator
+completes §10.1 on the production host.
 
 ### 10.1 What runs, and where
 
@@ -1676,17 +1692,43 @@ sed -e 's/aether\./aether_restore_test./g' \
 
 # 3. Restore into the scratch schema, in the SAME database (never a
 #    different DATABASE_URL host unless you intend a genuine DR failover).
+#    Parse the DSN into PG* environment variables (MF-2, S-FIX slice C) —
+#    the SAME discipline deploy/aether-backup.sh uses — so the credential
+#    never appears as a psql command-line argument. pg_dump/psql don't
+#    scrub argv, so handing psql a connection-string DSN as a positional
+#    argument is visible via `ps aux` / `/proc/<pid>/cmdline` to any local
+#    user for as long as each psql call below runs.
 DB_URL=$(grep -E '^DATABASE_URL=' .env | tail -1 | cut -d= -f2-)
 BASE_URL="${DB_URL%%\?*}"   # strip ?schema=... — psql doesn't understand it
-psql -v ON_ERROR_STOP=1 "$BASE_URL" -f /tmp/restore-remapped.sql
+eval "$(AETHER_RESTORE_DSN="$BASE_URL" python3 - <<'PYEOF'
+import os
+from urllib.parse import urlparse, unquote
+
+parsed = urlparse(os.environ["AETHER_RESTORE_DSN"])
+
+
+def esc(value: str) -> str:
+    return value.replace("'", "'\\''")
+
+
+print(f"export PGHOST='{esc(parsed.hostname or '')}'")
+print(f"export PGPORT='{esc(str(parsed.port or 5432))}'")
+print(f"export PGUSER='{esc(unquote(parsed.username or ''))}'")
+print(f"export PGPASSWORD='{esc(unquote(parsed.password or ''))}'")
+print(f"export PGDATABASE='{esc(parsed.path.lstrip('/'))}'")
+PYEOF
+)"
+unset DB_URL BASE_URL AETHER_RESTORE_DSN
+psql -v ON_ERROR_STOP=1 -f /tmp/restore-remapped.sql
 
 # 4. Verify: table count + row counts of key tables should match the live
 #    aether schema (adjust table names/counts to whatever you are checking).
-psql "$BASE_URL" -t -c "SELECT count(*) FROM information_schema.tables WHERE table_schema='aether_restore_test';"
-psql "$BASE_URL" -t -c "SET search_path=aether_restore_test; SELECT count(*) FROM \"User\";"
+#    PG* env vars from step 3 are still exported, so no DSN argument here either.
+psql -t -c "SELECT count(*) FROM information_schema.tables WHERE table_schema='aether_restore_test';"
+psql -t -c "SET search_path=aether_restore_test; SELECT count(*) FROM \"User\";"
 
 # 5. Clean up the scratch schema once verified.
-psql "$BASE_URL" -t -c "DROP SCHEMA aether_restore_test CASCADE;"
+psql -t -c "DROP SCHEMA aether_restore_test CASCADE;"
 ```
 
 ### 10.3 Restore drill — proof this actually works (2026-08-14)

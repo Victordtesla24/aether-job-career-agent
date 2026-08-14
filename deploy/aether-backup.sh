@@ -19,6 +19,11 @@
 #     grepping the single variable — this script never `source`s the whole
 #     .env (the exact mistake that caused the 2026-07-18 incident) and never
 #     echoes/logs the credential value.
+#   * The credential never reaches pg_dump's argv (MF-2, S-FIX slice C):
+#     the DSN is parsed into PGHOST/PGPORT/PGUSER/PGPASSWORD/PGDATABASE (the
+#     libpq environment-variable convention pg_dump reads automatically) —
+#     never passed as a connection-string argument, so it never appears in
+#     `ps aux` / `/proc/<pid>/cmdline` output for the pg_dump process.
 #   * pg_dump only ever reads (--schema=aether, no DDL/DML against prod);
 #     nothing here can write to or truncate the production database.
 #
@@ -55,12 +60,48 @@ fi
 # string and select the schema explicitly via --schema below instead.
 base_url="${raw_url%%\?*}"
 
+# Parse the DSN into PG* environment variables (MF-2, S-FIX slice C) so the
+# credential is never handed to pg_dump as a connection-string ARGUMENT —
+# only libpq client tools read PGPASSWORD from the environment; a value in
+# argv is visible to any local user via `ps aux` / `/proc/<pid>/cmdline` for
+# as long as the process runs. The DSN is passed to python3 via an exported
+# env var (never argv) for the same reason.
+export AETHER_BACKUP_DSN="$base_url"
+pg_env="$(python3 - <<'PYEOF'
+import os
+from urllib.parse import urlparse, unquote
+
+parsed = urlparse(os.environ["AETHER_BACKUP_DSN"])
+
+
+def esc(value: str) -> str:
+    return value.replace("'", "'\\''")
+
+
+print(f"export PGHOST='{esc(parsed.hostname or '')}'")
+print(f"export PGPORT='{esc(str(parsed.port or 5432))}'")
+print(f"export PGUSER='{esc(unquote(parsed.username or ''))}'")
+print(f"export PGPASSWORD='{esc(unquote(parsed.password or ''))}'")
+print(f"export PGDATABASE='{esc(parsed.path.lstrip('/'))}'")
+PYEOF
+)"
+unset AETHER_BACKUP_DSN
+eval "$pg_env"
+unset pg_env raw_url base_url
+
 ts="$(date -u +%Y%m%dT%H%M%SZ)"
 dump_file="$BACKUP_DIR/aether-${ts}.sql.gz"
 tmp_file="${dump_file}.partial"
+# MF-4 (S-FIX slice C): a pg_dump|gzip pipeline that fails mid-stream aborts
+# (set -euo pipefail) before the `mv` below ever runs, which would otherwise
+# leave an orphaned ".partial" file that the rotation glob below (which only
+# matches "aether-*.sql.gz") can never reclaim. Guarantee cleanup on any
+# exit path (success leaves nothing to remove, since the file is renamed
+# away before the trap fires).
+trap 'rm -f -- "$tmp_file"' EXIT
 
 echo "$LOG_PREFIX starting dump of schema=aether -> $dump_file"
-pg_dump --schema=aether --no-owner --no-privileges --format=plain "$base_url" | gzip -9 > "$tmp_file"
+pg_dump --schema=aether --no-owner --no-privileges --format=plain | gzip -9 > "$tmp_file"
 mv "$tmp_file" "$dump_file"
 echo "$LOG_PREFIX wrote $dump_file ($(du -h "$dump_file" | cut -f1))"
 
