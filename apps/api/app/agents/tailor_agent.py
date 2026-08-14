@@ -32,6 +32,7 @@ from app.services.resume_tailor import (
     render_tailored_raw_text,
     strip_bullet_lines,
 )
+from app.services.story_corpus import story_corpus_item
 from app.services.tailoring_loop import (
     DEFAULT_MAX_ITERATIONS,
     DEFAULT_TARGET_SCORE,
@@ -176,37 +177,6 @@ _DEFAULT_STORY_EVIDENCE_MAX_CHARS = 4000
 _DEFAULT_STORY_EVIDENCE_MIN_RELEVANCE = 0.01
 
 
-#: Epistemic provenance every Story Bank unit carries (U-STORY-1 step 4).
-#:
-#: A story is the candidate's OWN account of their OWN achievement, so the
-#: source STATES it — never "inferred". ``confidence high`` records that the
-#: extractor's grounding layer already refused any story whose numbers or
-#: organisation the résumé did not evidence (``services/resume_bullets.py``
-#: guards, ``story_extractor._ground_narrative``), and a hand-authored story is
-#: the candidate asserting it directly. These two values are a LABEL on
-#: evidence, not a guard input: nothing in the fabrication or entailment path
-#: reads them, they exist so a downstream reader (and the model) can tell a
-#: Story Bank claim from résumé text — which before this slice was impossible.
-_STORY_EVIDENCE_SOURCE = "story_bank"
-_STORY_EVIDENCE_EPISTEMIC = "stated"
-_STORY_EVIDENCE_CONFIDENCE = "high"
-
-
-def _story_corpus_item(claim: str) -> dict[str, Any]:
-    """One story claim in ``EvidenceCorpusItem`` shape.
-
-    Single definition of the story→corpus mapping, so the evidence-text
-    renderer here and the ``EvidenceCorpusItem`` mirror written on every story
-    write agree by construction instead of by convention.
-    """
-    return {
-        "claim": claim,
-        "source": _STORY_EVIDENCE_SOURCE,
-        "stated_or_inferred": _STORY_EVIDENCE_EPISTEMIC,
-        "confidence": _STORY_EVIDENCE_CONFIDENCE,
-    }
-
-
 def _story_evidence_max_chars() -> int:
     try:
         value = int(os.environ.get("AETHER_STORY_EVIDENCE_MAX_CHARS", ""))
@@ -291,16 +261,10 @@ def build_story_evidence(
     parts: list[str] = []
     used = 0
     for story in stories:
-        fields = [str(story.get("title") or ""), " ".join(story.get("tags") or [])]
-        for key in ("situation", "task", "action", "result"):
-            fields.append(str(story.get(key) or ""))
-        metrics = story.get("metrics")
-        if isinstance(metrics, dict):
-            fields.extend(f"{k} {v}" for k, v in metrics.items())
-        claim = " ".join(f for f in fields if f).strip()
-        if not claim:
+        item = story_corpus_item(story)
+        if item is None:
             continue
-        text = corpus_items_to_evidence_text([_story_corpus_item(claim)])
+        text = corpus_items_to_evidence_text([item])
         # ``continue`` rather than ``break`` (mirrors ``build_corpus_evidence``):
         # one oversized story must not evict every shorter one behind it.
         cost = len(text) + (2 if parts else 0)
@@ -309,6 +273,33 @@ def build_story_evidence(
         parts.append(text)
         used += cost
     return "\n\n".join(parts)
+
+
+def join_evidence_units(*parts: str) -> str:
+    """Blank-line-join evidence text, dropping units that repeat verbatim.
+
+    ``resume_tailor._scoped_evidence_map`` splits ``evidence_extra`` on blank
+    lines, so a UNIT is the atom of the evidence contract. Since U-STORY-1 step
+    5 every story reaches the prompt through TWO producers — live rows via
+    :func:`build_story_evidence` and their ``EvidenceCorpusItem`` mirror via
+    ``build_corpus_evidence`` — and both render through
+    ``corpus_items_to_evidence_text``, so a mirrored story's unit is
+    byte-identical on both sides. Joining naively would pay for the whole Story
+    Bank twice in every tailoring prompt, undoing the token load step 1 priced
+    down. Order is preserved (first occurrence wins), so ranking survives.
+    """
+    units: list[str] = []
+    seen: set[str] = set()
+    for part in parts:
+        if not part:
+            continue
+        for unit in re.split(r"\n\s*\n", part):
+            stripped = unit.strip()
+            if not stripped or stripped in seen:
+                continue
+            seen.add(stripped)
+            units.append(stripped)
+    return "\n\n".join(units)
 
 
 #: Content-word tokenizer for the tailor grounding metric (mirrors the cover
@@ -684,8 +675,8 @@ class TailoringAgent:
         # rejected and reverted. Empty string for a user with no corpus, which
         # keeps behaviour identical to before for those accounts.
         corpus_evidence = build_corpus_evidence(user_id, jd)
-        evidence_extra = "\n\n".join(
-            p for p in (career_corpus, story_evidence, corpus_evidence) if p
+        evidence_extra = join_evidence_units(
+            career_corpus, story_evidence, corpus_evidence
         )
         # §5.3 item 1: score-aware iterative tailoring — tailor, score via the
         # SAME ATSEngine ``/resumes/{id}/ats`` uses, and — while below the 85
