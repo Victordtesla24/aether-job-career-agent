@@ -26,10 +26,20 @@ Bullet lines are recognised with the SAME line-walk the ingestion pipeline uses
 (:mod:`app.services.resume_tailor`), so a bullet is never both dropped from the
 prose and absent from the bullet list: whatever ``extract_bullets`` claimed is
 exactly what this model reserves a slot for.
+
+ROUND 3 (2026-08-14) closed the last way the three could still disagree. A
+tailored version's stored ``raw_text`` was not built from this model at all: it
+was ``strip_bullet_lines(parent) + the tracked rewrites``, which deleted every
+bullet nobody had asked to rewrite and re-parented the rest under the last open
+heading, all of it BEFORE this module ever ran — so the slot-matching below had
+no slots left to be right about, and the verifier had nothing left to report
+missing. :func:`rebuild_raw_text` now writes that text out of this same model,
+so there is exactly one parse and one substitution in the system.
 """
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -42,7 +52,8 @@ from app.services.resume_tailor import (
     _is_bullet_marker,
     _is_section_banner,
     _job_header_indices,
-    deinterleave_columns,
+    marks_wrapping_by_indent,
+    reading_order,
 )
 
 #: Section banners a résumé actually uses. Only these end the name block at the
@@ -66,6 +77,14 @@ _MAX_NAME_LINES = 3
 _NON_CONTACT_KEYS = ("name", "title", "headline", "role")
 
 _MARKER_CHARS = "•●▪- \t"
+
+#: Indent given to a bullet when the document is written back out. A bullet
+#: prints inside its section's text column, one step in from the section's own
+#: prose — which is also the signal the line walk reads back (a continuation
+#: line sits deeper than its marker), so a regenerated résumé re-parses to the
+#: document it was written from instead of collapsing the line after a bullet
+#: into that bullet.
+_BULLET_INDENT = "  "
 
 _WORD_RE = re.compile(r"[0-9a-z]+")
 
@@ -205,18 +224,25 @@ def _parse_header(raw_lines: list[str]) -> tuple[str, str, int]:
     return " ".join(name_lines), " ".join(title_lines), index
 
 
-def _parse_sections(raw_lines: list[str], start: int) -> list[DocSection]:
+def _parse_sections(
+    raw_lines: list[str], indents: list[int], start: int
+) -> list[DocSection]:
     """Walk the résumé body into sections of lines and bullet slots.
 
     A bullet's wrapped continuation lines are folded into the bullet itself
     (identically to ``resume_tailor.extract_bullets``), so they are never drawn
-    twice — once as loose prose and once inside the bullet.
+    twice — once as loose prose and once inside the bullet. A line printed back
+    out at the bullet marker's own column is a NEW block, not that bullet's
+    wrapping: it stays the line it is, which is how the live résumé's second
+    degree stops being swallowed by the one-word ``"• Honors"`` above it.
     """
     header_indices = _job_header_indices(raw_lines)
+    column_wrapped = marks_wrapping_by_indent(indents)
     sections: list[DocSection] = []
     heading = ""
     items: list[DocItem] = []
     buffer: list[str] | None = None
+    marker_indent = 0
 
     def close_bullet() -> None:
         nonlocal buffer
@@ -237,6 +263,7 @@ def _parse_sections(raw_lines: list[str], start: int) -> list[DocSection]:
             close_bullet()
             head = _bullet_head(line)
             buffer = [head] if head else []
+            marker_indent = indents[i]
             if head and _ends_bullet(head):
                 close_bullet()
             continue
@@ -245,7 +272,9 @@ def _parse_sections(raw_lines: list[str], start: int) -> list[DocSection]:
             heading, items = line, []
             continue
         if buffer is not None:
-            if i in header_indices:
+            if i in header_indices or (
+                column_wrapped and indents[i] <= marker_indent
+            ):
                 close_bullet()
                 items.append(DocItem("line", line))
                 continue
@@ -399,30 +428,82 @@ def _contact_details(
     return tuple(details)
 
 
+def _persisted_bullets(payload: dict[str, Any]) -> list[str]:
+    return [
+        str(bullet.get("text", "")).strip()
+        for bullet in (payload.get("bullets") or [])
+        if isinstance(bullet, dict) and str(bullet.get("text", "")).strip()
+    ]
+
+
+def rebuild_raw_text(raw_text: str, persisted: Sequence[str]) -> str:
+    """``raw_text`` rewritten with ``persisted`` in the slots it rewrote.
+
+    The tailored child's ``raw_text`` is regenerated from THIS, the same
+    document model the renderer draws and the completeness verifier measures
+    against, so the three can never disagree about what the résumé contains.
+
+    Every section keeps its own items in their own order: a rewritten bullet
+    replaces the bullet it rewrote, a bullet the tailoring loop never touched is
+    written back unchanged, and a section's prose (an education entry, a job
+    header, a contact line) is untouched prose still. Nothing is stripped and
+    re-appended, so nothing can land under a heading it was never written under.
+
+    That is the whole point of this function. The version it replaces built the
+    tailored text as ``strip_bullet_lines(original) + every persisted bullet``,
+    which deleted every ORIGINAL bullet the tailoring loop had not tracked (on
+    the live artifact: two entire skills bullets and a certification) and moved
+    the ones it had under whichever heading happened to be open last — ``WORK
+    EXPERIENCE`` (U2b round-2 review, 2026-08-14).
+    """
+    raw_lines, indents = _document_lines(raw_text)
+    name, _title, start = _parse_header(raw_lines)
+    # ``_parse_header`` may have recovered a name out of a merged two-column
+    # first line; when it did, ``start`` is 0 and the name is no longer on any
+    # line, so it is written back as the line it always was.
+    out: list[str] = list(raw_lines[:start]) or ([name] if name else [])
+    for section in _substitute_bullets(
+        _parse_sections(raw_lines, indents, start),
+        [text for text in persisted if text.strip()],
+    ):
+        if section.heading:
+            out.append(section.heading)
+        for item in section.items:
+            out.append(
+                f"{_BULLET_INDENT}• {item.text}"
+                if item.kind == "bullet"
+                else item.text
+            )
+    return "\n".join(out)
+
+
+def _document_lines(raw_text: str) -> tuple[list[str], list[int]]:
+    """The résumé's non-empty lines in reading order, and their columns.
+
+    Two-column pages arrive with the sidebar welded onto the body, one line per
+    printed line; they are read back as the two columns they are BEFORE the
+    header/section walk, which assumes one logical line per line. Each line's
+    starting column comes back with it, because that is what says where a
+    bullet's wrapped continuation ends.
+    """
+    lines, indents = reading_order(str(raw_text or ""))
+    kept = [(line, indent) for line, indent in zip(lines, indents) if line]
+    return [line for line, _ in kept], [indent for _, indent in kept]
+
+
 def parse_resume_document(resume: dict[str, Any]) -> ResumeDocument:
     """The whole persisted résumé: header, contact, every section, every bullet."""
     payload = resume.get("sections") or {}
     contact = payload.get("contact") or {}
     if not isinstance(contact, dict):
         contact = {}
-    # Two-column pages arrive with the sidebar welded onto the body, one line
-    # per printed line; read them back as the two columns they are BEFORE the
-    # header/section walk, which assumes one logical line per line.
-    raw_lines = [
-        line.strip()
-        for line in deinterleave_columns(
-            str(payload.get("raw_text", "") or "")
-        ).splitlines()
-        if line.strip()
-    ]
-    persisted = [
-        str(bullet.get("text", "")).strip()
-        for bullet in (payload.get("bullets") or [])
-        if isinstance(bullet, dict) and str(bullet.get("text", "")).strip()
-    ]
+    raw_lines, indents = _document_lines(payload.get("raw_text", ""))
+    persisted = _persisted_bullets(payload)
 
     name, title, start = _parse_header(raw_lines)
-    sections = _substitute_bullets(_parse_sections(raw_lines, start), persisted)
+    sections = _substitute_bullets(
+        _parse_sections(raw_lines, indents, start), persisted
+    )
 
     name = str(contact.get("name") or name or resume.get("label") or "Resume")
     title = str(contact.get("title") or contact.get("headline") or title or "")

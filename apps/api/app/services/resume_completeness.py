@@ -17,7 +17,13 @@ So the artifact is now measured against the WHOLE persisted résumé
 * the person's own name, in full,
 * every section heading the résumé states,
 * every bullet it holds — the tailored ones AND the untouched ones,
+* every line of prose under those headings (an education entry is not a
+  bullet, and the live document lost an entire second degree),
 * every contact detail, which is the employer's only way back to the user.
+
+And for a TAILORED version that whole résumé is the PARENT's, with only the
+approved rewrites mapped in (:func:`baseline_record`) — never the child's own
+parse, which by then may already have lost the content being checked for.
 
 Anything missing is NAMED. A caller with a content-complete alternative render
 (``routers/resumes.py`` — the branded template) uses it instead of shipping the
@@ -59,6 +65,12 @@ class ResumeContent:
     headings: tuple[str, ...] = ()
     bullets: tuple[str, ...] = ()
     contact: tuple[str, ...] = ()
+    #: Every line of prose the résumé states under a heading — an education
+    #: entry, a job title, a company, a date, a summary paragraph. Added in the
+    #: U2b round-3 review: the live document lost an ENTIRE second degree
+    #: ("Bachelor of Engineering / University of Melbourne / 2007"), which was
+    #: never a bullet, so no field of this contract could name it.
+    lines: tuple[str, ...] = ()
     #: The person's own name. Added in the U2b round-2 review: the live render
     #: went out as "VIKRAM" with the surname parsed into body prose, and no
     #: field of this contract could ever have flagged it, so a name regression
@@ -67,7 +79,7 @@ class ResumeContent:
 
     @property
     def is_empty(self) -> bool:
-        return not (self.headings or self.bullets or self.contact)
+        return not (self.headings or self.bullets or self.contact or self.lines)
 
 
 @dataclass(frozen=True)
@@ -78,6 +90,8 @@ class CompletenessVerification:
     missing_headings: tuple[str, ...] = ()
     missing_bullets: tuple[str, ...] = ()
     missing_contact: tuple[str, ...] = ()
+    #: Section prose the produced file does not carry (the lost second degree).
+    missing_lines: tuple[str, ...] = ()
     #: The persisted name, when the produced file does not carry all of it.
     missing_name: str = ""
 
@@ -88,6 +102,7 @@ class CompletenessVerification:
             self.missing_headings
             or self.missing_bullets
             or self.missing_contact
+            or self.missing_lines
             or self.missing_name
         )
 
@@ -99,6 +114,7 @@ class CompletenessVerification:
             + tuple(f"section “{item}”" for item in self.missing_headings)
             + tuple(f"contact detail “{item}”" for item in self.missing_contact)
             + tuple(f"bullet “{_excerpt(item)}”" for item in self.missing_bullets)
+            + tuple(f"line “{_excerpt(item)}”" for item in self.missing_lines)
         )
 
 
@@ -107,18 +123,51 @@ def _excerpt(text: str) -> str:
     return flat if len(flat) <= _EXCERPT_CHARS else f"{flat[:_EXCERPT_CHARS - 1]}…"
 
 
-def build_resume_content(resume: dict[str, Any]) -> ResumeContent:
+def baseline_record(
+    resume: dict[str, Any], parent: dict[str, Any]
+) -> dict[str, Any]:
+    """The PARENT's own document with THIS version's rewrites mapped into it.
+
+    The parent supplies every heading, every line, every contact detail and
+    every bullet — including the ones nobody asked to rewrite. The child
+    supplies only the tailored bullet texts, which
+    :func:`~app.services.resume_document._substitute_bullets` puts back into the
+    slots they rewrote, by content. The result is the ground truth a tailored
+    download owes the user: their résumé, plus the edits they approved.
+    """
+    payload = dict(parent.get("sections") or {})
+    tailored = (resume.get("sections") or {}).get("bullets")
+    if tailored:
+        payload["bullets"] = tailored
+    return {**parent, "sections": payload}
+
+
+def build_resume_content(
+    resume: dict[str, Any], parent: dict[str, Any] | None = None
+) -> ResumeContent:
     """The completeness contract for one stored résumé record.
 
     Derived from the same document model the branded renderer draws, so the
     verifier can never be measuring a different résumé from the one the
     renderer was asked to produce.
+
+    For a TAILORED version the contract is built from its ``parent`` — the
+    baseline the user uploaded — with only the tailoring rewrites mapped
+    before → after. Measuring a tailored child against its own parse is what
+    made the live content loss invisible: the child's ``raw_text`` had already
+    lost two skills bullets and an entire academic degree, so its own parse no
+    longer contained them and there was nothing left to report missing. A
+    verifier that certifies a lossy record against itself certifies nothing
+    (U2b round-2 review, 2026-08-14). A baseline résumé has no parent and is
+    measured against itself, which for it IS the ground truth.
     """
-    document = parse_resume_document(resume)
+    source = resume if parent is None else baseline_record(resume, parent)
+    document = parse_resume_document(source)
     return ResumeContent(
         headings=document.headings,
         bullets=document.bullets,
         contact=document.contact,
+        lines=document.lines,
         name=document.name,
     )
 
@@ -172,5 +221,8 @@ def verify_completeness(
         ),
         missing_contact=tuple(
             item for item in content.contact if not _is_present(item, haystack)
+        ),
+        missing_lines=tuple(
+            item for item in content.lines if not _is_present(item, haystack)
         ),
     )

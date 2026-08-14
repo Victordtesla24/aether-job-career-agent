@@ -743,11 +743,16 @@ def _render_resume(resume_id: str, user_id: str) -> _RenderedResume:
     is_tailored = parent is not None
     changes = _tailoring_changes(resume, parent)
     source = parent or resume
-    #: What THIS version persists — every section heading, every bullet (tracked
-    #: or not) and every contact detail. Each produced artifact is measured
-    #: against it before it is served, because the per-change check cannot see
-    #: content nobody asked to rewrite (U2b CRITICAL, verify-final/).
-    content = build_resume_content(resume)
+    #: What this résumé OWES the user — every section heading, every bullet
+    #: (tracked or not), every line of prose and every contact detail. Each
+    #: produced artifact is measured against it before it is served, because the
+    #: per-change check cannot see content nobody asked to rewrite (U2b
+    #: CRITICAL, verify-final/). For a tailored version the ground truth is the
+    #: PARENT's document with the approved rewrites mapped in, never the child's
+    #: own parse: a child whose stored text has already lost a section has
+    #: nothing left to report missing, which is exactly how the live loss
+    #: passed verification (U2b round-2 review, critical/).
+    content = build_resume_content(resume, parent)
 
     original = resolve_original_pdf(source.get("formatHash") or resume.get("formatHash"))
     data: bytes | None = None
