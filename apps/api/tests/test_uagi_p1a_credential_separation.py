@@ -11,9 +11,14 @@ This suite pins BOTH directions BEFORE any supervisor LLM call exists:
 * F7 — the operator role consumes ONLY the operator-scoped credential slot
   (deployment-wide row / provider-scoped env). A user's own row is never
   reachable from it.
-* F8 — user-content generation NEVER consumes the operator SUBSCRIPTION row.
-  The operator's plain API key stays usable (that is metered API billing, the
-  shipped behaviour); only the subscription-class token is walled off.
+* F8 — user-content generation resolves the user's OWN credential first, then
+  the deployment-wide row. MODEL-DEFAULT reconciliation (OWNER DIRECTIVE,
+  2026-08-14): that deployment-wide row — the operator's Anthropic Pro
+  subscription — IS the intended system default for user-content, so the P1-A
+  wall that returned ``None`` here is lifted. A single subscriber cannot drain
+  it: the EXISTING per-user quota + spend cap bounds every run. The wall itself
+  is retained as a general ``resolve_credential`` capability, just no longer
+  engaged by the user-content path.
 
 Plus the operator fallback CHAIN as configuration of the existing machinery:
 anthropic-first, advancing only on exhaustion signals, primary retried first on
@@ -147,16 +152,21 @@ def test_f7_operator_role_may_use_the_operator_subscription_row(
 # ---------------------------------------------------------------------------
 
 
-def test_f8_user_content_never_consumes_the_operator_subscription_row(
+def test_f8_user_content_may_use_the_operator_subscription_metered(
     client, auth_headers, test_user_id, monkeypatch, _vault_key, _no_env_credentials
 ):
+    """MODEL-DEFAULT reconciliation (OWNER DIRECTIVE, 2026-08-14): user-content
+    with no credential of its own resolves the operator's Anthropic subscription
+    — the intended system default — instead of the old honest-``None``. The
+    old ``assert res is None`` here BROKE the owner's own bare ``claude-*``
+    tailoring/storyExtraction runs; per-user quota + spend caps bound it now."""
     _operator_row(monkeypatch, auth_mode="oauth_token", secret="sk-ant-oat01-OPERATOR")
 
     res = resolve_user_credential("anthropic", test_user_id, "tailor")
-    assert res is None, (
-        "a user-content run resolved the operator's subscription token — that is "
-        "the F7/F8 crossover ADR-AGI-3 closes"
-    )
+    assert res is not None
+    assert res.auth_mode == "oauth_token"
+    assert res.secret == "sk-ant-oat01-OPERATOR"
+    assert res.source == "database"
 
 
 def test_f8_user_content_still_uses_the_operator_api_key(
@@ -183,16 +193,20 @@ def test_f8_user_own_credential_still_wins_over_everything(
     assert res.source == "user_credential"
 
 
-def test_f8_wall_falls_through_to_provider_scoped_env(
+def test_f8_operator_subscription_row_wins_over_ambient_env(
     client, auth_headers, test_user_id, monkeypatch, _vault_key, _no_env_credentials
 ):
+    """Post-reconciliation the configured operator subscription (DB row) is read
+    DB-first and IS resolved for user-content, so it takes precedence over an
+    ambient legacy ``ANTHROPIC_API_KEY`` env key (this replaces the old
+    wall-falls-through-to-env assertion, since the wall no longer engages)."""
     _operator_row(monkeypatch, auth_mode="oauth_token", secret="sk-ant-oat01-OPERATOR")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-api-ENV")
 
     res = resolve_user_credential("anthropic", test_user_id, "tailor")
     assert res is not None
-    assert res.secret == "sk-ant-api-ENV"
-    assert res.source == "environment"
+    assert res.secret == "sk-ant-oat01-OPERATOR"
+    assert res.source == "database"
 
 
 def test_the_legacy_no_user_context_resolver_is_unchanged(

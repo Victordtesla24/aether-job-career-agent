@@ -43,20 +43,41 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_FIXTURE_DIR = Path(__file__).resolve().parents[2] / "tests" / "fixtures" / "llm"
 
-#: Last-resort model retried once when the primary model 404s / 429s (D-0014).
+#: Last-resort model retried once when a SYSTEM-DEFAULT primary 404s / 429s
+#: (D-0014). Also the ultimate tier default for an unknown/unset tier.
 #:
-#: This was ``openai/gpt-oss-20b:free`` until a live probe
-#: (``uat/reports/evidence/free-model-fallback/PROBE-REPORT.json``, 2026-07-29)
-#: showed that id emits GARBLED, never-terminating output on realistic prompt
-#: lengths (65 s, corrupted multilingual tokens, no clean stop) even though it
-#: passes a trivial "reply OK" smoke test. Same mechanism, working model: the
-#: id below was verified live on the same probe (clean 119-word draft, 3.0 s,
-#: ``finish_reason=stop``).
-FALLBACK_MODEL = "nvidia/nemotron-3-super-120b-a12b:free"
+#: OWNER DIRECTIVE (MODEL-DEFAULT, 2026-08-14): the system default is the
+#: operator's Anthropic Pro subscription, NEVER OpenRouter. So this is a bare
+#: ``claude-*`` id (``resolve_provider`` -> ``"anthropic"``) — the cheapest,
+#: always-served tier, which bounds a runaway retry and keeps the un-chosen
+#: system-default one-retry on the SAME provider as its primary (opus -> haiku).
+#: OpenRouter is reached ONLY via an explicit per-agent slash-model pick, never
+#: as a default or automatic fallback.
+#:
+#: NOTE — this is DISTINCT from the ADMIN-ONLY OpenRouter free-model rescue
+#: (:data:`_DEFAULT_ADMIN_FREE_FALLBACK_MODELS`, the nvidia ``:free`` pair): that
+#: rescue is env-gated, admin-scoped, and engages only on an HTTP 402
+#: insufficient-credits signal — it does NOT read this constant.
+FALLBACK_MODEL = "claude-haiku-4-5"
+
+#: Per-tier system-default model ids, applied when ``AETHER_MODEL_<TIER>`` is
+#: unset so behaviour is correct WITHOUT env too (the served ``.env`` flip is a
+#: documented config edit applied at land time; these code defaults must agree
+#: with it). Every id is a bare ``claude-*`` the operator's Anthropic
+#: subscription serves (MODEL-DEFAULT-SCOUT D1, == the app's static anthropic
+#: catalog): reasoning/heavy -> opus-class, structured -> sonnet-class,
+#: fast/light -> haiku-class. No tier default is ever an OpenRouter id.
+_DEFAULT_MODEL_BY_TIER = {
+    "REASONING": "claude-opus-4-8",
+    "HEAVY": "claude-opus-4-8",
+    "STRUCTURED": "claude-sonnet-4-6",
+    "FAST": "claude-haiku-4-5",
+    "LIGHT": "claude-haiku-4-5",
+}
 
 
 def get_fallback_model() -> str:
-    """Fallback model id, overridable so non-OpenRouter providers can set one."""
+    """Fallback model id (bare ``claude-*`` by default), env-overridable."""
     return os.environ.get("AETHER_MODEL_FALLBACK", FALLBACK_MODEL)
 
 
@@ -804,11 +825,15 @@ def get_model(tier: str = "REASONING") -> str:
     derived purely from the resolved model id (:func:`resolve_provider`), so the
     user's choice can never cross the anthropic/openrouter billing boundary.
     """
-    if tier.upper() in _USER_OVERRIDABLE_TIERS:
+    tier_key = tier.upper()
+    if tier_key in _USER_OVERRIDABLE_TIERS:
         override = _user_model_context.get()
         if override:
             return override
-    return os.environ.get(f"AETHER_MODEL_{tier.upper()}", FALLBACK_MODEL)
+    return os.environ.get(
+        f"AETHER_MODEL_{tier_key}",
+        _DEFAULT_MODEL_BY_TIER.get(tier_key, FALLBACK_MODEL),
+    )
 
 
 #: Env vars ``_call_live`` checks for a usable API key, in the exact
@@ -951,10 +976,16 @@ OPERATOR_SCOPED_AGENT_KEYS = frozenset({"supervisor"})
 #: Auth modes that identify a CONSUMER-SUBSCRIPTION credential rather than a
 #: metered API key. ``oauth_token`` is the live one (a pasted Claude Code token
 #: or the admin PKCE session); ``subscription_oauth`` is the legacy, already
-#: unusable form. User-content generation must never draw on either of these
-#: when they sit in the OPERATOR's deployment-wide row (F8): that is somebody
-#: else's personal plan, and spending it on a subscriber's résumé is a billing
-#: attribution error with a compliance edge — not a fallback.
+#: unusable form. These name the credentials the ``allow_operator_subscription``
+#: wall can scope OFF (:func:`resolve_credential`).
+#:
+#: MODEL-DEFAULT reconciliation (OWNER DIRECTIVE, 2026-08-14): the wall is
+#: RETAINED as a general capability, but user-content generation is NO LONGER
+#: walled off from the operator's subscription row — that subscription IS the
+#: intended system default ("the system default must be anthropic pro subs
+#: quota"). A single subscriber can no longer drain it because every metered run
+#: is bounded per-user by the EXISTING quota + spend cap (agents._record_run),
+#: not by a credential wall. Only OpenRouter stays user-choice-only.
 _SUBSCRIPTION_AUTH_MODES = frozenset({"oauth_token", "subscription_oauth"})
 
 
@@ -1175,11 +1206,16 @@ def resolve_user_credential(
       resolves ONLY the operator slot: steps 1 and 2 are skipped entirely, so a
       subscriber's own key can never fund the operator's planning, and an empty
       operator slot is an honest ``None`` rather than a silent substitution.
-    * **F8** — everything else is USER-CONTENT generation and never consumes the
-      operator's SUBSCRIPTION row. Composed from four verified facts, the shipped
-      order otherwise reaches it: a subscriber with no Anthropic credential of
-      their own, running a bare ``claude-*`` model, would have been served by the
-      owner's personal Max/Pro session. The operator's API KEY is unaffected.
+    * **F8** — everything else is USER-CONTENT generation. It resolves the user's
+      OWN credential first (steps 1-2); with none, it reaches the deployment-wide
+      row (step 3). MODEL-DEFAULT reconciliation (OWNER DIRECTIVE, 2026-08-14):
+      that row — the operator's Anthropic Pro subscription — IS the intended
+      system default for user-content ("the system default must be anthropic pro
+      subs quota"), so the P1-A hard wall that returned ``None`` here is lifted.
+      No single subscriber can drain it: every metered run is bounded per-user by
+      the EXISTING quota + spend cap (``agents._record_run``), which fires BEFORE
+      the model call regardless of which provider serves it. OpenRouter is NOT
+      reachable from this path — it is per-agent user-choice only.
 
     Both rules are one-directional and neither introduces a new provider path:
     the no-cross-provider invariant is untouched.
@@ -1244,10 +1280,14 @@ def resolve_user_credential(
                 provider, got["authMode"], got["secret"],
                 got.get("baseUrl"), "user_credential",
             )
-    # 3 + 4. Deployment-wide DB row, then legacy env — with the F8 wall applied:
-    # this branch is USER-CONTENT generation by definition (an operator role
-    # returned above), so the operator's subscription row is off limits.
-    return resolve_credential(provider, allow_operator_subscription=False)
+    # 3 + 4. Deployment-wide DB row, then legacy env. This branch is USER-CONTENT
+    # generation by definition (an operator role returned above). MODEL-DEFAULT
+    # reconciliation (OWNER DIRECTIVE, 2026-08-14): the operator's Anthropic
+    # subscription IS the intended system default here — the P1-A wall that
+    # scoped it OFF is lifted, and a runaway is bounded per-user by the quota +
+    # spend cap in ``agents._record_run`` (which fires before the model call),
+    # not by withholding the credential. OpenRouter is never reached from here.
+    return resolve_credential(provider)
 
 
 def _is_operator_scoped_run() -> bool:
