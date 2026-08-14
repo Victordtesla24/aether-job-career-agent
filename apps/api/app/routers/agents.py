@@ -927,6 +927,10 @@ def _record_run(
     # Entitlement gate FIRST (GAP-P6-PAYWALL): no active paid subscription -> an
     # honest 402 before any audit row, quota reserve, or LLM call.
     _require_active_subscription(user_id, agent_name=agent_name, system_run=system_run)
+    # U-AX: idempotent — ``_dispatch`` has normally stamped the policy already;
+    # this covers the direct ``_record_run`` callers (the pipeline's supervisor
+    # and matcher nodes) so EVERY AgentRun row carries the tier it ran under.
+    params = _with_quality_policy(user_id, params)
     runs = AgentRunRepository()
     audit, provider = _billing_audit(user_id, agent_name)
     if system_run or skip_quota:
@@ -1913,14 +1917,22 @@ def _agent_callable(
         from app.agents.tailor_agent import TailoringAgent
 
         job_id = _require_job_id(params)
+        # U-AX: the resolved rigor tier's knobs (iteration ceiling + ATS
+        # target). ``{}`` keeps the agent's shipped defaults verbatim.
+        knobs = _policy_knobs(params)
         return "tailor", (
-            lambda: TailoringAgent().run(user_id, job_id, params.get("resume_id"))
+            lambda: TailoringAgent().run(
+                user_id, job_id, params.get("resume_id"), policy_knobs=knobs
+            )
         )
     if name in ("coverLetter", "cover-letter"):
         from app.agents.cover_letter_agent import CoverLetterAgent
 
         job_id = _require_job_id(params)
-        return "coverLetter", (lambda: CoverLetterAgent().run(user_id, job_id))
+        knobs = _policy_knobs(params)
+        return "coverLetter", (
+            lambda: CoverLetterAgent().run(user_id, job_id, policy_knobs=knobs)
+        )
     if name in ("storyExtractor", "story-extractor"):
         from app.agents.story_extractor import StoryExtractorAgent
 
@@ -2082,6 +2094,55 @@ _RUNNABLE_BACKENDS = frozenset(
 )
 
 
+def _with_quality_policy(user_id: str, params: dict[str, Any]) -> dict[str, Any]:
+    """The SINGLE rigor-policy enforcement seam (U-AX build spec items 2-3).
+
+    Resolves this user's deterministic rigor tier once and merges it into the
+    run's own params as ``qualityPolicy``. Placing it here — upstream of
+    ``_agent_callable`` (which reads ``qualityPolicy.knobs`` to configure the
+    tailor loop / cover-letter retries) and upstream of
+    ``AgentRunRepository.start`` (which persists ``policyTier`` +
+    ``metricSnapshot`` off the same dict) — is what guarantees the tier the
+    agent OBEYED and the tier the run card DISPLAYS are the same object, not
+    two independent computations that could disagree.
+
+    Idempotent: an already-stamped params dict (async worker replaying a stored
+    payload, or ``_dispatch`` handing off to ``_record_run``) is returned
+    unchanged, so the policy is resolved exactly once per run.
+
+    Never raises: a policy-resolution failure must not take down an agent run.
+    ``resolve_policy_for_user`` already fails closed to an honest
+    ``insufficient_data`` verdict with a stated reason; this guard covers the
+    residual (import/programming) case by leaving params untouched, which
+    persists NULL columns — "no policy recorded" — rather than a fabricated
+    tier.
+    """
+    if isinstance(params.get("qualityPolicy"), dict):
+        return params
+    try:
+        from app.services.quality_policy import resolve_policy_for_user
+
+        policy = resolve_policy_for_user(user_id)
+    except Exception:  # noqa: BLE001
+        logger.warning("rigor policy unresolved for user %s", user_id, exc_info=True)
+        return params
+    return {**params, "qualityPolicy": policy}
+
+
+def _policy_knobs(params: dict[str, Any]) -> dict[str, Any]:
+    """The pipeline knobs for this run, or ``{}`` when no policy was resolved.
+
+    ``{}`` means "use the callee's shipped defaults" — the exact behaviour that
+    shipped before U-AX, so an unresolved policy degrades to today's product
+    rather than to a weaker one.
+    """
+    policy = params.get("qualityPolicy")
+    if not isinstance(policy, dict):
+        return {}
+    knobs = policy.get("knobs")
+    return knobs if isinstance(knobs, dict) else {}
+
+
 def _dispatch(
     user_id: str, name: str, params: dict[str, Any], *, system_run: bool = False,
     skip_quota: bool = False,
@@ -2094,6 +2155,9 @@ def _dispatch(
     ``skip_quota`` is threaded to ``_record_run`` so automated system operations
     (e.g. the board sweep) bypass the user's paid plan-quota reserve/spend-cap
     gates while still keeping the cooldown block and an honest audit trail."""
+    # U-AX: resolve the rigor tier BEFORE binding the callable, so the agent
+    # receives the knobs and the AgentRun row records the very same policy.
+    params = _with_quality_policy(user_id, params)
     canonical, fn = _agent_callable(user_id, name, params)
     return _record_run(
         user_id, canonical, params, fn,
@@ -2230,6 +2294,11 @@ def _enqueue_single_agent(
     # 1) Paywall FIRST (honest 402 before any row/reserve/enqueue) — scoped
     #    system-run exemption applies identically to the sync path.
     _require_active_subscription(user_id, agent_name=agent_key, system_run=system_run)
+    # U-AX: stamp the rigor policy onto the params BEFORE they are persisted to
+    # both the AgentRun row and the BackgroundJob payload, so the ARQ worker
+    # replays the exact policy this enqueue resolved (never a fresh one that
+    # could differ by the time the job is picked up).
+    params = _with_quality_policy(user_id, params)
     runs = AgentRunRepository()
     audit, provider = _billing_audit(user_id, agent_key)
     if system_run:
@@ -3561,6 +3630,307 @@ def _latest_failure_is_hard(runs: list[dict[str, Any]] | None) -> bool:
         return False
     chronic = len(runs) >= 3 and all(r["status"] == "failed" for r in runs[:3])
     return chronic or not _is_transient_failure(latest)
+
+
+# ---------------------------------------------------------------------------
+# Agent orchestration maps (U-AX build spec item 5) — the end-to-end workflow
+# every catalog agent occupies, with its real/planned status, the metrics it
+# consumes, the thresholds it is answerable for, and its measured trend.
+# ---------------------------------------------------------------------------
+
+#: THREE maps rather than one dense graph, exercising the architect's explicit
+#: decomposition freedom (U-PLAN.md item 5, "one or MULTIPLE workflow maps
+#: allowed — the constraint is the END RESULT"): the application pipeline is
+#: the linear path an application actually travels; the learning loop is a
+#: CYCLE over that pipeline's outcomes (drawing it as another pipeline stage
+#: would misrepresent it as a step rather than a feedback loop); and the
+#: enrichment map is a fan-out of context providers that no single application
+#: stage owns. Rendering them separately is what makes each one readable.
+#:
+#: ``(mapKey, mapName, mapSubtitle, [(stage, [agentKey, ...]), ...])``.
+_ORCHESTRATION_MAPS: tuple[tuple[str, str, str, tuple[tuple[str, tuple[str, ...]], ...]], ...] = (
+    (
+        "application-pipeline",
+        "Application Pipeline",
+        "The path one job posting travels from discovery to a tracked application.",
+        (
+            ("Discovery", ("jobDiscovery",)),
+            ("Fit Scoring", ("matchScoring", "atsOptimization", "skillGap", "jobMatching")),
+            ("Tailoring", ("resumeTailoring",)),
+            ("Cover Letter", ("coverLetter",)),
+            ("Quality Gates", ("compliance",)),
+            ("Submission", ("submission", "emailAgent")),
+            ("Tracking", ("notification", "scheduling")),
+        ),
+    ),
+    (
+        "learning-loop",
+        "Learning Loop",
+        "The cycle that reads the pipeline's real outcomes and re-tunes how hard "
+        "the agents try on the next run.",
+        (
+            ("Orchestration", ("orchestration",)),
+            ("Signal Capture", ("storyExtraction", "sentimentAnalysis")),
+            ("Learning", ("learningFeedback",)),
+        ),
+    ),
+    (
+        "enrichment",
+        "Context & Enrichment",
+        "Evidence and market context the pipeline draws on — none of these "
+        "advance an application on their own.",
+        (
+            ("Market Intelligence", ("marketTrends", "salaryIntelligence")),
+            ("Employer Research", ("companyResearch",)),
+            ("Outreach", ("recruiterOutreach", "reference")),
+            ("Interview Readiness", ("interviewPrep",)),
+        ),
+    ),
+)
+
+#: Per-agent metric/threshold visibility. Keys are catalog keys; an agent
+#: absent from this table reports EMPTY lists — honest ("nothing recorded")
+#: rather than a generic filler sentence that would read as a real
+#: responsibility. Thresholds name only the two the product actually measures
+#: (the >80% 10-dimension floor and the 1-in-5 interview conversion target,
+#: U2c/U5 ENRICHMENT MANDATE item 2).
+_AGENT_METRIC_VISIBILITY: dict[str, dict[str, tuple[str, ...]]] = {
+    "jobDiscovery": {
+        "metrics": ("jobs discovered per run", "source availability"),
+        "thresholds": (),
+    },
+    "matchScoring": {
+        "metrics": ("10-dimension fit scores", "ATS score"),
+        "thresholds": ("every fit dimension > 80%",),
+    },
+    "atsOptimization": {
+        "metrics": ("ATS keyword + semantic subscores",),
+        "thresholds": ("every fit dimension > 80%",),
+    },
+    "skillGap": {
+        "metrics": ("matched vs missing JD keywords",),
+        "thresholds": ("every fit dimension > 80%",),
+    },
+    "jobMatching": {
+        "metrics": ("fit score ranking",),
+        "thresholds": (),
+    },
+    "resumeTailoring": {
+        "metrics": (
+            "ATS score before/after",
+            "interview conversion rate",
+            "policy rigor tier",
+        ),
+        "thresholds": (
+            "ATS target score set by the current rigor tier",
+            "every fit dimension > 80%",
+        ),
+    },
+    "coverLetter": {
+        "metrics": (
+            "cover-letter quality score",
+            "interview conversion rate",
+            "policy rigor tier",
+        ),
+        "thresholds": ("cover-letter quality target 85",),
+    },
+    "compliance": {
+        "metrics": ("fabrication/entailment guard verdicts",),
+        "thresholds": ("zero unverifiable claims shipped",),
+    },
+    "submission": {
+        "metrics": ("applications submitted", "transmission channel"),
+        "thresholds": ("1 interview per 5 submitted applications",),
+    },
+    "emailAgent": {
+        "metrics": ("messages transmitted",),
+        "thresholds": (),
+    },
+    "notification": {"metrics": ("status transitions recorded",), "thresholds": ()},
+    "scheduling": {"metrics": ("interviews scheduled",), "thresholds": ()},
+    "orchestration": {
+        "metrics": ("pipeline step outcomes", "policy rigor tier"),
+        "thresholds": ("1 interview per 5 submitted applications",),
+    },
+    "storyExtraction": {"metrics": ("evidence stories captured",), "thresholds": ()},
+    "sentimentAnalysis": {"metrics": ("employer response sentiment",), "thresholds": ()},
+    "learningFeedback": {
+        "metrics": (
+            "interview conversion rate",
+            "10-dimension fit scores at submission",
+            "ATS score trend",
+        ),
+        "thresholds": (
+            "1 interview per 5 submitted applications",
+            "every fit dimension > 80%",
+        ),
+    },
+    "marketTrends": {"metrics": ("live market volumes (Adzuna, ABS)",), "thresholds": ()},
+    "salaryIntelligence": {"metrics": ("advertised salary benchmarks",), "thresholds": ()},
+    "companyResearch": {"metrics": ("employer profile coverage",), "thresholds": ()},
+    "recruiterOutreach": {"metrics": ("outreach messages sent",), "thresholds": ()},
+    "reference": {"metrics": ("references recorded",), "thresholds": ()},
+    "interviewPrep": {"metrics": ("prep packs generated",), "thresholds": ()},
+}
+
+#: Where a per-run numeric quality signal lives inside ``AgentRun.output``, per
+#: agent backend. ONLY these two agents record one today; every other agent's
+#: trend is honestly reported as unavailable rather than substituted with
+#: duration or cost, which measure the machine and not the work.
+_TREND_METRIC_PATHS: dict[str, tuple[tuple[str, ...], str]] = {
+    "tailor": (("tailoringSummary", "bestScore"), "best ATS score"),
+    "coverLetter": (("quality", "overall"), "cover-letter quality score"),
+}
+
+
+def _numeric_at(payload: Any, path: tuple[str, ...]) -> float | None:
+    """Follow ``path`` through nested dicts to a real number, else ``None``."""
+    node: Any = payload
+    for key in path:
+        if not isinstance(node, dict):
+            return None
+        node = node.get(key)
+    if isinstance(node, bool) or not isinstance(node, (int, float)):
+        return None
+    return float(node)
+
+
+def _agent_trend(backend: str, runs: list[dict[str, Any]] | None) -> dict[str, Any]:
+    """This agent's improvement trend across its recent runs — or an honest null.
+
+    ``runs`` is newest-first (``AgentRunRepository.recent_runs_by_agent``).
+    ``direction`` is non-null ONLY when the agent records a comparable
+    per-run quality number and at least two runs carry one; otherwise it is
+    ``None`` with a ``basis`` explaining why. An agent that has never run gets
+    zeros and a null direction — never an invented "steady".
+    """
+    runs = runs or []
+    spec = _TREND_METRIC_PATHS.get(backend)
+    if spec is None:
+        return {
+            "runs": len(runs),
+            "metric": None,
+            "latest": None,
+            "previous": None,
+            "delta": None,
+            "direction": None,
+            "basis": "this agent records no comparable per-run quality metric",
+        }
+    path, label = spec
+    # Oldest-first so "previous" really is the earlier run.
+    series = [
+        value
+        for run in reversed(runs)
+        if (value := _numeric_at(run.get("output"), path)) is not None
+    ]
+    if len(series) < 2:
+        return {
+            "runs": len(runs),
+            "metric": label,
+            "latest": series[-1] if series else None,
+            "previous": None,
+            "delta": None,
+            "direction": None,
+            "basis": (
+                "not enough scored runs yet to compare"
+                if series
+                else "no scored run recorded yet"
+            ),
+        }
+    latest, previous = series[-1], series[-2]
+    delta = round(latest - previous, 2)
+    return {
+        "runs": len(runs),
+        "metric": label,
+        "latest": latest,
+        "previous": previous,
+        "delta": delta,
+        "direction": (
+            "improving" if delta > 0 else "declining" if delta < 0 else "steady"
+        ),
+        "basis": f"{label}, latest run vs the one before it",
+    }
+
+
+@router.get("/orchestration-map")
+def orchestration_map(current_user: CurrentUser) -> dict[str, Any]:
+    """Every catalog agent placed in a defined end-to-end workflow (U-AX item 5).
+
+    HONESTY INVARIANTS enforced structurally, not by convention:
+
+    * ``status`` is ``real`` iff the catalog entry has a backend implementation
+      and ``planned`` otherwise — a roadmap card can never render as executing.
+    * ``lastRunPolicyTier`` / ``trend`` come from THIS user's own AgentRun rows.
+      An agent that has never run reports ``null``, never a fabricated tier or
+      a manufactured "steady" trend.
+    * Any catalog agent not placed in a map above lands in an explicit
+      "Unmapped" stage rather than disappearing, so adding an agent to the
+      catalog can never silently shrink this view.
+    """
+    user_id = current_user["id"]
+    last_runs = AgentRunRepository().last_policy_run_by_agent(user_id)
+    recent_runs = AgentRunRepository().recent_runs_by_agent(user_id, window=5)
+
+    def entry_for(agent_key: str) -> dict[str, Any]:
+        catalog = _CATALOG_BY_KEY[agent_key]
+        backend = catalog.get("backend")
+        visibility = _AGENT_METRIC_VISIBILITY.get(agent_key, {})
+        last = last_runs.get(backend) if backend else None
+        return {
+            "agentKey": agent_key,
+            "name": catalog["name"],
+            "backend": backend,
+            "status": "real" if backend else "planned",
+            "runnable": bool(backend) and backend in _RUNNABLE_BACKENDS,
+            "metricsConsumed": list(visibility.get("metrics", ())),
+            "thresholds": list(visibility.get("thresholds", ())),
+            "lastRunPolicyTier": (last or {}).get("policyTier"),
+            "lastRunAt": (last or {}).get("createdAt"),
+            "lastRunStatus": (last or {}).get("status"),
+            "trend": _agent_trend(backend or "", recent_runs.get(backend or "")),
+        }
+
+    placed: set[str] = set()
+    maps: list[dict[str, Any]] = []
+    for map_key, map_name, subtitle, stages in _ORCHESTRATION_MAPS:
+        stage_payload = []
+        for stage_name, agent_keys in stages:
+            known = [k for k in agent_keys if k in _CATALOG_BY_KEY]
+            placed.update(known)
+            stage_payload.append(
+                {"stage": stage_name, "agents": [entry_for(k) for k in known]}
+            )
+        maps.append(
+            {
+                "key": map_key,
+                "name": map_name,
+                "subtitle": subtitle,
+                "stages": stage_payload,
+            }
+        )
+
+    unmapped = [a["key"] for a in AGENT_CATALOG if a["key"] not in placed]
+    if unmapped:
+        # Visible-by-construction drift guard: a newly added catalog agent
+        # shows up here labelled as unplaced instead of vanishing from the
+        # workflow view.
+        maps.append(
+            {
+                "key": "unmapped",
+                "name": "Not yet placed in a workflow",
+                "subtitle": (
+                    "These agents exist in the catalog but have not been assigned "
+                    "a workflow stage yet."
+                ),
+                "stages": [
+                    {
+                        "stage": "Unmapped",
+                        "agents": [entry_for(k) for k in unmapped],
+                    }
+                ],
+            }
+        )
+    return {"maps": maps}
 
 
 @router.get("/catalog")

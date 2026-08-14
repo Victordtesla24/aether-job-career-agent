@@ -410,8 +410,15 @@ def ats_score(
             status.HTTP_422_UNPROCESSABLE_ENTITY, "Resume has no scoreable text"
         )
     from app.services.ats_engine import ATSEngine
+    from app.services.fit_evidence import job_evidence_text
 
-    score = ATSEngine().score(text, job.get("description") or "")
+    # F-UAX-01: score against the SAME JD text `GET /jobs/{id}/insights` uses
+    # (title + description + requirements, `job_evidence_text`) — not the
+    # description alone. Both endpoints feed the Resume Studio before/after
+    # panel for the same job, so a JD-corpus mismatch here would leak into
+    # every displayed ATS and dimension delta as a spurious term that has
+    # nothing to do with the tailoring itself.
+    score = ATSEngine().score(text, job_evidence_text(job))
     return {
         "resume_id": resume_id,
         "job_id": target_job_id,
@@ -434,6 +441,143 @@ def ats_score(
         "matched_keywords": score.matched_keywords,
         "missing_keywords": score.missing_keywords,
         "requires_review": score.requires_review,
+    }
+
+
+def _resume_scoreable_text(resume: dict[str, Any]) -> str:
+    sections = resume.get("sections") or {}
+    return sections.get("raw_text") or "\n".join(
+        b.get("text", "") for b in sections.get("bullets", [])
+    )
+
+
+@router.get("/{resume_id}/tailoring-impact")
+def tailoring_impact(
+    resume_id: str, current_user: CurrentUser, job_id: str | None = None
+) -> dict[str, Any]:
+    """The before/after pair for one tailored version — ONE authority (R-01/R-03).
+
+    U-AX build spec item 3 ("BEFORE/AFTER HONESTY"). Both halves are produced
+    HERE, by the same blend and the same rounding authority
+    (``routers/jobs.py::build_fit_dimensions`` / ``_round``: integer, clamped
+    [0,100]), against the same JD corpus (``job_evidence_text``):
+
+    * ``before`` — the baseline résumé vs this job, delegated verbatim to
+      ``_build_insights``, i.e. the identical payload the Job Discovery fit
+      radar renders. Not a re-implementation; literally the same call.
+    * ``after`` — the tailored version's own re-score, blended by the same
+      function.
+
+    Round 2 computed the "after" half in the BROWSER from the wire's
+    already-1-decimal subscores while the "before" half arrived pre-rounded to
+    integers server-side. That duplicated blend put up to ±0.5 of rounding
+    artefact into every displayed delta (~25% of the product's measured ~2-point
+    average lift) and had to re-derive the provenance rules by hand, which is
+    how a placeholder-contaminated baseline reached the screen flagged as
+    measured. There is now nothing left to duplicate.
+
+    PROVENANCE: a half whose ATS is not a genuine measurement reports
+    ``ats: null`` + ``atsMeasured: false``. The number is WITHHELD rather than
+    flagged, so no consumer can render it as a bold headline the way the panel
+    did in round 2 — the untrustworthy arm simply carries no number.
+    """
+    from app.repositories.job import JobRepository
+    from app.routers.jobs import _build_insights, _round, build_fit_dimensions
+    from app.services.ats_engine import ATSEngine
+    from app.services.fit_evidence import job_evidence_text
+
+    repo = ResumeRepository()
+    resume = repo.get_by_id(resume_id, current_user["id"])
+    if resume is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Resume not found")
+    target_job_id = job_id or resume.get("sourceJobId")
+    if not target_job_id:
+        # Picking a job would fabricate the comparison: a before/after pair is
+        # only meaningful against the posting the version was tailored for.
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "Resume has no target job — tailor it against a job or pass ?job_id=",
+        )
+    job = JobRepository().get_by_id(target_job_id, current_user["id"])
+    if job is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Target job not found")
+    text = _resume_scoreable_text(resume)
+    if not text.strip():
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY, "Resume has no scoreable text"
+        )
+
+    before = _build_insights(job, current_user["id"])
+    before_measured = bool(
+        before.get("scored")
+        and before.get("atsMeasured")
+        and not before.get("semanticDegraded")
+    )
+
+    try:
+        score = ATSEngine().score(text, job_evidence_text(job))
+        after_trusted = score.semantic_path in ("local", "hf_api")
+        after_dimensions = build_fit_dimensions(
+            job,
+            keyword_match=float(score.keyword_match),
+            semantic=float(score.semantic_similarity),
+            experience=float(score.experience_gap),
+            overall=float(score.overall),
+            semantic_trusted=after_trusted,
+            resume_measured=True,
+        )
+        after_ats = _round(float(score.overall)) if after_trusted else None
+        after_measured = after_trusted
+        after_reason = (
+            None
+            if after_trusted
+            else "the semantic scoring model was unavailable for this run"
+        )
+    except Exception:  # noqa: BLE001 — an unscoreable half is reported, never faked
+        # No engine output at all: unlike the job panel there is no stored
+        # fitScore to fall back on for a tailored version, and inventing one
+        # is exactly the defect this endpoint exists to close.
+        after_dimensions = build_fit_dimensions(
+            job,
+            keyword_match=0.0, semantic=0.0, experience=0.0, overall=0.0,
+            semantic_trusted=False, resume_measured=False,
+        )
+        after_ats = None
+        after_measured = False
+        after_reason = "the ATS scoring engine could not score this version"
+
+    before_reason = (
+        None
+        if before_measured
+        else (
+            "the ATS scoring engine could not score your baseline résumé "
+            "against this posting"
+            if not before.get("atsMeasured")
+            else "the semantic scoring model was unavailable for the baseline score"
+        )
+    )
+    return {
+        "resumeId": resume_id,
+        "jobId": target_job_id,
+        "jobTitle": job.get("title"),
+        "company": job.get("company"),
+        # Stated on the wire so a client cannot reintroduce a second rounding
+        # hop without contradicting the payload it is rendering.
+        "granularity": "integer_0_100",
+        "before": {
+            "label": "Baseline résumé",
+            "ats": before["overall"] if before_measured else None,
+            "atsMeasured": before_measured,
+            "unmeasuredReason": before_reason,
+            "dimensions": before["dimensions"],
+        },
+        "after": {
+            "label": "Tailored version",
+            "ats": after_ats,
+            "atsMeasured": after_measured,
+            "unmeasuredReason": after_reason,
+            "dimensions": after_dimensions,
+        },
     }
 
 

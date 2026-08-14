@@ -265,6 +265,19 @@ export default function TermsPage() {
                 You may revoke Gmail access at any time from the Email Center.
               </li>
               <li>We do not sell or share your email content with any third party.</li>
+              <li>
+                <strong className="text-aether-text">Adzuna</strong> — a licensed third-party
+                job-listings aggregator we query to source the live job postings shown in the
+                Jobs and discovery pipeline. No personal data of yours is sent to Adzuna.
+              </li>
+              <li>
+                <strong className="text-aether-text">GitHub (public API)</strong> — if you enter
+                a GitHub username in Settings, we fetch that account&rsquo;s public profile (bio,
+                repositories, languages, and stars) from GitHub&rsquo;s public API to build your
+                portfolio card. This is an unauthenticated, read-only call to GitHub&rsquo;s
+                public API; no GitHub authentication or private data is involved, and no data of
+                yours is sent to GitHub.
+              </li>
             </ul>
           </Section>
 

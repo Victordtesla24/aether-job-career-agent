@@ -54,6 +54,26 @@ export async function fetchTrackerApplication(
   );
 }
 
+/**
+ * Re-confirm a submission whose approval aged out (U5 stale-approval guard).
+ *
+ * The backend refuses to auto-execute an approval older than
+ * `AETHER_APPROVAL_MAX_AGE_DAYS` and records `manualStepReason =
+ * "approval_expired"` instead; this is the one-click path back. It creates a
+ * FRESH `ApprovalRequest` server-side (the existing approval machinery, not a
+ * second implementation) and clears ONLY the expired state — an obstacle a
+ * re-approval cannot fix (CAPTCHA, login wall) is answered 409 and left alone.
+ */
+export async function reconfirmSubmission(
+  id: string,
+  options: RequestOptions = {},
+): Promise<{ reconfirmed: boolean; approvalId: string; applicationId: string }> {
+  return apiRequest<{ reconfirmed: boolean; approvalId: string; applicationId: string }>(
+    `/applications/${id}/reconfirm-submission`,
+    { ...options, method: "POST" },
+  );
+}
+
 // ---- FEAT-B2: stage moves ----------------------------------------------------
 
 /**

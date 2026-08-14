@@ -14,8 +14,23 @@ import { NAV_ITEMS } from "../lib/navigation";
  * contract test is exactly what ships. The active section is resolved from the
  * live pathname (prefix-based for nested routes); `activeHref` can override it
  * for tests/stories.
+ *
+ * `supportEmail` (O-1, S-FIX slice C): before this, a logged-in user had no
+ * direct "Contact support" affordance anywhere in the dashboard shell — only
+ * an indirect path via Privacy Policy §7 / Terms §18 (both linked here) or a
+ * fallback inside Settings -> Billing. The value is supplied by the server
+ * component that renders this shell (dashboard/layout.tsx), which reads
+ * AETHER_SUPPORT_EMAIL at request time via the same `getOperatorLegalConfig()`
+ * helper the legal pages already use — never fabricated here, and simply
+ * omitted (honest, no dead mailto) when no support address is configured.
  */
-export function Sidebar({ activeHref }: { activeHref?: string }) {
+export function Sidebar({
+  activeHref,
+  supportEmail = null,
+}: {
+  activeHref?: string;
+  supportEmail?: string | null;
+}) {
   const pathname = usePathname();
   const currentHref = activeHref ?? pathname ?? "/dashboard";
   // undefined = loading, null = unavailable, otherwise live counts
@@ -203,6 +218,14 @@ export function Sidebar({ activeHref }: { activeHref?: string }) {
         >
           Terms
         </Link>
+        {supportEmail ? (
+          <>
+            <span>·</span>
+            <a href={`mailto:${supportEmail}`} className="hover:text-white transition">
+              Contact support
+            </a>
+          </>
+        ) : null}
         <span>·</span>
         <span>© 2026 Aether</span>
       </div>

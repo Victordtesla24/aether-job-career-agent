@@ -1,0 +1,28 @@
+<!--
+  SYNTHETIC fixture — see README.md in this directory. This is a minimal
+  reproduction of the common ATS "sign in to apply" gate (a login form
+  rendered INSTEAD of the application form, requiring an account before any
+  field-fill is possible). It is NOT a byte-for-byte capture of any specific
+  employer's ATS page.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Sign in to apply — Example Co</title></head>
+<body>
+  <div id="app">
+    <div class="auth-gate">
+      <h1>Sign in to continue your application</h1>
+      <p>You need an account to apply for this role.</p>
+      <form id="login_form" action="/login" method="post">
+        <label for="login_email">Email</label>
+        <input id="login_email" name="email" type="email" required>
+        <label for="login_password">Password</label>
+        <input id="login_password" name="password" type="password" required>
+        <button type="submit">Sign in</button>
+      </form>
+      <a href="/oauth/google">Continue with Google</a>
+      <a href="/signup">Create an account</a>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,12 @@
+# Fires aether-backup.service every 6 hours (RPO ~= 6h; see
+# docs/delivery/DEPLOYMENT-RUNBOOK.md §10 for the restore recipe).
+# Install/disable instructions: see aether-backup.service header.
+[Unit]
+Description=Run Aether production DB backup every 6 hours
+
+[Timer]
+OnCalendar=*-*-* 00/6:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

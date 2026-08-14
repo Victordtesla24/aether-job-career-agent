@@ -11,14 +11,17 @@ import { useRealtimeResources } from "../../../hooks/useRealtime";
 import { apiRequest } from "../../../lib/api/client";
 import type { Job } from "../../../lib/api/jobs";
 import { conversionImpactFrom, type ConversionImpact } from "../../../lib/scoring/provenance";
+import TailoringImpact from "../../../components/analytics/TailoringImpact";
 import {
   downloadResume,
   fetchResumeDiff,
   fetchResumes,
+  fetchTailoringImpact,
   runTailorAgent,
   type ConversionMetrics,
   type Resume,
   type ResumeDiff,
+  type TailoringImpact as TailoringImpactPair,
 } from "../../../lib/api/resumes";
 
 /** Real ATS engine breakdown for a tailored version vs its target job. */
@@ -39,6 +42,28 @@ type AtsScore = {
    *  semantic component above is a placeholder, not a real measurement. */
   semantic_degraded?: boolean;
 };
+
+/**
+ * R-03 (round 3). `JobInsights`, `DIMENSION_ORDER` and `deriveTailoredDimensions`
+ * used to live here: a browser-side re-implementation of
+ * `routers/jobs.py::_build_insights`'s blend, applied to the wire's
+ * already-1-decimal subscores, to produce the "after" half of the Resume
+ * Studio before/after panel while the "before" half arrived pre-rounded to
+ * integers from a different endpoint.
+ *
+ * Two defect classes came out of that duplication and neither was fixable
+ * where it stood: a mixed-granularity delta (up to ±0.5 of pure rounding
+ * artefact against a product lift that averages ~2 ATS points) and a second,
+ * hand-maintained copy of the provenance rules, which is how a
+ * placeholder-contaminated baseline reached the screen flagged as measured.
+ *
+ * Both halves now come from `GET /resumes/{id}/tailoring-impact`
+ * (`fetchTailoringImpact`), blended and rounded by ONE authority
+ * (`routers/jobs.py::build_fit_dimensions` + `_round`). The parity this file's
+ * deleted test asserted by re-implementing the formulas is now structural, and
+ * is pinned server-side by
+ * `apps/api/tests/test_uax_r3_provenance.py::test_before_half_is_byte_identical_to_the_jobs_insights_panel`.
+ */
 
 /**
  * The VERIFIED fidelity report for one version (`GET /resumes/{id}/fidelity`).
@@ -124,6 +149,12 @@ export default function ResumePage() {
   const [selected, setSelected] = useState<Resume | null>(null);
   const [diff, setDiff] = useState<ResumeDiff | null>(null);
   const [ats, setAts] = useState<AtsScore | null>(null);
+  // U-AX item 3: honest before(baseline)/after(tailored) ATS + all 10
+  // fit-radar dimensions for the SELECTED tailored version, served whole by
+  // GET /resumes/{id}/tailoring-impact. R-03: the browser no longer derives
+  // the "after" half — one server-side blend, one rounding authority, so the
+  // two sides of a delta can never carry different granularities.
+  const [tailoringImpact, setTailoringImpact] = useState<TailoringImpactPair | null>(null);
   const [fidelity, setFidelity] = useState<FormatFidelityReport | null>(null);
   const [conversion, setConversion] = useState<ConversionImpact | null>(null);
   const [running, setRunning] = useState(false);
@@ -244,6 +275,7 @@ export default function ResumePage() {
     setSelected(resume);
     setDiff(null);
     setAts(null);
+    setTailoringImpact(null);
     setFidelity(null);
     setDownloadNote(null);
     // W-TAILOR-CONVERGE item 5: the before/after ATS panel used to exist only
@@ -270,10 +302,22 @@ export default function ResumePage() {
       setDiff(null);
     }
     if (resume.sourceJobId) {
+      let tailoredAts: AtsScore | null = null;
       try {
-        setAts(await apiRequest<AtsScore>(`/resumes/${resume.id}/ats`));
+        tailoredAts = await apiRequest<AtsScore>(`/resumes/${resume.id}/ats`);
+        setAts(tailoredAts);
       } catch {
         setAts(null);
+      }
+      // U-AX item 3 / R-03: BOTH halves come from one endpoint, blended and
+      // rounded by one server-side authority (routers/jobs.py::
+      // build_fit_dimensions + _round) against one JD corpus. Nothing is
+      // re-derived here, so there is no second formula to drift and no second
+      // rounding hop to invent a delta the engine never measured.
+      try {
+        setTailoringImpact(await fetchTailoringImpact(resume.id));
+      } catch {
+        setTailoringImpact(null);
       }
     }
     // U2b truth round: the VERIFIED fidelity report for this exact version —
@@ -803,11 +847,24 @@ export default function ResumePage() {
                 {ats.company ? ` @ ${ats.company}` : ""}
               </p>
             </div>
+            {/* R-01 (round 3): `overall` is 0.4*keyword + 0.4*semantic +
+                0.2*experience, so a degraded semantic half makes this headline
+                40% neutral placeholder — the same value the "Semantic
+                similarity (40%)" row directly below already refuses to print.
+                A "treat as directional" footnote under a bold, colour-coded
+                number is not a caveat a reader acts on; the number itself has
+                to go. */}
             <span
-              className={`font-mono text-2xl font-bold ${ats.overall >= 60 ? "text-aether-green" : "text-aether-amber"}`}
+              className={`font-mono text-2xl font-bold ${
+                !semanticTrusted
+                  ? "text-aether-muted-dim"
+                  : ats.overall >= 60
+                    ? "text-aether-green"
+                    : "text-aether-amber"
+              }`}
               data-testid="ats-overall"
             >
-              {ats.overall}
+              {semanticTrusted ? ats.overall : "—"}
             </span>
           </div>
           <div className="mt-3 grid gap-3 sm:grid-cols-3">
@@ -847,8 +904,9 @@ export default function ResumePage() {
           {!semanticTrusted ? (
             <p className="mt-3 text-xs text-aether-muted-dim" data-testid="semantic-degraded-note">
               Semantic similarity could not be measured for this score — a neutral
-              placeholder stood in instead, so the overall score above should be
-              treated as directional until this is available again.
+              placeholder stood in instead. The overall ATS score is 40% built
+              from it, so it is shown as “—” rather than as a measurement until
+              semantic scoring is available again.
             </p>
           ) : null}
           {ats.missing_keywords.length > 0 ? (
@@ -860,6 +918,23 @@ export default function ResumePage() {
             </p>
           ) : null}
         </section>
+      ) : null}
+
+      {/* U-AX item 3: honest before(baseline)/after(tailored) ATS + all 10
+          fit-radar dimensions for this version, threshold line marked,
+          deltas never clamped or hidden. */}
+      {tailoringImpact ? (
+        <TailoringImpact
+          beforeAts={tailoringImpact.before.ats}
+          afterAts={tailoringImpact.after.ats}
+          beforeDimensions={tailoringImpact.before.dimensions}
+          afterDimensions={tailoringImpact.after.dimensions}
+          atsUnmeasuredReason={
+            tailoringImpact.before.ats === null
+              ? tailoringImpact.before.unmeasuredReason
+              : tailoringImpact.after.unmeasuredReason
+          }
+        />
       ) : null}
 
       <div className="grid gap-4 lg:grid-cols-2" data-design-id="evidence-voice-rs15">

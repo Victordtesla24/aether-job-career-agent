@@ -193,3 +193,106 @@ export async function runTailorAgent(jobId: string, options: RequestOptions = {}
   // to completion; a legacy synchronous body passes through unchanged.
   return resolveRun(body, options);
 }
+
+// ---------------------------------------------------------------------------
+// GET /resumes/{id}/tailoring-impact — the ONE before/after authority (R-01/R-03)
+// ---------------------------------------------------------------------------
+
+/**
+ * Wire shape of one half of the pair. `ats` and `atsMeasured` are siblings on
+ * the wire; the parser below collapses them so downstream components only ever
+ * see a number they are allowed to render.
+ */
+const TailoringImpactHalfWireSchema = z.object({
+  label: z.string().nullish(),
+  ats: z.number().nullish(),
+  atsMeasured: z.boolean().nullish(),
+  unmeasuredReason: z.string().nullish(),
+  dimensions: z
+    .array(
+      z.object({
+        label: z.string(),
+        score: z.number().nullish(),
+        degraded: z.boolean().nullish(),
+      }),
+    )
+    .default([]),
+});
+
+export interface TailoringImpactDimension {
+  label: string;
+  score: number;
+  degraded: boolean;
+}
+
+export interface TailoringImpactHalf {
+  label: string;
+  /** `null` == not measured. FAIL CLOSED: a half that does not explicitly
+   *  attest `atsMeasured: true` alongside a real number yields `null`, so an
+   *  unattested payload can never render as a measurement. */
+  ats: number | null;
+  unmeasuredReason: string | null;
+  dimensions: TailoringImpactDimension[];
+}
+
+export interface TailoringImpact {
+  resumeId: string;
+  jobId: string;
+  jobTitle: string | null;
+  company: string | null;
+  before: TailoringImpactHalf;
+  after: TailoringImpactHalf;
+}
+
+const TailoringImpactWireSchema = z.object({
+  resumeId: z.string(),
+  jobId: z.string(),
+  jobTitle: z.string().nullish(),
+  company: z.string().nullish(),
+  before: TailoringImpactHalfWireSchema,
+  after: TailoringImpactHalfWireSchema,
+});
+
+function halfFrom(
+  raw: z.infer<typeof TailoringImpactHalfWireSchema>,
+  fallbackLabel: string,
+): TailoringImpactHalf {
+  const measured = raw.atsMeasured === true && typeof raw.ats === "number";
+  return {
+    label: raw.label ?? fallbackLabel,
+    ats: measured ? (raw.ats as number) : null,
+    unmeasuredReason: raw.unmeasuredReason ?? null,
+    // Same fail-closed rule as `lib/scoring/provenance.ts::fitDimensionsFrom`:
+    // only an explicit `degraded: false` next to a real number is a
+    // measurement; absent, true, or a non-number all read as degraded.
+    dimensions: raw.dimensions.map((d) => ({
+      label: d.label,
+      score: typeof d.score === "number" ? d.score : 0,
+      degraded: !(d.degraded === false && typeof d.score === "number"),
+    })),
+  };
+}
+
+/**
+ * Both halves of a tailored version's before/after pair, blended and rounded
+ * by ONE server-side authority (`routers/jobs.py::build_fit_dimensions` +
+ * `_round`). The browser does no blending and no rounding of its own — that
+ * duplication is exactly what put rounding artefacts into the displayed delta
+ * and let a placeholder-contaminated baseline render as measured.
+ */
+export async function fetchTailoringImpact(
+  resumeId: string,
+  options: RequestOptions = {},
+): Promise<TailoringImpact> {
+  const raw = TailoringImpactWireSchema.parse(
+    await apiRequest<unknown>(`/resumes/${resumeId}/tailoring-impact`, options),
+  );
+  return {
+    resumeId: raw.resumeId,
+    jobId: raw.jobId,
+    jobTitle: raw.jobTitle ?? null,
+    company: raw.company ?? null,
+    before: halfFrom(raw.before, "Baseline résumé"),
+    after: halfFrom(raw.after, "Tailored version"),
+  };
+}

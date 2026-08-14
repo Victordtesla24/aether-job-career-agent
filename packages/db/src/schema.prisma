@@ -199,14 +199,45 @@ model Application {
   createdAt   DateTime          @default(now())
   updatedAt   DateTime          @updatedAt
 
-  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  job              Job               @relation(fields: [jobId], references: [id], onDelete: Cascade)
-  resume           Resume            @relation(fields: [resumeId], references: [id])
+  // U-AX submit-time snapshots (migration 0028). NULL means "not measured at
+  // that submission" — the honest value for every row predating them, which is
+  // why no backfill exists. Applied at runtime by
+  // app.db.ensure_application_submission_snapshot_columns; declared here so a
+  // Prisma push never drops them.
+  atsScoreAtSubmission        Float?
+  tailoredResumeVersionId     String?
+  dimensionScoresAtSubmission Json?
+  policyTierAtSubmission      String?
+
+  user             User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  job              Job                      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  resume           Resume                   @relation(fields: [resumeId], references: [id])
   approvalRequests ApprovalRequest[]
   emailThreads     EmailThread[]
+  statusEvents     ApplicationStatusEvent[]
 
   @@index([userId])
   @@index([jobId])
+}
+
+/// U-AX status-transition history (migration 0028). One row per OBSERVED
+/// transition, written by every path that changes Application.status.
+/// `fromStatus` is nullable and stays NULL when the prior status genuinely was
+/// not observed — a guessed value would defeat the table's entire purpose.
+/// `source` names the code path, and `'backfill:current-status'` marks the one
+/// reconstructed genesis row per pre-existing application.
+model ApplicationStatusEvent {
+  id            String   @id
+  seq           BigInt   @default(autoincrement())
+  applicationId String
+  fromStatus    String?
+  toStatus      String
+  at            DateTime @default(now())
+  source        String
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@index([applicationId, at, seq])
 }
 
 model ApprovalRequest {
@@ -317,10 +348,21 @@ model AgentRun {
   // was alive. The watchdog reconciles a 'running' row only when this evidence
   // is missing, so a legitimately long run is never reaped on age alone.
   heartbeatAt DateTime?
+  // U-AX (migration 0028). What this run acted on, and the rigor policy it
+  // obeyed. Plain nullable columns, NOT enforced FKs: runs legitimately exist
+  // with no job (scout, storyExtractor), and a deleted job must never make a
+  // historical audit row un-insertable. `policyTier` / `metricSnapshot` are
+  // NULL on every run predating the policy loop — never back-stamped with
+  // today's verdict.
+  applicationId  String?
+  jobId          String?
+  policyTier     String?
+  metricSnapshot Json?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([status])
   @@index([status, heartbeatAt])
+  @@index([jobId])
 }
