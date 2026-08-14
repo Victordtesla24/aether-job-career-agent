@@ -119,8 +119,8 @@ def _get_bg_job(job_id: str) -> dict:
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                'SELECT "id","userId","agentKey","status","result","error","params" '
-                'FROM "BackgroundJob" WHERE "id"=%s',
+                'SELECT "id","userId","agentKey","status","result","error","params",'
+                '"quotaReserved" FROM "BackgroundJob" WHERE "id"=%s',
                 (job_id,),
             )
             row = cur.fetchone()
