@@ -23,6 +23,10 @@
  * A row with `value: null` is never drawn as 0 (C-2). It renders the neutral
  * dash and states its reason on the row, so "we do not know this cohort's rate
  * yet" can never be mistaken for "this cohort converts at zero".
+ *
+ * THE TARGET IS OPTIONAL. Where no published target exists the tick and its
+ * label are not drawn at all, rather than drawn against an invented benchmark
+ * — see the `target` prop.
  */
 import type { ReactNode } from "react";
 
@@ -63,8 +67,19 @@ export interface BulletChartProps {
   /** C-3 — required. */
   windowLabel: string;
   rows: readonly BulletRow[];
-  /** The target every row is compared against. */
-  target: { value: number; label: string };
+  /**
+   * The target every row is compared against.
+   *
+   * OPTIONAL, and deliberately so (F3): some measures have no published
+   * target, and cost per outcome is one of them — nothing in this product
+   * states what an application or an interview OUGHT to cost. Drawing a tick
+   * there would be inventing a benchmark, which is the fabrication the whole
+   * kit exists to prevent. With no target the rows still share one linear
+   * axis, so the comparison BETWEEN them (an interview costs 2.5x an
+   * application) is still geometric — it simply makes no claim about whether
+   * either number is good.
+   */
+  target?: { value: number; label: string };
   /** C-2 — required when the rows mix a real 0 with a null. */
   nullMeaning?: string;
   /** The denominator ribbon. Omit when every measure covers its whole
@@ -106,7 +121,7 @@ export function BulletChart({
       note: row.note ?? row.basis,
       display: row.display,
     })),
-    { label: `${target.label} (target)`, value: target.value },
+    ...(target ? [{ label: `${target.label} (target)`, value: target.value }] : []),
     ...(coverage ?? []).map((segment) => ({
       label: `${segment.label} (coverage)`,
       value: segment.count,
@@ -116,8 +131,20 @@ export function BulletChart({
   const measured = rows
     .map((r) => r.value)
     .filter((v): v is number => typeof v === "number" && Number.isFinite(v));
-  const top = axisMax ?? Math.max(...measured, target.value, 1) * 1.25;
-  const targetPct = Math.min(100, (target.value / top) * 100);
+  /*
+   * THE AXIS COMES FROM THE DATA, not from a constant.
+   *
+   * This used to be `Math.max(…measured, target, 1) * 1.25`, where the `1` was
+   * only ever meant to keep an all-unmeasured chart from computing an axis of
+   * 0. On a percentage series it never bound (every value and target exceeds
+   * 1) — but on a series measured in dollars-and-cents it DOMINATED: a $0.03
+   * cost per application drew a 2.7% bar against an invented $1.25 axis, so
+   * the mark said "almost nothing" about a number that is the whole row. The
+   * floor now applies only when there is genuinely nothing to scale to.
+   */
+  const dataTop = Math.max(...measured, target?.value ?? 0);
+  const top = axisMax ?? (dataTop > 0 ? dataTop * 1.25 : 1);
+  const targetPct = target ? Math.min(100, (target.value / top) * 100) : null;
   const coverageTotal = (coverage ?? []).reduce((sum, s) => sum + Math.max(0, s.count), 0);
 
   return (
@@ -138,7 +165,8 @@ export function BulletChart({
             const isMeasured = typeof row.value === "number" && Number.isFinite(row.value);
             const isZero = row.value === 0;
             const pct = isMeasured ? Math.min(100, ((row.value as number) / top) * 100) : 0;
-            const meetsTarget = isMeasured && (row.value as number) >= target.value;
+            const meetsTarget =
+              target !== undefined && isMeasured && (row.value as number) >= target.value;
             return (
               <div
                 key={`${row.label}-${index}`}
@@ -202,20 +230,23 @@ export function BulletChart({
                     ) : null}
                   </div>
                   {/* The target tick spans the full row height so a reader can
-                      sight down it across every cohort at once. */}
-                  <span
-                    data-testid="bullet-target-tick"
-                    aria-hidden="true"
-                    className="pointer-events-none absolute -top-0.5 block h-5 w-px"
-                    style={{ left: `${targetPct}%`, backgroundColor: STATE.warn }}
-                    title={target.label}
-                  />
+                      sight down it across every cohort at once. It is drawn
+                      only where a target actually exists — see `target`. */}
+                  {target && targetPct !== null ? (
+                    <span
+                      data-testid="bullet-target-tick"
+                      aria-hidden="true"
+                      className="pointer-events-none absolute -top-0.5 block h-5 w-px"
+                      style={{ left: `${targetPct}%`, backgroundColor: STATE.warn }}
+                      title={target.label}
+                    />
+                  ) : null}
                 </div>
 
                 <span
                   data-testid="bullet-value"
                   data-tone={isMeasured && !isZero ? "series" : "neutral"}
-                  className="shrink-0 text-right font-mono text-[13px] tabular-nums sm:w-20"
+                  className="w-16 shrink-0 text-right font-mono text-[13px] tabular-nums sm:w-20"
                   style={{
                     color: isMeasured
                       ? meetsTarget
@@ -227,42 +258,53 @@ export function BulletChart({
                   {isMeasured ? (row.display ?? formatNumber(row.value as number)) : NOT_MEASURED}
                 </span>
 
-                {row.basis ? (
-                  <span
-                    data-testid="bullet-basis"
-                    className="shrink-0 text-[11px] text-aether-muted-dim"
-                  >
-                    {row.basis}
-                  </span>
-                ) : null}
-                {row.note ? (
-                  <span
-                    data-testid="bullet-note"
-                    className="min-w-0 flex-1 text-[11px] text-aether-muted-dim"
-                  >
-                    {row.note}
-                  </span>
-                ) : null}
                 {row.trailing}
+
+                {/*
+                 * THE DENOMINATOR AND THE REASON GET THEIR OWN LINE.
+                 *
+                 * They used to sit in the measure line, where `flex-1` on the
+                 * note competed with `flex-1` on the track: a row carrying a
+                 * long "nothing to divide by" reason ended up with a track
+                 * ~350px SHORTER than the row above it, and two bars drawn on
+                 * different-length tracks are not on the same scale — the one
+                 * thing a bullet row exists to guarantee. Wrapping them to a
+                 * full-width second line, indented to the track's left edge,
+                 * makes every row's measure line identical by construction.
+                 */}
+                {row.basis || row.note ? (
+                  <div className="flex w-full flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[11px] leading-[1.5] text-aether-muted-dim sm:pl-[172px]">
+                    {row.basis ? <span data-testid="bullet-basis">{row.basis}</span> : null}
+                    {row.note ? (
+                      <span data-testid="bullet-note" className="min-w-0">
+                        {row.note}
+                      </span>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
             );
           })}
 
           {/* C-5: the target's meaning is a word on the plot, not a colour a
-              reader has to decode from a legend that may be scrolled away. */}
-          <div className="relative mt-1 h-3 sm:ml-[172px]">
-            <span
-              data-testid="bullet-target-label"
-              className="absolute top-0 whitespace-nowrap font-mono text-[10px] leading-none"
-              style={{
-                left: `${targetPct}%`,
-                transform: targetPct > 60 ? "translateX(-100%)" : "translateX(-50%)",
-                color: STATE.warn,
-              }}
-            >
-              {`▲ ${target.label}`}
-            </span>
-          </div>
+              reader has to decode from a legend that may be scrolled away.
+              No target, no tick and no label row — an empty 12px strip under
+              a targetless chart is the dead void composition rule 6 forbids. */}
+          {target && targetPct !== null ? (
+            <div className="relative mt-1 h-3 sm:ml-[172px]">
+              <span
+                data-testid="bullet-target-label"
+                className="absolute top-0 whitespace-nowrap font-mono text-[10px] leading-none"
+                style={{
+                  left: `${targetPct}%`,
+                  transform: targetPct > 60 ? "translateX(-100%)" : "translateX(-50%)",
+                  color: STATE.warn,
+                }}
+              >
+                {`▲ ${target.label}`}
+              </span>
+            </div>
+          ) : null}
 
           {coverage && coverageTotal > 0 ? (
             <div className="mt-2" data-testid="bullet-coverage">

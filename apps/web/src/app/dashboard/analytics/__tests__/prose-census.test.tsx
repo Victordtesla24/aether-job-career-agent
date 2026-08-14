@@ -513,26 +513,31 @@ describe("RULE 5 — every top-level block in a view DRAWS", () => {
    * A PINNED CENSUS, not a pass/fail with an escape hatch.
    *
    * Running this rule page-wide found a SECOND block of F1's exact class that
-   * no finding named: `agent-roi` on Quality & ROI is five bare-numeral tiles
+   * no finding named: `agent-roi` on Quality & ROI WAS five bare-numeral tiles
    * with no mark of any kind — and on the default "all" period its spend and
-   * its two cost-per ratios are the same figures the band's spend tile draws
+   * its two cost-per ratios were the same figures the band's spend tile draws
    * above, which is word for word the complaint F1 made about the deleted
    * Dashboard summary.
    *
-   * It is NOT fixed here and NOT exempted here. F1's remedy was deletion, and
-   * this slice's brief lists "ROI tile prose → captions" — keep the tiles — so
-   * deleting them is a ruling, not a fixer's call; while `/analytics/agent-roi`
-   * returns three scalars in three different units (dollars, a count, seconds),
-   * so there is no honest shared scale to draw them on either. Escalated as F3.
+   * ROUND 3 — THE RULING LANDED, AND THIS LIST IS BACK AT `[]`.
+   *
+   * The judge's must-fix: delete the duplicated figures (total spend, agent
+   * runs — both drawn by the band's spend tile above) and re-express what is
+   * genuinely this panel's own as a real visual. Which is what shipped: the
+   * two cost-per ratios share ONE scale (dollars), so they are now a two-row
+   * `<BulletChart>` with the honest "—" states and their reasons on the rows,
+   * and the third scalar (seconds) is the chart's caption rather than a bar on
+   * a dollar axis. The escalation note above is kept as the record of why the
+   * previous round refused to guess.
    *
    * Pinning the census rather than skipping the tab is what keeps this from
    * being the F2 mistake (a mechanism used to pass a test instead of to satisfy
-   * the rule): a NEW chartless block fails this test, and so does removing this
-   * one — which forces the list back to `[]` the moment the ruling lands.
+   * the rule): the list is EXACT, so a new chartless block fails this test, and
+   * so does re-adding the one that was just removed.
    */
-  const CHARTLESS_AWAITING_RULING = ["analytics-panel-quality → Agent ROI"];
+  const CHARTLESS_BLOCKS: string[] = [];
 
-  it("has exactly one chartless top-level block left, the one awaiting a ruling (F3)", async () => {
+  it("leaves no chartless top-level block in any view (F3 closed)", async () => {
     const container = await renderPage();
     const chartless = (Array.from(container.querySelectorAll('[role="tabpanel"]')) as HTMLElement[])
       .flatMap((panel) =>
@@ -550,7 +555,7 @@ describe("RULE 5 — every top-level block in a view DRAWS", () => {
           }),
       );
 
-    expect(chartless).toEqual(CHARTLESS_AWAITING_RULING);
+    expect(chartless).toEqual(CHARTLESS_BLOCKS);
   });
 });
 

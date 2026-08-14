@@ -15,6 +15,7 @@ import SegmentedControl from "../../../components/ui/SegmentedControl";
 import Section from "../../../components/ui/Section";
 import {
   BulletChart,
+  type BulletRow,
   Funnel as FunnelChart,
   Histogram,
   Radar10,
@@ -89,9 +90,10 @@ const PERIODS: Period[] = ["7d", "30d", "90d", "all"];
  * the question they answer ("is the rigor policy working?") belongs.
  *
  * WHY THREE VIEWS AND NOT FOUR. Agent ROI was drafted as its own tab. Measured
- * at 1600x1100 it rendered one 280px panel above ~600px of empty ground —
- * five numerals alone on a screen, which reads as an unfinished view, not a
- * focused one. It joins Quality as the third row of that view: ATS spread and
+ * at 1600x1100 it rendered one 280px panel above ~600px of empty ground, which
+ * reads as an unfinished view, not a focused one (round 3 replaced that
+ * panel's bare numerals with a chart; one panel is still not a view). It joins
+ * Quality as the third row of that view: ATS spread and
  * fit radar (how good are these matches), the policy's history and cohorts (is
  * the rigor loop working), then what all of it cost. Every panel keeps its own
  * heading, so nothing about what the reader is looking at becomes ambiguous.
@@ -104,6 +106,70 @@ const TAB_ITEMS: ReadonlyArray<{ value: AnalyticsTab; label: string; icon: strin
   { value: "quality", label: "Quality & ROI", icon: "fa-bullseye" },
   { value: "market", label: "Market", icon: "fa-globe" },
 ];
+
+const money = (usd: number) => `$${usd.toFixed(2)}`;
+
+/**
+ * ROUND 3 / F3 — the two rows the Agent ROI panel draws, and the ONLY content
+ * that panel still owns.
+ *
+ * The judge's must-fix: `agent-roi` was five bare numerals in a grid, two of
+ * which (total spend, agent runs) are the same figures the executive band's
+ * spend tile already shows above. Those two are DELETED. What is genuinely
+ * this panel's own — cost per submitted application, cost per interview, and
+ * the honest "—" states — is re-expressed as a real chart, because a ratio
+ * against a ratio has a shared scale (dollars) and therefore a shape.
+ *
+ * THREE HONESTY RULES ARE PRESERVED BYTE FOR BYTE FROM THE DELETED TILES:
+ *  1. `roi` is ALL-TIME (no period support server-side) while `funnel` is
+ *     period-scoped, so on any scoped period the division is REFUSED rather
+ *     than performed across mismatched windows. The refusal reason is the
+ *     verbatim string the tile caption carried.
+ *  2. An empty denominator is "—" with its reason on the row, never $0.00 —
+ *     "no application reached this stage" is not "each one cost nothing".
+ *  3. A ratio never appears without the figures it was computed from: `basis`
+ *     puts "$8.16 over 287 submitted" beside the value, which is the same law
+ *     the interview-conversion chart obeys. That is a DENOMINATOR disclosure,
+ *     not a restatement of the deleted spend tile — it exists only next to the
+ *     division it justifies, and disappears with it when the windows disagree.
+ */
+function roiCostRows(roi: AgentRoi, funnel: Funnel | null, period: Period): BulletRow[] {
+  const comparable = period === "all" && funnel !== null;
+  const spend = money(roi.total_cost_usd);
+
+  return (
+    [
+      {
+        testId: "roi-cost-per-application",
+        label: "Cost per application",
+        denominator: funnel?.applied ?? 0,
+        basisNoun: "submitted",
+      },
+      {
+        testId: "roi-cost-per-interview",
+        label: "Cost per interview",
+        denominator: funnel?.interviewed ?? 0,
+        basisNoun: "reached an interview",
+      },
+    ] as const
+  ).map(({ testId, label, denominator, basisNoun }) => {
+    const measurable = comparable && denominator > 0;
+    return {
+      testId,
+      label,
+      value: measurable ? roi.total_cost_usd / denominator : null,
+      display: measurable ? money(roi.total_cost_usd / denominator) : undefined,
+      basis: measurable ? `${spend} over ${denominator} ${basisNoun}` : undefined,
+      // Verbatim from the deleted tile captions: which two windows failed to
+      // line up, or which denominator is empty.
+      note: measurable
+        ? undefined
+        : !comparable
+          ? `Spend is all-time, funnel is ${period} — select “all” to divide like with like.`
+          : "No application has reached this stage yet — nothing to divide by.",
+    };
+  });
+}
 
 export default function AnalyticsPage() {
   const [period, setPeriod] = useState<Period>("all");
@@ -676,8 +742,11 @@ export default function AnalyticsPage() {
         </div>
       ) : null}
 
-        {/* What the agents cost, and what each outcome cost — including the
-            two places the honest answer is "—" rather than a number. */}
+        {/* WHAT ONE OUTCOME COST — round 3, F3.
+            The five-numeral tile grid that used to live here is gone: total
+            spend and agent runs are the executive band's spend tile, above,
+            and this panel now draws only what is its own. `roiCostRows` (top
+            of file) carries the honesty rules the tile captions carried. */}
         <section className="elev-1 rounded-2xl p-5" data-testid="agent-roi">
           <h2 className="type-section flex items-center gap-1.5">
             Agent ROI
@@ -690,102 +759,30 @@ export default function AnalyticsPage() {
           {roi === null ? (
             <div className="mt-4 h-40 animate-pulse rounded-lg bg-white/5" aria-busy="true" />
           ) : (
-            /* U-UI ANALYTICS-STAT-TILE-OVERFLOW: a hard `grid-cols-3` at a
-             * 390px mobile viewport left each tile ~61px wide — too narrow
-             * for `text-2xl` values ("$8.16", "166.0s"), which measured
-             * 22–59% wider than their box. Stack to one column below the
-             * `sm` breakpoint (matching the responsive `dl` grids used
-             * elsewhere on this page) so every tile keeps its full-width
-             * value on screen; unchanged from `sm` up. */
-            <dl className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
-              <div className="rounded-xl border border-white/10 p-4 text-center">
-                <dd className="mono flex items-center justify-center text-2xl font-bold text-aether-green">
-                  <MetricTooltip
-                    value={`$${roi.total_cost_usd.toFixed(2)}`}
-                    tooltip="Cumulative LLM API cost across all agent runs in this period."
-                  />
-                </dd>
-                <dt className="mt-1 text-xs text-aether-muted">Total spend</dt>
-              </div>
-              <div className="rounded-xl border border-white/10 p-4 text-center">
-                <dd className="mono flex items-center justify-center text-2xl font-bold">
-                  <MetricTooltip value={roi.total_runs} tooltip="Total number of agent executions recorded in this period." />
-                </dd>
-                <dt className="mt-1 text-xs text-aether-muted">Agent runs</dt>
-              </div>
-              <div className="rounded-xl border border-white/10 p-4 text-center">
-                <dd className="mono flex items-center justify-center text-2xl font-bold text-aether-amber">
-                  <MetricTooltip
-                    value={`${(roi.avg_duration_ms / 1000).toFixed(1)}s`}
-                    tooltip="Average wall-clock time per agent run in this period."
-                  />
-                </dd>
-                <dt className="mt-1 text-xs text-aether-muted">Avg duration</dt>
-              </div>
-            </dl>
+            <div className="mt-4">
+              <BulletChart
+                title="Cost per outcome"
+                /* C-3. The window is the DIVISION's window, and on a scoped
+                   period there isn't one — which is exactly what it says. */
+                windowLabel={
+                  period === "all"
+                    ? "all time — total agent spend over the all-time funnel"
+                    : `agent spend is all time, the funnel is scoped to ${period} — the two cannot be divided`
+                }
+                rows={roiCostRows(roi, funnel, period)}
+                /* C-2. `$0.00` is reachable (spend of 0 over a real
+                   denominator), so the dash must say what it is instead. */
+                nullMeaning="the division could not be made; each row states why"
+                /* Avg duration keeps its exact figure and its meaning, as the
+                   caption of the panel's visual rather than a third bare
+                   numeral: it is seconds, and putting seconds on a dollar
+                   axis would be the mixed-scale defect the quality bar names.
+                   The old tile's wording ("Average wall-clock time per agent
+                   run") was hover-only — this states it on the face. */
+                footnote={`Runs average ${(roi.avg_duration_ms / 1000).toFixed(1)}s of wall-clock time.`}
+              />
+            </div>
           )}
-
-          {/*
-            §5.2 — cost per application / per interview, "computed only when
-            denominator > 0 else —".
-
-            There is a SECOND precondition the spec's one-liner does not state
-            and that this panel must not quietly ignore: `roi` is ALL-TIME
-            (no period support server-side) while `funnel` is period-scoped.
-            Dividing an all-time cost by a 7-day application count would
-            produce a confident number that describes nothing real. So the
-            ratio is computed only when the selector is on `all`, and otherwise
-            says which two windows failed to line up.
-          */}
-          {roi ? (
-            <dl className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2" data-testid="agent-roi-derived">
-              {(
-                [
-                  [
-                    "Cost per application",
-                    funnel?.applied ?? 0,
-                    "Total agent spend divided by applications submitted. Both figures are all-time.",
-                  ],
-                  [
-                    "Cost per interview",
-                    funnel?.interviewed ?? 0,
-                    "Total agent spend divided by applications that reached an interview. Both figures are all-time.",
-                  ],
-                ] as const
-              ).map(([label, denominator, tip]) => {
-                const comparable = period === "all" && funnel !== null;
-                const measurable = comparable && denominator > 0;
-                return (
-                  <div key={label} className="rounded-xl border border-white/10 p-4 text-center">
-                    <dd className="mono flex items-center justify-center text-2xl font-bold text-aether-green">
-                      {measurable ? (
-                        <MetricTooltip
-                          value={`$${(roi.total_cost_usd / denominator).toFixed(2)}`}
-                          tooltip={tip}
-                        />
-                      ) : (
-                        <span className="text-aether-muted-dim">—</span>
-                      )}
-                    </dd>
-                    <dt className="mt-1 text-xs text-aether-muted">{label}</dt>
-                    {/* ANALYTICS-VIZ: the reason a ratio is “—” stays on the
-                        tile, at the same size, demoted from a free-standing
-                        block to the CAPTION of the tile it qualifies. The
-                        wording is tightened to one line; the two facts it
-                        carries (which windows failed to line up / which
-                        denominator is empty) are unchanged. */}
-                    {!measurable ? (
-                      <p data-prose="caption" className="type-meta mt-1">
-                        {!comparable
-                          ? `Spend is all-time, funnel is ${period} — select “all” to divide like with like.`
-                          : "No application has reached this stage yet — nothing to divide by."}
-                      </p>
-                    ) : null}
-                  </div>
-                );
-              })}
-            </dl>
-          ) : null}
         </section>
       </div>
 
