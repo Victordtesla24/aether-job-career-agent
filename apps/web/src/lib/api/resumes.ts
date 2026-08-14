@@ -76,6 +76,43 @@ export async function fetchResumeDiff(id: string, options: RequestOptions = {}):
   return ResumeDiffSchema.parse(await apiRequest<unknown>(`/resumes/${id}/diff`, options));
 }
 
+// U2b (ML-U2B-approval-honesty ruling 2): the VERIFIED per-version fidelity
+// report — renders the version and re-reads the produced file, unlike
+// `Resume.formatFidelity` (a listing's cheaper, mechanism-only snapshot).
+// The approval modal reads this to supersede a résumé's tailoring-approval
+// reasoning with the résumé's LIVE fidelity rather than the frozen line the
+// approval payload was written with at creation time.
+export const ResumeFidelitySchema = z.object({
+  resume_id: z.string(),
+  formatPreserved: z.boolean().nullable(),
+  method: z.string(),
+  confidence: z.string(),
+  note: z.string(),
+});
+
+export type ResumeFidelity = z.infer<typeof ResumeFidelitySchema>;
+
+// MF-A (round-5 re-review): this render + re-extraction call is the one
+// `fetchResumeFidelity` caller (ApprovalModal) waits on to supersede a
+// green "Verified" claim before approval — a hang here used to leave that
+// claim on screen forever (no timeout anywhere in this module). 10s is a
+// wide margin over the ~220-260ms this endpoint measures in production
+// (`u2b-r5-probe-20260814/live-prod-probe-20260814T0525Z.txt`) while still
+// bounding the wait to something finite. Callers may override it.
+export const FIDELITY_FETCH_TIMEOUT_MS = 10_000;
+
+export async function fetchResumeFidelity(
+  id: string,
+  options: RequestOptions = {},
+): Promise<ResumeFidelity> {
+  return ResumeFidelitySchema.parse(
+    await apiRequest<unknown>(`/resumes/${id}/fidelity`, {
+      timeoutMs: FIDELITY_FETCH_TIMEOUT_MS,
+      ...options,
+    }),
+  );
+}
+
 /** Deterministic before/after ATS re-score + estimated conversion lift (GAP-E2). */
 export interface ConversionMetrics {
   baselineATSScore: number;

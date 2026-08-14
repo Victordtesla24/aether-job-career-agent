@@ -22,9 +22,10 @@ from app.repositories.story import StoryRepository
 from app.services.ats_engine import ATSEngine
 from app.services.career_data import build_career_corpus
 from app.services.evidence_corpus import build_corpus_evidence
+from app.services.resume_format import FormatFidelity, describe_fidelity, pending_fidelity
 from app.services.resume_grounding import MissingResumeError
 from app.services.resume_parser import parse_resume_pdf
-from app.services.resume_pdf import extract_pdf_bullets
+from app.services.resume_pdf import bundled_format_hashes, extract_pdf_bullets
 from app.services.resume_tailor import (
     ResumeTailorService,
     TailorResult,
@@ -223,15 +224,28 @@ def grounding_confidence(bullets: list[dict[str, str]], corpus: str) -> int:
 
 
 def build_tailor_approval_extras(
-    result: "Any", job: dict[str, Any], evidence_corpus: str
+    result: "Any", job: dict[str, Any], evidence_corpus: str, fidelity: FormatFidelity
 ) -> dict[str, Any]:
     """Approval-card fields the review modal renders for a tailored résumé
     (MV-resume-studio-001) — ``preview`` (the changed bullets a human reviews),
     ``why`` (why the gate fired), ``reasoning`` (what the agent verified) and
-    ``confidence`` (evidence grounding). Every reasoning item is TRUE by
-    construction: a version only reaches this point after its rewrites passed the
-    fabrication + entailment guards, and the source PDF's ``formatHash`` is carried
-    through untouched.
+    ``confidence`` (evidence grounding).
+
+    The fabrication/entailment-guard reasoning items are TRUE by construction:
+    a version only reaches this point after its rewrites passed both guards.
+    The layout-preservation item is NOT — it used to unconditionally claim
+    "Original layout preserved... Verified" for every run regardless of the
+    base document's own fidelity, which a live coherence re-review proved
+    false for 2 of 3 sampled production approvals (reflow-template,
+    ``formatPreserved: false`` bases still shown a green "Verified" claim;
+    SONNET-COHERENCE-REREVIEW-20260814.md finding F4). ``fidelity`` — the
+    SAME ``describe_fidelity``/``pending_fidelity`` decision table
+    ``GET /resumes`` stamps every listed version with — is required so this
+    item can only ever say what the base document's real mechanism supports:
+    a "check" when it claims preservation (still caveated as pending
+    per-document verification — no render/download has happened yet at
+    approval-creation time), a "warning" naming the true limitation
+    otherwise. Never an unconditional claim.
     """
     changed = [
         (cur, orig)
@@ -264,11 +278,8 @@ def build_tailor_approval_extras(
                 ),
             },
             {
-                "kind": "check",
-                "text": (
-                    "Original layout preserved — the source PDF's format hash is "
-                    "carried through untouched."
-                ),
+                "kind": "check" if fidelity.preserved is True else "warning",
+                "text": f"Original layout: {fidelity.note}",
             },
             {
                 "kind": "check",
@@ -446,6 +457,43 @@ class TailoringAgent:
             base["id"], user_id, sections, base["formatHash"]
         )
         return healed or base
+
+    def _pending_fidelity_for(self, base: dict[str, Any], user_id: str) -> FormatFidelity:
+        """The honest, mechanism-level fidelity report for the version about
+        to be tailored FROM ``base`` — the SAME decision table ``GET /resumes``
+        stamps every listed version with (:mod:`app.services.resume_format`),
+        computed here at approval-creation time so
+        :func:`build_tailor_approval_extras` can state a real, per-state
+        layout-preservation line instead of an unconditional claim
+        (ML-U2B-approval-honesty).
+
+        No download/render has happened yet at this point in the run, so a
+        mechanism claim of preservation is wrapped in :func:`pending_fidelity`
+        — exactly what ``stamp_fidelity`` does for a tailored listing row
+        whose parent claims preservation: state the mechanism, not an
+        outcome nobody has checked yet.
+
+        ``original_meta_by_user`` is looked up defensively (``getattr``): test
+        doubles for :class:`ResumeRepository` that predate this fix do not
+        implement it, and the honest degrade for "we don't know whether the
+        original is stored" is the same default ``stamp_fidelity`` already
+        uses for a résumé absent from its own ``original_meta`` mapping —
+        ``hasOriginal=False`` — never a crash and never an affirmative guess.
+        """
+        format_hash = base.get("formatHash")
+        meta_lookup = getattr(self._resumes, "original_meta_by_user", None)
+        meta: dict[str, Any] = {}
+        if meta_lookup is not None:
+            meta = meta_lookup(user_id).get(base.get("id"), {})
+        fidelity = describe_fidelity(
+            bundled_match=bool(format_hash) and format_hash in bundled_format_hashes(),
+            has_original=bool(meta.get("hasOriginal")),
+            content_type=meta.get("originalContentType"),
+            is_tailored=True,
+        )
+        if fidelity.preserved is True:
+            fidelity = pending_fidelity(fidelity)
+        return fidelity
 
     def run(
         self,
@@ -652,6 +700,10 @@ class TailoringAgent:
             changes=net_changes,
             rejected=best["rejected"],
         )
+        # ML-U2B-approval-honesty: the base document's REAL fidelity mechanism
+        # (not an unconditional claim) drives the approval card's
+        # layout-preservation line — see _pending_fidelity_for's docstring.
+        fidelity = self._pending_fidelity_for(base, user_id)
         approval = self._approvals.create(
             user_id,
             "application_submit",
@@ -665,7 +717,7 @@ class TailoringAgent:
                 # than the application_submit defaults.
                 "agent": "Tailoring Agent",
                 "action": "apply a tailored résumé",
-                **build_tailor_approval_extras(loop_as_result, job, evidence_corpus),
+                **build_tailor_approval_extras(loop_as_result, job, evidence_corpus, fidelity),
             },
         )
         # RT-005: a successfully tailored job belongs in the "Tailoring"

@@ -12,8 +12,19 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 
 import type { Approval } from "../../lib/api/approvals";
+import { fetchResumeFidelity } from "../../lib/api/resumes";
 import type { DecisionContext } from "./api";
-import { isExpired, metaLine, parseApprovalPayload, previewLabel } from "./lib";
+import {
+  FIDELITY_CHECKING,
+  FIDELITY_FETCH_FAILED,
+  type LiveFidelity,
+  isExpired,
+  metaLine,
+  parseApprovalPayload,
+  payloadKind,
+  previewLabel,
+  withLiveFidelity,
+} from "./lib";
 
 interface ApprovalModalProps {
   approval: Approval;
@@ -24,6 +35,23 @@ interface ApprovalModalProps {
 
 const FOCUSABLE =
   'button:not([disabled]), [href], input:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+/**
+ * The résumé id a PENDING ``resume_tailor`` approval's live fidelity check
+ * fetches for, or ``null`` when this approval will never fetch one (wrong
+ * kind, resolved, or a payload with no ``resume_id``). Shared by the state
+ * initializer and the fetch effect below (MF-A) so the two can never
+ * disagree about whether a fetch is coming.
+ */
+function fidelityResumeId(approval: Approval): string | null {
+  if (approval.status !== "pending" || payloadKind(approval) !== "resume_tailor") return null;
+  const resumeId = (approval.payload as { resume_id?: unknown }).resume_id;
+  return typeof resumeId === "string" ? resumeId : null;
+}
+
+function initialFidelity(approval: Approval): LiveFidelity | null {
+  return fidelityResumeId(approval) !== null ? FIDELITY_CHECKING : null;
+}
 
 export function ApprovalModal({ approval, onClose, onDecide }: ApprovalModalProps) {
   const details = parseApprovalPayload(approval);
@@ -40,6 +68,56 @@ export function ApprovalModal({ approval, onClose, onDecide }: ApprovalModalProp
   );
   const [busy, setBusy] = useState<"approve" | "reject" | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // ML-U2B-approval-honesty ruling 2: a PENDING resume_tailor approval's
+  // "Original layout" reasoning line is superseded by the résumé's LIVE,
+  // verified fidelity — never the frozen mechanism-level snapshot the
+  // approval was written with (see lib.ts withLiveFidelity). Resolved
+  // approvals and every other kind never fetch — nothing to supersede.
+  //
+  // MF-A (round-5 re-review): the frozen claim used to render, unsupervised,
+  // for this fetch's ENTIRE in-flight window (~220-260ms in production;
+  // indefinitely on a hang, since nothing in lib/api bounded a fetch with a
+  // timeout — see resumes.ts FIDELITY_FETCH_TIMEOUT_MS for the other half of
+  // this fix). The lazy initializer seeds FIDELITY_CHECKING synchronously,
+  // in the SAME render that first learns a fetch is coming, so there is
+  // never a paint with the frozen claim on screen — not even one frame — for
+  // an approval this modal is about to check. The render-phase reset below
+  // (React's documented "adjust state when a prop changes" pattern) gives
+  // the same guarantee when this modal is reused for a different approval
+  // without unmounting.
+  const [seenApproval, setSeenApproval] = useState(approval);
+  const [liveFidelity, setLiveFidelity] = useState<LiveFidelity | null>(() =>
+    initialFidelity(approval),
+  );
+  if (approval !== seenApproval) {
+    setSeenApproval(approval);
+    setLiveFidelity(initialFidelity(approval));
+  }
+  useEffect(() => {
+    const resumeId = fidelityResumeId(approval);
+    if (resumeId === null) return;
+    let cancelled = false;
+    fetchResumeFidelity(resumeId)
+      .then((fidelity) => {
+        if (!cancelled) setLiveFidelity({ preserved: fidelity.formatPreserved, note: fidelity.note });
+      })
+      .catch(() => {
+        // MF-1 (round-4 re-review): a failed fidelity fetch must NOT leave
+        // the frozen "Original layout preserved" claim rendering as a green
+        // "Verified" check — that silently restores the exact false-claim
+        // pattern this slice exists to kill. Downgrade to the honest-unknown
+        // warning instead of a no-op (`null` would keep showing the frozen
+        // line unchanged; see withLiveFidelity's docstring). A timed-out
+        // fetch (MF-A) rejects the same as any other network failure and
+        // lands here too — never a silent revert to the frozen text.
+        if (!cancelled) setLiveFidelity(FIDELITY_FETCH_FAILED);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [approval]);
+  const reasoning = withLiveFidelity(approval, details.reasoning, liveFidelity);
 
   // Focus management: remember the trigger, move focus in, restore on close.
   useEffect(() => {
@@ -204,25 +282,31 @@ export function ApprovalModal({ approval, onClose, onDecide }: ApprovalModalProp
           ) : null}
 
           {/* AI reasoning */}
-          {details.reasoning.length > 0 ? (
+          {reasoning.length > 0 ? (
             <div>
               <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-aether-muted-dim">
                 AI reasoning
               </p>
               <ul data-testid="modal-reasoning" className="flex flex-col gap-1.5 text-xs text-aether-muted">
-                {details.reasoning.map((item, index) => (
+                {reasoning.map((item, index) => (
                   <li key={index} className="flex gap-2">
                     <i
                       className={`mt-0.5 text-[10px] ${
                         item.kind === "warning"
                           ? "fa-solid fa-triangle-exclamation text-aether-yellow"
-                          : "fa-solid fa-check text-aether-green"
+                          : item.kind === "checking"
+                            ? "fa-solid fa-circle-notch fa-spin text-aether-muted-dim"
+                            : "fa-solid fa-check text-aether-green"
                       }`}
                       aria-hidden="true"
                     />
                     <span>
                       <span className="sr-only">
-                        {item.kind === "warning" ? "Caveat: " : "Verified: "}
+                        {item.kind === "warning"
+                          ? "Caveat: "
+                          : item.kind === "checking"
+                            ? "Checking: "
+                            : "Verified: "}
                       </span>
                       {item.text}
                     </span>

@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import type { Approval } from "../../../lib/api/approvals";
 import {
   EXPIRY_HOURS,
+  FIDELITY_CHECKING,
+  FIDELITY_FETCH_FAILED,
   canRemove,
   companyInitials,
   isExpired,
@@ -10,6 +12,7 @@ import {
   parseApprovalPayload,
   previewLabel,
   summarize,
+  withLiveFidelity,
 } from "../lib";
 
 function approval(overrides: Partial<Approval> = {}): Approval {
@@ -191,5 +194,93 @@ describe("summarize / metaLine", () => {
   it("omits missing meta segments", () => {
     const details = parseApprovalPayload(approval({ payload: { company: "Canva" } }));
     expect(metaLine(details)).toBe("Canva");
+  });
+});
+
+// ML-U2B-approval-honesty ruling 2: a PENDING resume_tailor approval's
+// frozen "Original layout" reasoning line must be superseded by the
+// résumé's LIVE fidelity where it is displayed — the exact live-sampled
+// defect (SONNET-COHERENCE-REREVIEW-20260814.md F4): 2/3 real approvals
+// showed a green "Verified: Original layout preserved" claim for a résumé
+// whose real fidelity was `formatPreserved: false`.
+describe("withLiveFidelity", () => {
+  const frozenReasoning = [
+    { kind: "check" as const, text: "Every reworded bullet is grounded in your résumé." },
+    { kind: "check" as const, text: "Original layout: pending — the mechanism claims preservation." },
+  ];
+
+  it("supersedes the frozen layout line with the live, verified value", () => {
+    const a = approval({ status: "pending", payload: { kind: "resume_tailor", resume_id: "r1" } });
+    const result = withLiveFidelity(a, frozenReasoning, {
+      preserved: false,
+      note: "Rendered in the Aether template; original layout preservation is not yet available.",
+    });
+    expect(result[0]).toEqual(frozenReasoning[0]);
+    expect(result[1]).toEqual({
+      kind: "warning",
+      text: "Original layout: Rendered in the Aether template; original layout preservation is not yet available.",
+    });
+    // Never the false affirmative claim, even though the frozen text was written honestly-pending.
+    expect(result[1].text.toLowerCase()).not.toContain("original layout preserved");
+  });
+
+  it("renders a check when the live fidelity genuinely confirms preservation", () => {
+    const a = approval({ status: "pending", payload: { kind: "resume_tailor", resume_id: "r1" } });
+    const result = withLiveFidelity(a, frozenReasoning, {
+      preserved: true,
+      note: "All 2 tailored changes were verified present in the file you download.",
+    });
+    expect(result[1].kind).toBe("check");
+  });
+
+  it("is a no-op when the live fidelity has not resolved yet", () => {
+    const a = approval({ status: "pending", payload: { kind: "resume_tailor", resume_id: "r1" } });
+    expect(withLiveFidelity(a, frozenReasoning, null)).toEqual(frozenReasoning);
+  });
+
+  it("never touches a resolved (historical) approval's frozen reasoning (ruling 3)", () => {
+    const a = approval({ status: "approved", payload: { kind: "resume_tailor", resume_id: "r1" } });
+    const result = withLiveFidelity(a, frozenReasoning, { preserved: false, note: "reflow" });
+    expect(result).toEqual(frozenReasoning);
+  });
+
+  it("never touches a non-resume_tailor approval", () => {
+    const a = approval({ status: "pending", payload: { kind: "cover_letter" } });
+    const result = withLiveFidelity(a, frozenReasoning, { preserved: false, note: "reflow" });
+    expect(result).toEqual(frozenReasoning);
+  });
+
+  it("is a no-op when no layout line exists to supersede", () => {
+    const a = approval({ status: "pending", payload: { kind: "resume_tailor", resume_id: "r1" } });
+    const noLayout = [frozenReasoning[0]];
+    expect(withLiveFidelity(a, noLayout, { preserved: false, note: "reflow" })).toEqual(noLayout);
+  });
+
+  // MF-A (round-5 re-review): FIDELITY_CHECKING must supersede the frozen
+  // claim with an honest in-flight state — never the green "check" the
+  // frozen text renders as, and never left as a no-op the way `live ===
+  // null` is (that would be the exact bug: the frozen "Verified" claim
+  // still on screen for the whole fetch window).
+  it("supersedes the frozen claim with the CHECKING sentinel while the fetch is in flight", () => {
+    const a = approval({ status: "pending", payload: { kind: "resume_tailor", resume_id: "r1" } });
+    const result = withLiveFidelity(a, frozenReasoning, FIDELITY_CHECKING);
+    expect(result[1]).toEqual({
+      kind: "checking",
+      text: "Checking this version's layout fidelity…",
+    });
+    expect(result[1].text.toLowerCase()).not.toContain("original layout preserved");
+  });
+
+  // FIDELITY_CHECKING and FIDELITY_FETCH_FAILED share the same
+  // `preserved: null` shape — withLiveFidelity must tell them apart by
+  // identity, not degrade a genuine in-flight check into the "warning"
+  // styling a real failure gets (or vice versa).
+  it("renders CHECKING and FETCH_FAILED distinctly even though both carry preserved: null", () => {
+    const a = approval({ status: "pending", payload: { kind: "resume_tailor", resume_id: "r1" } });
+    const checking = withLiveFidelity(a, frozenReasoning, FIDELITY_CHECKING);
+    const failed = withLiveFidelity(a, frozenReasoning, FIDELITY_FETCH_FAILED);
+    expect(checking[1].kind).toBe("checking");
+    expect(failed[1].kind).toBe("warning");
+    expect(checking[1].kind).not.toBe(failed[1].kind);
   });
 });
