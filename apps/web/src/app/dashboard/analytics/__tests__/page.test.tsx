@@ -3,7 +3,7 @@
  * MV-analytics-004 regression guard.
  *
  * The 7d/30d/90d/All period selector only re-fetched the Application Funnel
- * and Stage Conversion panels; the Dashboard-summary metric cards never
+ * and Stage Conversion panels; the `/analytics/dashboard` payload never
  * received a period parameter at all (the backend has always accepted one),
  * and ATS Score Distribution / Agent ROI have no period support server-side
  * yet carried no visual cue that they are exempt from the selector above
@@ -14,7 +14,7 @@
  *      as "all time" / unaffected by the selector, instead of silently
  *      implying they respect it.
  */
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const apiRequest = vi.fn();
@@ -105,7 +105,13 @@ describe("Analytics period selector (MV-analytics-004)", () => {
   it("forwards the selected period to GET /analytics/dashboard", async () => {
     render(<AnalyticsPage />);
 
-    await screen.findByTestId("dashboard-summary");
+    /* SELECTOR MAPPING (ANALYTICS-VIZ round 2, F1) — 1:1, assertion unchanged.
+       The `dashboard-summary` card grid this test used as its "the dashboard
+       payload has landed" anchor was deleted; its payload now feeds the
+       executive band's pipeline tile, whose "N created" chip is rendered
+       exactly when `/analytics/dashboard` has answered. Same wait, same
+       payload, same claim: the request carries the selected period. */
+    await screen.findByTestId("exec-tile-pipeline-delta");
     expect(apiRequest).toHaveBeenCalledWith(
       "/analytics/dashboard?period=all",
       expect.anything(),
@@ -131,32 +137,43 @@ describe("Analytics period selector (MV-analytics-004)", () => {
     expect(roi.textContent?.toLowerCase()).toMatch(/all time/);
   });
 
-  it("dashboard-summary now respects the period selector, so its 'Applications' tooltip no longer claims all-time and the section shows a period indicator like its siblings (review rework, MV-analytics-004/005)", async () => {
+  it("the all-stages application count still states the window it was counted over, and still distinguishes itself from the funnel's submitted-only stage (review rework, MV-analytics-004/005)", async () => {
     render(<AnalyticsPage />);
 
-    const summary = await screen.findByTestId("dashboard-summary");
-    // Matches the sibling "Application funnel ({period})" / "Stage
-    // conversion ({period})" headers instead of leaving this the only
-    // section with no period indicator.
-    expect(within(summary).getByText(/dashboard summary \(all\)/i)).toBeTruthy();
+    /* SELECTOR MAPPING (ANALYTICS-VIZ round 2, F1) — 1:1, every claim kept.
+       The deleted `dashboard-summary` grid carried this contract on a
+       StatBlock + its tooltip; the same payload is now the executive band's
+       pipeline tile, so the three assertions move to that tile verbatim:
+         section heading "Dashboard summary (<period>)" → the tile's visible
+           `basis` line, which names the same window;
+         "Applications (all stages)" card + value  → the tile's "N created"
+           delta chip, showing the same `dashboard.totalApplications`;
+         card tooltip's all-stages qualifier        → the chip's title, which
+           must still say the count spans every stage and must still not
+           claim to be all-time when a period is selected. */
+    const chip = await screen.findByTestId("exec-tile-pipeline-delta");
+    expect(chip.textContent).toContain(String(DASHBOARD_FIXTURE.totalApplications));
 
-    // The "Applications" stat card's tooltip must not claim "all time
-    // periods" now that the value genuinely changes with the selector.
-    // QA-2026-08-13 C-10: label now reads "Applications (all stages)" so the
-    // 460-vs-134 gap against the funnel's submitted-only "Applied" count is
-    // self-explanatory.
-    const appsLabel = within(summary).getByText("Applications (all stages)");
-    const card = appsLabel.closest("div");
-    expect(card).not.toBeNull();
-    const tooltip = card!.querySelector('[data-testid="metric-tooltip-popover"]');
-    expect(tooltip?.textContent?.toLowerCase()).not.toMatch(
-      /all time|all sources and time periods/,
-    );
-    expect(tooltip?.textContent?.toLowerCase()).toMatch(/selected period/);
+    // The window is stated on screen, next to the figure, exactly as the
+    // deleted section's "(all)" heading stated it.
+    const basis = screen.getByTestId("exec-tile-pipeline-basis");
+    expect(basis.textContent?.toLowerCase()).toContain("all time");
 
-    // The period indicator itself updates when the selector changes.
+    // QA-2026-08-13 C-10: the qualifier still explains why this count is
+    // larger than the funnel's submitted-only "Applied" stage below it.
+    const qualifier = chip.getAttribute("title")?.toLowerCase() ?? "";
+    expect(qualifier).toContain("every stage from draft to offer");
+    expect(qualifier).toContain("submitted");
+
+    // ...and it follows the selector rather than claiming a fixed window.
     fireEvent.click(screen.getByText("7d"));
-    await within(summary).findByText(/dashboard summary \(7d\)/i);
+    await screen.findByText(/application funnel \(7d\)/i);
+    expect(
+      screen.getByTestId("exec-tile-pipeline-basis").textContent?.toLowerCase(),
+    ).toContain("the selected period (7d)");
+    expect(
+      screen.getByTestId("exec-tile-pipeline-delta").getAttribute("title")?.toLowerCase(),
+    ).toContain("the selected period (7d)");
   });
 });
 

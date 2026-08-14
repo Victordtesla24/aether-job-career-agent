@@ -11,7 +11,6 @@ import ExecutiveSummary from "../../../components/analytics/ExecutiveSummary";
 import { useRealtimeResources } from "../../../hooks/useRealtime";
 import { useUrlTab } from "../../../hooks/useUrlTab";
 import MetricTooltip from "../../../components/MetricTooltip";
-import StatBlock from "../../../components/ui/StatBlock";
 import SegmentedControl from "../../../components/ui/SegmentedControl";
 import Section from "../../../components/ui/Section";
 import {
@@ -27,7 +26,6 @@ import {
   numberFrom,
   INTERVIEW_TARGET_PCT,
 } from "../../../lib/analytics/executive-summary";
-import type { RealtimeResource } from "../../../lib/realtime/transport-types";
 import AgentPolicyPanel from "../../../components/agents/AgentPolicyPanel";
 import {
   PolicyCohortProgress,
@@ -106,48 +104,6 @@ const TAB_ITEMS: ReadonlyArray<{ value: AnalyticsTab; label: string; icon: strin
   { value: "quality", label: "Quality & ROI", icon: "fa-bullseye" },
   { value: "market", label: "Market", icon: "fa-globe" },
 ];
-
-/**
- * The 12-column spans that make the 7-card summary strip divide exactly:
- * 3+3+3+3 on row one, 4+4+4 on row two. This is what removes the empty eighth
- * cell a `lg:grid-cols-4` grid left behind.
- */
-const SUMMARY_SPANS = [
-  "lg:col-span-3",
-  "lg:col-span-3",
-  "lg:col-span-3",
-  "lg:col-span-3",
-  "lg:col-span-4",
-  "lg:col-span-4",
-  "lg:col-span-4",
-] as const;
-
-/**
- * The summary strip's cards. Labels are UNCHANGED — `SUMMARY_TIP` is keyed by
- * them and each one carries a tested honesty contract about what is counted.
- *
- * `resource` drives the §3.4 T-B live delta chip and is set only where the
- * displayed value IS a row count of that stream resource. "Avg Fit Score" is a
- * mean and "Agent Spend" is a sum of costs, so neither may wear a row-count
- * delta — they are deliberately absent rather than approximated.
- */
-function SUMMARY_CARDS(
-  dashboard: Dashboard,
-): Array<{ label: string; value: string; unit?: string; resource?: RealtimeResource }> {
-  return [
-    {
-      label: "Applications (all stages)",
-      value: String(dashboard.totalApplications),
-      resource: "applications",
-    },
-    { label: "Interviews", value: String(dashboard.interviews), resource: "interviews" },
-    { label: "Offers", value: String(dashboard.offers), resource: "offers" },
-    { label: "Jobs Found", value: String(dashboard.jobsFound), resource: "jobs" },
-    { label: "Avg Fit Score", value: String(dashboard.avgFitScore), unit: "%" },
-    { label: "Agent Runs", value: String(dashboard.agentRuns), resource: "agentRuns" },
-    { label: "Agent Spend (USD)", value: `$${dashboard.agentCostUsd.toFixed(2)}` },
-  ];
-}
 
 export default function AnalyticsPage() {
   const [period, setPeriod] = useState<Period>("all");
@@ -235,29 +191,6 @@ export default function AnalyticsPage() {
 
 
 
-  const SUMMARY_TIP: Record<string, string> = {
-    // Honest about what's counted (data-consistency ruling,
-    // MV-analytics-005): this is the canonical, unqualified "Applications"
-    // figure — every Application record you have, including drafts you
-    // haven't submitted yet — not the narrower "Applied"/submitted count
-    // shown in the funnel below. It respects the period selector above
-    // (GET /analytics/dashboard?period=..., MV-analytics-004) — the copy
-    // must say so instead of claiming "all time periods" while the number
-    // visibly changes when the selector is used.
-    // QA-2026-08-13 C-10: the visible label now says "(all stages)" so the
-    // difference vs the funnel's narrower "Applied" (submitted-only) count is
-    // self-explanatory without hovering — 460 here vs 134 in the funnel is
-    // intentional, not a bug, and the copy must make that obvious.
-    "Applications (all stages)":
-      "Every application record created in the selected period — draft through offer or rejection. The funnel's \"Applied\" stage below counts only submitted applications, so it is expected to be smaller.",
-    Interviews: "Applications that have progressed to at least one interview stage.",
-    Offers: "Applications where an employer has extended a formal offer.",
-    "Jobs Found": "Roles discovered by the Scout agent and matched against your profile.",
-    "Avg Fit Score": "Average ATS/AI fit score (0–100) across all scored jobs — how well your resume matches each posting.",
-    "Agent Runs": "Total number of agent executions (discovery, tailoring, scoring, etc.) in this period.",
-    "Agent Spend (USD)": "Total agent cost incurred by agent runs in this period, shown in US dollars — LLM providers bill in USD and no currency conversion is applied.",
-  };
-
   const CONVERSION_TIP: Record<string, string> = {
     "Found → Applied": "Share of discovered jobs you went on to apply for.",
     "Applied → Screened": "Share of applications that advanced to a recruiter screen.",
@@ -304,6 +237,10 @@ export default function AnalyticsPage() {
     roi,
     policy,
     policyHistory,
+    // Round 2 (F1): the period-scoped payload the deleted "Dashboard summary"
+    // grid used to render. It feeds the pipeline tile's all-stages chip and
+    // the spend tile's scoped figure — the two facts that grid held alone.
+    dashboard,
   });
 
   /** The 1-in-5 interview-conversion target, sourced from the policy payload
@@ -391,64 +328,44 @@ export default function AnalyticsPage() {
       ) : null}
 
       {/* ══ VIEW 1 — OVERVIEW (default) ══════════════════════════════════
-          Where the search stands: the period-scoped KPI band, the policy the
-          agents are obeying right now, and the funnel those numbers came
-          from, with its conversion column beside it. */}
+          Where the search stands: the policy the agents are obeying right
+          now, and the funnel the band above was measured from, with its
+          conversion column beside it. The KPI figures themselves live in the
+          executive band — this view opens on a chart (round 2, F1). */}
       <div {...panelProps("overview")} className="space-y-7">
 
-      {dashboard === null && !error ? (
-        /* Space reservation while the summary loads — rendering nothing and
-           then inserting the 7-card grid shifted every section below it
-           (CLS 0.67 on prod load, W-E quality sweep). */
-        <section aria-busy="true" data-testid="dashboard-summary-loading">
-          <div className="mb-3 h-5 w-56 animate-pulse rounded bg-white/5" />
-          <div className="grid grid-cols-2 gap-4 lg:grid-cols-12">
-            {SUMMARY_SPANS.map((span, i) => (
-              <div key={i} className={`elev-1 h-[116px] rounded-2xl p-5 ${span}`}>
-                <div className="h-2.5 w-24 animate-pulse rounded bg-white/10" />
-                <div className="mt-4 h-7 w-16 animate-pulse rounded bg-white/5" />
-              </div>
-            ))}
-          </div>
-        </section>
-      ) : null}
+      {/*
+        THE "DASHBOARD SUMMARY" CARD GRID IS GONE (round 2, finding F1).
 
-      {dashboard ? (
-        <section data-testid="dashboard-summary">
-          {/* Every field on this card is period-scoped server-side (GET
-              /analytics/dashboard?period=..., MV-analytics-004) — say so
-              the same way the sibling funnel/conversion sections do,
-              instead of leaving this the only section with no period
-              indicator. */}
-          <h2 className="type-section mb-3">Dashboard summary ({period})</h2>
-          {/*
-            THE DEAD 4-COL SLOT, KILLED. Seven cards in a `lg:grid-cols-4` grid
-            occupy 7 of 8 cells and leave one visibly empty box on the second
-            row — an empty card is an implicit claim that content exists (the
-            same defect class as X-10). A 12-column grid divides exactly: four
-            cards at `col-span-3` fill row one, three at `col-span-4` fill row
-            two, with no orphan cell at any breakpoint.
-          */}
-          <dl className="grid grid-cols-2 gap-4 lg:grid-cols-12">
-          {SUMMARY_CARDS(dashboard).map(({ label, value, unit, resource }, i) => (
-            <StatBlock
-              key={label}
-              label={label}
-              value={value}
-              unit={unit}
-              resource={resource}
-              className={SUMMARY_SPANS[i]}
-              testId={`summary-${label.toLowerCase().replace(/[^a-z]+/g, "-").replace(/^-|-$/g, "")}`}
-            >
-              <MetricTooltip
-                value={value}
-                tooltip={SUMMARY_TIP[label] ?? "See the analytics glossary for how this metric is calculated."}
-              />
-            </StatBlock>
-          ))}
-          </dl>
-        </section>
-      ) : null}
+        It was seven StatBlocks — Applications, Interviews, Offers, Jobs Found,
+        Avg Fit Score, Agent Runs, Agent Spend — drawn as bare numerals with no
+        mark of any kind, directly under an executive band that already answers
+        the same question WITH shape: the funnel spark carries jobs found →
+        applied → screened → interviewed → offers, and on the default "all"
+        period the spend card and the band's spend tile printed the identical
+        dollar figure. Two summaries, one page, one of them chartless: against
+        the mandate ("ONLY visualisations… remove everything else") and against
+        the constraint that redundant UI is DELETED rather than restyled.
+
+        NOTHING WAS DROPPED SILENTLY — where each figure lives now:
+          · Applications (all stages) → the band's pipeline tile wears it as a
+            measured "N created" chip beside the submitted count. Both are
+            period-scoped, so the two counts can honestly sit together.
+          · Interviews / Offers / Jobs Found → the funnel below, and the
+            pipeline tile's spark, both period-scoped, both drawn.
+          · Agent Spend / Agent Runs → the band's spend tile, which now FOLLOWS
+            the selector using this same `/analytics/dashboard` payload (the
+            only period-scoped spend the API offers) instead of only ever
+            reporting the all-time ROI total.
+          · Avg Fit Score → deliberately not carried over. It is the mean of a
+            distribution this page already draws three ways (ATS histogram,
+            the band's "Scored 80+" tile, the ten-dimension fit radar), and a
+            mean is the one summary of a distribution that hides its shape.
+
+        The fetch is UNTOUCHED (binding constraint 1): `/analytics/dashboard`
+        is still requested with the selected period, and its payload now feeds
+        the band above.
+      */}
 
       {/* U-AX item 2(a): the self-improvement loop's live state — the exact
           tier every real agent is currently obeying, why, and what it

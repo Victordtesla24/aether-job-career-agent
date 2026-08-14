@@ -8,6 +8,15 @@
  */
 import { useEffect, useState } from "react";
 
+import {
+  CHART_PALETTE,
+  HAIRLINE_STRONG,
+  STATE,
+  TRACK,
+  ZERO_TICK_WIDTH,
+  barLength,
+  barPercent,
+} from "../charts";
 import { fetchMarketPulse, type MarketPulse as MarketPulseData } from "../../lib/api/workspaces";
 import MetricTooltip from "../MetricTooltip";
 
@@ -66,6 +75,61 @@ function DataAsOfLabel({ iso, className }: { iso: string | null; className?: str
   return (
     <span className={className}>
       data as of <time dateTime={iso}>{label}</time>
+    </span>
+  );
+}
+
+/**
+ * One market-vs-you bar, drawn to the chart kit's rules (ANALYTICS-VIZ round
+ * 2, F2). It replaces a hand-rolled `<div style="width: (value/max)*70%">`
+ * that had two honesty defects the kit exists to prevent:
+ *
+ *   · a measured 0 drew a bar of width 0 — indistinguishable from a row that
+ *     was never measured at all. `barLength` returns `kind: "zero"`, which is
+ *     drawn as the kit's 1px hairline tick in HAIRLINE, never in the series
+ *     colour (law C-1);
+ *   · there was no track, so the bar's length claimed a scale the reader
+ *     could not see. The track IS the shared scale: both bars in a row are
+ *     drawn against the same `max`, so their lengths are comparable.
+ *
+ * `data-mark` is the kit's own marker attribute (see `DivergingBar`), which
+ * is what makes these rows genuine marks rather than decorated numerals.
+ * The numerals beside each bar remain the proof of magnitude; the bar is
+ * never the only place a figure appears.
+ */
+function ComparisonMark({
+  value,
+  max,
+  colour,
+  title,
+}: {
+  value: number | null;
+  max: number;
+  colour: string;
+  title: string;
+}) {
+  const { kind, length } = barLength({ value, max, extent: 100, mode: "linear" });
+  return (
+    <span
+      className="relative block h-2 min-w-0 flex-1 overflow-hidden rounded-full"
+      style={{ backgroundColor: TRACK }}
+      title={title}
+    >
+      {kind === "value" ? (
+        <span
+          data-mark="value"
+          className="absolute inset-y-0 left-0 block rounded-full"
+          style={{ width: barPercent(length), backgroundColor: colour }}
+        />
+      ) : null}
+      {kind === "zero" ? (
+        <span
+          data-mark="zero"
+          data-tone="neutral"
+          className="absolute inset-y-0 left-0 block"
+          style={{ width: `${ZERO_TICK_WIDTH}px`, backgroundColor: HAIRLINE_STRONG }}
+        />
+      ) : null}
     </span>
   );
 }
@@ -588,9 +652,14 @@ export default function MarketPulse() {
         The band is now ONE composed row plus a named disclosure:
           - Market vs. Your Performance runs the full width as three compact
             side-by-side comparisons. The per-row prose (`marketNote`,
-            `footnote`) moves VERBATIM into this page's own MetricTooltip
-            info-icon pattern, attached to the row it qualifies — never
-            truncated, never paraphrased, one keypress or hover away.
+            `footnote`) renders VERBATIM on the row it qualifies — never
+            truncated, never paraphrased. ROUND 3 (ANALYTICS-VIZ F2) moved it
+            out of the info-icon popover and onto the row itself: the panel's
+            floating summary paragraph was deleted, and a qualifier of a
+            number that is on screen may not be reachable only by hovering
+            (U-AX law). The three-across grid is what makes that affordable —
+            the density this popover was introduced to fix came from the same
+            notes stacked in ONE narrow column.
           - The honesty state itself does NOT move: "Market data: not
             connected" stays inline, on the row, next to the number it
             qualifies, exactly as before. A caveat is only ever collapsed
@@ -639,9 +708,15 @@ export default function MarketPulse() {
               const max = Math.max(c.market ?? 0, c.you ?? 0, 1);
               // B1 judge round 2, item 2: the server's own explanatory prose,
               // JOINED not edited — every character the API sent still renders
-              // in this row, inside the popover, so the definition of "market"
-              // and the caveat on "you" stay attached to the numbers they
-              // qualify instead of adding four italic lines under each one.
+              // in this row, so the definition of "market" and the caveat on
+              // "you" stay attached to the numbers they qualify.
+              //
+              // ANALYTICS-VIZ round 2 (F2): it is now the row's VISIBLE
+              // caption rather than the row's popover. The panel-level
+              // paragraph that used to carry this panel's provenance is gone,
+              // and a qualifier of a number that is on screen may not be
+              // hover-only (U-AX law) — so the qualifier moves to where the
+              // number it qualifies is drawn, one caption per comparison.
               const detail = [c.marketNote, c.footnote].filter(Boolean).join(" ");
               return (
                 // `flex-1` on the market half pins every card's "you" line to
@@ -649,19 +724,18 @@ export default function MarketPulse() {
                 // even though a disconnected row is a line shorter than a
                 // connected one carrying a freshness stamp.
                 <div key={c.label} className="flex min-w-0 flex-col" data-testid={`market-comparison-row-${i}`}>
-                  <div className="mb-2 flex items-center gap-1.5">
-                    <p className="text-xs text-aether-muted">{c.label}</p>
-                    {detail ? <MetricTooltip value="" tooltip={detail} /> : null}
-                  </div>
+                  <p className="mb-2 text-xs text-aether-muted">{c.label}</p>
                   <div className="flex-1 space-y-0.5">
                     {marketValue !== null ? (
                       <>
                         <div className="flex items-center gap-2">
-                          <div
-                            className="h-2 rounded-full bg-white/20"
-                            style={{ width: `${(marketValue / max) * 70}%` }}
+                          <ComparisonMark
+                            value={marketValue}
+                            max={max}
+                            colour={STATE.neutral}
+                            title={`Market: ${formatMarketValue(marketValue, c.unit)}`}
                           />
-                          <span className="mono text-[10px] text-aether-muted-dim">
+                          <span className="mono shrink-0 text-[10px] text-aether-muted-dim">
                             market {formatMarketValue(marketValue, c.unit)}
                           </span>
                         </div>
@@ -675,24 +749,65 @@ export default function MarketPulse() {
                     <p className="mt-1.5 text-[10px] text-aether-coral">—</p>
                   ) : (
                     <div className="mt-1.5 flex items-center gap-2">
-                      <div className="h-2 rounded-full bg-aether-coral" style={{ width: `${(c.you / max) * 70}%` }} />
-                      <span className="mono text-[10px] text-aether-coral">
+                      <ComparisonMark
+                        value={c.you}
+                        max={max}
+                        colour={CHART_PALETTE[0]}
+                        title={`You: ${formatMarketValue(c.you, c.unit)}`}
+                      />
+                      <span className="mono shrink-0 text-[10px] text-aether-coral">
                         you {formatMarketValue(c.you, c.unit)}
                       </span>
                     </div>
                   )}
+                  {detail ? (
+                    <p
+                      data-prose="caption"
+                      data-prose-source="server"
+                      data-testid={`market-comparison-note-${i}`}
+                      className="mt-2 text-[10px] leading-[1.5] text-aether-muted-dim"
+                    >
+                      {detail}
+                    </p>
+                  ) : null}
                 </div>
               );
             })}
           </div>
-          <p
-            data-prose="caption"
-            data-prose-source="server"
-            data-testid="market-vs-you-summary"
-            className="mt-4 text-[11px] leading-relaxed text-aether-muted-dim"
-          >
-            {data.marketVsYou.summary}
-          </p>
+          {/*
+            THE PANEL-LEVEL SUMMARY PARAGRAPH IS GONE (round 2, finding F2).
+
+            `marketVsYou.summary` was three sentences and 300+ characters
+            floating under three comparisons, qualifying none of them in
+            particular. Every figure it stated is drawn above it, on the row
+            that owns it, with that row's own server-authored note now VISIBLE
+            beside the mark instead of behind a hover:
+              · "N live postings (last 30 days) for your target role in X" →
+                the Applications/month row: its market mark, its numeral, its
+                freshness stamp, and its `marketNote`, which states the same
+                count, location, provider and role-family scope — and adds the
+                caveat the summary never had (employer demand is not
+                applications sent by other candidates).
+              · "Adzuna reports a mean advertised salary of A$X for that same
+                search" → the Advertised salary row: same mark, numeral,
+                freshness and `marketNote`.
+              · The provider attribution and its as-of stamp → the panel's
+                attribution line above the grid.
+              · "No market data source connected" (the no-provider variant) →
+                the amber banner above, which is rendered on exactly the
+                condition that matters (no row connected) rather than on
+                `postingsLast30d is None`, which could leave the paragraph
+                claiming nothing was connected while the salary row was.
+
+            What is NOT re-expressed, and is deliberately not paraphrased into
+            a chart it has no data for: the summary's optional 12-month
+            all-roles salary range and modal-band sentences. Those two facts
+            reach the browser ONLY as prose inside this string — the wire type
+            carries no `salaryTrend12m` / `salaryHistogram` field to draw — and
+            `apps/api` is untouchable in this slice. Escalated to the
+            orchestrator: put those series on the payload and they become a
+            real distribution mark on the salary row.
+          */}
         </div>
 
         {/* The disclosure control. It names every panel it holds, so a

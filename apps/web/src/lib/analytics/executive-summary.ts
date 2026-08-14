@@ -30,7 +30,14 @@
 import type { ChartDatum } from "../../components/charts";
 import { NOT_MEASURED, formatNumber } from "../../components/charts";
 import type { AgentPolicy, PolicyHistory } from "../api/agentPolicy";
-import type { AgentRoi, AtsDistribution, Conversion, Funnel, Period } from "../api/analytics";
+import type {
+  AgentRoi,
+  AtsDistribution,
+  Conversion,
+  Dashboard,
+  Funnel,
+  Period,
+} from "../api/analytics";
 
 /** The interview-conversion target the whole product is calibrated against
  *  (1-in-5). Sourced from the policy payload when it is present, so this is a
@@ -86,6 +93,19 @@ export interface ExecutiveSummaryInput {
   roi: AgentRoi | null;
   policy: AgentPolicy | null;
   policyHistory: PolicyHistory | null;
+  /**
+   * `GET /analytics/dashboard?period=…` — the page's one PERIOD-SCOPED source
+   * for the all-stages application count and for agent spend/runs (round 2,
+   * finding F1). Every field on it is filtered by the selected period
+   * server-side (`analytics._dashboard`: `createdAt` for applications and
+   * jobs, `startedAt` for agent runs), which is what makes it safe to read
+   * beside the funnel — the two are measured in the SAME window — and unsafe
+   * to read beside `roi`, which has no period support at all.
+   *
+   * `null` when the endpoint has not answered. Every use below is guarded:
+   * absence removes a chip, never a tile, and never turns into a 0.
+   */
+  dashboard: Dashboard | null;
 }
 
 function periodWindow(period: Period): string {
@@ -151,8 +171,36 @@ export function steepestDropOff(steps: ReadonlyArray<{ label: string; value: num
   return worst;
 }
 
+/**
+ * The ALL-STAGES application count, as a chip beside the submitted one.
+ *
+ * These are two different measurements of the same window — `/dashboard`
+ * counts every Application row the period created (draft through offer),
+ * `/funnel` counts only the ones actually submitted — and the gap between
+ * them is the reader's draft backlog. The chip states BOTH counts and
+ * subtracts nothing: the two endpoints define "in this period" on their own
+ * date columns, so a difference is a real quantity but a computed remainder
+ * would be a claim neither endpoint made.
+ *
+ * This is where the deleted "Dashboard summary" card's one non-duplicated
+ * figure lives now (round 2, F1).
+ */
+function createdChip(dashboard: Dashboard | null, period: Period, submitted: number | null): ExecDelta | undefined {
+  if (dashboard === null) return undefined;
+  const created = formatNumber(dashboard.totalApplications);
+  return {
+    text: `${created} created`,
+    tone: "neutral",
+    title:
+      `${created} application records created, counted over ${periodWindow(period)} — every stage from draft to offer` +
+      (submitted === null
+        ? "."
+        : `; ${formatNumber(submitted)} of them have been submitted.`),
+  };
+}
+
 function pipelineTile(input: ExecutiveSummaryInput): ExecTileModel {
-  const { funnel, period } = input;
+  const { funnel, period, dashboard } = input;
   const basis = `${periodWindow(period)} — funnel stages counted within it`;
   if (funnel === null) {
     return {
@@ -160,6 +208,7 @@ function pipelineTile(input: ExecutiveSummaryInput): ExecTileModel {
       label: "Applications submitted",
       value: NOT_MEASURED,
       spark: { kind: "bars", data: [] },
+      delta: createdChip(dashboard, period, null),
       insight: "The funnel has not loaded yet — no stage has been counted.",
       basis,
       measured: false,
@@ -181,6 +230,7 @@ function pipelineTile(input: ExecutiveSummaryInput): ExecTileModel {
       kind: "bars",
       data: steps.map((s) => ({ label: s.label, value: s.value })),
     },
+    delta: createdChip(dashboard, period, funnel.applied),
     insight: worst
       ? `Steepest drop-off ${worst.from} → ${worst.to}: ${pct(
           Math.round(worst.carriedPct * 10) / 10,
@@ -367,9 +417,41 @@ function qualityTile(input: ExecutiveSummaryInput): ExecTileModel {
 /* ------------------------------------------------------------------ */
 
 function spendTile(input: ExecutiveSummaryInput): ExecTileModel {
-  const { roi, funnel, period } = input;
-  const basis = "all time — agent spend has no period support server-side";
-  if (roi === null) {
+  const { roi, funnel, dashboard, period } = input;
+
+  /*
+   * WHICH SPEND FIGURE THIS TILE IS SHOWING, and why it can change.
+   *
+   * `/analytics/agent-roi` has no period support server-side, so on a scoped
+   * period it can only ever report an all-time total — which is why this tile
+   * used to say "select the all period to compare like for like" and withhold
+   * both ratios. `/analytics/dashboard?period=…` DOES scope agent spend and
+   * agent runs (`AgentRun."startedAt"`), and it is the source the deleted
+   * "Dashboard summary" card read (round 2, F1).
+   *
+   * So: on a scoped period, when that payload is present, this tile reports
+   * the scoped figure and its window says so — and because the funnel beside
+   * it is scoped to the SAME period, the cost-per ratios become genuinely
+   * divisible instead of withheld. On "all", or when the dashboard endpoint
+   * did not answer, nothing changes: the all-time ROI figure with its
+   * all-time window, and the ratio rules exactly as before.
+   *
+   * What never happens is the mix: an all-time numerator over a
+   * period-scoped denominator. `windowsAlign` is the single place that is
+   * decided, and both the ratios and the tile's stated basis read it.
+   */
+  const scopedSource =
+    period !== "all" && dashboard !== null
+      ? { cost: dashboard.agentCostUsd, runs: dashboard.agentRuns }
+      : null;
+  const scoped = scopedSource !== null;
+  const source =
+    scopedSource ?? (roi === null ? null : { cost: roi.total_cost_usd, runs: roi.total_runs });
+  const basis = scoped
+    ? `${periodWindow(period)} — agent runs started within it`
+    : "all time — agent spend has no period support server-side";
+
+  if (source === null) {
     return {
       id: "spend",
       label: "Agent spend",
@@ -380,12 +462,13 @@ function spendTile(input: ExecutiveSummaryInput): ExecTileModel {
       measured: false,
     };
   }
-  // The SAME precondition the Agent ROI panel applies: `roi` is all-time and
-  // `funnel` is period-scoped, so a ratio between them is only real on "all".
-  const comparable = period === "all" && funnel !== null;
-  const perApplication = comparable && funnel.applied > 0 ? roi.total_cost_usd / funnel.applied : null;
+
+  const windowsAlign = scoped || period === "all";
+  const comparable = windowsAlign && funnel !== null;
+  const perApplication = comparable && funnel.applied > 0 ? source.cost / funnel.applied : null;
   const perInterview =
-    comparable && funnel.interviewed > 0 ? roi.total_cost_usd / funnel.interviewed : null;
+    comparable && funnel.interviewed > 0 ? source.cost / funnel.interviewed : null;
+  const mismatch = `agent spend is all-time but the funnel is scoped to ${period}`;
 
   const data: ChartDatum[] = [
     {
@@ -394,7 +477,7 @@ function spendTile(input: ExecutiveSummaryInput): ExecTileModel {
       display: perApplication === null ? undefined : money(perApplication),
       note: comparable
         ? "No application has been submitted yet, so there is nothing to divide by."
-        : `agent spend is all-time but the funnel is scoped to ${period}`,
+        : mismatch,
     },
     {
       label: "Cost per interview",
@@ -402,7 +485,7 @@ function spendTile(input: ExecutiveSummaryInput): ExecTileModel {
       display: perInterview === null ? undefined : money(perInterview),
       note: comparable
         ? "No application has reached an interview yet, so there is nothing to divide by."
-        : `agent spend is all-time but the funnel is scoped to ${period}`,
+        : mismatch,
     },
   ];
 
@@ -414,7 +497,7 @@ function spendTile(input: ExecutiveSummaryInput): ExecTileModel {
     // tile's text distinct from the Agent ROI panel's own "$8.16" — the two
     // render the SAME figure from the same field, and a page with two
     // identical strings is a page whose tests cannot tell them apart.
-    value: roi.total_cost_usd.toFixed(2),
+    value: source.cost.toFixed(2),
     unit: "USD",
     spark: {
       kind: "bars",
@@ -424,11 +507,13 @@ function spendTile(input: ExecutiveSummaryInput): ExecTileModel {
         : `agent spend is all-time and the funnel is scoped to ${period} — the two windows cannot be divided`,
     },
     delta:
-      roi.total_runs > 0
+      source.runs > 0
         ? {
-            text: `${formatNumber(roi.total_runs)} runs`,
+            text: `${formatNumber(source.runs)} runs`,
             tone: "neutral",
-            title: `${formatNumber(roi.total_runs)} agent runs recorded, all time.`,
+            title: `${formatNumber(source.runs)} agent runs recorded, ${
+              scoped ? `in ${periodWindow(period)}` : "all time"
+            }.`,
           }
         : undefined,
     insight:

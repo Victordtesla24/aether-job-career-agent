@@ -59,6 +59,26 @@ const ATS = {
 
 const ROI = { total_cost_usd: 8.16, total_runs: 8781, avg_duration_ms: 166_000 };
 
+/**
+ * `GET /analytics/dashboard?period=…` — the ONE period-scoped payload the page
+ * has. Round 2 (F1) folded it into the band when the seven-numeral "Dashboard
+ * summary" grid that used to render it was deleted, so these figures now have
+ * to be provably on a tile rather than in a card of their own.
+ *
+ * Defaulted to `null` in `input()` below, so every pre-existing expectation in
+ * this file still describes a page whose dashboard endpoint has not answered —
+ * the all-time ROI path — and the new behaviour is asked for explicitly.
+ */
+const DASHBOARD = {
+  totalApplications: 460,
+  interviews: 2,
+  offers: 0,
+  jobsFound: 8358,
+  avgFitScore: 61,
+  agentRuns: 812,
+  agentCostUsd: 3.4,
+};
+
 const POLICY: AgentPolicy = {
   tier: "heightened",
   triggers: ["conversion_below_20pct_target"],
@@ -118,6 +138,7 @@ function input(overrides: Partial<ExecutiveSummaryInput> = {}): ExecutiveSummary
     roi: ROI,
     policy: POLICY,
     policyHistory: HISTORY,
+    dashboard: null,
     ...overrides,
   };
 }
@@ -248,6 +269,71 @@ describe("the spend tile refuses to divide two different windows", () => {
     });
     expect(t.spark.data[0].value).toBeNull();
     expect(t.insight).toContain("cannot be divided");
+  });
+});
+
+/**
+ * ROUND 2 / F1 — the seven-numeral "Dashboard summary" grid was deleted, and
+ * the two figures it alone carried had to land on a tile that already draws.
+ * These tests are what stops that deletion from being a quiet data loss.
+ */
+describe("the deleted dashboard card's figures survive on the band", () => {
+  it("wears the all-stages application count as a chip beside the submitted one, subtracting nothing", () => {
+    const t = tile("pipeline", { dashboard: DASHBOARD });
+    expect(t.value).toBe("287"); // submitted, from the funnel
+    expect(t.delta?.text).toBe("460 created"); // all stages, from the dashboard
+    expect(t.delta?.tone).toBe("neutral");
+    // Both counts are stated; the difference between two endpoints' date
+    // columns is never presented as a "drafts" figure neither one measured.
+    expect(t.delta?.title).toContain("every stage from draft to offer");
+    expect(t.delta?.title).toContain("287 of them have been submitted");
+    expect(t.delta?.title).not.toMatch(/173|draft backlog|not yet submitted/);
+  });
+
+  it("names the window the count was taken over, and follows the selector", () => {
+    expect(tile("pipeline", { dashboard: DASHBOARD }).delta?.title).toContain("all time");
+    expect(
+      tile("pipeline", { dashboard: DASHBOARD, period: "7d" }).delta?.title,
+    ).toContain("the selected period (7d)");
+  });
+
+  it("keeps the chip off the tile entirely when the dashboard endpoint did not answer", () => {
+    expect(tile("pipeline").delta).toBeUndefined();
+  });
+
+  it("still states the created count when the FUNNEL is the endpoint that failed", () => {
+    const t = tile("pipeline", { dashboard: DASHBOARD, funnel: null });
+    expect(t.measured).toBe(false);
+    expect(t.delta?.text).toBe("460 created");
+    // With no funnel there is no submitted count to compare against, and none
+    // is implied.
+    expect(t.delta?.title).not.toContain("submitted");
+  });
+
+  it("reports the PERIOD-SCOPED spend on a scoped period, and divides it by the same window's funnel", () => {
+    const t = tile("spend", { dashboard: DASHBOARD, period: "7d" });
+    expect(t.value).toBe("3.40"); // dashboard.agentCostUsd, scoped to 7d
+    expect(t.basis).toContain("the selected period (7d)");
+    expect(t.delta?.text).toBe("812 runs");
+    expect(t.delta?.title).toContain("the selected period (7d)");
+    // 3.40 / 287 submitted — both measured over the same 7d window, so the
+    // ratio the all-time ROI figure could never honestly produce is real here.
+    expect(t.spark.data[0].display).toBe("$0.01");
+    expect(t.insight).toBe("$0.01 per submitted application.");
+  });
+
+  it("keeps the all-time ROI figure on the 'all' period, where the two agree on window", () => {
+    const t = tile("spend", { dashboard: DASHBOARD });
+    expect(t.value).toBe("8.16"); // roi.total_cost_usd
+    expect(t.basis).toContain("all time");
+    expect(t.delta?.title).toContain("all time");
+  });
+
+  it("falls back to the all-time figure — and says so — when a scoped period has no dashboard payload", () => {
+    const t = tile("spend", { period: "7d" });
+    expect(t.value).toBe("8.16");
+    expect(t.basis).toContain("all time");
+    expect(t.spark.data[0].value).toBeNull();
   });
 });
 

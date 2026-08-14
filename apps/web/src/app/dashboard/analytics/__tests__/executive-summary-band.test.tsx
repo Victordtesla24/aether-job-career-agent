@@ -301,7 +301,7 @@ describe("every tile is measured, and says what it was measured on", () => {
     }
   });
 
-  it("wears a delta chip only where a target or a prior measurement exists", async () => {
+  it("wears a delta chip only where a target or a second real measurement exists", async () => {
     mockApi();
     render(<AnalyticsPage />);
     await screen.findByTestId("executive-summary");
@@ -310,8 +310,21 @@ describe("every tile is measured, and says what it was measured on", () => {
       "19.3 pts to target",
     );
     expect(screen.getByTestId("exec-tile-rigor-delta").textContent).toContain("from Standard");
-    // The pipeline tile has no target and no prior measurement — it gets no
-    // chip rather than an approximated one.
+    // Round 2 (F1): the pipeline tile has no target, but it does have a second
+    // real measurement of the same window — `/analytics/dashboard`'s
+    // all-stages count, which the deleted "Dashboard summary" grid used to
+    // show on its own card.
+    expect(screen.getByTestId("exec-tile-pipeline-delta").textContent).toContain("460 created");
+  });
+
+  it("drops the all-stages chip rather than approximating it when the dashboard endpoint fails", async () => {
+    mockApi({ "/analytics/dashboard?period=all": new Error("dashboard endpoint down") });
+    render(<AnalyticsPage />);
+    await screen.findByTestId("executive-summary");
+
+    // The tile keeps its slot and its measured submitted count; only the
+    // figure that genuinely could not be read disappears.
+    expect(screen.getByTestId("exec-tile-pipeline-value").textContent).toBe("287");
     expect(screen.queryByTestId("exec-tile-pipeline-delta")).toBeNull();
   });
 });

@@ -254,6 +254,18 @@ const MARKET_PULSE_FIXTURE = {
         marketNote: null,
         footnote: null,
       },
+      // A genuinely MEASURED zero on both sides — the case a `width: 0%` bar
+      // renders identically to "never measured" (law C-1).
+      {
+        label: "Advertised salary (mean)",
+        market: 0,
+        you: 0,
+        unit: "A$",
+        connected: true,
+        dataAsOf: "2026-08-13T00:00:00Z",
+        marketNote: "Market = the mean advertised salary Adzuna Australia reports (AUD).",
+        footnote: null,
+      },
     ],
     summary:
       "Market data: Adzuna Australia — 1,204 live postings (last 30 days) for your target role in Melbourne. Adzuna reports a mean advertised salary of A$147,925 for that same search.",
@@ -378,9 +390,59 @@ describe("RULE 2 — a caption is one line", () => {
     expect(screen.getByTestId("agent-policy-behaviour").textContent).toBe(
       POLICY_FIXTURE.behaviour,
     );
-    expect(screen.getByTestId("market-vs-you-summary").textContent).toBe(
-      MARKET_PULSE_FIXTURE.marketVsYou.summary,
+    // ROUND 2 (F2): the market panel's server copy is its ROWS' notes, each
+    // verbatim and each attached to the comparison it qualifies — no longer
+    // one paragraph floating under all three.
+    const row0 = MARKET_PULSE_FIXTURE.marketVsYou.comparisons[0];
+    expect(screen.getByTestId("market-comparison-note-0").textContent).toBe(
+      `${row0.marketNote} ${row0.footnote}`,
     );
+  });
+});
+
+/**
+ * ROUND 2 / F2 — the panel-level `marketVsYou.summary` paragraph is deleted.
+ * The exemption that let a 300-character server string sit under three
+ * comparisons ("server-authored copy is rendered verbatim") is still the right
+ * rule; what it may not do is keep a FLOATING paragraph alive, so this pins
+ * the shape the panel now has instead.
+ */
+describe("the market panel has no floating summary paragraph", () => {
+  it("renders no panel-level summary block at all", async () => {
+    await renderPage();
+    expect(screen.queryByTestId("market-vs-you-summary")).toBeNull();
+    const panel = screen.getByTestId("market-vs-you");
+    expect(panel.textContent).not.toContain(MARKET_PULSE_FIXTURE.marketVsYou.summary);
+  });
+
+  it("keeps every figure that paragraph carried on the row that owns it, as a drawn mark plus a visible note", async () => {
+    await renderPage();
+    const row = screen.getByTestId("market-comparison-row-0");
+    // The number is drawn (a real mark, not only a numeral)...
+    expect(row.querySelector("[data-mark]")).not.toBeNull();
+    // ...it is legible as text beside the mark...
+    expect(row.textContent).toContain("24");
+    // ...and its qualifier is ON the row, not behind a hover.
+    const note = within(row).getByTestId("market-comparison-note-0");
+    expect(note.getAttribute("data-prose")).toBe("caption");
+    expect(note.closest('[data-testid="metric-tooltip-popover"]')).toBeNull();
+    expect(note.textContent).toContain("Adzuna Australia");
+  });
+
+  it("keeps a measured zero apart from an unmeasured row (law C-1)", async () => {
+    await renderPage();
+
+    // Not connected: no mark of any kind on the market side, and the row says
+    // so in words rather than drawing a zero-length bar.
+    const disconnected = screen.getByTestId("market-comparison-row-1");
+    expect(disconnected.textContent).toMatch(/market data: not connected/i);
+    // Its own side IS measured (0.7%), so that half draws.
+    expect(disconnected.querySelector('[data-mark="value"]')).not.toBeNull();
+
+    // Measured 0 on both sides: hairline ticks, not absent bars.
+    const zeroRow = screen.getByTestId("market-comparison-row-2");
+    expect(zeroRow.querySelectorAll('[data-mark="zero"]')).toHaveLength(2);
+    expect(zeroRow.querySelector('[data-mark="value"]')).toBeNull();
   });
 });
 
