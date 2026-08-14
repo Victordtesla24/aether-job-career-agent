@@ -221,9 +221,17 @@ export function shortDate(iso: string): string {
 // human copy the card/detail-panel UI renders, so that copy lives in one
 // tested place instead of being duplicated inline in JSX.
 
-/** Machine channel code → human label (apply_channel_resolver.py CHANNELS). */
+/** Machine channel code → human label. Keys cover BOTH the
+ *  `transmissionChannel` values `application_submission.py` stamps on a real
+ *  send (`gmail`, the only value today) AND the `applyChannel` codes
+ *  `apply_channel_resolver.py` `CHANNELS` resolves from a posting (`email`,
+ *  `ashby`, ... `seek-manual`, `unknown`) — two different columns, so
+ *  `gmail`/`email` are BOTH mapped here rather than assuming only one is ever
+ *  seen (MED-9: a future writer stamping `transmissionChannel = "email"`
+ *  must not fall through to the unrecognised-code branch). */
 const CHANNEL_LABELS: Readonly<Record<string, string>> = {
   gmail: "email",
+  email: "email",
   ashby: "Ashby application form",
   greenhouse: "Greenhouse application form",
   lever: "Lever application form",
@@ -264,6 +272,18 @@ export function manualStepLabel(reason: string | null | undefined): string {
   );
 }
 
+/** Single-sourced manual-step tooltip title (MED-8: previously assembled
+ *  inline, identically, at both the board badge and the "ready" card badge —
+ *  free to drift). Quotes the employer's own verbatim detail when Aether
+ *  recorded one; never invents one when it did not. */
+export function manualStepTooltip(
+  reason: string | null | undefined,
+  detail?: string | null,
+): string {
+  const label = manualStepLabel(reason);
+  return detail ? `${label}: "${detail}"` : label;
+}
+
 /** The facts `describeTransmission` needs — a structural subset of
  *  `TrackerApplication` so it stays usable from a bare `{app}`-shaped object
  *  in tests without importing the full schema type. */
@@ -298,7 +318,16 @@ export type TransmissionSummary = {
  */
 export function describeTransmission(app: TransmissionFacts): TransmissionSummary {
   const when = app.transmittedAt ? ` on ${shortDate(app.transmittedAt)}` : "";
-  const isEmail = !app.transmissionChannel || app.transmissionChannel === "gmail";
+  // MED-9: recognise BOTH `gmail` (the literal value
+  // `application_submission.py` `CHANNEL_GMAIL` stamps today) and `email`
+  // (the resolver's own code for the same channel) as the email path, so a
+  // future writer using either value still renders truthfully instead of
+  // falling into the web-form branch below and claiming a screenshot that
+  // was never taken.
+  const isEmail =
+    !app.transmissionChannel ||
+    app.transmissionChannel === "gmail" ||
+    app.transmissionChannel === "email";
   const ref = app.transmissionRef ?? null;
   const looksLikeUrl = ref !== null && /^https?:\/\//i.test(ref);
   if (isEmail) {
@@ -311,9 +340,81 @@ export function describeTransmission(app: TransmissionFacts): TransmissionSummar
   return {
     headline: `Submitted by Aether via ${channelLabel(app.transmissionChannel)}${when}`,
     evidenceUrl: looksLikeUrl ? ref : null,
-    evidenceNote: !looksLikeUrl && ref ? "confirmation screenshot saved by Aether" : null,
+    // HIGH-5: the web-form path stores a SERVER-LOCAL file path in this
+    // column (apps/api/app/services/apply_executor.py `_record_site_
+    // transmission`, :1203/:1220) — there is no authenticated endpoint that
+    // serves it to the browser yet, so saying only "saved by Aether" implied
+    // evidence the user could open. State plainly that it exists but is not
+    // viewable here, rather than imply a dead link.
+    evidenceNote:
+      !looksLikeUrl && ref
+        ? "confirmation screenshot saved by Aether (not yet viewable in this app)"
+        : null,
   };
 }
+
+/** Every channel the site-apply automation is allowed to drive a browser
+ *  against (mirrors `apps/api/app/services/apply_channel_resolver.py`
+ *  `AUTOMATABLE_CHANNELS` — kept as a literal copy, not an import, because
+ *  this is a `next/server`-free pure FE module and the two lists are pinned
+ *  together by `tracker-lib.test.ts`). */
+const FE_AUTOMATABLE_CHANNELS: ReadonlySet<string> = new Set([
+  "ashby",
+  "greenhouse",
+  "lever",
+  "smartrecruiters",
+  "generic",
+]);
+
+/**
+ * Single-sourced, honest reason an application has NOT been transmitted
+ * (BLOCKER-2/BLOCKER-3/MED-8): reused verbatim by the board badge and the
+ * detail-panel line so the two copies cannot drift, and differentiated by
+ * `applyChannel` so the promise is never broader than what the code can
+ * actually do.
+ *
+ * Never claims automatic submission "with no further action" — the ARQ sweep
+ * that would drive a non-email channel is OFF by code default
+ * (`apps/api/app/workers/apply_sweep.py` `sweep_enabled()`) and
+ * `AETHER_APPLY_SWEEP_ENABLED` is unset in this deployment's `.env` today, so
+ * approving a non-email application does not, by itself, cause anything to
+ * happen. Seek postings and unresolved channels are excluded from automation
+ * even once the sweep runs (ADR-SEEK-V3 / `AUTOMATABLE_CHANNELS`).
+ */
+export function notTransmittedReason(app: {
+  autoSubmittable?: boolean | null;
+  applyChannel?: string | null;
+}): string {
+  if (app.autoSubmittable) {
+    return "Approve it in Approvals to email it to the employer.";
+  }
+  if (app.applyChannel === "seek-manual") {
+    return (
+      "This is a Seek posting — Aether does not automate Seek applications " +
+      "(policy). Apply on Seek yourself."
+    );
+  }
+  if (app.applyChannel && FE_AUTOMATABLE_CHANNELS.has(app.applyChannel)) {
+    return (
+      "This posting publishes no application email address. Automatic " +
+      `submission through ${channelLabel(app.applyChannel)} is not enabled ` +
+      "on this deployment yet — apply on the employer's site yourself."
+    );
+  }
+  return (
+    "This posting publishes no application email address, and Aether has not " +
+    "resolved where to submit it. Apply on the employer's site yourself."
+  );
+}
+
+/** Generic (non-per-application) version of {@link notTransmittedReason} for
+ *  confirm dialogs that decide over a batch and have no single application's
+ *  channel to hand (approvals bulk-approve). Kept as ONE string so it cannot
+ *  say something the per-application copy above contradicts. */
+export const AUTOMATIC_SUBMISSION_DISCLAIMER =
+  "Approving does not send anything automatically: emails must be sent " +
+  "individually from each application's card, and automatic employer-form " +
+  "submission is not enabled on this deployment yet.";
 
 function metaOf(app: TrackerApplication): TrackerMeta {
   return (app.answers ?? {}) as TrackerMeta;

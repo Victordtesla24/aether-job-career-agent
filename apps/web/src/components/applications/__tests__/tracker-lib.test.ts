@@ -6,6 +6,7 @@ import type { TrackerApplication } from "../tracker-api";
 import {
   APP_STAGE,
   APP_STAGE_KEYS,
+  AUTOMATIC_SUBMISSION_DISCLAIMER,
   JOB_STAGE_KEYS,
   STAGE_DEFS,
   STAGE_TO_APP_STATUS,
@@ -17,7 +18,9 @@ import {
   fitClass,
   initials,
   manualStepLabel,
+  manualStepTooltip,
   moveTargetsFor,
+  notTransmittedReason,
   shortDate,
   sortCards,
   timeAgo,
@@ -399,6 +402,74 @@ describe("U5 manualStepLabel", () => {
   });
 });
 
+// MED-8 (re-review): the manual-step tooltip title was assembled inline,
+// identically, at both the board badge and the "ready" card badge — pinning
+// the single-sourced helper here means a future drift shows up as a test
+// change in ONE place, not a silent divergence in two.
+describe("U5 manualStepTooltip", () => {
+  it("quotes the employer's own verbatim detail when one was recorded", () => {
+    expect(manualStepTooltip("captcha", "Please verify you are human")).toBe(
+      'A CAPTCHA blocked automatic submission: "Please verify you are human"',
+    );
+  });
+
+  it("falls back to the bare label when no detail was recorded", () => {
+    expect(manualStepTooltip("login_wall", null)).toBe(
+      "This posting requires logging in to apply",
+    );
+    expect(manualStepTooltip("login_wall", undefined)).toBe(
+      "This posting requires logging in to apply",
+    );
+  });
+});
+
+// BLOCKER-2/BLOCKER-3 (re-review): the FE promised automatic employer-form
+// submission for every non-email posting, unconditionally — false today (the
+// ARQ sweep that would drive it is OFF by code default) and false by ruling
+// for Seek and unresolved channels even once a deployment turns the sweep
+// on. `notTransmittedReason` is the single place this differentiation lives.
+describe("U5 notTransmittedReason", () => {
+  it("points at Approvals when the posting has a real apply email", () => {
+    expect(notTransmittedReason({ autoSubmittable: true, applyChannel: "email" })).toBe(
+      "Approve it in Approvals to email it to the employer.",
+    );
+  });
+
+  it("never promises automation for a Seek posting (ADR-SEEK-V3)", () => {
+    const reason = notTransmittedReason({ autoSubmittable: false, applyChannel: "seek-manual" });
+    expect(reason).toContain("does not automate Seek");
+    expect(reason).not.toContain("automatically");
+  });
+
+  it("states honestly that site-apply is not enabled, for a resolved automatable channel", () => {
+    const reason = notTransmittedReason({ autoSubmittable: false, applyChannel: "ashby" });
+    expect(reason).toContain("publishes no application email address");
+    expect(reason).toContain("not enabled on this deployment yet");
+    expect(reason).not.toContain("with no further action");
+  });
+
+  it("never claims a channel for an unresolved or absent applyChannel", () => {
+    expect(
+      notTransmittedReason({ autoSubmittable: false, applyChannel: "unknown" }),
+    ).toContain("has not resolved where to submit it");
+    expect(
+      notTransmittedReason({ autoSubmittable: false, applyChannel: null }),
+    ).toContain("has not resolved where to submit it");
+  });
+});
+
+describe("U5 AUTOMATIC_SUBMISSION_DISCLAIMER (bulk-approve confirm)", () => {
+  it("never contradicts itself the way the pre-refix copy did", () => {
+    // The pre-refix bulk-approve confirm said, in the same sentence, that
+    // approved emails are "NOT sent automatically" AND that approved
+    // applications are "queued for automatic submission ... with no further
+    // action from you" — this asserts the replacement says one honest thing.
+    expect(AUTOMATIC_SUBMISSION_DISCLAIMER).toContain("does not send anything automatically");
+    expect(AUTOMATIC_SUBMISSION_DISCLAIMER).not.toContain("with no further action");
+    expect(AUTOMATIC_SUBMISSION_DISCLAIMER).not.toContain("queued for automatic submission");
+  });
+});
+
 describe("U5 describeTransmission", () => {
   it("describes the W-SUB email path with its findable Gmail message id", () => {
     const t = describeTransmission({
@@ -427,6 +498,24 @@ describe("U5 describeTransmission", () => {
     expect(t.evidenceNote).toBeNull();
   });
 
+  // MED-9 (re-review, latent fabrication risk): `transmissionChannel` is
+  // stamped "gmail" today (application_submission.py `CHANNEL_GMAIL`), but
+  // the resolver's OWN code for the same channel is "email"
+  // (apply_channel_resolver.py). A future writer using "email" must still
+  // render the honest email-path headline, not fall into the web-form
+  // branch and claim a screenshot that was never taken.
+  it("also treats transmissionChannel \"email\" as the email path", () => {
+    const t = describeTransmission({
+      transmittedTo: "jobs@acme.com",
+      transmittedAt: "2026-08-13T09:00:00Z",
+      transmissionChannel: "email",
+      transmissionRef: "gmail-msg-2",
+    });
+    expect(t.headline).toBe(`Sent by Aether to jobs@acme.com on ${shortDate("2026-08-13T09:00:00Z")}`);
+    expect(t.evidenceUrl).toBeNull();
+    expect(t.evidenceNote).toBe("message gmail-msg-2 (in your Gmail Sent folder)");
+  });
+
   it("names the real ATS form for a site submission", () => {
     const t = describeTransmission({
       transmittedTo: "https://jobs.ashbyhq.com/acme/1",
@@ -447,7 +536,9 @@ describe("U5 describeTransmission", () => {
       transmissionRef: "/var/lib/aether/apply-evidence/app-1.png",
     });
     expect(t.evidenceUrl).toBeNull();
-    expect(t.evidenceNote).toBe("confirmation screenshot saved by Aether");
+    expect(t.evidenceNote).toBe(
+      "confirmation screenshot saved by Aether (not yet viewable in this app)",
+    );
   });
 
   it("makes no evidence claim when no reference was stored", () => {

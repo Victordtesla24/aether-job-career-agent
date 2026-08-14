@@ -31,6 +31,7 @@ import {
   purgeExpiredApprovals,
   type Approval,
 } from "../../../lib/api/approvals";
+import { AUTOMATIC_SUBMISSION_DISCLAIMER } from "../../../components/applications/tracker-lib";
 
 type StatusFilter = "pending" | "approved" | "rejected" | "all";
 
@@ -266,9 +267,7 @@ export default function ApprovalsPage() {
       !window.confirm(
         `${verb} all ${targets.length} pending request${targets.length === 1 ? "" : "s"}? ` +
           (decision === "approve"
-            ? "Approved emails are NOT sent automatically — send each from its card. " +
-              "Approved applications are queued for automatic submission (email or the " +
-              "employer's own form) with no further action from you."
+            ? AUTOMATIC_SUBMISSION_DISCLAIMER
             : "Rejected requests can be re-created by the agents on their next run."),
       )
     ) {

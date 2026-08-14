@@ -124,3 +124,34 @@ describe("W-SUB — truthful submission state on the board", () => {
     expect(line.textContent).toContain("gmail-msg-1");
   });
 });
+
+// HIGH-6 (re-review): the "Applied Jobs" history list shows a green "applied"
+// chip next to the SAME badge that, on the board, invites the user to
+// approve a card for automatic submission — on a job the user already told
+// Aether they applied to some other way, that invitation is a duplicate-apply
+// nudge and contradicts the chip beside it.
+describe("W-SUB — Applied Jobs history view never invites a duplicate apply", () => {
+  it("does not tell the user to approve-for-automatic-submission on an already-applied card", async () => {
+    apiRequest.mockImplementation(async (path: string) => {
+      if (path === "/applications") return [];
+      if (path.startsWith("/applications?include_applied=true")) return [NEVER_TRANSMITTED];
+      if (path === "/jobs") return [];
+      if (path.startsWith("/approvals")) return [];
+      if (path === "/workspaces/settings") {
+        return { agentConfig: { autoApply: false, approvalGate: true, matchThreshold: 85 } };
+      }
+      if (path === "/applications/funnel/sankey") {
+        return { stages: [], dropoffs: [], insight: "" };
+      }
+      return {};
+    });
+    render(<ApplicationsPage />);
+    fireEvent.click(await screen.findByTestId("view-applied"));
+    const badge = await screen.findByTestId("submission-not-transmitted-badge");
+    expect(badge.title).not.toContain("Approve it in Approvals");
+    expect(badge.title).not.toContain("automatically");
+    // The chip beside it still honestly says "applied" — this only checks the
+    // badge next to it stops contradicting it.
+    expect(await screen.findByText("applied")).toBeTruthy();
+  });
+});

@@ -19,6 +19,7 @@ import { createApproval, fetchApprovals, type Approval } from "../../../lib/api/
 import { apiRequest } from "../../../lib/api/client";
 import type { Job } from "../../../lib/api/jobs";
 import { downloadResume } from "../../../lib/api/resumes";
+import { downloadCoverLetterPdf } from "../../../components/cover-letters/api";
 import SankeyFlow from "../../../components/applications/SankeyFlow";
 import { useRealtimeResources } from "../../../hooks/useRealtime";
 import {
@@ -46,7 +47,9 @@ import {
   fitClass,
   initials,
   manualStepLabel,
+  manualStepTooltip,
   moveTargetsFor,
+  notTransmittedReason,
   shortDate,
   timeAgo,
   viewStages,
@@ -257,7 +260,19 @@ function MoveMenu({
  * "don't claim it" when the API omits it (an older build), because inventing
  * an answer is exactly the failure mode being fixed.
  */
-function SubmissionBadge({ app }: { app?: TrackerApplication }) {
+function SubmissionBadge({
+  app,
+  historyContext = false,
+}: {
+  app?: TrackerApplication;
+  /** HIGH-6: true inside the "Applied Jobs" history list, where a card
+   *  already shows a green "applied" chip. That view exists because the
+   *  user told Aether about a job they applied to some other way, so the
+   *  ordinary not-transmitted copy — which invites approving it for
+   *  automatic submission — would nudge a second application to an employer
+   *  already applied to, and would contradict the chip right next to it. */
+  historyContext?: boolean;
+}) {
   if (!app) return null;
   if (app.transmitted) {
     const t = describeTransmission(app);
@@ -276,11 +291,7 @@ function SubmissionBadge({ app }: { app?: TrackerApplication }) {
     return (
       <span
         data-testid="submission-manual-step-badge"
-        title={
-          app.manualStepDetail
-            ? `${manualStepLabel(app.manualStepReason)}: "${app.manualStepDetail}"`
-            : manualStepLabel(app.manualStepReason)
-        }
+        title={manualStepTooltip(app.manualStepReason, app.manualStepDetail)}
         className="mt-2 inline-flex items-center gap-1 rounded-md bg-aether-coral/15 px-2 py-0.5 text-[10px] text-aether-coral"
       >
         <i className="fa-solid fa-triangle-exclamation text-[9px]" aria-hidden="true" />
@@ -293,10 +304,10 @@ function SubmissionBadge({ app }: { app?: TrackerApplication }) {
     <span
       data-testid="submission-not-transmitted-badge"
       title={
-        "Aether did not send this application — it is recorded as prepared. " +
-        (app.autoSubmittable
-          ? "Approve it in Approvals to email it to the employer."
-          : "This posting publishes no application email address. Approve it in Approvals and Aether will attempt to submit it automatically through the employer's own application form.")
+        historyContext
+          ? "Aether did not send this application — it was recorded as applied outside Aether's automatic submission."
+          : "Aether did not send this application — it is recorded as prepared. " +
+            notTransmittedReason(app)
       }
       className="mt-2 inline-flex items-center gap-1 rounded-md bg-aether-yellow/15 px-2 py-0.5 text-[10px] text-aether-yellow"
     >
@@ -347,11 +358,7 @@ function CardMeta({
         return (
           <span
             data-testid="ready-manual-step-badge"
-            title={
-              card.app.manualStepDetail
-                ? `${manualStepLabel(card.app.manualStepReason)}: "${card.app.manualStepDetail}"`
-                : manualStepLabel(card.app.manualStepReason)
-            }
+            title={manualStepTooltip(card.app.manualStepReason, card.app.manualStepDetail)}
             className="mt-2 inline-flex items-center gap-1 rounded-md bg-aether-coral/15 px-2 py-0.5 text-[10px] text-aether-coral"
           >
             <i className="fa-solid fa-triangle-exclamation text-[9px]" aria-hidden="true" />
@@ -940,9 +947,7 @@ export default function ApplicationsPage() {
                   ? // The manual-step block below carries the full detail —
                     // this line just states the top-level fact plainly.
                     "Not sent by Aether — Aether tried and ran into an obstacle. See below."
-                  : detail.autoSubmittable
-                    ? "Not sent by Aether — prepared only. Approve it in Approvals to email it to the employer."
-                    : "Not sent by Aether — prepared only. This posting publishes no application email address. Approve it in Approvals and Aether will attempt to submit it automatically through the employer's own application form."}
+                  : `Not sent by Aether — prepared only. ${notTransmittedReason(detail)}`}
             </p>
           ) : null}
           {detail.transmitted && describeTransmission(detail).evidenceUrl ? (
@@ -986,12 +991,36 @@ export default function ApplicationsPage() {
                 <button
                   type="button"
                   data-testid="manual-step-download-resume-btn"
-                  onClick={() => void downloadResume(detail.resumeId)}
+                  onClick={() => {
+                    downloadResume(detail.resumeId).catch((e) => {
+                      setError(e instanceof Error ? e.message : "Failed to download résumé");
+                    });
+                  }}
                   className="rounded-lg border border-white/15 px-2.5 py-1.5 text-xs font-medium text-aether-muted transition hover:border-white/30 hover:text-white"
                 >
                   <i className="fa-solid fa-download mr-1.5 text-[10px]" aria-hidden="true" />
                   Download tailored résumé
                 </button>
+                {/* MED-10: the mandate's manual-step package is the tailored
+                    artifacts for THIS application — résumé alone left out
+                    the cover letter Aether also prepared for it. */}
+                {detail.coverLetter ? (
+                  <button
+                    type="button"
+                    data-testid="manual-step-download-cover-letter-btn"
+                    onClick={() => {
+                      downloadCoverLetterPdf(detail.id, detail.company).catch((e) => {
+                        setError(
+                          e instanceof Error ? e.message : "Failed to download cover letter",
+                        );
+                      });
+                    }}
+                    className="rounded-lg border border-white/15 px-2.5 py-1.5 text-xs font-medium text-aether-muted transition hover:border-white/30 hover:text-white"
+                  >
+                    <i className="fa-solid fa-download mr-1.5 text-[10px]" aria-hidden="true" />
+                    Download cover letter
+                  </button>
+                ) : null}
                 {detail.applyUrl && !detail.applyUrl.includes("demo.aether.dev") ? (
                   <a
                     href={detail.applyUrl}
@@ -1322,7 +1351,7 @@ export default function ApplicationsPage() {
                       anything. This history view is exactly where that
                       distinction matters most, so the same honest badge the
                       board's Submitted column uses renders here too. */}
-                  <SubmissionBadge app={a} />
+                  <SubmissionBadge app={a} historyContext />
                   {a.applyUrl && !a.applyUrl.includes("demo.aether.dev") ? (
                     <a
                       href={a.applyUrl}
