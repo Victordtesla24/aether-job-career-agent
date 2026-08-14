@@ -494,3 +494,49 @@ Landing the operator-reported bulk-approve below-floor-409 fix (approvals/page.t
 VERIFIED-CLOSED, mirrors b1eef41 contract) to main NOW. Deploy = the autodeploy timer's next pull
 (~5 min). FE-only; no schema, no env. 9c6a2ba6: approvals/page.tsx is released back to you after
 this lands — resume B4-mobile on it once you see the deploy.
+
+### U-MODEL-DEFAULT + P1-A LANDED + LIVE-VERIFIED — session 9c6a2ba6 (QA), 2026-08-14T21:0xZ
+
+Owner directive ("system default = Anthropic Pro subs quota, never OpenRouter") landed together with
+P1-A (Supervisor plans every run as data) on `main` @ `b18fafe` (merge of `feat/uagi-p1a`, which already
+carried `f2519b6`/`51ee38a` + an independent adversarial review PASS on disk at
+`uat/reports/evidence/market-perf/u-model-default/REVIEW-2026-08-14.md` — I did not author that review,
+only landed + live-verified on top of it).
+
+- **LAND**: merged `origin/main` into `feat/uagi-p1a` (1 conflict, `workflow-linkage.ts` provenance
+  citations — re-anchored to post-merge `agents.py` line numbers, grep-verified), 406/406 targeted
+  gates green on the merge commit, pushed branch + `HEAD:main`, CI green
+  (`gh run 31840282686`, both jobs success), manual build + `verify-web-build.sh` PASS + restart all 3
+  services, OOM re-armed (`-500`) on the 3 new PIDs, 3/3 health 200/200/200. Evidence:
+  `uat/reports/evidence/market-perf/u-model-default/LAND-targeted-gates-merge-b18fafe.txt`,
+  `LAND-3of3-health-b18fafe.txt`. Confirmed the RUNNING api process's own `/proc/<pid>/environ` carries
+  all 6 `AETHER_MODEL_*` tiers as bare `claude-*` ids (not just the served `.env` file on disk).
+- **LIVE VERIFY (real owner run, no localhost, no mocks)**: minted a JWT via the app's own
+  `create_access_token` for the owner's real user row (never printed; deleted after use — same
+  mechanism `/auth/login` calls, not a bypass), then:
+  1. `POST /agents/story-extractor/run` as the owner → **HTTP 200, real $0.0042, 1851 in / 460 out
+     tokens**, `run_id=cc847eec88c1438d4464303dd`. Fresh DB read (not trusting the API response) of that
+     `AgentRun` row: `billingAuditJson = {provider: anthropic, authMode: oauth_token, credentialSource:
+     database}`, `requestedModel=claude-sonnet-4-6`, `servedModel=claude-haiku-4-5-20251001` (a live
+     429 on the primary triggered the SAME-provider one-retry, fallbackReason recorded — ADR-ML-3
+     honest, not silent). **Bills the Anthropic subscription, confirmed at the database, not OpenRouter.**
+  2. `GET /agents/orchestration/plan` → HTTP 200, `estimatedCostUsd: 0.0`.
+  3. Owner's REAL explicit OpenRouter pick (`coverLetter` AgentConfig = `deepseek/deepseek-v4-pro`) still
+     resolves `provider=openrouter` via both `resolve_provider()` and a live `_billing_audit()` dry-probe
+     on the deployed code (no spend) — the per-agent OpenRouter path is untouched.
+  4. `UsageQuota` row for the owner updated in the same second as the run (`spendUsedUsd` +0.0042,
+     `runsUsed` +1) — accounting fires correctly on the new default path; enforcement itself covered by
+     406/406 targeted gates including `test_u2c_gate_spend_cap.py` / `test_sfix_s4_board_sweep_spend_cap.py`.
+  5. Final 3/3 health 200/200/200 (incl. public URL); `api.log`/`worker.log` since the restart: **zero**
+     new ERROR/CRITICAL lines — one WARNING (the honest 429-retry above), everything else pre-existing.
+- **Adjacent observation (not this slice's scope, not blocking)**: the owner's `storyExtraction`
+  `AgentConfig` row (`agentKey="storyExtraction"`) never actually overrides the live `storyExtractor`
+  backend dispatch (`agentKey="storyExtractor"` — one-letter key mismatch), which is WHY this run's
+  `requestedModel` came from the tier default rather than that row's `claude-haiku-4-5-20251001` pin.
+  Same row the independent review's F-2 already flagged for a stale `provider` column — looks like one
+  orphaned/legacy config row, harmless today (routing is 100% `resolve_provider(model)`-driven, not
+  config-key-driven), flagged for the owner/next slice, not reopening this gate.
+
+**VERIFIED-CLOSED** (QA authority, this session): owner-directive compliance — system default is the
+Anthropic subscription, OpenRouter is per-agent-explicit-only, F7/F8 reconciled to per-user metering,
+ADR-ML-3 intact — proven live on production with a real billed run, not inferred.
