@@ -42,17 +42,61 @@ METHOD_REFLOW = "reflow-template"
 METHOD_UNKNOWN = "unknown"
 
 
+#: How a fidelity claim was established.
+VERIFICATION_POST_RENDER = "post-render-text-extraction"
+VERIFICATION_BYTE_IDENTITY = "byte-identity"
+
+#: Confidence vocabulary. ``high``/``low`` describe the MECHANISM (does the
+#: download reproduce the user's own document at all); ``verified``-derived
+#: states describe what re-reading the produced file actually proved.
+CONFIDENCE_PENDING = "unverified"
+CONFIDENCE_PARTIAL = "partial"
+
+#: The surface a rewrite has to land on, per method — used in the honest note.
+_SURFACE = {
+    METHOD_PDF_SPLICE: "PDF layout",
+    METHOD_DOCX_NATIVE: "Word document",
+    METHOD_TEXT_NATIVE: "text file",
+    METHOD_REFLOW: "rendered document",
+}
+
+
 @dataclass(frozen=True)
 class FormatFidelity:
-    """What a download of this résumé version will really do to its format."""
+    """What a download of this résumé version will really do to its format.
+
+    ``verification`` and the change counts are present only once the claim has
+    been checked against a produced artifact (the download / fidelity
+    endpoints). A listing cannot re-render every version, so its rows carry the
+    MECHANISM and say the per-change check is still pending — never a
+    completeness claim nobody verified (U2b truth round).
+    """
 
     method: str
     confidence: str
     note: str
     preserved: bool | None
+    verification: str | None = None
+    changes_requested: int | None = None
+    changes_applied: int | None = None
+    changes_dropped: int | None = None
+    dropped_changes: tuple[dict[str, Any], ...] = ()
 
-    def as_dict(self) -> dict[str, str]:
-        return {"method": self.method, "confidence": self.confidence, "note": self.note}
+    def as_dict(self) -> dict[str, Any]:
+        report: dict[str, Any] = {
+            "method": self.method,
+            "confidence": self.confidence,
+            "note": self.note,
+        }
+        if self.verification is not None:
+            report.update({
+                "verification": self.verification,
+                "changesRequested": self.changes_requested,
+                "changesApplied": self.changes_applied,
+                "changesDropped": self.changes_dropped,
+                "droppedChanges": list(self.dropped_changes),
+            })
+        return report
 
 
 def is_docx_content_type(content_type: str | None) -> bool:
@@ -98,8 +142,9 @@ def describe_fidelity(
                 method=METHOD_PDF_SPLICE,
                 confidence="high",
                 note=(
-                    "Only the reworded bullets are redrawn on your original PDF "
-                    "— every other element is identical to the source document."
+                    "Your original PDF is edited in place — reworded bullets are "
+                    "redrawn on the page and every other element is the source "
+                    "document's own."
                 ),
                 preserved=True,
             )
@@ -155,6 +200,145 @@ def describe_fidelity(
     )
 
 
+def pending_fidelity(base: FormatFidelity) -> FormatFidelity:
+    """The honest listing state for a tailored version: mechanism, not outcome.
+
+    ``GET /resumes`` describes many versions at once and cannot re-render each
+    one, so it must not repeat the completeness claim that live production
+    falsified ("every other element is identical to the source document" for a
+    splice that had silently skipped a rewrite). It states the mechanism and
+    points at the per-document verification instead.
+    """
+    return FormatFidelity(
+        method=base.method,
+        confidence=CONFIDENCE_PENDING,
+        note=(
+            f"{base.note} Each reworded bullet is verified against the file "
+            "itself when this version is rendered — open it to see the "
+            "verified report."
+        ),
+        preserved=base.preserved,
+    )
+
+
+def native_fallback_fidelity(*, unreadable: bool = False) -> FormatFidelity:
+    """The honest report when a native in-document rewrite could not complete.
+
+    The user's own document IS the preferred surface, but a rewrite Aether
+    cannot place in it (or a stored file that no longer opens) must not ship as
+    a half-tailored copy of their résumé. The download falls back to the
+    branded template, which renders the version's complete tailored content —
+    and says exactly that, rather than reusing the generic "not yet available
+    for this upload type" copy, which would be false for these versions.
+    """
+    reason = (
+        "Your stored original file could not be opened, so this download is "
+        "rendered in the Aether template"
+        if unreadable
+        else "A reworded line could not be located in your original document, "
+        "so this download is rendered in the Aether template"
+    )
+    return FormatFidelity(
+        method=METHOD_REFLOW,
+        confidence="low",
+        note=(
+            f"{reason} with your complete tailored content, rather than a "
+            "partially tailored copy of your own file. The file you uploaded "
+            "is unchanged and can still be downloaded from Settings."
+        ),
+        preserved=False,
+    )
+
+
+def verified_fidelity(
+    base: FormatFidelity, verification: Any, *, byte_identical: bool = False
+) -> FormatFidelity:
+    """``base``, re-stated from what re-reading the produced artifact proved.
+
+    ``verification`` is a
+    :class:`app.services.format_verification.RenderVerification`. Three honest
+    outcomes:
+
+    * **byte-identical / nothing to verify** — the download is the user's own
+      stored document; the claim is byte identity, not an inference.
+    * **every change present** — the mechanism claim stands, and the note says
+      how many rewrites were checked in the file itself.
+    * **a change is missing** — confidence drops to ``partial`` and the note
+      NAMES the rewrite that could not be applied, because the alternative is
+      handing the user a document that is neither their baseline nor their
+      tailored résumé while telling them it is complete.
+
+    An artifact that cannot be re-read reports ``unverified`` — never a
+    guess in either direction.
+    """
+    if byte_identical:
+        return FormatFidelity(
+            method=base.method,
+            confidence=base.confidence,
+            note=base.note,
+            preserved=base.preserved,
+            verification=VERIFICATION_BYTE_IDENTITY,
+            changes_requested=0,
+            changes_applied=0,
+            changes_dropped=0,
+        )
+    requested = int(getattr(verification, "requested", 0))
+    if not getattr(verification, "text_extracted", False):
+        return FormatFidelity(
+            method=base.method,
+            confidence=CONFIDENCE_PENDING,
+            note=(
+                f"{base.note} Aether could not re-read the produced file to "
+                "check the tailored wording, so this download is reported as "
+                "unverified rather than assumed correct."
+            ),
+            preserved=base.preserved,
+            verification=VERIFICATION_POST_RENDER,
+            changes_requested=requested,
+            changes_applied=0,
+            changes_dropped=0,
+        )
+    applied = int(verification.applied_count)
+    dropped = verification.dropped
+    surface = _SURFACE.get(base.method, "rendered document")
+    if not dropped:
+        checked = (
+            f" All {requested} tailored change{'s' if requested != 1 else ''} "
+            "were verified present in the file you download."
+            if requested
+            else ""
+        )
+        return FormatFidelity(
+            method=base.method,
+            confidence=base.confidence,
+            note=f"{base.note}{checked}",
+            preserved=base.preserved,
+            verification=VERIFICATION_POST_RENDER,
+            changes_requested=requested,
+            changes_applied=applied,
+            changes_dropped=0,
+        )
+    excerpt = str(dropped[0].after).strip()
+    if len(excerpt) > 120:
+        excerpt = f"{excerpt[:117]}…"
+    return FormatFidelity(
+        method=base.method,
+        confidence=CONFIDENCE_PARTIAL,
+        note=(
+            f"{base.note} {len(dropped)} of {requested} tailoring changes could "
+            f"not be applied to the {surface} — the full tailored wording is in "
+            "this version's text (Resume Studio's change summary), not in the "
+            f"downloaded file. Not applied: “{excerpt}”."
+        ),
+        preserved=base.preserved,
+        verification=VERIFICATION_POST_RENDER,
+        changes_requested=requested,
+        changes_applied=applied,
+        changes_dropped=len(dropped),
+        dropped_changes=tuple(outcome.as_dict() for outcome in dropped),
+    )
+
+
 def stamp_fidelity(
     resumes: list[dict[str, Any]],
     bundled_hashes: set[str],
@@ -183,6 +367,11 @@ def stamp_fidelity(
             is_tailored=parent_id is not None,
             source_resolved=source_resolved,
         )
+        if parent_id is not None and fidelity.preserved is True:
+            # A tailored version's preservation claim depends on whether every
+            # rewrite could actually be placed in the user's own document — a
+            # question only the render itself can answer (U2b truth round).
+            fidelity = pending_fidelity(fidelity)
         stamped.append({
             **resume,
             "formatPreserved": fidelity.preserved,

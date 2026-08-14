@@ -40,6 +40,41 @@ type AtsScore = {
   semantic_degraded?: boolean;
 };
 
+/**
+ * The VERIFIED fidelity report for one version (`GET /resumes/{id}/fidelity`).
+ *
+ * U2b truth round: the listing cannot re-render every version, so its
+ * `formatFidelity` row states the mechanism and marks the per-change check
+ * pending. This report is produced by rendering the version and re-reading the
+ * document that came out, so it can say how many tailored changes are really
+ * in the file the user downloads — and name the ones that are not. Live
+ * production shipped the opposite: an unconditional "every other element is
+ * identical to the source document" for a PDF splice that had silently skipped
+ * a rewrite (uat/reports/evidence/agents-uplift/u2b/verify/, 2026-08-14).
+ */
+type FormatFidelityReport = {
+  method: string;
+  confidence: string;
+  note: string;
+  verification?: string | null;
+  changesRequested?: number | null;
+  changesApplied?: number | null;
+  changesDropped?: number | null;
+};
+
+/** Accept the report ONLY when it really is one — an unrelated payload (or an
+ *  older API with no such route) must fall back to the listing's own honest
+ *  row, never render as a blank/garbled claim. */
+function asFidelityReport(value: unknown): FormatFidelityReport | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const candidate = value as Record<string, unknown>;
+  return typeof candidate.method === "string" &&
+    typeof candidate.confidence === "string" &&
+    typeof candidate.note === "string"
+    ? (candidate as FormatFidelityReport)
+    : null;
+}
+
 /** How many version cards to show before "Show more" (MV-resume-studio-005). */
 const VERSIONS_PAGE_SIZE = 8;
 
@@ -89,6 +124,7 @@ export default function ResumePage() {
   const [selected, setSelected] = useState<Resume | null>(null);
   const [diff, setDiff] = useState<ResumeDiff | null>(null);
   const [ats, setAts] = useState<AtsScore | null>(null);
+  const [fidelity, setFidelity] = useState<FormatFidelityReport | null>(null);
   const [conversion, setConversion] = useState<ConversionImpact | null>(null);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -200,6 +236,7 @@ export default function ResumePage() {
     setSelected(resume);
     setDiff(null);
     setAts(null);
+    setFidelity(null);
     setDownloadNote(null);
     // W-TAILOR-CONVERGE item 5: the before/after ATS panel used to exist only
     // in transient state populated by the tailor RUN response, so a reload (or
@@ -230,6 +267,19 @@ export default function ResumePage() {
       } catch {
         setAts(null);
       }
+    }
+    // U2b truth round: the VERIFIED fidelity report for this exact version —
+    // the API renders it and re-reads the produced document, so the panel can
+    // say how many tailored changes are genuinely in the downloadable file.
+    // If the call fails the panel falls back to the listing's own row, which
+    // states the mechanism and marks the per-change check pending — a weaker
+    // claim, never a stronger one.
+    try {
+      setFidelity(
+        asFidelityReport(await apiRequest<unknown>(`/resumes/${resume.id}/fidelity`)),
+      );
+    } catch {
+      setFidelity(null);
     }
   };
 
@@ -268,7 +318,14 @@ export default function ResumePage() {
   // confidence, note}. Rendered verbatim below the status line so the panel
   // states the real mechanism (native Word editing vs an Aether-template
   // re-render) instead of one generic sentence for every unpreserved case.
-  const formatFidelity = selected?.formatFidelity ?? null;
+  // U2b truth round: prefer the VERIFIED report for the opened version over
+  // the listing's row, which describes the mechanism but cannot know whether
+  // every rewrite really landed in the produced document.
+  const formatFidelity = fidelity ?? selected?.formatFidelity ?? null;
+  const fidelityCounts =
+    fidelity && typeof fidelity.changesRequested === "number" && fidelity.changesRequested > 0
+      ? fidelity
+      : null;
   const formatPreservationKnown = selected != null && selected.formatPreserved != null;
   const formatExplicitlyUnpreserved = selected != null && selected.formatPreserved === false;
   const formatIntact = selected
@@ -445,6 +502,22 @@ export default function ResumePage() {
                 </span>
                 {" · "}
                 {formatFidelity.confidence} confidence — {formatFidelity.note}
+              </p>
+            ) : null}
+            {fidelityCounts ? (
+              // The counts come from re-reading the file this version renders
+              // to — not from what the tailoring run believed it changed.
+              <p
+                className={`mt-1 text-xs ${
+                  (fidelityCounts.changesDropped ?? 0) > 0
+                    ? "text-aether-amber"
+                    : "text-aether-green"
+                }`}
+                data-testid="format-fidelity-counts"
+              >
+                {(fidelityCounts.changesDropped ?? 0) > 0
+                  ? `Verified on the produced file: ${fidelityCounts.changesApplied ?? 0} of ${fidelityCounts.changesRequested} tailored changes applied — ${fidelityCounts.changesDropped} could not be applied to this layout (the full wording is in the change summary below).`
+                  : `Verified on the produced file: all ${fidelityCounts.changesRequested} tailored changes are present in the document you download.`}
               </p>
             ) : null}
             <p className="mt-1 text-xs text-aether-muted-dim">
