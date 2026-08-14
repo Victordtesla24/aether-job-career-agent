@@ -21,7 +21,7 @@ from app.repositories.resume import ResumeRepository
 from app.repositories.story import StoryRepository
 from app.services.ats_engine import ATSEngine
 from app.services.career_data import build_career_corpus
-from app.services.evidence_corpus import build_corpus_evidence
+from app.services.evidence_corpus import build_corpus_evidence, corpus_items_to_evidence_text
 from app.services.resume_format import FormatFidelity, describe_fidelity, pending_fidelity
 from app.services.resume_grounding import MissingResumeError
 from app.services.resume_parser import parse_resume_pdf
@@ -176,6 +176,37 @@ _DEFAULT_STORY_EVIDENCE_MAX_CHARS = 4000
 _DEFAULT_STORY_EVIDENCE_MIN_RELEVANCE = 0.01
 
 
+#: Epistemic provenance every Story Bank unit carries (U-STORY-1 step 4).
+#:
+#: A story is the candidate's OWN account of their OWN achievement, so the
+#: source STATES it — never "inferred". ``confidence high`` records that the
+#: extractor's grounding layer already refused any story whose numbers or
+#: organisation the résumé did not evidence (``services/resume_bullets.py``
+#: guards, ``story_extractor._ground_narrative``), and a hand-authored story is
+#: the candidate asserting it directly. These two values are a LABEL on
+#: evidence, not a guard input: nothing in the fabrication or entailment path
+#: reads them, they exist so a downstream reader (and the model) can tell a
+#: Story Bank claim from résumé text — which before this slice was impossible.
+_STORY_EVIDENCE_SOURCE = "story_bank"
+_STORY_EVIDENCE_EPISTEMIC = "stated"
+_STORY_EVIDENCE_CONFIDENCE = "high"
+
+
+def _story_corpus_item(claim: str) -> dict[str, Any]:
+    """One story claim in ``EvidenceCorpusItem`` shape.
+
+    Single definition of the story→corpus mapping, so the evidence-text
+    renderer here and the ``EvidenceCorpusItem`` mirror written on every story
+    write agree by construction instead of by convention.
+    """
+    return {
+        "claim": claim,
+        "source": _STORY_EVIDENCE_SOURCE,
+        "stated_or_inferred": _STORY_EVIDENCE_EPISTEMIC,
+        "confidence": _STORY_EVIDENCE_CONFIDENCE,
+    }
+
+
 def _story_evidence_max_chars() -> int:
     try:
         value = int(os.environ.get("AETHER_STORY_EVIDENCE_MAX_CHARS", ""))
@@ -266,9 +297,10 @@ def build_story_evidence(
         metrics = story.get("metrics")
         if isinstance(metrics, dict):
             fields.extend(f"{k} {v}" for k, v in metrics.items())
-        text = " ".join(f for f in fields if f).strip()
-        if not text:
+        claim = " ".join(f for f in fields if f).strip()
+        if not claim:
             continue
+        text = corpus_items_to_evidence_text([_story_corpus_item(claim)])
         # ``continue`` rather than ``break`` (mirrors ``build_corpus_evidence``):
         # one oversized story must not evict every shorter one behind it.
         cost = len(text) + (2 if parts else 0)
