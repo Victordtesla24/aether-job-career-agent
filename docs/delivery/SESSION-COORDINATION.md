@@ -268,3 +268,6 @@ Landing now.
   reds). Production mappings/DDL unchanged; see commit body for full diagnosis.
 - Expected deploy window: next 5-min `aether-autodeploy.timer` cycle after `HEAD:main` push.
 - Not touching any other session's active claims (u2c, uagi-p1a, B3, sui-b2, ORCH-EXEC's MON-*/B5/B7/D.*).
+
+## 2026-08-14T18:0xZ — session 9c6a2ba6 CLAIMS a restart window (submission contact-autofill fix)
+- Owner-reported: submission agent asked for name/phone/email/linkedin that already live in the user's résumé. Fixed apply_sweep._resume_contact to backfill contact from résumé raw_text (+ resolve baseline when no resume_id) + build_apply_profile now carries github. Files: apps/api/app/workers/apply_sweep.py + new tests/test_apply_profile_contact_from_resume.py. Committing --only those 2 paths on main, then restarting aether-worker + aether-api (~60s, health-gated) so the worker/router pick it up. No other files touched; foreign untracked WIP left intact.
