@@ -203,7 +203,7 @@ export default function Orchestration({
             disabled
             title="Not yet available"
             aria-disabled="true"
-            className="cursor-not-allowed rounded-lg border border-white/10 px-3 py-1.5 text-xs font-semibold text-aether-muted-dim opacity-50"
+            className="cursor-not-allowed rounded-md border border-hairline px-3 py-1.5 text-[12px] font-semibold text-aether-muted-dim opacity-50"
           >
             <i className="fa-solid fa-pause mr-1.5" aria-hidden="true" />
             Pause All
@@ -213,7 +213,7 @@ export default function Orchestration({
             disabled
             title="Not yet available"
             aria-disabled="true"
-            className="cursor-not-allowed rounded-lg border border-white/10 px-3 py-1.5 text-xs font-semibold text-aether-muted-dim opacity-50"
+            className="cursor-not-allowed rounded-md border border-hairline px-3 py-1.5 text-[12px] font-semibold text-aether-muted-dim opacity-50"
           >
             Manual Override
           </button>
@@ -221,10 +221,16 @@ export default function Orchestration({
       </div>
 
       {/* Workflow graph */}
-      <div className="glass relative overflow-hidden rounded-2xl border border-white/10 p-5" data-testid="node-graph">
-        <h3 className="mb-4 text-xs font-semibold uppercase tracking-wide text-aether-muted-dim">
-          Workflow Graph
+      <div className="elev-1 relative overflow-hidden rounded-2xl p-5" data-testid="node-graph">
+        <h3 className="mb-1 text-[13px] font-semibold uppercase tracking-[0.08em] text-aether-muted-dim">
+          Live Run Monitor
         </h3>
+        {/* Named apart from the workflow MAP above it: that one is the DEFINED
+            22-agent topology from GET /agents/orchestration-map; this one is
+            the 7 implemented backends and what each is doing right now. */}
+        <p className="mb-4 text-[11px] leading-[1.5] text-aether-muted-dim">
+          The implemented agents and the state of each one&apos;s current run.
+        </p>
         <div className="relative">
           {/* Animated flow line behind the nodes */}
           <svg className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden="true">
@@ -248,7 +254,7 @@ export default function Orchestration({
                 <article
                   key={node.label}
                   data-testid={`workflow-node-${node.label.toLowerCase()}`}
-                  className="glass rounded-xl border border-white/10 p-3.5"
+                  className="elev-1 rounded-xl p-3.5 transition-[border-color,background-color] duration-[var(--dur)] hover:border-hairline-strong hover:bg-surface-2"
                 >
                   <div className="flex items-center justify-between gap-2">
                     <h4 className="text-xs font-semibold">{node.label}</h4>
@@ -266,8 +272,8 @@ export default function Orchestration({
 
       <div className="grid gap-4 xl:grid-cols-3">
         {/* Task queue */}
-        <div className="glass min-w-0 rounded-2xl border border-white/10 p-5" data-testid="task-queue">
-          <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-aether-muted-dim">Task Queue</h3>
+        <div className="elev-1 min-w-0 rounded-2xl p-5" data-testid="task-queue">
+          <h3 className="mb-3 text-[13px] font-semibold uppercase tracking-[0.08em] text-aether-muted-dim">Task Queue</h3>
           {tasks.length === 0 ? (
             <p className="py-4 text-center text-xs text-aether-muted-dim">Queue is empty — trigger a run above.</p>
           ) : (
@@ -319,7 +325,7 @@ export default function Orchestration({
         </div>
 
         {/* Performance */}
-        <div className="glass min-w-0 rounded-2xl border border-white/10 p-5" data-testid="performance-metrics">
+        <div className="elev-1 min-w-0 rounded-2xl p-5" data-testid="performance-metrics">
           {/*
             MV-agent-monitor-003: this card's success rate is computed
             client-side from the `runs` prop, which the Agents page fetches
@@ -330,39 +336,41 @@ export default function Orchestration({
             this card's own window explicitly, matching the disclosure
             pattern already used by the Agent Stats card ("last N tasks").
           */}
-          <h3 className="mb-3 flex flex-wrap items-baseline gap-x-1.5 text-xs font-semibold uppercase tracking-wide text-aether-muted-dim">
+          <h3 className="mb-3 flex flex-wrap items-baseline gap-x-1.5 text-[13px] font-semibold uppercase tracking-[0.08em] text-aether-muted-dim">
             Performance
-            <span className="normal-case text-[10px] font-normal tracking-normal text-aether-muted-dim/70">
+            <span className="normal-case text-[11px] font-normal tracking-normal text-aether-muted-dim">
               · last {runs.length.toLocaleString()} run{runs.length === 1 ? "" : "s"}
             </span>
           </h3>
           <div className="grid grid-cols-3 gap-2 text-center">
             <div>
-              <div className="mono text-xl font-bold">{runs.length.toLocaleString()}</div>
-              <div className="text-[10px] text-aether-muted-dim">tasks run</div>
+              <div className="font-mono text-[22px] font-bold tabular-nums">{runs.length.toLocaleString()}</div>
+              <div className="text-[11px] text-aether-muted-dim">tasks run</div>
             </div>
             <div>
-              <div className="mono text-xl font-bold">{avgSecs}s</div>
-              <div className="text-[10px] text-aether-muted-dim">avg duration</div>
+              <div className="font-mono text-[22px] font-bold tabular-nums">{avgSecs}s</div>
+              <div className="text-[11px] text-aether-muted-dim">avg duration</div>
             </div>
             <div>
-              <div className="mono text-xl font-bold text-aether-green">{successRate}%</div>
-              <div className="text-[10px] text-aether-muted-dim">success rate</div>
+              <div className="font-mono text-[22px] font-bold tabular-nums text-aether-green">{successRate}%</div>
+              <div className="text-[11px] text-aether-muted-dim">success rate</div>
             </div>
           </div>
           {degraded > 0 ? (
             // QA3-F-03: degraded (letterless) runs are counted distinctly
             // rather than silently absorbed into — or dropped from — the
             // success figure above.
-            <p className="mt-2 text-center text-[10px] text-aether-muted-dim">
+            <p className="mt-2 flex items-center justify-center gap-1.5 text-center text-[11px] text-aether-muted-dim">
+              {/* Rule D-1: a degrade is neither success-green nor failure-red. */}
+              <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-state-degraded" aria-hidden="true" />
               {degraded} degraded run{degraded === 1 ? "" : "s"} excluded from success
             </p>
           ) : null}
         </div>
 
         {/* Error log */}
-        <div className="glass min-w-0 rounded-2xl border border-white/10 p-5" data-testid="error-log">
-          <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-aether-muted-dim">Error Log</h3>
+        <div className="elev-1 min-w-0 rounded-2xl p-5" data-testid="error-log">
+          <h3 className="mb-3 text-[13px] font-semibold uppercase tracking-[0.08em] text-aether-muted-dim">Error Log</h3>
           {runs.length === 0 ? (
             <p className="py-4 text-center text-xs text-aether-muted-dim">No log entries yet.</p>
           ) : (

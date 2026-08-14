@@ -1,23 +1,38 @@
 "use client";
 
 /**
- * Manage Agents console (wireframe: design/screens/agents.html).
+ * Manage Agents console (wireframe: design/screens/agents.html; restructured in
+ * S-UI-1 §4.1).
  *
- * Sections, in wireframe order:
- *  1. Header — "Manage Agents" + live counts + Add Provider / Test Run / Run All
- *  2. AI Provider Connections (6 cards, persisted connection state)
- *  3. Agent Configuration grid (full catalog, live status + enable/disable/model)
- *  4. Quick stats (spend / tokens / most-active / success — all from AgentRun)
- *  5. Agent Orchestration (agent-monitor, merged into this screen)
- *  6. Recent runs audit table
- *  7. Test Run modal
+ * ── WHY THIS PAGE IS TABBED ────────────────────────────────────────────────
+ * The page conflates three jobs — *connect providers*, *configure 22 agents*,
+ * *watch the system run* — and used to present all three in one ~6 400px
+ * scroll, ordered worst-first: provider config occupied the first ~1 700px and
+ * the orchestration content (the product's actual differentiator) sat at
+ * ~4 900px, below everything. One route, three linkable tabs (`?tab=`), with
+ * ORCHESTRATION as the default, puts the differentiator first and gives each
+ * job a whole screen.
+ *
+ * Tabs, in order:
+ *  1. Orchestration (default) — run-health strip, the workflow map(s), the live
+ *     run monitor (task queue / performance / error log) and the recent-runs
+ *     audit table.
+ *  2. Agents — the full catalog grid, filterable, plus the run/spend stats row.
+ *  3. Providers — AI provider connections and the provider-default model.
+ *
+ * ZERO-REGRESSION NOTE (S-UI binding constraint 1): every panel stays MOUNTED
+ * and is hidden with the `hidden` attribute rather than unmounted. That keeps
+ * the page's request behaviour byte-identical to before (the same fetches on
+ * mount, the same polling, the same realtime subscription — a tab switch
+ * issues no request at all) and keeps every control keyboard-reachable the
+ * instant its tab is shown.
  *
  * Every control is wired to a real endpoint — nothing is mock. The full
  * pipeline ("Run All") is a synchronous ~30–120 s call, so the UI streams live
  * progress and a completion/failure notice (see lib/agents-feedback).
  */
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   fetchAgentRuns,
@@ -29,12 +44,16 @@ import {
 } from "../../../lib/api/agents";
 import {
   agentOutputGaps,
+  isInFlight,
+  isLiveRun,
   isStalledRun,
   outputGapMessage,
   parseServerTime,
   stalledLabel,
   STALLED_RUN_ADVICE,
 } from "../../../lib/agent-run-health";
+import SegmentedControl from "../../../components/ui/SegmentedControl";
+import { useUrlTab } from "../../../hooks/useUrlTab";
 import { useNow } from "../../../hooks/useNow";
 import { apiRequest } from "../../../lib/api/client";
 import { humanizeActivityMessage } from "../../../lib/humanize";
@@ -118,6 +137,16 @@ const AGENT_ROUTE: Record<string, string> = {
 };
 
 const POLL_MS = 3000;
+
+/** S-UI §4.1 — three linkable tabs; Orchestration is the default view. */
+const TABS = ["orchestration", "agents", "providers"] as const;
+type AgentsTab = (typeof TABS)[number];
+
+const TAB_ITEMS: ReadonlyArray<{ value: AgentsTab; label: string; icon: string }> = [
+  { value: "orchestration", label: "Orchestration", icon: "fa-diagram-project" },
+  { value: "agents", label: "Agents", icon: "fa-robot" },
+  { value: "providers", label: "Providers", icon: "fa-plug" },
+];
 
 //: The provider whose LIVE catalog backs the per-agent pickers. OpenRouter is
 //: the only provider exposing an open /models catalog (the direct-Anthropic
@@ -691,47 +720,95 @@ export default function AgentsPage() {
   // providers expose only a small static list via the card select above.
   const openrouterProvider = (providers ?? []).find((p) => p.id === "openrouter") ?? null;
 
+  // S-UI §4.1 RUN HEALTH strip. Every number is derived from data already on
+  // screen — agents online from GET /agents, live/stalled from the SAME
+  // `isInFlight && isLiveRun` predicates the run monitor obeys (CRITICAL-2).
+  // There is no uptime signal in this product, so no uptime % is shown.
+  const agentsOnline = agents.filter((a) => a.status !== "offline").length;
+  const liveRunCount = runs.filter((r) => isInFlight(r) && isLiveRun(r, now)).length;
+
+  const [tab, setTab] = useUrlTab<AgentsTab>(TABS, "orchestration");
+  const [overflowOpen, setOverflowOpen] = useState(false);
+  const overflowRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!overflowOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (overflowRef.current && !overflowRef.current.contains(e.target as Node)) {
+        setOverflowOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOverflowOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [overflowOpen]);
+
+  const tabItems = useMemo(
+    () =>
+      TAB_ITEMS.map((t) =>
+        t.value === "agents"
+          ? { ...t, count: catalog ? catalog.counts.total : null }
+          : t.value === "providers"
+            ? { ...t, count: providers ? providers.length : null }
+            : t,
+      ),
+    [catalog, providers],
+  );
+
+  /** Inactive panels stay mounted (see the file header) but are removed from
+   *  the a11y tree and from layout by the `hidden` attribute. */
+  const panelProps = (value: AgentsTab) => ({
+    id: `agents-panel-${value}`,
+    role: "tabpanel" as const,
+    "aria-labelledby": `agents-tabs-${value}`,
+    hidden: tab !== value,
+    "data-testid": `agents-panel-${value}`,
+  });
+
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <header className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold">Manage Agents</h1>
-          <p className="mt-0.5 font-mono text-xs text-aether-muted-dim">
+        <div className="min-w-0">
+          <h1 className="text-[26px] font-bold leading-tight tracking-[-0.02em]">Manage Agents</h1>
+          <p className="mt-0.5 font-mono text-[11px] tabular-nums text-aether-muted-dim">
             {agentCount} agents · {providerCount} AI providers · configure models &amp; connections
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <button
-            type="button"
-            data-testid="add-provider-btn"
-            onClick={() => void onAddProvider()}
-            className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3.5 py-2 text-xs font-medium transition hover:bg-white/10"
-          >
-            <i className="fa-solid fa-plus text-[10px]" aria-hidden="true" />
-            Add Provider
-          </button>
+        {/* S-UI §4.1: ONE primary action (coral). Everything else is a ghost of
+            equal weight, and the destructive bulk action moves into an overflow
+            menu — it used to sit in the header at full red weight, competing
+            with "Run All" for the eye. The menu is always mounted (hidden, not
+            unmounted) so every control stays keyboard-reachable and no
+            automation has to guess whether it exists. */}
+        <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             data-testid="test-run-open"
             onClick={() => setTestOpen(true)}
-            className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3.5 py-2 text-xs font-medium transition hover:bg-white/10"
+            className="flex items-center gap-2 rounded-md border border-hairline bg-surface-1 px-3 py-2 text-[12px] font-medium outline-none transition-colors duration-[var(--dur-fast)] hover:border-hairline-strong hover:bg-surface-3 focus-visible:ring-2 focus-visible:ring-aether-coral/70 active:translate-y-px"
           >
             <i className="fa-solid fa-vial text-[10px] text-aether-indigo" aria-hidden="true" />
             Test Run
           </button>
           {/* The Email Agent's job-alert intake. The per-agent "Run" button
-              below triggers TRIAGE (RUN_PARAMS.emailAgent) — before this
-              control existed, `mode: "job_alerts"` was reachable from no user
-              action anywhere, so a fully built backend sat dead. Deterministic
-              on the server (regex/HTML parser, no model), so it is never
-              metered and never invents a posting. */}
+              triggers TRIAGE (RUN_PARAMS.emailAgent) — before this control
+              existed, `mode: "job_alerts"` was reachable from no user action
+              anywhere, so a fully built backend sat dead. Deterministic on the
+              server (regex/HTML parser, no model), so it is never metered and
+              never invents a posting. */}
           <button
             type="button"
             data-testid="agents-scan-job-alerts"
             onClick={() => void scanJobAlerts()}
             disabled={alertsBusy}
             title="Read your own job-alert emails from the last 7 days and add the postings to your Jobs board"
-            className="flex items-center gap-2 rounded-lg border border-aether-green/40 bg-aether-green/10 px-3.5 py-2 text-xs font-semibold text-aether-green transition hover:bg-aether-green/20 disabled:opacity-50"
+            className="flex items-center gap-2 rounded-md border border-hairline bg-surface-1 px-3 py-2 text-[12px] font-medium outline-none transition-colors duration-[var(--dur-fast)] hover:border-hairline-strong hover:bg-surface-3 focus-visible:ring-2 focus-visible:ring-aether-coral/70 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-50"
           >
             {alertsBusy ? (
               <>
@@ -740,28 +817,8 @@ export default function AgentsPage() {
               </>
             ) : (
               <>
-                <i className="fa-solid fa-inbox text-[10px]" aria-hidden="true" />
+                <i className="fa-solid fa-inbox text-[10px] text-aether-green" aria-hidden="true" />
                 Scan Job Alerts
-              </>
-            )}
-          </button>
-          <button
-            type="button"
-            data-testid="stop-all-agents-btn"
-            onClick={() => void onStopAll()}
-            disabled={stoppingAll || busy !== null}
-            title="Pause every enabled agent so no new runs are scheduled"
-            className="flex items-center gap-2 rounded-lg border border-red-500/40 bg-red-500/10 px-3.5 py-2 text-xs font-semibold text-red-300 transition hover:bg-red-500/20 disabled:opacity-50"
-          >
-            {stoppingAll ? (
-              <>
-                <span className="h-3 w-3 animate-spin rounded-full border-2 border-red-300/40 border-t-red-300" />
-                Stopping…
-              </>
-            ) : (
-              <>
-                <i className="fa-solid fa-stop text-[10px]" aria-hidden="true" />
-                Stop All Agents
               </>
             )}
           </button>
@@ -770,11 +827,11 @@ export default function AgentsPage() {
             data-testid="run-pipeline-btn"
             onClick={() => void pipeline()}
             disabled={busy !== null}
-            className="flex items-center gap-2 rounded-lg bg-aether-coral px-4 py-2 text-xs font-semibold text-white shadow-lg shadow-aether-coral/25 transition hover:opacity-90 disabled:opacity-50"
+            className="flex items-center gap-2 rounded-md bg-aether-coral px-4 py-2 text-[12px] font-semibold outline-none transition-opacity duration-[var(--dur-fast)] hover:opacity-90 focus-visible:ring-2 focus-visible:ring-aether-coral/70 focus-visible:ring-offset-2 focus-visible:ring-offset-aether-bg active:translate-y-px disabled:cursor-not-allowed disabled:opacity-50"
           >
             {busy === "pipeline" ? (
               <>
-                <span className="h-3 w-3 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+                <span className="h-3 w-3 animate-spin rounded-full border-2 border-black/30 border-t-black/70" />
                 Running…
               </>
             ) : (
@@ -784,6 +841,63 @@ export default function AgentsPage() {
               </>
             )}
           </button>
+          <div className="relative" ref={overflowRef}>
+            <button
+              type="button"
+              data-testid="agents-overflow-btn"
+              aria-haspopup="menu"
+              aria-expanded={overflowOpen}
+              aria-label="More agent actions"
+              onClick={() => setOverflowOpen((v) => !v)}
+              className="flex h-9 w-9 items-center justify-center rounded-md border border-hairline bg-surface-1 outline-none transition-colors duration-[var(--dur-fast)] hover:border-hairline-strong hover:bg-surface-3 focus-visible:ring-2 focus-visible:ring-aether-coral/70"
+            >
+              <i className="fa-solid fa-ellipsis text-[12px]" aria-hidden="true" />
+            </button>
+            <div
+              role="menu"
+              aria-label="More agent actions"
+              hidden={!overflowOpen}
+              className="elev-3 absolute right-0 top-full z-40 mt-1 w-[240px] rounded-lg p-1"
+            >
+              <button
+                type="button"
+                role="menuitem"
+                data-testid="add-provider-btn"
+                onClick={() => {
+                  setOverflowOpen(false);
+                  void onAddProvider();
+                }}
+                className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-[12px] font-medium outline-none hover:bg-surface-3 focus-visible:ring-2 focus-visible:ring-aether-coral/70"
+              >
+                <i className="fa-solid fa-plus w-4 text-[10px]" aria-hidden="true" />
+                Add Provider
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                data-testid="stop-all-agents-btn"
+                onClick={() => {
+                  setOverflowOpen(false);
+                  void onStopAll();
+                }}
+                disabled={stoppingAll || busy !== null}
+                title="Pause every enabled agent so no new runs are scheduled"
+                className="flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-[12px] font-semibold text-state-danger outline-none hover:bg-state-danger/10 focus-visible:ring-2 focus-visible:ring-aether-coral/70 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {stoppingAll ? (
+                  <>
+                    <span className="h-3 w-3 animate-spin rounded-full border-2 border-state-danger/40 border-t-state-danger" />
+                    Stopping…
+                  </>
+                ) : (
+                  <>
+                    <i className="fa-solid fa-stop w-4 text-[10px]" aria-hidden="true" />
+                    Stop All Agents
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
         </div>
       </header>
 
@@ -899,94 +1013,94 @@ export default function AgentsPage() {
 
       <LowCreditBanner credits={credits} />
 
-      <ProviderConnections
-        providers={providers ?? []}
-        loading={providers === null || isAdmin === null}
-        busyId={providerBusy}
-        onConfigure={openConfig}
-        onModel={(id, model) => void onProviderModel(id, model)}
-        anthropicModels={anthropicModels}
-        anthropicModelsError={anthropicModelsError}
-        title={
-          isAdmin === null
-            ? "AI Providers"
-            : isAdmin
-              ? "AI Provider Connections"
-              : "Your AI Provider Keys"
-        }
-        blurb={
-          isAdmin === false
-            ? "Keys you add here are yours alone, stored encrypted. Runs on a provider you have supplied a key for bill to your own account."
-            : undefined
-        }
+      <SegmentedControl
+        items={tabItems}
+        value={tab}
+        onChange={setTab}
+        ariaLabel="Agents console sections"
+        idPrefix="agents-tabs"
+        panelIdPrefix="agents-panel"
+        testId="agents-tabs"
       />
 
-      {openrouterProvider ? (
-        <ModelPicker
-          provider={openrouterProvider}
-          onSaved={refreshProviders}
-          onNotice={setNotice}
-        />
-      ) : null}
+      {/* ══ TAB 1 — ORCHESTRATION (default) ═══════════════════════════════ */}
+      <div {...panelProps("orchestration")} className="space-y-6">
+        {/* RUN HEALTH. `aria-live="polite"` so a run starting or dying is
+            announced without stealing focus. No fabricated uptime %: this
+            product has no uptime signal, so the strip reports only what is
+            genuinely measured — agents online, live runs, stalled runs. */}
+        <div
+          data-testid="agents-run-health"
+          role="status"
+          aria-live="polite"
+          className="elev-2 flex flex-wrap items-center gap-x-6 gap-y-2 rounded-xl px-4 py-3"
+        >
+          <span className="flex items-center gap-2 text-[13px]">
+            <span className="h-2 w-2 rounded-full bg-state-ok" aria-hidden="true" />
+            <span className="font-mono tabular-nums">{agentsOnline}</span>
+            <span className="text-aether-muted">online</span>
+          </span>
+          <span className="flex items-center gap-2 text-[13px]">
+            {liveRunCount > 0 ? (
+              <span className="live-dot h-2 w-2 rounded-full bg-aether-coral" aria-hidden="true" />
+            ) : (
+              <span className="h-2 w-2 rounded-full bg-state-neutral" aria-hidden="true" />
+            )}
+            <span className="font-mono tabular-nums">{liveRunCount}</span>
+            <span className="text-aether-muted">running</span>
+          </span>
+          <span
+            className={`flex items-center gap-2 text-[13px] ${stalledRuns.length > 0 ? "text-state-warn" : ""}`}
+          >
+            <span
+              className={`h-2 w-2 rounded-full ${stalledRuns.length > 0 ? "bg-state-warn" : "bg-state-neutral"}`}
+              aria-hidden="true"
+            />
+            <span className="font-mono tabular-nums">{stalledRuns.length}</span>
+            <span className={stalledRuns.length > 0 ? "" : "text-aether-muted"}>stalled</span>
+          </span>
+          <span className="ml-auto text-[11px] text-aether-muted-dim">
+            Counted from the {runs.length.toLocaleString()} most recent run
+            {runs.length === 1 ? "" : "s"} this console loaded.
+          </span>
+        </div>
 
-      <AgentConfigGrid
-        agents={catalog?.agents ?? []}
-        counts={catalog?.counts ?? null}
-        loading={catalog === null}
-        busyKey={toggleBusy ?? busy}
-        onToggle={(key, enabled) => void onToggleAgent(key, enabled)}
-        onRun={onRunAgent}
-        catalogModels={catalogModels}
-        catalogLoading={catalogLoading}
-        catalogError={catalogError}
-        orchestratorModels={anthropicModels}
-        orchestratorModelsLoading={anthropicModelsLoading}
-        orchestratorModelsError={anthropicModelsError}
-        catalogRefreshedAt={catalogRefreshedAt}
-        catalogStale={catalogStale}
-        catalogRefreshing={catalogRefreshing}
-        onRefreshCatalog={() => void onRefreshCatalog()}
-        savingModelKey={savingModelKey}
-        onSelectModel={(key, model) => void onSelectModel(key, model)}
-      />
+        {/* U-AX item 5 / S-UI §4.1: the defined end-to-end workflow map(s) —
+            every catalog agent, honest real-vs-planned status, stage role,
+            metrics consumed, threshold responsibilities, last-run tier +
+            trend. DISTINCT from the live run monitor below. `runs` is passed
+            so an edge can pulse ONLY where a run is genuinely in flight. */}
+        {orchestrationMap ? (
+          <section className="space-y-3">
+            <div>
+              <h2 className="text-[13px] font-semibold uppercase tracking-[0.08em] text-aether-muted-dim">
+                Agent Orchestration — Workflow Maps
+              </h2>
+              <p className="mt-0.5 text-[13px] leading-[1.5] text-aether-muted">
+                Every agent in the catalog, placed in the workflow it actually plays a part in —
+                real agents show what they consume and improve on; planned agents are labelled
+                roadmap stages, never shown as running.
+              </p>
+            </div>
+            <OrchestrationMap data={orchestrationMap} runs={runs} />
+          </section>
+        ) : null}
 
-      <AgentStatsRow stats={stats} loading={stats === null} />
+        <Orchestration agents={agents} runs={runs} />
 
-      <Orchestration agents={agents} runs={runs} />
-
-      {/* U-AX item 5: the defined end-to-end workflow map(s) — every catalog
-          agent, honest real-vs-planned status, stage role, metrics consumed,
-          threshold responsibilities, last-run tier + trend. DISTINCT from the
-          task-queue/performance widget above. */}
-      {orchestrationMap ? (
         <section className="space-y-3">
-          <div>
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-aether-muted-dim">
-              Agent Orchestration — Workflow Maps
-            </h2>
-            <p className="mt-0.5 text-xs text-aether-muted-dim">
-              Every agent in the catalog, placed in the workflow it actually plays a part in —
-              real agents show what they consume and improve on; planned agents are labelled
-              roadmap stages, never shown as running.
-            </p>
-          </div>
-          <OrchestrationMap data={orchestrationMap} />
-        </section>
-      ) : null}
-
-      <section className="space-y-3">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-aether-muted-dim">
-          Recent runs
-        </h2>
-        {runs.length === 0 ? (
-          <div className="glass rounded-2xl border border-white/10 p-6 text-center text-sm text-aether-muted">
-            No agent runs recorded yet.
-          </div>
-        ) : (
-          <div className="glass overflow-x-auto rounded-2xl border border-white/10">
-            <table className="w-full text-left text-sm" data-testid="agent-runs-table">
-              <thead className="text-xs uppercase tracking-wide text-aether-muted-dim">
-                <tr className="border-b border-white/10">
+          <h2 className="text-[13px] font-semibold uppercase tracking-[0.08em] text-aether-muted-dim">
+            Recent runs
+          </h2>
+          {runs.length === 0 ? (
+            <div className="elev-1 rounded-2xl p-6 text-center text-[13px] text-aether-muted">
+              No agent runs recorded yet.
+            </div>
+          ) : (
+            <div className="elev-1 overflow-x-auto rounded-2xl">
+              <table className="w-full text-left text-sm" data-testid="agent-runs-table">
+              <thead className="text-[13px] font-semibold uppercase tracking-[0.08em] text-aether-muted-dim">
+                <tr className="border-b border-hairline-strong">
                   <th className="px-4 py-3">Agent</th>
                   <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3">Started</th>
@@ -1000,7 +1114,10 @@ export default function AgentsPage() {
               </thead>
               <tbody>
                 {runs.slice(0, 20).map((run) => (
-                  <tr key={run.id} className="border-b border-white/5 last:border-0">
+                  <tr
+                    key={run.id}
+                    className="border-b border-hairline transition-colors duration-[var(--dur-fast)] last:border-0 hover:bg-white/[0.04]"
+                  >
                     <td className="px-4 py-2.5 font-medium">{run.agentName}</td>
                     <td className="px-4 py-2.5">
                       {coverLetterDegraded(run) ? (
@@ -1033,7 +1150,7 @@ export default function AgentsPage() {
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-2.5 font-mono text-xs text-aether-muted">
+                    <td className="whitespace-nowrap px-4 py-2.5 font-mono text-[11px] tabular-nums text-aether-muted">
                       {/* parseServerTime, not `new Date`: the API's naive UTC
                           stamps carry no timezone designator, so a bare parse
                           renders them in the viewer's offset — ten hours out
@@ -1042,8 +1159,16 @@ export default function AgentsPage() {
                         ? new Date(parseServerTime(run.startedAt) as number).toLocaleString("en-AU")
                         : "—"}
                     </td>
-                    <td className="px-4 py-2.5 text-xs text-aether-muted-dim">
-                      {humanizeActivityMessage(run.error) || "—"}
+                    {/* S-UI §3.4: a raw error string used to run the full width
+                        of the viewport. Clamped to two lines with the full text
+                        in `title` — clamped, never truncated away. */}
+                    <td className="max-w-[320px] px-4 py-2.5 text-[11px] text-aether-muted-dim">
+                      <span
+                        title={humanizeActivityMessage(run.error) || undefined}
+                        className="line-clamp-2 block"
+                      >
+                        {humanizeActivityMessage(run.error) || "—"}
+                      </span>
                     </td>
                     <td className="max-w-[220px] px-4 py-2.5">
                       <RunPolicyInputs run={run} />
@@ -1053,8 +1178,97 @@ export default function AgentsPage() {
               </tbody>
             </table>
           </div>
-        )}
-      </section>
+          )}
+        </section>
+      </div>
+
+      {/* ══ TAB 2 — AGENTS ════════════════════════════════════════════════ */}
+      <div {...panelProps("agents")} className="space-y-6">
+        <AgentConfigGrid
+          agents={catalog?.agents ?? []}
+          counts={catalog?.counts ?? null}
+          loading={catalog === null}
+          busyKey={toggleBusy ?? busy}
+          onToggle={(key, enabled) => void onToggleAgent(key, enabled)}
+          onRun={onRunAgent}
+          catalogModels={catalogModels}
+          catalogLoading={catalogLoading}
+          catalogError={catalogError}
+          orchestratorModels={anthropicModels}
+          orchestratorModelsLoading={anthropicModelsLoading}
+          orchestratorModelsError={anthropicModelsError}
+          catalogRefreshedAt={catalogRefreshedAt}
+          catalogStale={catalogStale}
+          catalogRefreshing={catalogRefreshing}
+          onRefreshCatalog={() => void onRefreshCatalog()}
+          savingModelKey={savingModelKey}
+          onSelectModel={(key, model) => void onSelectModel(key, model)}
+        />
+
+        <AgentStatsRow stats={stats} loading={stats === null} />
+      </div>
+
+      {/* ══ TAB 3 — PROVIDERS ═════════════════════════════════════════════ */}
+      <div {...panelProps("providers")} className="space-y-6">
+        <ProviderConnections
+          providers={providers ?? []}
+          loading={providers === null || isAdmin === null}
+          busyId={providerBusy}
+          onConfigure={openConfig}
+          onModel={(id, model) => void onProviderModel(id, model)}
+          anthropicModels={anthropicModels}
+          anthropicModelsError={anthropicModelsError}
+          title={
+            isAdmin === null
+              ? "AI Providers"
+              : isAdmin
+                ? "AI Provider Connections"
+                : "Your AI Provider Keys"
+          }
+          blurb={
+            isAdmin === false
+              ? "Keys you add here are yours alone, stored encrypted. Runs on a provider you have supplied a key for bill to your own account."
+              : undefined
+          }
+        />
+
+        {/* The per-agent pickers on the Agents tab browse this same live
+            catalog, so the browsing surface no longer needs a second home on
+            this tab — but this control does something the per-agent pickers
+            cannot: it sets the PROVIDER-GLOBAL default (PUT
+            /agents/providers/{id}), which is the model every agent without its
+            own override runs on. It is deliberately retained (S-UI §4.1 Tab 3
+            proposed removing it; removing it would delete the only UI for that
+            endpoint, which the zero-regression constraint forbids) and given an
+            explicit heading so the two scopes can no longer be confused. */}
+        {openrouterProvider ? (
+          <section className="space-y-2" data-testid="provider-default-model">
+            <div>
+              <h2 className="text-[13px] font-semibold uppercase tracking-[0.08em] text-aether-muted-dim">
+                Provider default model
+              </h2>
+              <p className="mt-0.5 text-[11px] leading-[1.5] text-aether-muted-dim">
+                The fallback every agent uses when it has no model of its own. To give ONE agent a
+                different model, open that agent&apos;s model picker on the Agents tab —
+                {catalogModels && catalogModels.length > 0 ? (
+                  <>
+                    {" "}
+                    <span className="font-mono tabular-nums">{catalogModels.length}</span> models are
+                    available there.
+                  </>
+                ) : (
+                  " the full live catalog is available there."
+                )}
+              </p>
+            </div>
+            <ModelPicker
+              provider={openrouterProvider}
+              onSaved={refreshProviders}
+              onNotice={setNotice}
+            />
+          </section>
+        ) : null}
+      </div>
 
       <TestRunModal
         open={testOpen}

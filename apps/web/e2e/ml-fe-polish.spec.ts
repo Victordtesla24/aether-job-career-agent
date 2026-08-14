@@ -224,7 +224,15 @@ async function setupAgentsWithRealErrorLogEntry(page: Page, tag: string): Promis
       }
 
       await gotoWarm(page, "/dashboard/agents");
-      await expect(page.getByTestId("agent-configuration")).toBeVisible({ timeout: 20_000 });
+      // S-UI-1 selector map (1:1, assertion semantics unchanged): the console
+      // is now tabbed and the Orchestration panel — which owns the Error Log
+      // this finding is about — is the DEFAULT tab. The page-loaded sentinel
+      // moves from the agent-configuration grid (now on the `?tab=agents`
+      // panel) to that panel's own container. Everything measured below is
+      // unchanged.
+      //   before: page.getByTestId("agent-configuration")  → visible
+      //   after:  page.getByTestId("agents-panel-orchestration") → visible
+      await expect(page.getByTestId("agents-panel-orchestration")).toBeVisible({ timeout: 20_000 });
       await expect(page.getByTestId("agent-orchestration")).toBeVisible({ timeout: 20_000 });
       // Wait for the Error Log to show the real run entry rather than its
       // "No log entries yet." empty state, so the truncate/nowrap span this

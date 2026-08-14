@@ -1,17 +1,40 @@
 "use client";
 
 /**
- * Agent Configuration grid (wireframe: agent-grid-ag14). The full agent catalog
- * as cards: category icon, keyboard-accessible recommendation tooltip, live
- * status dot (active/paused/error), assigned model, status label and an
- * enable/disable toggle. Runnable agents (real backend) also expose Run.
+ * Agent Configuration grid (wireframe: agent-grid-ag14; redesigned in S-UI-1
+ * §4.1 Tab 2). The full agent catalog as cards: category glyph,
+ * keyboard-accessible recommendation tooltip, live status badge, assigned
+ * model, and an enable/disable toggle. Runnable agents (real backend) also
+ * expose Run.
  *
  * Status + config are real: derived from GET /agents/catalog and mutated via
  * PUT /agents/config/{key} (see components/agents/api.ts).
+ *
+ * ── S-UI-1 CHANGES (presentation + information architecture only) ──────────
+ * X-2 "card-height discipline": NO component may render an expanding list
+ * inside a grid cell. Two offenders lived here and both are gone:
+ *   1. `AgentModelPicker`'s model list — now a portalled popover opened from a
+ *      compact trigger (see that file's header for the root-cause note).
+ *   2. `AgentSettingsPanel` — now a full-width drawer BELOW the grid rather
+ *      than an accordion inside one cell, which used to shove that card to
+ *      ~600px and break every row's alignment.
+ * With no variable-height children left, every card renders the same height by
+ * construction (a `min-h` floor plus grid row-stretch keeps it exact), so this
+ * is a grid instead of a broken masonry.
+ *
+ * A filter strip (status segments + text filter) is added because 22 identical
+ * cards is a wall, not a grid. It is pure client-side filtering over the same
+ * `agents` prop — no new request, no changed request.
+ *
+ * Preserved verbatim: the stale-catalog banner and its exact `refreshedLabel()`
+ * copy, the model-picker lock and its reason text, planned cards' disabled
+ * treatment and absent picker, and every existing testid.
  */
-import { useCallback, useId, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
+import SegmentedControl from "../ui/SegmentedControl";
+import StatusBadge, { type StatusTone } from "../ui/StatusBadge";
 import AgentModelPicker from "./AgentModelPicker";
 import AgentSettingsPanel from "./AgentSettingsPanel";
 import type { CatalogAgent, ProviderModel } from "./api";
@@ -36,25 +59,11 @@ const ACCENT_BG: Record<string, string> = {
   green: "bg-aether-green/15 text-aether-green",
 };
 
-const STATUS_DOT: Record<CatalogAgent["status"], string> = {
-  active: "bg-aether-green",
-  paused: "bg-aether-yellow",
-  error: "bg-red-400",
-  planned: "bg-white/25",
-};
-
-const STATUS_TEXT: Record<CatalogAgent["status"], string> = {
-  active: "text-aether-green",
-  paused: "text-aether-yellow",
-  error: "text-red-400",
-  planned: "text-aether-muted-dim",
-};
-
-const CARD_BORDER: Record<CatalogAgent["status"], string> = {
-  active: "border-white/10 hover:border-white/20",
-  paused: "border-white/10 hover:border-white/20",
-  error: "border-red-400/30 hover:border-red-400/50",
-  planned: "border-white/5 opacity-75",
+const STATUS_TONE: Record<CatalogAgent["status"], StatusTone> = {
+  active: "ok",
+  paused: "warn",
+  error: "danger",
+  planned: "neutral",
 };
 
 const STATUS_LABEL: Record<CatalogAgent["status"], string> = {
@@ -64,25 +73,35 @@ const STATUS_LABEL: Record<CatalogAgent["status"], string> = {
   planned: "Planned",
 };
 
+const CARD_BORDER: Record<CatalogAgent["status"], string> = {
+  active: "elev-1 hover:border-hairline-strong hover:bg-surface-2",
+  paused: "elev-1 hover:border-hairline-strong hover:bg-surface-2",
+  error: "border border-state-danger/30 bg-state-danger/[0.05] hover:border-state-danger/50",
+  planned: "border border-dashed border-hairline bg-surface-0 opacity-75",
+};
+
+type StatusFilter = "all" | CatalogAgent["status"];
+
+const FILTERS: ReadonlyArray<{ value: StatusFilter; label: string }> = [
+  { value: "all", label: "All" },
+  { value: "active", label: "Active" },
+  { value: "paused", label: "Paused" },
+  { value: "error", label: "Error" },
+  { value: "planned", label: "Planned" },
+];
+
 /**
  * U-UI AGENTS-PHANTOM-OVERFLOW-01 / AGENTS-CARD-OVERLAP-01: the recommendation
  * tooltip used to be a `.group`/`group-hover` CSS-only popover living inline
  * next to its trigger. Even while closed (`opacity-0`) it stayed in normal
- * flow, so all 22 cards' hidden description boxes contributed to their
- * card's `scrollHeight` (70 flagged elements, 71px phantom overflow on the
- * whole grid) and could geometrically overlap the next row's card.
+ * flow, so all 22 cards' hidden description boxes contributed to their card's
+ * `scrollHeight` (70 flagged elements, 71px phantom overflow on the whole
+ * grid) and could geometrically overlap the next row's card.
  *
- * The description now always renders through a portal to document.body —
- * never a DOM descendant of its `agent-card-<key>` container — with
- * visibility toggled by CSS (`hidden opacity-0` vs `opacity-100`, the same
- * pattern already proven in MetricTooltip/GAP-P6-UI-001) instead of being
- * conditionally mounted inside the card. Because it is never nested inside
- * the card or the `agent-configuration` section, it can no longer inflate
- * either one's scrollable-overflow region, and each card's description
- * carries its own `agent-tip-desc-<key>` identity, so two cards' boxes can
- * never land in the same place. Same trigger icon, same popover copy/style,
- * same hover+focus reveal — identical visual behaviour, different (safe)
- * place in the DOM.
+ * The description renders through a portal to document.body — never a DOM
+ * descendant of its `agent-card-<key>` container — with visibility toggled by
+ * CSS, and is re-measured on open (REV-U-UI-01) so a below-the-fold card's
+ * popover is never pinned to a stale page-load position.
  */
 function AgentTip({ agentKey, name, tip }: { agentKey: string; name: string; tip: string }) {
   const tipId = useId();
@@ -99,16 +118,6 @@ function AgentTip({ agentKey, name, tip }: { agentKey: string; name: string; tip
     setPos({ top: rect.bottom + 8, right: Math.max(8, window.innerWidth - rect.right) });
   }, []);
 
-  // REV-U-UI-01: the grid has no inner scroll container — the whole
-  // dashboard page (dashboard/layout.tsx) scrolls with the window, so a
-  // `position: fixed` popover's viewport coordinates are only valid for the
-  // exact scroll offset they were captured at. Measuring once on mount (the
-  // old behaviour) permanently pinned every below-the-fold card's popover to
-  // its page-load position, which was off-screen for any card past the
-  // initial ~900px fold. Re-measure the instant the popover opens (never
-  // trust a stale mount-time rect) and keep tracking the trigger's viewport
-  // position for as long as it stays open, so a scroll or resize mid-hover
-  // can't leave it pinned to a now-wrong spot either.
   useLayoutEffect(() => {
     if (!open) return;
     measure();
@@ -141,7 +150,7 @@ function AgentTip({ agentKey, name, tip }: { agentKey: string; name: string; tip
             triggerRef.current?.focus();
           }
         }}
-        className="flex h-5 w-5 items-center justify-center rounded text-aether-muted-dim outline-none hover:text-white focus-visible:ring-2 focus-visible:ring-aether-coral/60"
+        className="flex h-5 w-5 items-center justify-center rounded text-aether-muted-dim outline-none hover:text-white focus-visible:ring-2 focus-visible:ring-aether-coral/70"
       >
         <i className="fa-solid fa-circle-info text-xs" aria-hidden="true" />
       </button>
@@ -156,7 +165,7 @@ function AgentTip({ agentKey, name, tip }: { agentKey: string; name: string; tip
                 id={tipId}
                 role="tooltip"
                 data-testid={`agent-tip-popover-${agentKey}`}
-                className={`w-56 max-w-[calc(100vw-2rem)] rounded-lg border border-white/10 bg-[#1C1C29] p-3 text-[11px] leading-relaxed text-aether-muted shadow-2xl transition-opacity duration-150 ${
+                className={`elev-3 w-[280px] max-w-[calc(100vw-2rem)] rounded-lg p-3 text-[12px] leading-[1.45] text-aether-muted transition-opacity duration-[var(--dur-fast)] ${
                   open ? "block opacity-100" : "hidden opacity-0"
                 }`}
               >
@@ -189,6 +198,8 @@ function AgentCard({
   orchestratorModelsError,
   savingModel,
   onSelectModel,
+  settingsOpen,
+  onToggleSettings,
 }: {
   agent: CatalogAgent;
   busy: boolean;
@@ -205,97 +216,43 @@ function AgentCard({
   orchestratorModelsError: string | null;
   savingModel: boolean;
   onSelectModel: (key: string, model: string) => void;
+  settingsOpen: boolean;
+  onToggleSettings: (key: string) => void;
 }) {
   const isOrchestratorRole = agent.key === ORCHESTRATOR_ROLE_KEY;
   const pickerModels = isOrchestratorRole ? orchestratorModels : catalogModels;
   const pickerLoading = isOrchestratorRole ? orchestratorModelsLoading : catalogLoading;
   const pickerError = isOrchestratorRole ? orchestratorModelsError : catalogError;
   const runLockReason = agentRunDisabledReason(agent);
-  const [showSettings, setShowSettings] = useState(false);
+
   return (
     <div
       data-testid={`agent-card-${agent.key}`}
-      className={`glass relative rounded-xl border p-4 transition ${CARD_BORDER[agent.status]}`}
+      className={`relative flex min-h-[168px] flex-col justify-between gap-3 rounded-xl p-4 transition-[border-color,background-color] duration-[var(--dur)] sm:min-h-[150px] ${CARD_BORDER[agent.status]}`}
     >
-      <div className="mb-2 flex items-start justify-between">
-        <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${ACCENT_BG[agent.accent] ?? ACCENT_BG.indigo}`}>
+      <div className="flex items-start justify-between gap-2">
+        <div
+          className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${ACCENT_BG[agent.accent] ?? ACCENT_BG.indigo}`}
+        >
           <i className={`fa-solid ${agent.icon} text-xs`} aria-hidden="true" />
         </div>
-        <div className="flex items-center gap-2">
-          <AgentTip agentKey={agent.key} name={agent.name} tip={agent.tip} />
-          <span
-            className={`h-2 w-2 rounded-full ${STATUS_DOT[agent.status]}`}
-            aria-hidden="true"
-          />
+        <div className="flex min-w-0 flex-1 flex-col items-end gap-1">
+          <div className="flex w-full min-w-0 items-center justify-end gap-1.5">
+            <p
+              title={agent.name}
+              className="min-w-0 flex-1 truncate text-right text-[13px] font-semibold tracking-[-0.01em]"
+            >
+              {agent.name}
+            </p>
+            <AgentTip agentKey={agent.key} name={agent.name} tip={agent.tip} />
+          </div>
         </div>
       </div>
 
-      <p className="text-xs font-semibold">{agent.name}</p>
-      <p
-        className={`mt-1 font-mono text-[10px] ${agent.status === "error" ? "text-red-400" : "text-aether-indigo"}`}
-      >
-        {agent.model}
-        {agent.status === "error" ? " · error" : ""}
-      </p>
-
-      {/* ML-agents-005: the 44px min tap targets (gear/run/toggle) plus the
-          status label exceed a 2-column card's width at 390px, pushing the
-          toggle past the viewport (14px horizontal overflow). Wrap the row so
-          the action cluster drops to its own line on a narrow card while the
-          accessible 44px tap targets are preserved; on ≥sm the shrunk controls
-          fit on one line so the wrap never triggers. */}
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
-        <span className={`text-[10px] ${STATUS_TEXT[agent.status]}`}>
-          {STATUS_LABEL[agent.status]}
-        </span>
-        {agent.status === "planned" ? null : (
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            data-testid={`agent-settings-toggle-${agent.key}`}
-            aria-expanded={showSettings}
-            aria-label={`${showSettings ? "Hide" : "Show"} settings for ${agent.name}`}
-            onClick={() => setShowSettings((s) => !s)}
-            className="flex h-6 w-6 items-center justify-center rounded-md border border-white/15 text-aether-muted-dim transition hover:border-white/30 hover:text-white"
-          >
-            <i className="fa-solid fa-sliders text-[10px]" aria-hidden="true" />
-          </button>
-          {agent.runnable ? (
-            <button
-              type="button"
-              data-testid={`agent-run-${agent.key}`}
-              onClick={() => onRun(agent.key)}
-              disabled={busy || !agent.enabled}
-              aria-disabled={runLockReason !== null || undefined}
-              title={busy ? "Running…" : (runLockReason ?? undefined)}
-              className="rounded-md border border-white/15 px-2 py-0.5 text-[10px] font-semibold text-aether-muted hover:border-white/30 hover:text-white disabled:cursor-not-allowed disabled:opacity-40 disabled:grayscale"
-            >
-              Run
-            </button>
-          ) : null}
-          <button
-            type="button"
-            role="switch"
-            aria-checked={agent.enabled}
-            aria-label={`${agent.enabled ? "Disable" : "Enable"} ${agent.name}`}
-            data-testid={`agent-toggle-${agent.key}`}
-            onClick={() => onToggle(agent.key, !agent.enabled)}
-            disabled={busy}
-            title={busy ? "Updating…" : undefined}
-            className="inline-flex min-h-[44px] min-w-[44px] items-center justify-end disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-0 sm:min-w-0"
-          >
-            <span
-              className={`relative block h-4 w-8 rounded-full transition ${agent.enabled ? "bg-aether-coral" : "bg-white/12"}`}
-            >
-              <span
-                className={`absolute top-0.5 h-3 w-3 rounded-full transition-all ${agent.enabled ? "right-0.5 bg-white" : "left-0.5 bg-aether-muted-dim"}`}
-              />
-            </span>
-          </button>
-        </div>
-        )}
-      </div>
-
+      {/* The model is a BUTTON that opens the picker popover — never an
+          inline, card-height-inflating list (X-2). Planned agents have no
+          backend and therefore nothing to configure, so they get no picker,
+          exactly as before. */}
       {agent.status !== "planned" ? (
         <AgentModelPicker
           agentKey={agent.key}
@@ -316,11 +273,75 @@ function AgentCard({
           catalogProvider={isOrchestratorRole ? "anthropic" : "openrouter"}
           onSelect={(model) => onSelectModel(agent.key, model)}
         />
-      ) : null}
+      ) : (
+        <p className="truncate rounded-md border border-dashed border-hairline px-2 py-1 font-mono text-[11px] text-state-neutral">
+          {agent.model}
+        </p>
+      )}
 
-      {agent.status !== "planned" && showSettings ? (
-        <AgentSettingsPanel agent={agent} />
-      ) : null}
+      {/* ML-agents-005: the 44px min tap targets (gear/run/toggle) plus the
+          status label exceed a narrow card's width at 390px. Wrap the row so
+          the action cluster drops to its own line on a narrow card while the
+          accessible 44px tap targets are preserved. */}
+      <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+        <StatusBadge
+          tone={STATUS_TONE[agent.status]}
+          dot={agent.status === "active"}
+          testId={`agent-status-${agent.key}`}
+        >
+          {STATUS_LABEL[agent.status]}
+        </StatusBadge>
+        {agent.status === "planned" ? null : (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              data-testid={`agent-settings-toggle-${agent.key}`}
+              aria-expanded={settingsOpen}
+              aria-label={`${settingsOpen ? "Hide" : "Show"} settings for ${agent.name}`}
+              onClick={() => onToggleSettings(agent.key)}
+              className={`flex h-6 w-6 items-center justify-center rounded-md border outline-none transition-colors duration-[var(--dur-fast)] focus-visible:ring-2 focus-visible:ring-aether-coral/70 ${
+                settingsOpen
+                  ? "border-aether-coral/50 bg-aether-coral/10 text-aether-coral"
+                  : "border-hairline-strong text-aether-muted-dim hover:border-white/30 hover:text-white"
+              }`}
+            >
+              <i className="fa-solid fa-sliders text-[10px]" aria-hidden="true" />
+            </button>
+            {agent.runnable ? (
+              <button
+                type="button"
+                data-testid={`agent-run-${agent.key}`}
+                onClick={() => onRun(agent.key)}
+                disabled={busy || !agent.enabled}
+                aria-disabled={runLockReason !== null || undefined}
+                title={busy ? "Running…" : (runLockReason ?? undefined)}
+                className="rounded-md border border-hairline-strong px-2 py-0.5 text-[11px] font-semibold text-aether-muted outline-none hover:border-white/30 hover:text-white focus-visible:ring-2 focus-visible:ring-aether-coral/70 disabled:cursor-not-allowed disabled:opacity-40 disabled:grayscale"
+              >
+                Run
+              </button>
+            ) : null}
+            <button
+              type="button"
+              role="switch"
+              aria-checked={agent.enabled}
+              aria-label={`${agent.enabled ? "Disable" : "Enable"} ${agent.name}`}
+              data-testid={`agent-toggle-${agent.key}`}
+              onClick={() => onToggle(agent.key, !agent.enabled)}
+              disabled={busy}
+              title={busy ? "Updating…" : undefined}
+              className="inline-flex min-h-[44px] min-w-[44px] items-center justify-end outline-none focus-visible:ring-2 focus-visible:ring-aether-coral/70 disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-0 sm:min-w-0"
+            >
+              <span
+                className={`relative block h-4 w-8 rounded-full transition-colors duration-[var(--dur)] ${agent.enabled ? "bg-aether-coral" : "bg-white/12"}`}
+              >
+                <span
+                  className={`absolute top-0.5 h-3 w-3 rounded-full transition-all duration-[var(--dur)] ${agent.enabled ? "right-0.5 bg-white" : "left-0.5 bg-aether-muted-dim"}`}
+                />
+              </span>
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -378,40 +399,60 @@ export default function AgentConfigGrid({
   savingModelKey: string | null;
   onSelectModel: (key: string, model: string) => void;
 }) {
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [text, setText] = useState("");
+  const [settingsKey, setSettingsKey] = useState<string | null>(null);
+
+  const visible = useMemo(() => {
+    const q = text.trim().toLowerCase();
+    return agents.filter((a) => {
+      if (statusFilter !== "all" && a.status !== statusFilter) return false;
+      if (!q) return true;
+      return (
+        a.name.toLowerCase().includes(q) ||
+        a.key.toLowerCase().includes(q) ||
+        a.model.toLowerCase().includes(q)
+      );
+    });
+  }, [agents, statusFilter, text]);
+
+  const settingsAgent = settingsKey ? (agents.find((a) => a.key === settingsKey) ?? null) : null;
+
   return (
-    <section data-testid="agent-configuration">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+    <section data-testid="agent-configuration" className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <i className="fa-solid fa-robot text-sm text-aether-coral" aria-hidden="true" />
-          <h2 className="text-sm font-semibold">Agent Configuration</h2>
-          <span className="font-mono text-[11px] text-aether-muted-dim">
+          <h2 className="text-[15px] font-semibold tracking-[-0.01em]">Agent Configuration</h2>
+          <span className="font-mono text-[11px] tabular-nums text-aether-muted-dim">
             {counts ? `${counts.total} agents` : "…"}
           </span>
         </div>
         <div className="flex items-center gap-3 text-[11px] text-aether-muted-dim">
           <span className="flex items-center gap-1.5">
-            <span className="h-2 w-2 rounded-full bg-aether-green" />
-            {counts ? `${counts.active} Active` : "Active"}
+            <span className="h-2 w-2 rounded-full bg-state-ok" />
+            <span className="font-mono tabular-nums">{counts ? counts.active : "—"}</span> Active
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="h-2 w-2 rounded-full bg-aether-yellow" />
-            {counts ? `${counts.paused} Paused` : "Paused"}
+            <span className="h-2 w-2 rounded-full bg-state-warn" />
+            <span className="font-mono tabular-nums">{counts ? counts.paused : "—"}</span> Paused
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="h-2 w-2 rounded-full bg-red-400" />
-            {counts ? `${counts.error} Error` : "Error"}
+            <span className="h-2 w-2 rounded-full bg-state-danger" />
+            <span className="font-mono tabular-nums">{counts ? counts.error : "—"}</span> Error
           </span>
           <span className="flex items-center gap-1.5">
-            <span className="h-2 w-2 rounded-full bg-white/25" />
-            {counts ? `${counts.planned ?? 0} Planned` : "Planned"}
+            <span className="h-2 w-2 rounded-full bg-state-neutral" />
+            <span className="font-mono tabular-nums">{counts ? (counts.planned ?? 0) : "—"}</span>{" "}
+            Planned
           </span>
         </div>
       </div>
 
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2">
+      <div className="elev-2 flex flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-2">
         <p
           data-testid="catalog-last-refreshed"
-          className={`text-[11px] ${catalogStale ? "text-aether-amber" : "text-aether-muted-dim"}`}
+          className={`text-[11px] ${catalogStale ? "text-state-warn" : "text-aether-muted-dim"}`}
         >
           <i
             className={`fa-solid ${catalogStale ? "fa-triangle-exclamation" : "fa-clock-rotate-left"} mr-1.5 text-[10px]`}
@@ -424,7 +465,7 @@ export default function AgentConfigGrid({
           data-testid="catalog-refresh-btn"
           onClick={onRefreshCatalog}
           disabled={catalogRefreshing}
-          className="flex items-center gap-1.5 rounded-md border border-white/15 bg-white/5 px-2.5 py-1 text-[11px] font-medium transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex items-center gap-1.5 rounded-md border border-hairline-strong bg-surface-1 px-2.5 py-1 text-[11px] font-medium outline-none transition-colors duration-[var(--dur-fast)] hover:bg-surface-3 focus-visible:ring-2 focus-visible:ring-aether-coral/70 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <i
             className={`fa-solid fa-rotate-right text-[10px] ${catalogRefreshing ? "animate-spin" : ""}`}
@@ -434,15 +475,71 @@ export default function AgentConfigGrid({
         </button>
       </div>
 
+      {/* Filter strip — with 22 cards this is the difference between a grid
+          and a wall. Pure client-side narrowing of the same data. */}
+      <div className="flex flex-wrap items-center gap-3">
+        <SegmentedControl
+          items={FILTERS}
+          value={statusFilter}
+          onChange={setStatusFilter}
+          ariaLabel="Filter agents by status"
+          idPrefix="agent-filter"
+          size="sm"
+          testId="agent-filter-strip"
+        />
+        <label className="relative min-w-[180px] flex-1">
+          <span className="sr-only">Filter agents by name or model</span>
+          <i
+            className="fa-solid fa-magnifying-glass pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] text-aether-muted-dim"
+            aria-hidden="true"
+          />
+          <input
+            type="search"
+            data-testid="agent-text-filter"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder="Filter by name or model…"
+            className="w-full rounded-md border border-hairline bg-surface-1 py-1.5 pl-7 pr-2 text-[12px] text-white outline-none placeholder:text-aether-muted-dim focus-visible:ring-2 focus-visible:ring-aether-coral/70"
+          />
+        </label>
+      </div>
+
       {loading ? (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4" aria-busy="true">
+        // Skeleton at the EXACT final geometry so nothing reflows on arrival.
+        <div
+          className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4"
+          aria-busy="true"
+        >
           {Array.from({ length: 8 }).map((_, i) => (
-            <div key={i} className="glass h-28 animate-pulse rounded-xl border border-white/10" />
+            <div
+              key={i}
+              className="elev-1 min-h-[168px] animate-pulse rounded-xl sm:min-h-[150px]"
+            />
           ))}
         </div>
+      ) : visible.length === 0 ? (
+        <div className="elev-1 rounded-xl p-8 text-center">
+          <i
+            className="fa-solid fa-filter-circle-xmark mb-2 text-[32px] text-aether-muted-dim/40"
+            aria-hidden="true"
+          />
+          <p className="text-[13px] text-aether-muted">
+            No agents match this filter.
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              setStatusFilter("all");
+              setText("");
+            }}
+            className="mt-3 rounded-md bg-aether-coral px-3 py-1.5 text-[12px] font-semibold outline-none focus-visible:ring-2 focus-visible:ring-aether-coral/70"
+          >
+            Clear filters
+          </button>
+        </div>
       ) : (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
-          {agents.map((a) => (
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+          {visible.map((a) => (
             <AgentCard
               key={a.key}
               agent={a}
@@ -457,10 +554,41 @@ export default function AgentConfigGrid({
               orchestratorModelsError={orchestratorModelsError}
               savingModel={savingModelKey === a.key}
               onSelectModel={onSelectModel}
+              settingsOpen={settingsKey === a.key}
+              onToggleSettings={(key) => setSettingsKey((k) => (k === key ? null : key))}
             />
           ))}
         </div>
       )}
+
+      {/* X-2: the settings drawer opens BELOW the grid at full width — it used
+          to expand inside one grid cell and shove that column's cards out of
+          alignment with every other column. Same component, same endpoints. */}
+      {settingsAgent ? (
+        <div
+          data-testid="agent-settings-drawer"
+          className="elev-2 rounded-xl p-4"
+          role="region"
+          aria-label={`Settings for ${settingsAgent.name}`}
+        >
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h3 className="text-[13px] font-semibold">
+              Settings ·{" "}
+              <span className="font-mono tabular-nums text-aether-muted">{settingsAgent.name}</span>
+            </h3>
+            <button
+              type="button"
+              data-testid="agent-settings-drawer-close"
+              onClick={() => setSettingsKey(null)}
+              aria-label={`Close settings for ${settingsAgent.name}`}
+              className="rounded-md border border-hairline-strong px-2 py-1 text-[11px] text-aether-muted-dim outline-none hover:text-white focus-visible:ring-2 focus-visible:ring-aether-coral/70"
+            >
+              Close
+            </button>
+          </div>
+          <AgentSettingsPanel agent={settingsAgent} />
+        </div>
+      ) : null}
     </section>
   );
 }
