@@ -88,6 +88,9 @@ import { runErrorNotice, type Notice } from "../../lib/agents-feedback";
 import type { AgentRun } from "../../lib/api/agents";
 import type { OrchestrationMapData } from "../../lib/api/agentPolicy";
 import StatusBadge from "../ui/StatusBadge";
+// ADR-AGI-3 Decision 2 — the header control's name in ONE place, so the map's
+// "X is in progress" copy can never drift from the button it names.
+import { RUN_PIPELINE_SHORT } from "./conductor";
 import {
   buildMapModel,
   lastRunStatusText,
@@ -762,7 +765,7 @@ const NO_SCROLL: ScrollState = { left: 0, client: 0, total: 0 };
  * no trigger — in which case no run control renders anywhere on it.
  */
 interface MapRunApi {
-  /** Console-wide in-flight backend ("pipeline" while Run All runs), or null. */
+  /** Console-wide in-flight backend ("pipeline" while Run pipeline runs), or null. */
   busyBackend: string | null;
   /** The backend this map is dispatching right now, or null. */
   dispatchingBackend: string | null;
@@ -1292,7 +1295,7 @@ export default function OrchestrationMap({
    */
   onRunAgent?: (backend: string) => Promise<Notice>;
   /**
-   * The console-wide in-flight backend — the same `busy` the Run All button
+   * The console-wide in-flight backend — the same `busy` the Run pipeline button
    * disables itself on ("pipeline" while the full pipeline runs). Mirrored here
    * so the map runs one thing at a time, exactly as the pipeline does.
    */
@@ -1400,7 +1403,7 @@ export default function OrchestrationMap({
   /**
    * Dispatch a plan, ONE AT A TIME, halting on the first refusal.
    *
-   * That is Run All's shape, not a choice made here: `_pipeline_core` runs its
+   * That is Run pipeline's shape, not a choice made here: `_pipeline_core` runs its
    * six nodes sequentially and an exception from any of them ends the rest. A
    * quota or spend-cap wall is exactly such a refusal, and pressing on would
    * only collect N identical rejections while the first one is the answer.
@@ -1691,10 +1694,10 @@ export default function OrchestrationMap({
             }
           : null;
         const workflowBlocked = batchActive
-          ? "A run is already in progress — one at a time, as Run All does"
+          ? `A run is already in progress — one at a time, as ${RUN_PIPELINE_SHORT} does`
           : busyBackend
             ? busyBackend === "pipeline"
-              ? "Run All is in progress — one run at a time"
+              ? `${RUN_PIPELINE_SHORT} is in progress — one run at a time`
               : `${busyBackend} is running — one run at a time`
             : plan.length === 0
               ? "Nothing in this map is individually runnable"
@@ -1733,7 +1736,7 @@ export default function OrchestrationMap({
                   <span className="text-state-warn"> · {model.stalledCount} stalled</span>
                 ) : null}
               </p>
-              {/* ORCH-RUN 3 — "Run All" scoped to THIS map: every runnable
+              {/* ORCH-RUN 3 — "Run pipeline" scoped to THIS map: every runnable
                   agent it contains, in its own stage order, one at a time. The
                   count is the PLAN's, not the node count, because three nodes
                   sharing the fitScorer backend are one run. */}
@@ -1958,9 +1961,9 @@ export default function OrchestrationMap({
             disabled={batchActive || busyBackend !== null || selectionPlan.length === 0}
             title={
               batchActive
-                ? "A run is already in progress — one at a time, as Run All does"
+                ? `A run is already in progress — one at a time, as ${RUN_PIPELINE_SHORT} does`
                 : busyBackend
-                  ? `${busyBackend === "pipeline" ? "Run All" : busyBackend} is running — one run at a time`
+                  ? `${busyBackend === "pipeline" ? RUN_PIPELINE_SHORT : busyBackend} is running — one run at a time`
                   : `Run the selection in ${selectedModel.name}'s stage order`
             }
             className="flex shrink-0 items-center gap-2 whitespace-nowrap rounded-md bg-aether-coral px-3 py-1.5 text-[12px] font-semibold text-black outline-none transition-opacity duration-[var(--dur-fast)] hover:opacity-90 focus-visible:ring-2 focus-visible:ring-aether-coral/70 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-45"
