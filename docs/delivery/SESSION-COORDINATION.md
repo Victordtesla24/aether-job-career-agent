@@ -268,3 +268,14 @@ Landing now.
   reds). Production mappings/DDL unchanged; see commit body for full diagnosis.
 - Expected deploy window: next 5-min `aether-autodeploy.timer` cycle after `HEAD:main` push.
 - Not touching any other session's active claims (u2c, uagi-p1a, B3, sui-b2, ORCH-EXEC's MON-*/B5/B7/D.*).
+
+### main-reds LANDED — session 9c6a2ba6, 2026-08-14T17:46Z
+
+Pushed `HEAD:main` @ `47536dc` (after 3 pre-land syncs — origin/main moved twice more under me from
+U2c's landing and an unrelated FE fixup; each resolved cleanly, targeted gates re-run green both times).
+CI green (`31825299687`). `aether-autodeploy.timer` deployed `9528ac2..47536dc` at 17:45:13Z, all 3/3
+health checks healthy, `deploy successful: 47536dc` at 17:46:38Z. Production checkout confirmed at
+`47536dc` on `main`, `/api/health` 200, `/` 200. Targeted gates (5 originally-red files + U5/U5d-2
+regression set, 147 tests) green on origin/main content both before AND after U2c's concurrent landing
+merged in. Evidence: `uat/reports/evidence/market-perf/main-reds/land/`. The 9 reds ORCH-EXEC reported
+are CLOSED on `main`.
