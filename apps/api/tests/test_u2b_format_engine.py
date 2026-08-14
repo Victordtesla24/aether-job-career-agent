@@ -42,10 +42,7 @@ Evidence for this run: uat/reports/evidence/agents-uplift/u2b/RED-EVIDENCE.txt
 """
 from __future__ import annotations
 
-import hashlib
 from io import BytesIO
-
-import pytest
 
 DOCX_CONTENT_TYPE = (
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
