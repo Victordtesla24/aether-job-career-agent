@@ -84,3 +84,22 @@ describe("Sidebar plan/quota indicator (MV-dashboard-006)", () => {
     expect(screen.getByTestId("sidebar-plan-quota").textContent).toMatch(/plan unavailable/i);
   });
 });
+
+describe("Sidebar contact-support link (O-1, S-FIX slice C)", () => {
+  beforeEach(() => {
+    fetchSubscriptionMock.mockResolvedValue(null);
+  });
+
+  it("renders a real mailto 'Contact support' link next to Privacy Policy/Terms when a support email is supplied", () => {
+    render(<Sidebar supportEmail="help@example-operator.com" />);
+
+    const link = screen.getByRole("link", { name: /contact support/i });
+    expect(link.getAttribute("href")).toBe("mailto:help@example-operator.com");
+  });
+
+  it("never fabricates a contact link — renders no 'Contact support' link when no support email is configured", () => {
+    render(<Sidebar supportEmail={null} />);
+
+    expect(screen.queryByRole("link", { name: /contact support/i })).toBeNull();
+  });
+});

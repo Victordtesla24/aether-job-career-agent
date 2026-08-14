@@ -119,4 +119,16 @@ describe("PrivacyPolicyPage", () => {
     expect(bodyText).not.toMatch(/or call/i);
     expect(bodyText).not.toMatch(/you can call/i);
   });
+
+  it("O-3 (S-FIX slice C): discloses GitHub as a live data source (public profile pulled from a supplied username)", () => {
+    render(<PrivacyPolicyPage />);
+    const bodyText = document.body.textContent ?? "";
+    expect(bodyText).toMatch(/GitHub/);
+  });
+
+  it("O-3 (S-FIX slice C): discloses Adzuna as a third-party job-postings aggregator", () => {
+    render(<PrivacyPolicyPage />);
+    const bodyText = document.body.textContent ?? "";
+    expect(bodyText).toMatch(/Adzuna/);
+  });
 });

@@ -189,4 +189,16 @@ describe("TermsPage", () => {
     expect(bodyText).not.toMatch(/or call/i);
     expect(bodyText).not.toMatch(/you can call/i);
   });
+
+  it("MF-1 (S-FIX slice C): discloses Adzuna as the source of the job postings shown in the app", () => {
+    render(<TermsPage />);
+    const bodyText = document.body.textContent ?? "";
+    expect(bodyText).toMatch(/Adzuna/);
+  });
+
+  it("MF-1 (S-FIX slice C): discloses GitHub as a third-party integration when a username is supplied", () => {
+    render(<TermsPage />);
+    const bodyText = document.body.textContent ?? "";
+    expect(bodyText).toMatch(/GitHub/);
+  });
 });
