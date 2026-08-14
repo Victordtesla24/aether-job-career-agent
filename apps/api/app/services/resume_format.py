@@ -12,13 +12,23 @@ Three honest states, end to end:
 
 ``preserved = True``   the download genuinely reproduces the user's own
                        document (their stored bytes, or a native in-document
-                       edit of them);
-``preserved = False``  the download is a re-render in Aether's template — said
-                       plainly, with the reason;
+                       edit of them) AND nothing we verified contradicts that;
+``preserved = False``  the download is not a faithful rendering of this
+                       version — a re-render in Aether's template, or an
+                       in-document edit that re-reading the produced file
+                       proved incomplete. Said plainly, with the reason;
 ``preserved = None``   we genuinely cannot tell (the source version could not
                        be resolved). Reported as unknown rather than guessed;
                        the Resume Studio panel already renders this third state
                        as "status is unknown" instead of an affirmative claim.
+
+The flag is DERIVED, never carried: :func:`describe_fidelity` states what the
+mechanism can do, and :func:`verified_fidelity` re-states it from what re-reading
+the produced artifact actually proved. Live production shipped the alternative —
+``formatPreserved: true`` next to ``changesDropped: 1`` in the same payload
+(``uat/reports/evidence/agents-uplift/u2b/verify-truthround/``, 2026-08-14) —
+and every consumer that branches on the boolean repeated the affirmative claim
+over a report that contradicted it.
 
 Every state also carries a ``formatFidelity`` report — ``{method, confidence,
 note}`` — because a bare boolean cannot say WHY, and R-F4 forbids silent
@@ -221,15 +231,25 @@ def pending_fidelity(base: FormatFidelity) -> FormatFidelity:
     )
 
 
-def native_fallback_fidelity(*, unreadable: bool = False) -> FormatFidelity:
-    """The honest report when a native in-document rewrite could not complete.
+def native_fallback_fidelity(
+    *, unreadable: bool = False, stored_original: bool = True
+) -> FormatFidelity:
+    """The honest report when an in-document rewrite could not complete.
 
     The user's own document IS the preferred surface, but a rewrite Aether
     cannot place in it (or a stored file that no longer opens) must not ship as
     a half-tailored copy of their résumé. The download falls back to the
-    branded template, which renders the version's complete tailored content —
-    and says exactly that, rather than reusing the generic "not yet available
-    for this upload type" copy, which would be false for these versions.
+    branded template, which is built from the version's own tailored text — and
+    says exactly that, rather than reusing the generic "not yet available for
+    this upload type" copy, which would be false for these versions.
+
+    The note stops at what is known HERE: the branded render is verified like
+    every other artifact (:func:`verified_fidelity` re-reads it and appends the
+    real counts), so this text must not pre-claim completeness on its behalf.
+    ``stored_original`` is ``False`` when the version is backed by a bundled
+    asset rather than a file the user uploaded, so the "download your original
+    from Settings" pointer is dropped instead of promising a file that may not
+    exist.
     """
     reason = (
         "Your stored original file could not be opened, so this download is "
@@ -238,13 +258,17 @@ def native_fallback_fidelity(*, unreadable: bool = False) -> FormatFidelity:
         else "A reworded line could not be located in your original document, "
         "so this download is rendered in the Aether template"
     )
+    pointer = (
+        " The file you uploaded is unchanged and can still be downloaded from Settings."
+        if stored_original
+        else ""
+    )
     return FormatFidelity(
         method=METHOD_REFLOW,
         confidence="low",
         note=(
-            f"{reason} with your complete tailored content, rather than a "
-            "partially tailored copy of your own file. The file you uploaded "
-            "is unchanged and can still be downloaded from Settings."
+            f"{reason} from this version's own tailored text, rather than a "
+            f"partially tailored copy of your own document.{pointer}"
         ),
         preserved=False,
     )
@@ -263,13 +287,15 @@ def verified_fidelity(
       stored document; the claim is byte identity, not an inference.
     * **every change present** — the mechanism claim stands, and the note says
       how many rewrites were checked in the file itself.
-    * **a change is missing** — confidence drops to ``partial`` and the note
-      NAMES the rewrite that could not be applied, because the alternative is
-      handing the user a document that is neither their baseline nor their
-      tailored résumé while telling them it is complete.
+    * **a change is missing** — confidence drops to ``partial``, the note NAMES
+      the rewrite that could not be applied, and ``preserved`` becomes ``False``
+      whatever the mechanism claimed, because the alternative is handing the
+      user a document that is neither their baseline nor their tailored résumé
+      while telling them it is complete.
 
     An artifact that cannot be re-read reports ``unverified`` — never a
-    guess in either direction.
+    guess in either direction, so the mechanism's own ``preserved`` value
+    stands there with the caveat spelled out in the note.
     """
     if byte_identical:
         return FormatFidelity(
@@ -330,7 +356,11 @@ def verified_fidelity(
             "this version's text (Resume Studio's change summary), not in the "
             f"downloaded file. Not applied: “{excerpt}”."
         ),
-        preserved=base.preserved,
+        # DERIVED, not carried: whatever the mechanism could do in principle,
+        # a file we just re-read and found a tailored change missing from is
+        # not a faithful rendering of this version. Consumers branch on this
+        # boolean, so it may not disagree with the counts beside it.
+        preserved=False,
         verification=VERIFICATION_POST_RENDER,
         changes_requested=requested,
         changes_applied=applied,

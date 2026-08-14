@@ -20,7 +20,8 @@ The contract these tests pin:
    really in it (``verification: "post-render-text-extraction"``), with the
    applied/dropped counts exposed in the API payload.
 2. A change the engine could not apply is NAMED, not hidden, and drops the
-   confidence off "high".
+   confidence off "high" (round 2, the coherence round: and the partial file is
+   not shipped at all — ``test_u2b_fidelity_coherence.py``).
 3. The listing (``GET /resumes``) never asserts completeness it has not
    verified for a tailored version.
 4. The DOCX-native path's report is verification-derived too — not the
@@ -175,13 +176,23 @@ def _make_docx_bytes(paragraphs: list[tuple[str, str]]) -> bytes:
 # ---------------------------------------------------------------------------
 
 
-def test_pdf_splice_fidelity_names_the_change_it_could_not_apply(client, auth_headers):
+def test_pdf_splice_never_ships_a_change_it_could_not_apply(client, auth_headers):
     """The exact production failure, reproduced against the same bundled layout.
 
     One rewrite targets a left-rail line the splice engine skips; the other a
-    right-column work bullet it can redraw. The fidelity report must be
-    computed from the produced PDF — 1 of 2 applied, the dropped one named —
-    instead of claiming high-confidence completeness for both.
+    right-column work bullet it can redraw.
+
+    ROUND 2 (coherence round, 2026-08-14) — this test originally pinned the
+    weaker contract that shipped: serve the partial splice, but *describe* it
+    honestly ("1 of 2 applied", the dropped rewrite named). Naming the loss is
+    not the same as not causing it: the file the user downloaded was still
+    neither their baseline nor their tailored résumé, while the DOCX and text
+    paths already refused to do that on the identical completeness rule. So the
+    contract is now the sibling paths': an incomplete splice falls back to the
+    branded render, which carries this version's whole tailored content, and
+    the report says plainly that the original layout was not preserved. The
+    "name what was dropped" behaviour itself is still pinned — at the level it
+    belongs, on the report builder, in test_u2b_fidelity_coherence.py.
     """
     baseline, left, right = _seed_bundled_baseline(client, auth_headers)
     left_after = f"Product and delivery leadership across regulated platforms; {left}"
@@ -195,37 +206,37 @@ def test_pdf_splice_fidelity_names_the_change_it_could_not_apply(client, auth_he
     assert res.status_code == 200, res.text
     report = res.json()
 
-    assert report["method"] == "pdf-in-place-splice"
     assert report["verification"] == "post-render-text-extraction", (
         "the claim must come from re-reading the produced document, not from "
         f"resume metadata, got {report!r}"
     )
-    assert report["changesRequested"] == 2
-    assert report["changesApplied"] == 1, report
-    assert report["changesDropped"] == 1, report
-    assert report["confidence"] != "high", (
-        "a download that silently drops a tailored change is not a "
-        f"high-confidence fidelity claim, got {report!r}"
+    assert report["method"] == "reflow-template", (
+        "the splice could not place the left-rail rewrite, so the download must "
+        f"be the content-complete branded render instead, got {report!r}"
     )
-    note = report["note"]
-    assert "1 of 2" in note, f"the note must state the honest counts, got {note!r}"
-    assert "could not be applied" in note.lower(), note
-    dropped = report["droppedChanges"]
-    assert len(dropped) == 1 and dropped[0]["after"].startswith(left_after[:40]), dropped
+    assert report["formatPreserved"] is False, report
+    assert report["changesRequested"] == 2
+    assert report["changesApplied"] == 2, report
+    assert report["changesDropped"] == 0, report
+    note = report["note"].lower()
+    assert "aether template" in note, note
+    assert "every other element is identical" not in note, (
+        f"the falsified completeness claim must not survive, got {note!r}"
+    )
 
     # The report must match the file the user really gets — verified here
-    # independently of the endpoint's own machinery.
+    # independently of the endpoint's own machinery. Neither rewrite may be
+    # missing from it: that is the loss this round refuses to ship.
     download = client.get(f"/resumes/{child['id']}/download", headers=auth_headers)
     assert download.status_code == 200, download.text
-    text = _pdf_text(download.content)
-    assert left_after[:60] not in text, (
-        "fixture invalid: the left-rail rewrite must genuinely be missing"
+    text = " ".join(_pdf_text(download.content).split())
+    assert left_after[:60] in text, (
+        "the rewrite the splice engine could not place must be present in the "
+        "document the user downloads"
     )
-    assert right_after.partition(":")[2].strip()[:60] in text, (
-        "fixture invalid: the right-column rewrite must genuinely be applied"
-    )
-    assert download.headers["X-Aether-Changes-Applied"] == "1"
-    assert download.headers["X-Aether-Changes-Dropped"] == "1"
+    assert right_after.partition(":")[2].strip()[:60] in text, text[:400]
+    assert download.headers["X-Aether-Changes-Applied"] == "2"
+    assert download.headers["X-Aether-Changes-Dropped"] == "0"
 
 
 def test_listing_does_not_claim_completeness_it_has_not_verified(client, auth_headers):

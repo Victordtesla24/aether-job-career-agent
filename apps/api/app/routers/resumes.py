@@ -684,36 +684,51 @@ def _render_resume(resume_id: str, user_id: str) -> _RenderedResume:
             is_tailored=is_tailored,
         )
         if not is_tailored:
-            pdf_bytes = original.read_bytes()  # base → verbatim bytes
-            fidelity = verified_fidelity(splice_report, None, byte_identical=True)
-        else:
-            pdf_bytes = render_tailored_pdf(original, changes)  # splice in place
-            fidelity = verified_fidelity(
-                splice_report, verify_changes(pdf_bytes, _PDF_CONTENT_TYPE, changes)
+            return _RenderedResume(
+                content=original.read_bytes(),  # base → verbatim bytes
+                media_type=_PDF_CONTENT_TYPE,
+                filename=f"resume-{resume_id[:8]}.pdf",
+                fidelity=verified_fidelity(splice_report, None, byte_identical=True),
             )
-    else:
-        # No bundled source PDF for this résumé — a user-authored upload/ingest
-        # (NF-final-B-005) → render from the résumé's OWN structured content with
-        # the branded template; never serve the operator's bundled PDF bytes.
-        name, title, objective, sections = _branded_content(resume)
-        pdf_bytes = create_branded_resume_pdf(
-            name, title, objective, sections, changes or None
-        )
-        reflow_report = fallback_report or describe_fidelity(
-            bundled_match=False,
-            has_original=bool(data),
-            content_type=content_type,
-            is_tailored=is_tailored,
-        )
-        fidelity = verified_fidelity(
-            reflow_report, verify_changes(pdf_bytes, _PDF_CONTENT_TYPE, changes)
-        )
+        spliced = render_tailored_pdf(original, changes)  # splice in place
+        verification = verify_changes(spliced, _PDF_CONTENT_TYPE, changes)
+        # The SAME completeness rule the DOCX/text paths above apply. The
+        # in-place engine only redraws right-column work bullets, so a rewrite
+        # aimed at the left rail cannot be placed — and live production shipped
+        # exactly that file (1 of 4 changes missing, verify-truthround/,
+        # 2026-08-14). A partial splice is neither the user's baseline nor their
+        # tailored résumé; the honest alternative is the branded render below,
+        # which is built from this version's own tailored text.
+        if verification.complete:
+            return _RenderedResume(
+                content=spliced,
+                media_type=_PDF_CONTENT_TYPE,
+                filename=f"resume-{resume_id[:8]}.pdf",
+                fidelity=verified_fidelity(splice_report, verification),
+            )
+        fallback_report = native_fallback_fidelity(stored_original=False)
 
+    # No bundled source PDF for this résumé — a user-authored upload/ingest
+    # (NF-final-B-005) — or a native/in-place rewrite that could not be
+    # completed → render from the résumé's OWN structured content with the
+    # branded template; never serve the operator's bundled PDF bytes.
+    name, title, objective, sections = _branded_content(resume)
+    pdf_bytes = create_branded_resume_pdf(
+        name, title, objective, sections, changes or None
+    )
+    reflow_report = fallback_report or describe_fidelity(
+        bundled_match=False,
+        has_original=bool(data),
+        content_type=content_type,
+        is_tailored=is_tailored,
+    )
     return _RenderedResume(
         content=pdf_bytes,
         media_type=_PDF_CONTENT_TYPE,
         filename=f"resume-{resume_id[:8]}.pdf",
-        fidelity=fidelity,
+        fidelity=verified_fidelity(
+            reflow_report, verify_changes(pdf_bytes, _PDF_CONTENT_TYPE, changes)
+        ),
     )
 
 
@@ -764,7 +779,11 @@ def download_resume(resume_id: str, current_user: CurrentUser) -> Response:
 
     - **Bundled-asset PDF** (the seeded operator résumés): base → the original
       bytes verbatim; tailored → the original PDF with *only* the reworded
-      bullets redrawn in place (same two-column layout, panel, accents, fonts).
+      bullets redrawn in place (same two-column layout, panel, accents, fonts),
+      served only when re-reading it proves every rewrite landed — an
+      incomplete splice falls back to the branded render, exactly like the
+      DOCX/text paths, rather than shipping a half-tailored copy of the user's
+      own document.
     - **Stored .docx upload** → the flagship format-preserving path: base → the
       user's own file, byte-identical; tailored → native run-level text
       replacement inside their own document (``services/resume_docx.py``), so
