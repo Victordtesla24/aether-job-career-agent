@@ -38,15 +38,14 @@ export const ApplicationSchema = z.object({
   // U5 — the honest "or an actionable manual step" half of the NO-PREPARED-ONLY
   // invariant (apps/api/app/services/apply_executor.py record_manual_step /
   // apply_channel_resolver.py). Additive nullable DB columns
-  // (applyChannel/manualStepReason/manualStepDetail/manualStepAt); NOT YET
-  // selected by GET /applications as of the U5a/U5b backend contract this was
-  // built against (apps/api/app/routers/applications.py `_COLUMNS` /
-  // apps/api/app/services/application_submission.py `submission_view` — read,
-  // never modified, from this FE-only slice). Declared here as nullish so the
-  // schema parses successfully either way: absent today reads as "unknown,
-  // don't claim a manual step" (the same honest-degrade rule `transmitted`
-  // already uses below), and the UI below picks the fields up the moment the
-  // backend adds them to the SELECT — no second FE deploy required.
+  // (applyChannel/manualStepReason/manualStepDetail/manualStepAt), SELECTed by
+  // both read endpoints via apps/api/app/routers/applications.py `_COLUMNS`
+  // and pinned there by apps/api/tests/test_u5_applications_read_manual_step.py
+  // — without that SELECT the whole manual-step UI below is dead code and a
+  // blocked application reads to the user as silently "prepared only".
+  // Still declared nullish, deliberately: an older API build that omits them
+  // must read as "unknown, don't claim a manual step" (the same honest-degrade
+  // rule `transmitted` uses above) rather than fail the parse.
   applyChannel: z.string().nullish(),
   manualStepReason: z.string().nullish(),
   manualStepDetail: z.string().nullish(),

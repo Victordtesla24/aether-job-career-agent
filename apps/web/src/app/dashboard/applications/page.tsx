@@ -254,10 +254,8 @@ function MoveMenu({
  *
  * History is not rewritten and the card is not moved. The badge simply states
  * which of the three happened. Any field this component reads degrades to
- * "don't claim it" when the API omits it (an older build, or — as of the
- * backend contract this shipped against — the manual-step columns not yet
- * selected by GET /applications), because inventing an answer is exactly the
- * failure mode being fixed.
+ * "don't claim it" when the API omits it (an older build), because inventing
+ * an answer is exactly the failure mode being fixed.
  */
 function SubmissionBadge({ app }: { app?: TrackerApplication }) {
   if (!app) return null;

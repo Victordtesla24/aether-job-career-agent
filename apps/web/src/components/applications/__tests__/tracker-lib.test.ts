@@ -12,8 +12,11 @@ import {
   STAGE_TO_JOB_STATUS,
   buildStages,
   cardMatchesFilter,
+  channelLabel,
+  describeTransmission,
   fitClass,
   initials,
+  manualStepLabel,
   moveTargetsFor,
   shortDate,
   sortCards,
@@ -329,5 +332,133 @@ describe("filter / sort", () => {
     expect(filtered).toHaveLength(8);
     expect(filtered.map((s) => s.key)).toEqual(STAGE_DEFS.map((d) => d.key));
     expect(filtered.find((s) => s.key === "submitted")!.cards).toEqual([]);
+  });
+});
+
+// ---- U5 — honest submission-state label helpers ----------------------------
+//
+// U-PLAN "U5 MANDATE SHARPENED" rule 1 (NO-PREPARED-ONLY): an approved
+// application ends either TRANSMITTED (with checkable evidence) or in an
+// HONEST, ACTIONABLE manual-step state. These three pure helpers are the only
+// place the machine codes the backend records
+// (apps/api/app/services/apply_channel_resolver.py CHANNELS,
+// apply_executor.py `record_manual_step` reasons, and the shared
+// transmissionChannel/transmissionRef columns) become the words the user
+// reads, so the honesty rules live here and are pinned here.
+
+describe("U5 channelLabel", () => {
+  it("maps every known channel code to human copy", () => {
+    expect(channelLabel("gmail")).toBe("email");
+    expect(channelLabel("ashby")).toBe("Ashby application form");
+    expect(channelLabel("greenhouse")).toBe("Greenhouse application form");
+    expect(channelLabel("lever")).toBe("Lever application form");
+    expect(channelLabel("smartrecruiters")).toBe("SmartRecruiters application form");
+    expect(channelLabel("generic")).toBe("the employer's application form");
+    expect(channelLabel("seek-manual")).toBe("Seek (not automated)");
+    expect(channelLabel("unknown")).toBe("an unresolved channel");
+  });
+
+  it("never invents a channel when none was recorded", () => {
+    expect(channelLabel(null)).toBe("the employer");
+    expect(channelLabel(undefined)).toBe("the employer");
+    expect(channelLabel("")).toBe("the employer");
+  });
+
+  it("shows an unrecognised code verbatim rather than hiding it", () => {
+    // A channel this build has not been taught about must stay legible —
+    // silently rendering it as a known channel would be a fabricated claim.
+    expect(channelLabel("workday")).toBe("workday");
+  });
+});
+
+describe("U5 manualStepLabel", () => {
+  it("maps every reason the executor records to an actionable headline", () => {
+    expect(manualStepLabel("unknown_required_question")).toBe(
+      "A required question needs your answer",
+    );
+    expect(manualStepLabel("captcha")).toBe("A CAPTCHA blocked automatic submission");
+    expect(manualStepLabel("login_wall")).toBe("This posting requires logging in to apply");
+    expect(manualStepLabel("no_automatable_channel")).toBe(
+      "No automatic submission path exists for this posting yet",
+    );
+    expect(manualStepLabel("submit_control_not_found")).toBe(
+      "Aether filled the form but could not find its submit button",
+    );
+    expect(manualStepLabel("no_confirmation")).toBe(
+      "Aether submitted the form but the site did not confirm it",
+    );
+  });
+
+  it("de-slugifies an unknown reason instead of hiding it behind a vague label", () => {
+    expect(manualStepLabel("two_factor_challenge")).toBe("Two factor challenge");
+  });
+
+  it("falls back to a neutral headline when no reason was recorded", () => {
+    expect(manualStepLabel(null)).toBe("Manual step needed");
+    expect(manualStepLabel(undefined)).toBe("Manual step needed");
+  });
+});
+
+describe("U5 describeTransmission", () => {
+  it("describes the W-SUB email path with its findable Gmail message id", () => {
+    const t = describeTransmission({
+      transmittedTo: "careers@acme.com",
+      transmittedAt: "2026-08-02T04:00:00Z",
+      transmissionChannel: "gmail",
+      transmissionRef: "gmail-msg-1",
+    });
+    expect(t.headline).toContain("Sent by Aether to careers@acme.com");
+    expect(t.headline).toContain(shortDate("2026-08-02T04:00:00Z"));
+    expect(t.evidenceNote).toBe("message gmail-msg-1 (in your Gmail Sent folder)");
+    // A Gmail message id is not a URL — offering it as a link would be a
+    // broken promise, so the email path never produces one.
+    expect(t.evidenceUrl).toBeNull();
+  });
+
+  it("treats an absent channel as the email path (every pre-U5 row)", () => {
+    const t = describeTransmission({
+      transmittedTo: "jobs@acme.com",
+      transmittedAt: null,
+      transmissionChannel: null,
+      transmissionRef: null,
+    });
+    expect(t.headline).toBe("Sent by Aether to jobs@acme.com");
+    expect(t.evidenceUrl).toBeNull();
+    expect(t.evidenceNote).toBeNull();
+  });
+
+  it("names the real ATS form for a site submission", () => {
+    const t = describeTransmission({
+      transmittedTo: "https://jobs.ashbyhq.com/acme/1",
+      transmittedAt: "2026-08-13T09:00:00Z",
+      transmissionChannel: "ashby",
+      transmissionRef: "https://jobs.ashbyhq.com/acme/1/confirmation",
+    });
+    expect(t.headline).toContain("Submitted by Aether via Ashby application form");
+    expect(t.evidenceUrl).toBe("https://jobs.ashbyhq.com/acme/1/confirmation");
+    expect(t.evidenceNote).toBeNull();
+  });
+
+  it("never links a server-side screenshot path — an unopenable link is not evidence", () => {
+    const t = describeTransmission({
+      transmittedTo: "https://boards.greenhouse.io/acme/jobs/1",
+      transmittedAt: "2026-08-13T09:00:00Z",
+      transmissionChannel: "greenhouse",
+      transmissionRef: "/var/lib/aether/apply-evidence/app-1.png",
+    });
+    expect(t.evidenceUrl).toBeNull();
+    expect(t.evidenceNote).toBe("confirmation screenshot saved by Aether");
+  });
+
+  it("makes no evidence claim when no reference was stored", () => {
+    const t = describeTransmission({
+      transmittedTo: "https://jobs.lever.co/acme/1",
+      transmittedAt: "2026-08-13T09:00:00Z",
+      transmissionChannel: "lever",
+      transmissionRef: null,
+    });
+    expect(t.headline).toContain("Submitted by Aether via Lever application form");
+    expect(t.evidenceUrl).toBeNull();
+    expect(t.evidenceNote).toBeNull();
   });
 });

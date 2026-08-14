@@ -11,6 +11,8 @@ from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 
 from app.db import (
+    ensure_application_apply_channel_column,
+    ensure_application_manual_step_columns,
     ensure_application_transmission_columns,
     ensure_application_unique_active_index,
     ensure_job_apply_contact_columns,
@@ -34,13 +36,42 @@ _STATUSES = frozenset(
 #: with EVERY application read, so no caller can render a "submitted" card
 #: without also having the fact of whether anything was actually transmitted.
 #: See ``app.services.application_submission.submission_view``.
+#:
+#: U5 (NO-PREPARED-ONLY invariant): the apply-channel and manual-step columns
+#: travel with every read for the SAME reason. TRANSMITTED is only half the
+#: invariant — the other half is the honest, actionable manual-step state
+#: (``manualStepReason``/``manualStepDetail``/``manualStepAt``, written by
+#: ``app.services.apply_executor.record_manual_step``; ``applyChannel``
+#: written by ``app.services.apply_channel_resolver``). If these are not
+#: SELECTed here, an application blocked by a CAPTCHA, a login wall or a
+#: question Aether refuses to fabricate an answer to is recorded honestly in
+#: Postgres and shows the user NOTHING — i.e. it reads as silently stuck in
+#: "prepared", which is exactly the outcome U5 forbids. Any new writer of a
+#: submission-outcome column must be added here in the same change.
 _COLUMNS = (
     'a."id", a."userId", a."jobId", a."resumeId", a."status", a."coverLetter", '
     'a."answers", a."createdAt", a."updatedAt", j."title" AS "jobTitle", '
     'j."company", j."sourceUrl" AS "applyUrl", j."fitScore", '
     'a."transmittedAt", a."transmittedTo", a."transmissionChannel", '
-    'a."transmissionRef", j."applyEmail", j."applyEmailSource"'
+    'a."transmissionRef", j."applyEmail", j."applyEmailSource", '
+    'a."applyChannel", a."manualStepReason", a."manualStepDetail", '
+    'a."manualStepAt"'
 )
+
+
+def _ensure_read_columns() -> None:
+    """Run the lazy additive DDL every ``_COLUMNS`` read depends on (ADR-TR-1).
+
+    ``_COLUMNS`` names columns added by additive lazy migrations, so the DDL
+    MUST run before any statement that reads them — a path that skipped the
+    equivalent call for ``contentHash`` raised UndefinedColumn -> HTTP 500 on
+    first use. Kept as ONE helper so a future column added to ``_COLUMNS``
+    cannot be ensured on one endpoint and forgotten on the other.
+    """
+    ensure_application_transmission_columns()
+    ensure_job_apply_contact_columns()
+    ensure_application_apply_channel_column()
+    ensure_application_manual_step_columns()
 
 
 def _with_submission(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -178,12 +209,7 @@ def list_applications(
         clauses.append('j."status" = %s::"JobStatus"')
         params.append("applied")
     where = " AND ".join(clauses)
-    # W-SUB: ``_COLUMNS`` now names the additive transmission / apply-address
-    # columns, so the lazy DDL MUST run before the statement that reads them
-    # (ADR-TR-1 — a path that skipped the equivalent call for ``contentHash``
-    # raised UndefinedColumn -> HTTP 500 on first use).
-    ensure_application_transmission_columns()
-    ensure_job_apply_contact_columns()
+    _ensure_read_columns()
     with get_connection() as conn:
         with conn.cursor() as cur:
             # RT-004: ONE board card per job, however many letter-version rows
@@ -230,8 +256,7 @@ def list_applications(
 
 @router.get("/{application_id}")
 def get_application(application_id: str, current_user: CurrentUser) -> dict[str, Any]:
-    ensure_application_transmission_columns()
-    ensure_job_apply_contact_columns()
+    _ensure_read_columns()
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
