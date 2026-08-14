@@ -1210,7 +1210,27 @@ export default function ApplicationsPage() {
                             draggable
                             onDragStart={(e) => onCardDragStart(e, card, stage.key)}
                             onClick={clickable ? () => void openDetail(card.app!.id) : undefined}
-                            className={`${listCard({ interactive: clickable, class: "p-3" })} ${
+                            /*
+                              `shrink-0` is load-bearing, not cosmetic.
+
+                              This column is `display:flex; flex-direction:column`
+                              with a `max-height` (BOARD_COLUMN_VIEWPORT), so every
+                              card is a flex item — and a flex item's default
+                              `flex-shrink: 1` means that once the cards' natural
+                              height exceeds the column, the browser COMPRESSES them
+                              to fit instead of letting the column scroll. Combined
+                              with `listCard`'s `overflow-hidden`, that rendered the
+                              deep columns (Evaluating 3,642 / Ready to Apply 253 /
+                              Submitted) as ~100px slivers with the title and company
+                              sliced mid-glyph, while the shallow columns (Tailoring
+                              6, Discovered 7) looked fine because they never needed
+                              to shrink. Evidence: b2/after/ (pre-fix capture) and
+                              b2/nits/kanban-card-crush-*.json.
+
+                              `shrink-0` restores the intent of the scroll container:
+                              cards keep their natural height and the COLUMN scrolls.
+                            */
+                            className={`${listCard({ interactive: clickable, class: "shrink-0 p-3" })} ${
                               stage.key === "tailoring"
                                 ? "border-aether-coral/25"
                                 : stage.key === "offer"
