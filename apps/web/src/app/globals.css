@@ -58,6 +58,12 @@ body {
   background-image:
     radial-gradient(1200px 600px at 80% -10%, rgba(79, 70, 229, 0.1), transparent 60%),
     radial-gradient(1000px 500px at -5% 10%, rgba(255, 107, 53, 0.08), transparent 55%),
+    /* VIGNETTE. Linear (#08090a) and Raycast (#07080a) both read as deep
+       rather than flat because their ground is not one uniform value — it
+       falls off toward the frame, so the content column is the lit part of
+       the picture. Layered ABOVE the base ramp and BELOW the two brand
+       radials, so it deepens the ground without muddying the hue. */
+      radial-gradient(125% 95% at 50% 38%, transparent 42%, rgba(0, 0, 0, 0.45) 100%),
     linear-gradient(180deg, #0a0a0f 0%, #12121c 100%);
   background-attachment: fixed;
   min-height: 100vh;
@@ -65,6 +71,11 @@ body {
 
 .mono {
   font-family: "JetBrains Mono", ui-monospace, monospace;
+  /* D-γ — numbers are a typeface, not text. Every numeral in the product is
+     rendered through this class, so the tabular figure set belongs here once
+     rather than being re-applied per call site (which is how a column of
+     numbers ends up half-aligned). */
+  font-variant-numeric: tabular-nums;
 }
 
 .glass {
@@ -290,28 +301,82 @@ body {
  */
 .atmos-hero {
   position: relative;
-  isolate: isolate;
+  /* Was `isolate: isolate` — not a CSS property, so it did nothing. The
+     property is `isolation`; with it the hero's glow composites inside its
+     own stacking context instead of against whatever happens to be beneath. */
+  isolation: isolate;
 }
+/*
+ * THE ATMOSPHERE. Scored beside `references/img/linear-01-product-shot.png`
+ * and `references/img/mercury-01-dashboard.png` — the AESTHETICS BAR asks for
+ * a visceral read, and the first pass did not have one.
+ *
+ * WHY IT READ AS A FAINT HIGHLIGHT: two gradients at 0.13/0.17 alpha spread
+ * over a 460px band and blurred 8px is a uniform wash. A wash has no light
+ * SOURCE in it. What makes Linear's and Mercury's dark grounds feel lit is
+ * high dynamic range — a small, genuinely bright core with a fast falloff,
+ * carried outward by a much wider, much fainter bloom of the same hue.
+ *
+ * So the band is now built as an actual light rig:
+ *   1. a tight coral CORE at 0.34 — the source, sitting behind the page title;
+ *   2. a wide coral BLOOM at 0.09 that carries the core across the band;
+ *   3. the AMBER half of the brand signature, offset from the core, so the
+ *      coral→amber gesture (reference rule 3) exists in the light and not
+ *      only in the title's gradient text;
+ *   4. a violet COUNTERWEIGHT on the far side, so the band is lit from two
+ *      directions and does not read as a single lamp.
+ * Blur is raised to 26px so no gradient edge is ever legible as a shape.
+ *
+ * D-ι: `left/right: 0`, never negative. These were once `-12%` to let the
+ * bloom bleed past the content column; a pseudo-element is invisible to a
+ * `querySelectorAll("*")` overflow scan, so it took a `document.scrollWidth`
+ * measurement to catch that the overhang made both pages scroll 123px
+ * sideways at 1600px. Every gradient below fades to transparent well inside
+ * the box, so the bloom reads the same width-bounded.
+ *
+ * D-β: entirely static. Nothing in this rig animates, in any state — it is
+ * atmosphere, not telemetry, and a breathing background would be a claim
+ * that something moved.
+ */
 .atmos-hero::before {
   content: "";
   position: absolute;
-  /* D-ι. These were `left/right: -12%`, to let the bloom bleed past the
-     content column. A pseudo-element is invisible to a `querySelectorAll("*")`
-     overflow scan, so it took a `document.scrollWidth` measurement to catch:
-     the overhang made /dashboard and /dashboard/analytics scroll 123px
-     sideways at a 1600px viewport. The radial gradients below already fade to
-     transparent well inside the box, so the bloom reads the same width-bounded
-     — and now the page cannot scroll sideways at any viewport. */
   left: 0;
   right: 0;
-  top: -180px;
-  height: 460px;
+  top: -240px;
+  height: 680px;
   z-index: 0;
   pointer-events: none;
   background:
-    radial-gradient(58% 62% at 18% 58%, rgba(255, 107, 53, 0.17), transparent 72%),
-    radial-gradient(52% 62% at 82% 44%, rgba(139, 92, 246, 0.13), transparent 70%);
-  filter: blur(8px);
+    radial-gradient(30% 40% at 19% 55%, rgba(255, 107, 53, 0.34), transparent 62%),
+    radial-gradient(80% 86% at 13% 58%, rgba(255, 107, 53, 0.09), transparent 74%),
+    radial-gradient(26% 34% at 42% 33%, rgba(251, 191, 36, 0.17), transparent 66%),
+    radial-gradient(46% 58% at 88% 38%, rgba(139, 92, 246, 0.2), transparent 70%);
+  filter: blur(26px);
+}
+/*
+ * THE HORIZON. Light that is bounded reads as depth; light that just fades
+ * out reads as a smudge. A 1px rule brightest under the light source and
+ * gone by the far edge gives the band a base — the same device Stripe and
+ * Mercury use to end a lit section (reference rule 12: separate bands with a
+ * luminance shift, not a border).
+ */
+.atmos-hero::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 1px;
+  z-index: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 138, 92, 0.34) 0%,
+    rgba(251, 191, 36, 0.16) 34%,
+    rgba(255, 255, 255, 0.05) 62%,
+    transparent 100%
+  );
 }
 .atmos-hero > * {
   position: relative;

@@ -477,8 +477,29 @@ export default function AnalyticsPage() {
 
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <section className="elev-1 rounded-2xl p-5" data-testid="ats-distribution">
+      {/*
+        THE QUALITY BAND — recomposed (doctrine D-δ; §8 leaves per-page layout
+        to the batch team inside the doctrine).
+
+        It was `lg:grid-cols-2` holding ATS distribution + Agent ROI, with the
+        Fit profile radar dropped full-width beneath. A radar's mark is
+        `min(plotWidth, plotHeight) / 2` — so at a 1300px card and a 300px
+        height it drew a ~116px figure marooned in ~1150px of empty card,
+        while ATS and ROI were both squeezed into half a page. Three panels,
+        none of them the shape its content wanted.
+
+        ATS distribution and Fit profile are the same question asked twice —
+        how well do these roles actually fit — so they pair, 7/5, with the
+        histogram taking the width its ten buckets need and the radar taking a
+        column it can fill. Agent ROI is the other question (what this cost)
+        and gets the full measure below, where its two stat rows read as a
+        panel rather than a squeeze. `items-start` so nothing stretches.
+      */}
+      <div className="grid gap-6 xl:grid-cols-12 xl:items-start">
+        <section
+          className={`elev-1 rounded-2xl p-5 ${policy ? "xl:col-span-7" : "xl:col-span-12"}`}
+          data-testid="ats-distribution"
+        >
           <h2 className="flex items-center gap-1.5">
             <MetricTooltip
               label="ATS score distribution"
@@ -515,7 +536,44 @@ export default function AnalyticsPage() {
           )}
         </section>
 
-        <section className="elev-1 rounded-2xl p-5" data-testid="agent-roi">
+        {/*
+          §5.2 NEW — the 10-dimension fit profile. Its data is
+          `AgentPolicy.metricSnapshot.dimensionScores`, which this page ALREADY
+          fetches via `GET /analytics/agent-policy`: no new endpoint, no new
+          request. `<Radar10>` is the chart the spec calls "the single most
+          dangerous in the product" — a dimension the scorer never evaluated
+          gets a hollow marker on the outer ring and a struck-through label,
+          never a vertex at the centre, because a centre vertex is a specific
+          false claim about the candidate rather than an absence of one.
+
+          `height` is raised from the 300px default because the radar's radius
+          is `min(plotWidth, plotHeight) / 2 - 34`: in a five-column card the
+          height is what binds, and 300 drew a figure far smaller than the
+          frame around it.
+        */}
+        {policy ? (
+          <Section
+            testId="fit-profile"
+            className="xl:col-span-5"
+            footnote={
+              policy.metricSnapshot.dimensionSampleSize
+                ? `Scored across ${policy.metricSnapshot.dimensionSampleSize} evaluated ${
+                    policy.metricSnapshot.dimensionSampleSize === 1 ? "application" : "applications"
+                  }.`
+                : "No application has been scored on these dimensions yet — every axis is shown as unmeasured rather than as a zero."
+            }
+          >
+            <Radar10
+              title="Fit profile"
+              windowLabel="all time — the dimensions the scorer has actually evaluated for you"
+              dimensions={fitDimensions(policy.metricSnapshot.dimensionScores)}
+              expectedDimensions={10}
+              height={360}
+            />
+          </Section>
+        ) : null}
+
+        <section className="elev-1 rounded-2xl p-5 xl:col-span-12" data-testid="agent-roi">
           <h2 className="type-section flex items-center gap-1.5">
             Agent ROI
             {/* No period support server-side (MV-analytics-004) — honest
@@ -619,36 +677,6 @@ export default function AnalyticsPage() {
           ) : null}
         </section>
       </div>
-
-      {/*
-        §5.2 NEW — the 10-dimension fit profile. Its data is
-        `AgentPolicy.metricSnapshot.dimensionScores`, which this page ALREADY
-        fetches via `GET /analytics/agent-policy`: no new endpoint, no new
-        request. `<Radar10>` is the chart the spec calls "the single most
-        dangerous in the product" — a dimension the scorer never evaluated gets
-        a hollow marker on the outer ring and a struck-through label, never a
-        vertex at the centre, because a centre vertex is a specific false claim
-        about the candidate rather than an absence of one.
-      */}
-      {policy ? (
-        <Section
-          testId="fit-profile"
-          footnote={
-            policy.metricSnapshot.dimensionSampleSize
-              ? `Scored across ${policy.metricSnapshot.dimensionSampleSize} evaluated ${
-                  policy.metricSnapshot.dimensionSampleSize === 1 ? "application" : "applications"
-                }.`
-              : "No application has been scored on these dimensions yet — every axis is shown as unmeasured rather than as a zero."
-          }
-        >
-          <Radar10
-            title="Fit profile"
-            windowLabel="all time — the dimensions the scorer has actually evaluated for you"
-            dimensions={fitDimensions(policy.metricSnapshot.dimensionScores)}
-            expectedDimensions={10}
-          />
-        </Section>
-      ) : null}
 
       <MarketPulse />
     </div>

@@ -183,15 +183,78 @@ function sparkSegments(series: Array<number | null>, w = 120, h = 36) {
 export default function MarketPulse() {
   const [data, setData] = useState<MarketPulseData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /*
+   * S-UI-REBUILD-SPEC §5.1 — "per-widget error card with retry (one widget
+   * failing must never blank the page)". This widget had the error card and
+   * not the retry: a transient 502 on `GET /analytics/market-pulse` (which
+   * takes 8–15s in production) left a dead red strip at the bottom of BOTH
+   * flagship screens with no way back short of a full page reload.
+   *
+   * `attempt` is the effect's only re-run trigger. Mount still issues exactly
+   * one request — the network trace for the healthy path is unchanged — and a
+   * retry is a user-initiated repeat of the SAME call with the SAME contract.
+   */
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
+    let cancelled = false;
+    setError(null);
     fetchMarketPulse()
-      .then(setData)
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : "Failed to load market pulse"));
-  }, []);
+      .then((next) => {
+        if (!cancelled) setData(next);
+      })
+      .catch((e: unknown) => {
+        if (cancelled) return;
+        setError(e instanceof Error ? e.message : "Failed to load market pulse");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [attempt]);
 
   if (error) {
-    return <p className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">{error}</p>;
+    /*
+     * D-θ / reference rule 7: the failure is drawn, not dumped. It says which
+     * panel failed, states that the rest of the page is unaffected (true — no
+     * other widget reads this endpoint), shows the server's own message
+     * VERBATIM rather than a friendlier substitute, and offers the one action
+     * that can change the state.
+     */
+    return (
+      <section className="space-y-4" data-testid="market-pulse-error">
+        <div className="flex items-center gap-2.5">
+          <span className="h-2 w-2 shrink-0 rounded-full bg-aether-coral" />
+          <h2 className="text-[15px] font-semibold">Real-Time Market Pulse</h2>
+          <span className="type-mono-micro text-aether-muted-dim">could not load</span>
+        </div>
+        <div
+          className="elev-1 rounded-2xl border-l-2 border-l-aether-coral p-5"
+          role="alert"
+          aria-live="polite"
+        >
+          <p className="text-sm font-semibold text-aether-coral">
+            Market pulse could not be loaded
+          </p>
+          <p className="type-meta mt-1.5">
+            Every other figure on this page is unaffected — only this panel failed to load.
+          </p>
+          <p
+            className="type-mono-micro mt-3 break-words rounded-lg border border-white/10 bg-black/30 p-2.5 text-aether-muted"
+            data-testid="market-pulse-error-detail"
+          >
+            {error}
+          </p>
+          <button
+            type="button"
+            onClick={() => setAttempt((n) => n + 1)}
+            data-testid="market-pulse-retry"
+            className="mt-4 rounded-lg border border-white/15 bg-white/[0.06] px-3 py-1.5 text-xs font-semibold text-white transition-colors duration-[--dur-fast] hover:border-white/25 hover:bg-white/[0.1] active:translate-y-px"
+          >
+            Retry
+          </button>
+        </div>
+      </section>
+    );
   }
 
   if (data === null) {
@@ -264,7 +327,7 @@ export default function MarketPulse() {
 
       {/* Trend indicator tiles */}
       <div data-testid="trend-indicators">
-        <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-aether-muted-dim">Trend Indicators</h3>
+        <h3 className="mb-3 type-section">Trend Indicators</h3>
         <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
         {data.trendIndicators.map((t) => {
           // MON-016/AX-REV-01: derive the rendered signal from the series'
@@ -290,7 +353,7 @@ export default function MarketPulse() {
                 : `${t.label}: percentage change vs. the prior period (this week's still-in-progress data isn't counted yet).`;
           const { completeRuns, partial } = sparkSegments(t.series);
           return (
-            <div key={t.label} className="glass rounded-2xl border border-white/10 p-4" data-testid="trend-indicator-tile">
+            <div key={t.label} className="elev-1 rounded-2xl p-4" data-testid="trend-indicator-tile">
               <div className="flex items-center justify-between">
                 <span className="text-[11px] text-aether-muted-dim">{t.label}</span>
                 <MetricTooltip
@@ -334,8 +397,8 @@ export default function MarketPulse() {
 
       <div className="grid gap-4 xl:grid-cols-3">
         {/* Jobs by source donut */}
-        <div className="glass rounded-2xl border border-white/10 p-5" data-testid="sources-donut">
-          <h3 className="mb-4 text-xs font-semibold uppercase tracking-wide text-aether-muted-dim">
+        <div className="elev-1 rounded-2xl p-5" data-testid="sources-donut">
+          <h3 className="mb-4 type-section">
             Jobs by Source
           </h3>
           <div className="flex items-center gap-5">
@@ -373,8 +436,8 @@ export default function MarketPulse() {
         </div>
 
         {/* Top skills */}
-        <div className="glass rounded-2xl border border-white/10 p-5" data-testid="top-skills">
-          <h3 className="mb-4 text-xs font-semibold uppercase tracking-wide text-aether-muted-dim">
+        <div className="elev-1 rounded-2xl p-5" data-testid="top-skills">
+          <h3 className="mb-4 type-section">
             Top Skills in Demand
           </h3>
           {data.topSkills.length === 0 ? (
@@ -416,8 +479,8 @@ export default function MarketPulse() {
          * `score` / `value` are `number | null`, so a not-measured signal is a
          * compile error to render as a number — it takes the "not measured"
          * branch, matching LetterQualityPanel and the Resume Studio panels. */}
-        <div className="glass rounded-2xl border border-white/10 p-5" data-testid="probability-score">
-          <h3 className="mb-3 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-aether-muted-dim">
+        <div className="elev-1 rounded-2xl p-5" data-testid="probability-score">
+          <h3 className="mb-3 flex items-center gap-1.5 type-section">
             <MetricTooltip label={prob.label} value="" tooltip={prob.methodology} />
           </h3>
           <div className="flex items-center gap-5">
@@ -488,10 +551,33 @@ export default function MarketPulse() {
         </div>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-4">
+      {/*
+        THE CLOSING BAND — recomposed (doctrine D-δ: density is a decision).
+
+        This was `grid gap-4 xl:grid-cols-4`: four equal columns holding four
+        wildly unequal panels. "Market vs. Your Performance" is an editorial
+        column — three labelled comparisons, each with a market bar, a you
+        bar, a freshness stamp and a footnote — and measures ~560px tall.
+        Weekly Activity, Employer Hiring Activity and Recruiter Activity are
+        compact signals, 190–300px each. A CSS grid row stretches every cell
+        to its tallest sibling, so three panels were padded with ~300px of
+        dead space apiece and the band read as accretion: four things that
+        happened to be four, not a composition anyone chose.
+
+        Now the band is 7/5. The left seven columns hold the three compact
+        signals as their own 2-up cluster, with Recruiter Activity spanning
+        both beneath — a sparkline wants width, and its two rows read as a
+        proper pair at that measure. The right five columns are the editorial
+        column, which now has a shape that fits it. `items-start` on both
+        axes means nothing stretches to match anything: each panel ends where
+        its content ends. Same panels, same data, same strings — the only
+        thing that changed is which shape each one was given.
+      */}
+      <div className="grid gap-4 xl:grid-cols-12 xl:items-start">
+        <div className="grid gap-4 sm:grid-cols-2 sm:items-start xl:col-span-7">
         {/* Activity heatmap */}
-        <div className="glass rounded-2xl border border-white/10 p-5" data-testid="activity-heatmap">
-          <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-aether-muted-dim">
+        <div className="elev-1 rounded-2xl p-5" data-testid="activity-heatmap">
+          <h3 className="mb-1 type-section">
             Weekly Activity
           </h3>
           {/* MON-015: disclose which calendar the day/week boundaries below
@@ -523,8 +609,8 @@ export default function MarketPulse() {
         </div>
 
         {/* Employer activity */}
-        <div className="glass rounded-2xl border border-white/10 p-5" data-testid="employer-activity">
-          <h3 className="mb-4 text-xs font-semibold uppercase tracking-wide text-aether-muted-dim">
+        <div className="elev-1 rounded-2xl p-5" data-testid="employer-activity">
+          <h3 className="mb-4 type-section">
             Employer Hiring Activity
           </h3>
           <div className="space-y-3">
@@ -547,9 +633,12 @@ export default function MarketPulse() {
           </div>
         </div>
 
-        {/* Recruiter trends */}
-        <div className="glass rounded-2xl border border-white/10 p-5" data-testid="recruiter-trends">
-          <h3 className="mb-4 text-xs font-semibold uppercase tracking-wide text-aether-muted-dim">
+        {/* Recruiter trends — spans the cluster: the sparkline is a 120-unit
+            viewBox stretched to the panel width, so width is the thing it
+            actually needs, and its label/delta rows read as a pair at this
+            measure instead of wrapping in a quarter-width column. */}
+        <div className="elev-1 rounded-2xl p-5 sm:col-span-2" data-testid="recruiter-trends">
+          <h3 className="mb-4 type-section">
             Recruiter Activity
           </h3>
           {(() => {
@@ -617,10 +706,12 @@ export default function MarketPulse() {
             })}
           </div>
         </div>
+        </div>
 
-        {/* Market vs you */}
-        <div className="glass rounded-2xl border border-white/10 p-5" data-testid="market-vs-you">
-          <h3 className="mb-4 text-xs font-semibold uppercase tracking-wide text-aether-muted-dim">
+        {/* Market vs you — the editorial column of the band (see the note
+            above this grid). */}
+        <div className="elev-1 rounded-2xl p-5 xl:col-span-5" data-testid="market-vs-you">
+          <h3 className="mb-4 type-section">
             Market vs. Your Performance
           </h3>
 
