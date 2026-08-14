@@ -114,7 +114,7 @@ def test_pipeline_degrades_gracefully_on_cover_fabrication(monkeypatch):
         agents_mod, "_record_run", lambda uid, name, params, fn, **kw: fn()
     )
 
-    def fake_dispatch(user_id, name, params, *, system_run=False):
+    def fake_dispatch(user_id, name, params, *, system_run=False, **kw):
         if name == "scout":
             return {"persisted": 2}
         if name == "fitScorer":
@@ -161,7 +161,7 @@ def test_pipeline_still_awaits_approval_when_cover_succeeds(monkeypatch):
         agents_mod, "_record_run", lambda uid, name, params, fn, **kw: fn()
     )
 
-    def fake_dispatch(user_id, name, params, *, system_run=False):
+    def fake_dispatch(user_id, name, params, *, system_run=False, **kw):
         return {
             "scout": {"persisted": 2},
             "fitScorer": {"scored": 3},
@@ -196,7 +196,7 @@ def test_pipeline_degradation_message_honest_when_tailor_also_noops(monkeypatch)
         agents_mod, "_record_run", lambda uid, name, params, fn, **kw: fn()
     )
 
-    def fake_dispatch(user_id, name, params, *, system_run=False):
+    def fake_dispatch(user_id, name, params, *, system_run=False, **kw):
         if name == "scout":
             return {"persisted": 1}
         if name == "fitScorer":

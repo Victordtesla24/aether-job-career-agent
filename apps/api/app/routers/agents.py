@@ -949,6 +949,7 @@ def _record_run(
     *,
     system_run: bool = False,
     skip_quota: bool = False,
+    parent_run_id: str | None = None,
 ) -> dict[str, Any]:
     """Execute ``fn`` under an AgentRun audit record.
 
@@ -974,6 +975,12 @@ def _record_run(
     stamped ``systemRun: true`` so the exemption is honestly traceable, and the
     quota cooldown block check still runs — a genuinely blocked user should
     never have system ops run either.
+
+    ``parent_run_id`` (B6, ORCH-B1-BLUEPRINT-2026-08-14.md §4.4): the id of the
+    AgentRun that CAUSED this one — set by ``_pipeline_core`` for every step it
+    dispatches, so the agents-console orchestration map can draw a REAL causal
+    edge. ``None`` (the default) is the honest value for a directly-triggered
+    run: it has no parent, and nothing here invents one.
     """
     # Entitlement gate FIRST (GAP-P6-PAYWALL): no active paid subscription -> an
     # honest 402 before any audit row, quota reserve, or LLM call.
@@ -1051,7 +1058,7 @@ def _record_run(
             except Exception:  # noqa: BLE001 — accounting is best-effort
                 pass
 
-    run = runs.start(user_id, agent_name, params)
+    run = runs.start(user_id, agent_name, params, parent_run_id=parent_run_id)
     _persist_billing_audit(runs, run["id"], audit)
     # Reserve + AgentRun row now stand; execution (and refund-on-failure) is the
     # shared block reused verbatim by the async worker (GAP-P7-ASYNC-001 §4.1).
@@ -2237,7 +2244,7 @@ def _policy_knobs(params: dict[str, Any]) -> dict[str, Any]:
 
 def _dispatch(
     user_id: str, name: str, params: dict[str, Any], *, system_run: bool = False,
-    skip_quota: bool = False,
+    skip_quota: bool = False, parent_run_id: str | None = None,
 ) -> dict[str, Any]:
     """Resolve the agent callable (pure) then execute + audit it. ``system_run``
     (ADR-P7-05) is threaded to ``_record_run`` -> ``_require_active_subscription``,
@@ -2246,14 +2253,18 @@ def _dispatch(
 
     ``skip_quota`` is threaded to ``_record_run`` so automated system operations
     (e.g. the board sweep) bypass the user's paid plan-quota reserve/spend-cap
-    gates while still keeping the cooldown block and an honest audit trail."""
+    gates while still keeping the cooldown block and an honest audit trail.
+
+    ``parent_run_id`` (B6) is threaded to ``_record_run`` -> ``AgentRunRepository
+    .start`` unchanged: this function makes no causal claim of its own, it only
+    carries the caller's (``_pipeline_core``'s)."""
     # U-AX: resolve the rigor tier BEFORE binding the callable, so the agent
     # receives the knobs and the AgentRun row records the very same policy.
     params = _with_quality_policy(user_id, params)
     canonical, fn = _agent_callable(user_id, name, params)
     return _record_run(
         user_id, canonical, params, fn,
-        system_run=system_run, skip_quota=skip_quota,
+        system_run=system_run, skip_quota=skip_quota, parent_run_id=parent_run_id,
     )
 
 
@@ -3410,19 +3421,31 @@ def _pipeline_core(
     atomically via ``_record_run``, so the composite's data-dependent metered
     footprint is billed correctly (GAP-P7-ASYNC-001 D6). Shared by BOTH the sync
     handler (``budget_seconds=None`` → default HTTP budget) and the async worker
-    (``budget_seconds`` → the more-generous worker pipeline budget)."""
+    (``budget_seconds`` → the more-generous worker pipeline budget).
+
+    B6 (ORCH-B1-BLUEPRINT-2026-08-14.md §4.4): this is the ONE place in this
+    tree where one run genuinely causes others (B1a's scheduler is a separate,
+    uncommitted worktree — not present here). Every step below is dispatched
+    BY this pipeline invocation, so each one's ``parentRunId`` is the
+    SUPERVISOR run's id — a sibling of the others, not chained to the previous
+    step. That is the real, traceable cause: the supervisor is what decided
+    this sequence would run at all."""
     steps: list[dict[str, Any]] = []
 
     # Supervisor node: plans the run (audit-recorded, defect fix — the card
     # previously showed "Never run" because the pipeline skipped this node).
+    # It is the top of this run's causal chain, so it takes no parent itself.
     sup_out = _record_run(
         user_id, "supervisor", params, lambda: {"plan": list(_PIPELINE_PLAN)}
     )
     steps.append({"agent": "supervisor", "output": sup_out})
+    sup_run_id = sup_out.get("run_id")
 
-    scout_out = _dispatch(user_id, "scout", params)
+    scout_out = _dispatch(user_id, "scout", params, parent_run_id=sup_run_id)
     steps.append({"agent": "scout", "output": scout_out})
-    fit_out = _dispatch(user_id, "fitScorer", {"rescore": False})
+    fit_out = _dispatch(
+        user_id, "fitScorer", {"rescore": False}, parent_run_id=sup_run_id
+    )
     steps.append({"agent": "fitScorer", "output": fit_out})
 
     from app.agents.matcher_agent import MatcherAgent
@@ -3430,7 +3453,10 @@ def _pipeline_core(
     # Matcher node: ranks scored jobs and selects the top match (audit-recorded).
     # Reuses the now first-class MatcherAgent so the pipeline and the standalone
     # /agents/matcher/run trigger share one implementation.
-    match_out = _record_run(user_id, "matcher", {}, lambda: MatcherAgent().run(user_id))
+    match_out = _record_run(
+        user_id, "matcher", {}, lambda: MatcherAgent().run(user_id),
+        parent_run_id=sup_run_id,
+    )
     steps.append({"agent": "matcher", "output": match_out})
 
     top_job_id = match_out.get("top_job_id")
@@ -3453,7 +3479,7 @@ def _pipeline_core(
     with shared_budget(budget_seconds):
         try:
             tailor_out: dict[str, Any] = _dispatch(
-                user_id, "tailor", {"job_id": top_job_id}
+                user_id, "tailor", {"job_id": top_job_id}, parent_run_id=sup_run_id
             )
         except NoChangesApplied as exc:
             # MV-resume-studio-003: the guards rejected every proposed edit, so no
@@ -3463,7 +3489,10 @@ def _pipeline_core(
             tailor_out = {"noChangesApplied": True, "changes": 0, "message": str(exc)}
         steps.append({"agent": "tailor", "output": tailor_out})
         try:
-            letter_out = _dispatch(user_id, "coverLetter", {"job_id": top_job_id})
+            letter_out = _dispatch(
+                user_id, "coverLetter", {"job_id": top_job_id},
+                parent_run_id=sup_run_id,
+            )
         except (FabricationError, StructuralError) as exc:
             # GAP-P7-COV-PIPE-001: the cover step's own fabrication/structural
             # guard rejected the draft — an ungrounded term or §10.2 format

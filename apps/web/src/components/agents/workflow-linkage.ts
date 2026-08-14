@@ -37,10 +37,18 @@
  * original citation so the frozen snapshot still byte-matches this table and
  * the drift stays on the record rather than being overwritten.
  *
- * CAUSAL, run-level. "This tailoring run consumed stories X and Y at 10:42."
- * That needs a parent run id the API does not record yet. It is NOT in this
- * slice: no faked traces, no dead UI built ahead of the data. The legend under
- * the toggle says so in the user's own words, and promises no date.
+ * CAUSAL, run-level (§CAUSAL below, added B6 — ORCH-B1-BLUEPRINT-2026-08-14.md
+ * §4.4). "This run was started by that run." `AgentRun.parentRunId` now
+ * records it — `_pipeline_core` stamps it on every step it dispatches — so
+ * this is real, not faked: a causal edge is drawn ONLY for a run pair BOTH
+ * present in the SAME fetched `GET /agents/runs` window, with BOTH backends
+ * resolving to a placed catalog agent on this payload. A parent outside the
+ * window, or an unplaced backend, drops the edge — it is never approximated,
+ * mirroring `crossMapLinks`'s own drop rule. Rendered distinctly from the
+ * STRUCTURAL wires above: its own icon, its own ink, never mixed into the
+ * checked-in table (a code citation is not evidence of a specific run pair,
+ * and a run pair is not evidence of how the code is wired — conflating them
+ * would misrepresent one kind of fact as the other).
  *
  * WHY EACH ENTRY LOOKS LIKE THIS
  * ------------------------------------------------------------------------
@@ -74,6 +82,7 @@
  * checked in with their citations, and `drawableLinkages` refuses to draw any
  * edge whose provenance does not hold up.
  */
+import type { AgentRun } from "../../lib/api/agents";
 import type { MapModel } from "./orchestration-map-model";
 
 /** Live = the call exists on the default production codepath (graph rule). */
@@ -180,7 +189,10 @@ export const LINKAGE_SOURCE = {
 /** The toggle's label, and the one sentence under it. */
 export const LINKAGE_TOGGLE_LABEL = "Show connections";
 export const LINKAGE_LEGEND =
-  "System wiring — how agents feed each other. Live run traces are coming and will be drawn only from real run records.";
+  "System wiring — how agents feed each other. Real run traces (which run " +
+  "actually started which) are drawn separately, as a chain glyph on the " +
+  "run itself — read from real run records, never from stage order or " +
+  "timing.";
 
 /**
  * The wire's ink. Deliberately NOT `#FF6B35`: on this console coral means one
@@ -1042,3 +1054,154 @@ export function linkageSentences(links: readonly CrossMapLink[]): string[] {
       `${entry.link.via ? ` via ${entry.link.via}` : ""}. ${entry.link.meaning}`,
   );
 }
+
+// ---------------------------------------------------------------------------
+// §CAUSAL — real run-level edges (B6, ORCH-B1-BLUEPRINT-2026-08-14.md §4.4)
+//
+// Distinct from every table above: nothing here is checked in. A causal edge
+// is computed FRESH, every render, from the run rows the page already
+// fetched (`GET /agents/runs`) — its "provenance" is the two matching ids
+// actually being present in that response, not a citation into source code.
+// ---------------------------------------------------------------------------
+
+/** Catalog placement indexed by BACKEND (`AgentRun.agentName`) — the join key
+ *  a run row actually carries; `placementIndex` above is keyed by the
+ *  catalog's `agentKey`, which a run does not know. First placement wins,
+ *  same rule as `placementIndex`. */
+export function placementIndexByBackend(
+  models: readonly MapModel[],
+): Map<string, LinkagePlacement> {
+  const index = new Map<string, LinkagePlacement>();
+  models.forEach((model) => {
+    model.stages.forEach((stage) => {
+      stage.nodes.forEach((node) => {
+        const backend = node.agent.backend;
+        if (!backend || index.has(backend)) return;
+        index.set(backend, {
+          agentKey: node.agent.agentKey,
+          name: node.agent.name,
+          mapKey: model.key,
+          mapName: model.name,
+        });
+      });
+    });
+  });
+  return index;
+}
+
+export interface CausalEdge {
+  /** `${parentRunId}->${childRunId}` — stable and unique per real run pair. */
+  id: string;
+  parentRunId: string;
+  childRunId: string;
+  parentRun: AgentRun;
+  childRun: AgentRun;
+  /** The CAUSING run's catalog placement. */
+  from: LinkagePlacement;
+  /** The CAUSED run's catalog placement. */
+  to: LinkagePlacement;
+}
+
+/**
+ * REAL, run-level causal edges. A pair exists ONLY when:
+ *   1. a run's own `parentRunId` names another run's `id`, and that parent is
+ *      ALSO present in the same fetched `runs` window — a parent outside the
+ *      window (paged out, or genuinely never fetched) produces NOTHING, never
+ *      an inferred or approximated edge;
+ *   2. BOTH runs' backends resolve to a placed catalog agent on THIS payload
+ *      — an unplaced backend is dropped, exactly like `crossMapLinks` drops a
+ *      linkage whose endpoint the payload does not contain.
+ * Never inferred from agent name, stage order or timing — only from the two
+ * ids actually matching in data the caller already holds.
+ */
+export function causalEdges(
+  runs: readonly AgentRun[],
+  models: readonly MapModel[],
+): CausalEdge[] {
+  const byId = new Map(runs.map((r) => [r.id, r]));
+  const placement = placementIndexByBackend(models);
+  const out: CausalEdge[] = [];
+  for (const run of runs) {
+    const parentId = run.parentRunId;
+    if (!parentId) continue;
+    const parentRun = byId.get(parentId);
+    if (!parentRun) continue;
+    const from = placement.get(parentRun.agentName);
+    const to = placement.get(run.agentName);
+    if (!from || !to) continue;
+    out.push({
+      id: `${parentId}->${run.id}`,
+      parentRunId: parentId,
+      childRunId: run.id,
+      parentRun,
+      childRun: run,
+      from,
+      to,
+    });
+  }
+  return out;
+}
+
+/** The child run's own timestamp — the EFFECT's time, always (never "now"). */
+function causalRunAt(run: AgentRun): string | null {
+  return run.createdAt ?? run.startedAt ?? null;
+}
+
+export interface CausalPort {
+  edge: CausalEdge;
+  direction: PortDirection;
+  /** The node at the OTHER end, with the map it lives on. */
+  counterpart: LinkagePlacement;
+  /** The child run's timestamp — when this causal fact was recorded. */
+  at: string | null;
+  /** "⛓ caused Resume Tailoring Agent (Application Pipeline)". */
+  label: string;
+  /** The label plus the honesty statement — title + aria. */
+  description: string;
+}
+
+export function causalPortLabel(
+  direction: PortDirection,
+  counterpart: LinkagePlacement,
+): string {
+  return direction === "out"
+    ? `⛓ caused ${counterpart.name} (${counterpart.mapName})`
+    : `⛓ caused by ${counterpart.name} (${counterpart.mapName})`;
+}
+
+/** The causal ports one node shows: outbound (what it started) first, then
+ *  inbound (what started it) — same grouping rule as `portsFor`. */
+export function causalPortsFor(
+  backend: string,
+  edges: readonly CausalEdge[],
+): CausalPort[] {
+  const port = (edge: CausalEdge, direction: PortDirection): CausalPort => {
+    const counterpart = direction === "out" ? edge.to : edge.from;
+    const label = causalPortLabel(direction, counterpart);
+    return {
+      edge,
+      direction,
+      counterpart,
+      at: causalRunAt(edge.childRun),
+      label,
+      description: `${label} — a real recorded run, not a stage-order inference.`,
+    };
+  };
+  return [
+    ...edges.filter((e) => e.parentRun.agentName === backend).map((e) => port(e, "out")),
+    ...edges.filter((e) => e.childRun.agentName === backend).map((e) => port(e, "in")),
+  ];
+}
+
+/** The toggle-free legend line for the causal layer — always visible under
+ *  it, same disclosure discipline as `LINKAGE_LEGEND`. */
+export const CAUSAL_LEGEND =
+  "Real run traces — which run actually started which, read from recorded runs. Only drawn for runs the page has fetched; never inferred from stage order or timing.";
+
+/**
+ * The causal wire's ink. Deliberately NOT `LINKAGE_STROKE` (this is a
+ * different KIND of fact, not more of the same one) and NOT the console's
+ * live-run coral (`#FF6B35` — reserved for "in flight right now"; a causal
+ * edge is a completed, historical fact even when both runs succeeded).
+ */
+export const CAUSAL_STROKE = "rgba(255,166,110,0.55)";
