@@ -281,3 +281,27 @@ health checks healthy, `deploy successful: 47536dc` at 17:46:38Z. Production che
 regression set, 147 tests) green on origin/main content both before AND after U2c's concurrent landing
 merged in. Evidence: `uat/reports/evidence/market-perf/main-reds/land/`. The 9 reds ORCH-EXEC reported
 are CLOSED on `main`.
+
+## 2026-08-14T18:5xZ — session 9c6a2ba6 PUSHES slice sui-b3 (studios) — feature branch, NOT main
+- **Slice:** S-UI **B3** — Resume Studio (the aha moment), Cover Letter Studio, Story Bank. Branch
+  `feat/sui-b3` @ `f110ce9` (merged with `origin/main c5db511`, U2c threshold wiring re-applied verbatim).
+- **This is a feature-branch push, NOT a main landing / production deploy.** Per S-UI-REBUILD-SPEC §6.5,
+  batches merge into the `feat/sui-rebuild` integration branch and `main` sees ONE coordinated landing at
+  the end — so **no deploy window is consumed and no auto-deploy / 3-of-3 health check applies to this
+  slice**. There is nothing here for `aether-autodeploy.timer` to pick up (main is untouched).
+- **Files (FE presentation only; `apps/api` diff vs origin/main = EMPTY — 0 files):**
+  `apps/web/src/app/dashboard/{resume,cover-letters,stories,[...slug]}/page.tsx`,
+  `components/resume/{AhaHero,ChangeList,diff-semantics}.{tsx,ts}` (+ tests),
+  `components/cover-letters/*` (7 panels), `components/stories/{story-card,story-sheet,story-aside}.tsx`,
+  `components/analytics/TailoringImpact.tsx`, `lib/navigation-suggest.ts` (+ test), and this doc.
+- **Story Bank "Section not found" root cause (diagnosis/STORY-BANK-SECTION-NOT-FOUND.json):** the real
+  page ships at `/dashboard/stories`; the wireframe name `/dashboard/story-bank` hit the `[...slug]`
+  catch-all and dead-ended. Routing/anchor/data/API all ruled out with evidence — the fix is a
+  "Did you mean Story Bank?" suggestion that SUGGESTS, never redirects (silent-fallback rule). No API
+  change; `apps/api` untouched.
+- **Gates (fixer-hard reverify @ f110ce9, artefacts `uat/reports/evidence/market-perf/s-ui/b3/gates/*-fixer-reverify.txt`):**
+  targeted vitest 26 files / 126 tests PASS; full vitest (post-merge) 203 files / 1661 PASS; `tsc --noEmit`
+  0; `next lint --max-warnings=0` clean; worktree `next build` exit 0. No existing test modified (3 NEW
+  test files for B3-created code only; carve-out: none).
+- Touches no other session's active claims. Coordination entry committed WITH the branch push (rides
+  `feat/sui-b3`; nothing written to `main`).
