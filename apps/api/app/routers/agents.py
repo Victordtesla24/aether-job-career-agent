@@ -1122,6 +1122,31 @@ def _execute_reserved_run(
                 except Exception:  # noqa: BLE001
                     pass
 
+    # ML-STOPALL-001: refuse HERE — the ONE seam every dispatch path converges
+    # on immediately before real work happens (the sync ``_record_run`` caller
+    # has already created this AgentRun row + reservation; the async ARQ
+    # worker's ``_run_single_agent_body`` calls this function DIRECTLY,
+    # bypassing ``_record_run`` entirely) — when the user has paused this
+    # agent (``AgentConfig.enabled=false``, set by the Agents-page per-agent
+    # toggle OR the bulk "Stop All Agents" action). Checking here — rather
+    # than duplicating the check in both ``_record_run`` and the enqueue seam
+    # — means an agent paused AFTER a background job was already enqueued is
+    # still honestly refused the instant it reaches execution, with the check
+    # written exactly once. Finished + refunded exactly like every other
+    # pre-existing refusal below, never a silent run against a config the user
+    # disabled and never a bill for work that never happened.
+    if not _agent_enabled_for_dispatch(user_id, agent_name):
+        message = (
+            f'Agent "{agent_name}" is paused (you disabled it on the Agents '
+            "page). Re-enable it to run."
+        )
+        runs.finish(run_id, "failed", error=message)
+        _refund_once()
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail={"code": "agent_paused", "message": message, "agentKey": agent_name},
+        )
+
     # Resolve the user's chosen model ONCE — used to bind the run AND to cost it
     # against the model that actually served it (GAP-P7-MODEL-CHOICE-001).
     _override_model = _user_model_override(user_id, agent_name)
@@ -1827,6 +1852,39 @@ _RECOMMENDED_FOR_BACKEND: dict[str, str] = {
     for e in AGENT_CATALOG
     if e.get("backend")
 }
+
+
+def _agent_enabled_for_dispatch(user_id: str, agent_name: str) -> bool:
+    """Whether ``user_id`` has NOT paused ``agent_name`` (ML-STOPALL-001).
+
+    ``agent_name`` is the BACKEND key (e.g. ``tailor``); ``AgentConfig`` is
+    keyed by the UI's ``agentKey`` (e.g. ``resumeTailoring``) — reuse the SAME
+    ``_UI_KEY_FOR_BACKEND`` mapping ``_user_model_override`` already relies on,
+    rather than inventing a second backend<->UI namespace translation.
+
+    A user with NO persisted ``AgentConfig`` row for this agent has never
+    touched its toggle, so the honest default is ``enabled=True`` — unchanged
+    behaviour for every run that predates this check. A DB read fault also
+    resolves to ``True``: a config-lookup outage must never itself block a
+    run that was otherwise permitted.
+    """
+    _ensure_agent_config_schema()
+    ui_key = _UI_KEY_FOR_BACKEND.get(agent_name, agent_name)
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    'SELECT "enabled" FROM "AgentConfig" '
+                    'WHERE "userId" = %s AND "agentKey" = %s',
+                    (user_id, ui_key),
+                )
+                row = cur.fetchone()
+    except Exception:  # noqa: BLE001 — a config-read fault must never itself
+        # block a run; fall back to the honest pre-existing default.
+        return True
+    if row is None:
+        return True
+    return bool(row[0])
 
 
 def _user_model_override(user_id: str, agent_name: str) -> "str | None":

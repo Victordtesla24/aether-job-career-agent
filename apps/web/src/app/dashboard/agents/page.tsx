@@ -114,6 +114,7 @@ import {
   pipelineProgressNotice,
   pipelineStartNotice,
   runErrorNotice,
+  stopAllAgentsNotice,
   type Notice,
 } from "../../../lib/agents-feedback";
 
@@ -651,12 +652,19 @@ export default function AgentsPage() {
   };
 
   // H-06: a single kill-switch that pauses every currently-enabled agent.
-  // There is no server-side "stop all" endpoint (each agent's enabled flag is
-  // its own AgentConfig row), so this honestly pauses them one by one via the
-  // same PATCH the per-agent toggle uses, then refreshes from the server so
-  // the counts reflect the true post-stop state. Disabling an agent stops it
-  // being scheduled/triggered; it does not force-kill an already-running run
-  // (no cancel endpoint exists) — the notice says so.
+  // There is no dedicated server-side "stop all" endpoint (each agent's
+  // enabled flag is its own AgentConfig row), so this honestly pauses them
+  // one by one via the same PATCH the per-agent toggle uses, then refreshes
+  // from the server so the counts reflect the true post-stop state.
+  //
+  // ML-STOPALL-001: disabling an agent now ACTUALLY stops it being
+  // scheduled/triggered — every dispatch path (sync routes, pipeline, the
+  // generic run route, the async worker, and the board-sweep autopilot)
+  // refuses a paused agent's runs at the single chokepoint they all share
+  // (`_execute_reserved_run`) — so "New runs are blocked" below is now an
+  // enforced fact, not a hope. It still does not force-kill an already
+  // in-progress run (no cancel/abort endpoint exists); `stopAllAgentsNotice`
+  // discloses that using the same live-run count the RUN HEALTH strip shows.
   const onStopAll = async () => {
     const enabled = (catalog?.agents ?? []).filter((a) => a.enabled);
     if (enabled.length === 0) {
@@ -690,10 +698,7 @@ export default function AgentsPage() {
     }
     setStoppingAll(false);
     if (failed === 0) {
-      setNotice({
-        kind: "success",
-        text: `Paused ${enabled.length} agent${enabled.length === 1 ? "" : "s"}. New runs are on hold.`,
-      });
+      setNotice(stopAllAgentsNotice(enabled.length, liveRunCount));
     } else {
       setNotice({
         kind: "error",

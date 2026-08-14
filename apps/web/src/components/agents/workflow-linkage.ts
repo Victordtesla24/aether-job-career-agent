@@ -394,9 +394,19 @@ const HOP = {
     to: "agent.jobDiscovery",
     kind: "triggers",
     mechanism: "_pipeline_core sequential _dispatch",
-    evidence: "apps/api/app/routers/agents.py:3441,3463",
+    // ML-STOPALL-001 shifted these line numbers (the honest-refusal check +
+    // its _agent_enabled_for_dispatch helper were inserted earlier in the
+    // file) — re-verified against HEAD, same anchors, new line numbers. The
+    // second anchor was ALSO already stale independent of that shift (an
+    // unrelated prior change — B6/ORCH-B1-BLUEPRINT-2026-08-14.md §4.4 —
+    // added the trailing parent_run_id argument); corrected to match the
+    // real call while this citation was already being touched.
+    evidence: "apps/api/app/routers/agents.py:3510,3542",
     discoveryEvidence: "apps/api/app/routers/agents.py:3380",
-    anchors: ["def _pipeline_core(", 'scout_out = _dispatch(user_id, "scout", params)'],
+    anchors: [
+      "def _pipeline_core(",
+      'scout_out = _dispatch(user_id, "scout", params, parent_run_id=sup_run_id)',
+    ],
     status: "live",
   },
   discoveryWritesJob: {
@@ -469,8 +479,11 @@ const HOP = {
     kind: "reads",
     mechanism:
       "synthesis over the user's own postings; optional guard-checked LLM narrative",
+    // ML-STOPALL-001 shifted the agents.py line numbers below (the
+    // honest-refusal check + its helper were inserted earlier in the file) —
+    // re-verified against HEAD, same anchors, new line numbers.
     evidence:
-      "apps/api/app/agents/company_research_agent.py:53,183; narrative opt-in at apps/api/app/routers/agents.py:1563,2082",
+      "apps/api/app/agents/company_research_agent.py:53,183; narrative opt-in at apps/api/app/routers/agents.py:1595,2147",
     discoveryEvidence:
       "apps/api/app/agents/company_research_agent.py:53; narrative opt-in at apps/api/app/routers/agents.py:2020-2027",
     anchors: [
