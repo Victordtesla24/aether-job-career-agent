@@ -7,6 +7,8 @@
  * buildStatCards for unit testing.
  */
 import MetricTooltip from "../MetricTooltip";
+import StatBlock from "../ui/StatBlock";
+import type { RealtimeResource } from "../../lib/realtime/transport-types";
 import type { Funnel } from "../../lib/api/analytics";
 
 interface StatCard {
@@ -20,6 +22,23 @@ interface StatCard {
   trendUp?: boolean;
   tooltip: string;
 }
+
+/**
+ * S-UI-REBUILD §3.4 T-B — which tiles may carry a live delta chip.
+ *
+ * Only a tile whose value IS a row count of one stream resource qualifies:
+ * `applications` and `offers` are counted rows, so "+2" beside them is the
+ * server's own delta. "Interview Rate" is a RATIO and "AI Confidence" is a MEAN
+ * — a row-count delta beside either would be a number about a different
+ * quantity than the one displayed, so they are deliberately absent here rather
+ * than approximated.
+ */
+const DELTA_RESOURCE: Record<string, RealtimeResource | undefined> = {
+  "Active Applications": "applications",
+  Offers: "offers",
+  "Interview Rate": undefined,
+  "AI Confidence": undefined,
+};
 
 interface StatExtras {
   /** Applications created in the last 7 days (funnel period=7d). */
@@ -109,14 +128,21 @@ export default function DashboardStats({
 
   if (funnel === null) {
     return (
+      /* X-11: 2-up on mobile, not 1-up — four 1-up tiles consumed the entire
+         first mobile screen before any content. Same geometry as the resolved
+         strip so nothing shifts when the funnel lands. */
       <section
-        className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4"
+        className="grid grid-cols-2 gap-4 xl:grid-cols-4"
         aria-busy="true"
         aria-label="Loading stats"
         data-testid="stats-skeleton"
       >
         {[0, 1, 2, 3].map((i) => (
-          <div key={i} className="glass h-32 animate-pulse rounded-2xl border border-white/10" />
+          <div key={i} className="elev-1 h-[132px] rounded-2xl p-5">
+            <div className="h-2.5 w-24 animate-pulse rounded bg-white/10" />
+            <div className="mt-4 h-8 w-20 animate-pulse rounded bg-white/5" />
+            <div className="mt-3 h-2.5 w-28 animate-pulse rounded bg-white/5" />
+          </div>
         ))}
       </section>
     );
@@ -124,37 +150,33 @@ export default function DashboardStats({
 
   return (
     <section
-      className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4"
+      className="grid grid-cols-2 gap-4 xl:grid-cols-4"
       data-testid="live-stats"
       aria-label="Key stats"
     >
       {buildStatCards(funnel, extras).map((stat) => (
-        <div
+        <StatBlock
           key={stat.label}
-          className="glass rounded-2xl border border-white/10 p-5 transition hover:border-white/20"
-        >
-          <div className="mb-3 flex items-center justify-between">
-            <span className="text-[11px] font-medium uppercase tracking-wide text-aether-muted-dim">
-              {stat.label}
+          label={stat.label}
+          value={stat.value}
+          unit={stat.unit}
+          resource={DELTA_RESOURCE[stat.label]}
+          testId={`stat-${stat.label.toLowerCase().replace(/\s+/g, "-")}`}
+          note={
+            <span className={`flex items-center gap-1 ${stat.noteColor}`}>
+              {stat.trendUp ? (
+                <i className="fa-solid fa-arrow-up text-[9px]" aria-hidden="true" />
+              ) : null}
+              {stat.note}
             </span>
-            <i className={`${stat.icon} ${stat.iconColor} text-sm`} aria-hidden="true" />
-          </div>
-          <div className="mono text-3xl font-bold">
-            <MetricTooltip
-              value={
-                <>
-                  {stat.value}
-                  {stat.unit ? <span className="text-lg text-aether-muted-dim">{stat.unit}</span> : null}
-                </>
-              }
-              tooltip={stat.tooltip}
-            />
-          </div>
-          <div className={`mt-2 flex items-center gap-1 text-xs ${stat.noteColor}`}>
-            {stat.trendUp ? <i className="fa-solid fa-arrow-up text-[10px]" aria-hidden="true" /> : null}
-            {stat.note}
-          </div>
-        </div>
+          }
+        >
+          {/* The tooltip affordance is preserved verbatim — it is where the
+              "what is actually counted" honesty copy lives. The unit is NOT
+              repeated here: `<StatBlock unit>` renders it in the Mercury
+              raised-baseline treatment immediately after this node. */}
+          <MetricTooltip value={stat.value} tooltip={stat.tooltip} />
+        </StatBlock>
       ))}
     </section>
   );

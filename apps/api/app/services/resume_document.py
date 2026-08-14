@@ -342,6 +342,38 @@ def _claim_slots(
     return claimed, unmatched
 
 
+def merge_persisted_bullets(
+    original: Sequence[str], persisted: Sequence[str]
+) -> list[str]:
+    """``original``'s bullets with ``persisted``'s rewrites in the slots they took.
+
+    The tailoring loop's own list is not an inventory of the résumé — it is the
+    set of bullets that RUN produced. A bullet nobody selected for rewrite may
+    never reach it, and a résumé's persisted bullets are not always
+    reconstructible from its ``raw_text`` either (the platform derives them from
+    a POSITIONAL read of the source PDF, so on the live two-column artifact 10 of
+    25 appear nowhere in the flat text layer as one contiguous line). Taking the
+    child's list as the ground truth therefore quietly shrank the résumé the
+    download was measured against — the same class of defect as measuring the
+    child against its own parse, one layer further in (U2b round-4 land review,
+    2026-08-14).
+
+    So the two are MERGED, and merged by the one pass that already knows which
+    rewrite replaced which bullet — :func:`_claim_slots`, the matcher
+    :func:`_substitute_bullets` and :func:`rebuild_raw_text` use. A slot a
+    rewrite claimed yields the approved AFTER text; every untouched original
+    stays verbatim; a rewrite that claimed nothing is appended rather than
+    dropped. A second matcher would be a second opinion about what the résumé
+    contains, which is precisely the drift rounds 1-3 were spent undoing.
+    """
+    originals = [text for text in original if text.strip()]
+    rewrites = [text for text in persisted if text.strip()]
+    if not originals:
+        return rewrites
+    claimed, extra = _claim_slots(originals, rewrites)
+    return [claimed.get(index, text) for index, text in enumerate(originals)] + extra
+
+
 def _overlap(left: str, right: str) -> float:
     """Word overlap of two bullets (0.0–1.0), used to pair a rewrite with the
     bullet it rewrote."""
