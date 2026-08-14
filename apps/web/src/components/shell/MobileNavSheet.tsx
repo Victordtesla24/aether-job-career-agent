@@ -177,6 +177,21 @@ export function MobileNavSheet({
                   </div>
                 ) : subscription === null ? (
                   <p className="type-meta">Plan unavailable</p>
+                ) : subscription.entitlement?.unlimited === true ? (
+                  /* ADMIN-FULL / OWNER EXPERIENCE: same honest owner state as
+                     the rail — an owner has no plan and no quota, so no number
+                     is shown and no upgrade is offered. */
+                  <>
+                    <p className="text-xs font-medium" data-testid="mobile-nav-plan-name">
+                      Owner — unlimited
+                    </p>
+                    <p
+                      className="type-mono-micro mt-1 text-aether-muted-dim"
+                      data-testid="mobile-nav-plan-unlimited"
+                    >
+                      No plan, quota or spend cap
+                    </p>
+                  </>
                 ) : (
                   <>
                     <p className="text-xs font-medium">{subscription.plan?.name ?? "Free plan"}</p>

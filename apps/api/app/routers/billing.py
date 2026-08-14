@@ -30,7 +30,7 @@ from app.repositories.billing import (
     subscription_gate_enabled,
 )
 from app.repositories.user import UserRepository
-from app.services import stripe_gateway
+from app.services import entitlements, stripe_gateway
 
 router = APIRouter()
 
@@ -123,13 +123,18 @@ def create_checkout(
     body: CheckoutRequest, current_user: CurrentUser, request: Request
 ) -> dict[str, Any]:
     user_id = current_user["id"]
+    # ADMIN-FULL: per-user rate limits are a "restriction" under the binding
+    # scope ruling, so an admin is exempt. The check short-circuits BEFORE
+    # ``allow()`` because that call consumes a token — asking and then ignoring
+    # the answer would still burn the admin's window.
     limiter = getattr(request.app.state, "checkout_rate_limiter", None)
-    if limiter is not None and not limiter.allow(user_id):
-        raise HTTPException(
-            status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="Too many checkout attempts, retry later",
-            headers={"Retry-After": str(limiter.retry_after(user_id))},
-        )
+    if limiter is not None and not entitlements.is_admin(user_id):
+        if not limiter.allow(user_id):
+            raise HTTPException(
+                status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Too many checkout attempts, retry later",
+                headers={"Retry-After": str(limiter.retry_after(user_id))},
+            )
 
     plan = PlanRepository().get(body.planId)
     if plan is None or not plan["active"]:
@@ -389,6 +394,11 @@ def _sync_plan_and_quota(user_id: str, plan_id: str, interval: str) -> None:
                 '"spendCapUsd"=%s,"updatedAt"=now() WHERE "userId"=%s',
                 (plan_id, runs_allowed, spend_cap, user_id),
             )
+            # ADMIN-FULL: an admin-granted comp/tier ceiling must survive a plan
+            # re-sync. Without this the grant would silently evaporate on the
+            # next billing event — a restriction reappearing with no admin
+            # action behind it. No-op when the user has no override.
+            entitlements.reapply_override_limits(user_id, cur=cur)
         conn.commit()
 
 
@@ -734,6 +744,10 @@ def _reset_quota(
         ''',
         (user_id, plan_id, runs_allowed, spend_cap),
     )
+    # ADMIN-FULL: same reason as ``_sync_plan_and_quota`` — a live admin grant is
+    # re-asserted after the plan's own ceiling lands, so a period reset never
+    # silently revokes it. No-op when the user has no override.
+    entitlements.reapply_override_limits(user_id, cur=cur)
 
 
 def _user_by_subscription(cur: Any, subscription_id: Optional[str]) -> Optional[str]:
@@ -795,6 +809,10 @@ def get_subscription(current_user: CurrentUser) -> dict[str, Any]:
         }
         if quota
         else None,
+        # ADMIN-FULL: the resolver's verdict rides along so the rail/nav plan
+        # card can render an honest "Owner — unlimited" state instead of a
+        # meaningless x/y run counter that no gate would ever enforce.
+        "entitlement": entitlements.resolve(user_id).as_dict(),
     }
 
 
@@ -816,10 +834,22 @@ def get_entitlement(current_user: CurrentUser) -> dict[str, Any]:
     ensure_user_billing(user_id)
     repo = SubscriptionRepository()
     sub = repo.get_by_user(user_id)
+    # ADMIN-FULL: ``unlimited``/``entitled``/``source`` come from the ONE
+    # server-side resolver so the frontend gate cannot disagree with the backend.
+    # ``active_paid`` deliberately still reports the REAL billing truth — an
+    # admin/comp entitlement is reported as an entitlement, never disguised as a
+    # payment that never happened.
+    ent = entitlements.resolve(user_id)
     return {
         "active_paid": repo.has_active_paid_subscription(user_id),
         "plan": {"id": sub["planId"], "status": sub["status"]} if sub else None,
         "requiresSubscription": subscription_gate_enabled(),
+        "unlimited": ent.unlimited,
+        "entitled": ent.entitled,
+        "source": ent.source,
+        "isAdmin": ent.is_admin,
+        "overrideActive": ent.override_active,
+        "overrideKind": ent.override_kind,
     }
 
 
@@ -831,13 +861,15 @@ def get_entitlement(current_user: CurrentUser) -> dict[str, Any]:
 @router.post("/portal")
 def create_portal(current_user: CurrentUser, request: Request) -> dict[str, str]:
     user_id = current_user["id"]
+    # ADMIN-FULL: admin-exempt per-user rate limit (see ``create_checkout``).
     limiter = getattr(request.app.state, "portal_rate_limiter", None)
-    if limiter is not None and not limiter.allow(user_id):
-        raise HTTPException(
-            status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="Too many portal requests, retry later",
-            headers={"Retry-After": str(limiter.retry_after(user_id))},
-        )
+    if limiter is not None and not entitlements.is_admin(user_id):
+        if not limiter.allow(user_id):
+            raise HTTPException(
+                status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Too many portal requests, retry later",
+                headers={"Retry-After": str(limiter.retry_after(user_id))},
+            )
     sub = SubscriptionRepository().get_by_user(user_id)
     customer_id = sub.get("stripeCustomerId") if sub else None
     if not customer_id:
@@ -876,30 +908,19 @@ async def _parse_refund_body(request: Request) -> dict[str, Any]:
     return raw
 
 
-@router.post("/admin/refund")
-async def admin_refund(admin: AdminUser, request: Request) -> dict[str, Any]:
-    """Refund a user's latest paid charge, then downgrade them to Free + cancel
-    their subscription (PAY-R3-04). Admin-only; every call is audit-logged.
+def perform_admin_refund(
+    *, actor_user_id: str, target_user_id: str, ip: Optional[str] = None
+) -> dict[str, Any]:
+    """THE admin refund path (PAY-R3-04), shared by every admin surface.
 
-    Body: ``{"userId": <id>}`` OR ``{"email": <email>}``. Issues
-    ``stripe.Refund.create(charge=<latest paid charge>)`` and returns the refund
-    id/status.
+    Extracted so the admin user-management panel reuses this exact sequence
+    rather than growing a second, drifting copy: refund the latest paid charge
+    through the gateway, then ``_revoke_to_free`` (the same shared handler the
+    refund/dispute webhooks use) inside one transaction that also writes the
+    audit row. Raises the same honest HTTP errors either caller would.
     """
-    body = await _parse_refund_body(request)
-    target_user_id = (body.get("userId") or "").strip() or None
-    email = (body.get("email") or "").strip() or None
-    if not target_user_id and not email:
-        raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY, "Provide a userId or an email."
-        )
-    if target_user_id is None and email is not None:
-        user = UserRepository().get_by_email(email)
-        if user is None:
-            raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
-        target_user_id = user["id"]
     if not admin_repo.user_exists(target_user_id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
-
     if not stripe_gateway.is_configured():
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -927,7 +948,7 @@ async def admin_refund(admin: AdminUser, request: Request) -> dict[str, Any]:
         with conn.cursor() as cur:
             _revoke_to_free(cur, target_user_id, cancel_stripe=True)
             admin_repo.write_audit(
-                admin["id"],
+                actor_user_id,
                 "billing_refund",
                 target_type="user",
                 target_id=target_user_id,
@@ -936,6 +957,7 @@ async def admin_refund(admin: AdminUser, request: Request) -> dict[str, Any]:
                     "refundId": refund.get("id"),
                     "refundStatus": refund.get("status"),
                 },
+                ip=ip,
                 cur=cur,
             )
         conn.commit()
@@ -947,3 +969,131 @@ async def admin_refund(admin: AdminUser, request: Request) -> dict[str, Any]:
         "chargeId": charge_id,
         "planId": "free",
     }
+
+
+def perform_admin_cancel(
+    *,
+    actor_user_id: str,
+    target_user_id: str,
+    at_period_end: bool = True,
+    ip: Optional[str] = None,
+) -> dict[str, Any]:
+    """Cancel a user's REAL Stripe subscription on an admin's behalf.
+
+    Routes through the existing billing service in both modes — never a hand
+    mutation of billing state:
+
+    * ``at_period_end=True`` -> ``stripe_gateway.set_cancel_at_period_end``; the
+      local ``cancelAtPeriodEnd`` flag is a MIRROR of what Stripe returned (the
+      ``customer.subscription.updated`` webhook reconciles it either way). The
+      plan and entitlement are untouched, so a customer keeps what they paid for.
+    * ``at_period_end=False`` -> ``_revoke_to_free(cancel_stripe=True)``, the very
+      same shared revoke the subscription.deleted / charge.refunded /
+      dispute.created webhooks use.
+
+    A user with no Stripe subscription is an honest 409: there is nothing to
+    cancel, and the in-app lever for that case is an entitlement override.
+    """
+    if not admin_repo.user_exists(target_user_id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
+    if not stripe_gateway.is_configured():
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "Billing is not configured on this deployment yet",
+        )
+    sub = SubscriptionRepository().get_by_user(target_user_id)
+    subscription_id = sub.get("stripeSubscriptionId") if sub else None
+    if not subscription_id:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "This user has no Stripe subscription to cancel — "
+            "use an entitlement override instead",
+        )
+
+    _ensure_billing_tables()
+    admin_repo._ensure_admin_schema()
+    if at_period_end:
+        result = stripe_gateway.set_cancel_at_period_end(subscription_id, True)
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    'UPDATE "Subscription" SET "cancelAtPeriodEnd"=%s,'
+                    '"updatedAt"=now() WHERE "userId"=%s',
+                    (bool(result.get("cancelAtPeriodEnd", True)), target_user_id),
+                )
+                admin_repo.write_audit(
+                    actor_user_id,
+                    "cancel_subscription",
+                    target_type="user",
+                    target_id=target_user_id,
+                    detail={
+                        "atPeriodEnd": True,
+                        "stripeSubscriptionId": subscription_id,
+                        "before": {"cancelAtPeriodEnd": bool(sub["cancelAtPeriodEnd"])},
+                        "after": {
+                            "cancelAtPeriodEnd": bool(
+                                result.get("cancelAtPeriodEnd", True)
+                            )
+                        },
+                    },
+                    ip=ip,
+                    cur=cur,
+                )
+            conn.commit()
+        return {
+            "userId": target_user_id,
+            "atPeriodEnd": True,
+            "cancelAtPeriodEnd": bool(result.get("cancelAtPeriodEnd", True)),
+            "planId": sub["planId"],
+        }
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            _revoke_to_free(cur, target_user_id, cancel_stripe=True)
+            admin_repo.write_audit(
+                actor_user_id,
+                "cancel_subscription",
+                target_type="user",
+                target_id=target_user_id,
+                detail={
+                    "atPeriodEnd": False,
+                    "stripeSubscriptionId": subscription_id,
+                    "before": {"planId": sub["planId"], "status": sub["status"]},
+                    "after": {"planId": "free", "status": "canceled"},
+                },
+                ip=ip,
+                cur=cur,
+            )
+        conn.commit()
+    return {
+        "userId": target_user_id,
+        "atPeriodEnd": False,
+        "cancelAtPeriodEnd": False,
+        "planId": "free",
+    }
+
+
+@router.post("/admin/refund")
+async def admin_refund(admin: AdminUser, request: Request) -> dict[str, Any]:
+    """Refund a user's latest paid charge, then downgrade them to Free + cancel
+    their subscription (PAY-R3-04). Admin-only; every call is audit-logged.
+
+    Body: ``{"userId": <id>}`` OR ``{"email": <email>}``. Issues
+    ``stripe.Refund.create(charge=<latest paid charge>)`` and returns the refund
+    id/status.
+    """
+    body = await _parse_refund_body(request)
+    target_user_id = (body.get("userId") or "").strip() or None
+    email = (body.get("email") or "").strip() or None
+    if not target_user_id and not email:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY, "Provide a userId or an email."
+        )
+    if target_user_id is None and email is not None:
+        user = UserRepository().get_by_email(email)
+        if user is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
+        target_user_id = user["id"]
+    return perform_admin_refund(
+        actor_user_id=admin["id"], target_user_id=target_user_id
+    )

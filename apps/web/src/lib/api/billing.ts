@@ -88,6 +88,33 @@ export async function startCheckout(
   });
 }
 
+/**
+ * The ONE server-side entitlement verdict (ADMIN-FULL), echoed onto both
+ * `/billing/subscription` and `/billing/entitlement`. `unlimited` means the
+ * backend enforces NO quota, spend cap, paywall or per-user rate limit for this
+ * account — admins/owners, and users an admin granted an unlimited entitlement.
+ *
+ * `activePaid` deliberately keeps reporting the REAL billing truth, so an
+ * entitlement grant is always visibly a grant and never masquerades as a
+ * payment. Every field is optional-with-default so an older API build still
+ * parses (the UI then renders exactly what it rendered before).
+ */
+export const EntitlementViewSchema = z.object({
+  unlimited: z.boolean().optional().default(false),
+  entitled: z.boolean().optional().default(false),
+  source: z.string().optional().default("plan"),
+  isAdmin: z.boolean().optional().default(false),
+  planId: z.string().nullable().optional().default(null),
+  activePaid: z.boolean().optional().default(false),
+  overrideActive: z.boolean().optional().default(false),
+  overrideKind: z.string().nullable().optional().default(null),
+  overridePlanId: z.string().nullable().optional().default(null),
+  overrideNote: z.string().nullable().optional().default(null),
+  overrideSetBy: z.string().nullable().optional().default(null),
+  overrideSetAt: z.string().nullable().optional().default(null),
+});
+export type EntitlementView = z.infer<typeof EntitlementViewSchema>;
+
 export const SubscriptionStateSchema = z.object({
   plan: z
     .object({ id: z.string(), name: z.string(), modelTier: z.string() })
@@ -105,6 +132,7 @@ export const SubscriptionStateSchema = z.object({
       periodEnd: z.string().nullable(),
     })
     .nullable(),
+  entitlement: EntitlementViewSchema.optional().default({}),
 });
 export type SubscriptionState = z.infer<typeof SubscriptionStateSchema>;
 
@@ -135,6 +163,16 @@ const EntitlementSchema = z.object({
   active_paid: z.boolean(),
   plan: z.object({ id: z.string(), status: z.string() }).nullable(),
   requiresSubscription: z.boolean(),
+  // ADMIN-FULL: the resolver's verdict. `unlimited` is what suppresses the
+  // paywall for an admin/owner — a real server-side exemption reflected in the
+  // UI, never a frontend-only bypass. Optional-with-default so an older API
+  // build behaves exactly as it did before.
+  unlimited: z.boolean().optional().default(false),
+  entitled: z.boolean().optional().default(false),
+  source: z.string().optional().default("plan"),
+  isAdmin: z.boolean().optional().default(false),
+  overrideActive: z.boolean().optional().default(false),
+  overrideKind: z.string().nullable().optional().default(null),
 });
 type Entitlement = z.infer<typeof EntitlementSchema>;
 

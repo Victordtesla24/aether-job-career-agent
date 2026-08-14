@@ -47,7 +47,7 @@ from app.repositories.user_provider_credential import (
     UserProviderCredentialRepository,
     _ensure_user_agent_tables,
 )
-from app.services import credential_vault
+from app.services import credential_vault, entitlements
 from app.services.agent_run_stream import (
     SSE_HEADERS,
     StreamCapExceeded,
@@ -878,12 +878,19 @@ def _require_active_subscription(
     ``system_run`` (ADR-P7-05) skips ONLY this check, and ONLY for
     ``agent_name`` in ``_SYSTEM_RUN_EXEMPT_AGENTS`` — every other guard below
     this call (quota block, plan quota reserve, spend cap) is unaffected.
+
+    ADMIN-FULL: the "is this caller entitled" question is answered by the ONE
+    resolver (``app.services.entitlements``) rather than by a local
+    ``has_active_paid_subscription`` call. For an ordinary user the verdict is
+    byte-identical (the resolver asks the very same repository); an admin, or a
+    user an admin granted a comp/tier/unlimited entitlement, passes here without
+    a Stripe subscription — which is the whole point of the mandate.
     """
     if not subscription_gate_enabled():
         return
     if system_run and agent_name in _SYSTEM_RUN_EXEMPT_AGENTS:
         return
-    if SubscriptionRepository().has_active_paid_subscription(user_id):
+    if entitlements.resolve(user_id).entitled:
         return
     raise HTTPException(
         status.HTTP_402_PAYMENT_REQUIRED,
@@ -1019,7 +1026,13 @@ def _record_run(
     # reserves atomically here, BEFORE execution, exactly as before.
     metered = _call_is_metered(agent_name, params)
     quota_repo: Any = None
-    if metered and skip_quota:
+    if metered and entitlements.unlimited(user_id):
+        # ADMIN-FULL: an admin (or an admin-granted unlimited entitlement) has no
+        # run allowance and no USD ceiling, so nothing is reserved and nothing is
+        # checked. Realized spend is STILL recorded through ``_SpendOnlyQuota`` —
+        # accounting is not a restriction, and /admin/spend must stay truthful.
+        quota_repo = _SpendOnlyQuota()
+    elif metered and skip_quota:
         # S-4: the exemption is RUN-COUNT ONLY. An automated system run spends
         # the USER's real dollars, so the per-user USD ceiling is checked here —
         # BEFORE the AgentRun row and before any LLM call — and the realized
@@ -2425,8 +2438,15 @@ def _enqueue_single_agent(
                 return str(active["id"])
     # 3) Atomic reserve AT ENQUEUE (metered calls only — ``_call_is_metered``
     #    keeps this seam in step with the sync path for opt-in-LLM backends).
+    #    ADMIN-FULL: the SAME resolver the sync path consults — an unlimited
+    #    caller reserves nothing here either, so the two seams can never
+    #    disagree about who is exempt.
     metered = _call_is_metered(agent_key, params)
-    quota_repo = UsageQuotaRepository() if metered else None
+    quota_repo = (
+        UsageQuotaRepository()
+        if metered and not entitlements.unlimited(user_id)
+        else None
+    )
     reserved_flag = False
     if quota_repo is not None:
         reserved = quota_repo.reserve(user_id)
@@ -2829,6 +2849,17 @@ def _guard_scout_cooldown(user_id: str, request: Request, system_run: bool) -> N
     limiter = getattr(request.app.state, "scout_rate_limiter", None)
     if limiter is None:  # app built without the limiter (older test harness)
         return
+    # ADMIN-FULL: this is a PER-USER rate limit, which the binding scope ruling
+    # classes as a restriction — so the ONE resolver exempts an admin here just
+    # as it does at the checkout/portal limiters. The SHARED protection this
+    # cooldown was built to defend is untouched: the deployment-wide Adzuna
+    # daily budget is enforced independently inside
+    # ``app.services.discovery.adzuna_adapter`` (``_daily_budget`` /
+    # ``budget_snapshot``), so an exempt admin still cannot spend past the
+    # ceiling — they simply are not throttled on their own clicks. The check
+    # short-circuits BEFORE ``allow()`` because that call consumes a token.
+    if entitlements.is_admin(user_id):
+        return
     if limiter.allow(user_id):
         return
     retry_after = limiter.retry_after(user_id)
@@ -3019,10 +3050,19 @@ def _sweep_eligible_users(limit: int) -> list[dict[str, str]]:
     entitled_clause = ""
     params: tuple[Any, ...] = (limit,)
     if subscription_gate_enabled():
+        # ADMIN-FULL: the sweep's SQL filter must agree with the ONE resolver, or
+        # an admin (and an admin-granted comp/tier/unlimited user) would be
+        # silently excluded from autopilot despite passing every runtime gate.
+        # Same three-way precedence as ``entitlements.resolve``, expressed as a
+        # set-returning predicate so the sweep stays one query.
+        entitlements.ensure_entitlement_schema()
         statuses = SubscriptionRepository._ENTITLED_STATUSES
         entitled_clause = (
-            ' AND EXISTS (SELECT 1 FROM "Subscription" s WHERE s."userId" = u."id"'
-            ' AND s."status" = ANY(%s) AND s."planId" <> \'free\')'
+            " AND (COALESCE(u.\"isAdmin\", false)"
+            ' OR EXISTS (SELECT 1 FROM "UserEntitlementOverride" o'
+            ' WHERE o."userId" = u."id")'
+            ' OR EXISTS (SELECT 1 FROM "Subscription" s WHERE s."userId" = u."id"'
+            ' AND s."status" = ANY(%s) AND s."planId" <> \'free\'))'
         )
         params = (list(statuses), limit)
     with get_connection() as conn:

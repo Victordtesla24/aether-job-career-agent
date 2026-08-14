@@ -282,13 +282,11 @@ regression set, 147 tests) green on origin/main content both before AND after U2
 merged in. Evidence: `uat/reports/evidence/market-perf/main-reds/land/`. The 9 reds ORCH-EXEC reported
 are CLOSED on `main`.
 
-## 2026-08-14T18:5xZ — session 9c6a2ba6 PUSHES slice sui-b3 (studios) — feature branch, NOT main
+## 2026-08-14T18:5xZ — session 9c6a2ba6 pushed slice sui-b3 (studios) to the feature branch
 - **Slice:** S-UI **B3** — Resume Studio (the aha moment), Cover Letter Studio, Story Bank. Branch
   `feat/sui-b3` @ `f110ce9` (merged with `origin/main c5db511`, U2c threshold wiring re-applied verbatim).
-- **This is a feature-branch push, NOT a main landing / production deploy.** Per S-UI-REBUILD-SPEC §6.5,
-  batches merge into the `feat/sui-rebuild` integration branch and `main` sees ONE coordinated landing at
-  the end — so **no deploy window is consumed and no auto-deploy / 3-of-3 health check applies to this
-  slice**. There is nothing here for `aether-autodeploy.timer` to pick up (main is untouched).
+  Independent judge verdict: PASS (`uat/reports/evidence/market-perf/s-ui/b3/judge/B3-JUDGE-REPORT.md`,
+  per-page scores 8/8/9, bar is ≥8).
 - **Files (FE presentation only; `apps/api` diff vs origin/main = EMPTY — 0 files):**
   `apps/web/src/app/dashboard/{resume,cover-letters,stories,[...slug]}/page.tsx`,
   `components/resume/{AhaHero,ChangeList,diff-semantics}.{tsx,ts}` (+ tests),
@@ -303,5 +301,56 @@ are CLOSED on `main`.
   targeted vitest 26 files / 126 tests PASS; full vitest (post-merge) 203 files / 1661 PASS; `tsc --noEmit`
   0; `next lint --max-warnings=0` clean; worktree `next build` exit 0. No existing test modified (3 NEW
   test files for B3-created code only; carve-out: none).
-- Touches no other session's active claims. Coordination entry committed WITH the branch push (rides
-  `feat/sui-b3`; nothing written to `main`).
+- Touches no other session's active claims.
+
+### Correction — this batch DOES land to `main` now, superseding the note above
+S-UI-REBUILD-SPEC.md §6.5 describes ONE coordinated landing after all five batches (B0–B4) merge into
+`feat/sui-rebuild`. In practice B0/B1(`feat/sui1-agents`→dashboard+analytics)/B2 already each landed to
+`main` individually with their own deploy + live-verify (see B2 LAND/VERIFY entries, `analytics-viz`
+entries, this doc's history) — this session's standing mandate is thin-slice continuous production
+delivery (owner instruction, 2026-08-13), which supersedes the batched-integration plan in §6.5 for this
+workstream. B3 follows the same precedent: landing directly to `main` per-batch rather than waiting on
+B4. Recorded here so a future reader of §6.5 isn't misled by the doc text, and so the earlier "NOT main
+landing" note on this same branch (superseded, not deleted, see git history) doesn't cause confusion.
+
+## Claim — session 9c6a2ba6, slice sui-b3, 2026-08-14T19:3xZ — LANDING to main
+
+Landing `feat/sui-b3` (Resume Studio aha moment, Cover Letter Studio, Story Bank fix) to `main`, worktree
+`aether-wt-sui-b3`. Merged latest `origin/main` (`e0efeec`, includes admin-full + dashboard 409 hotfix)
+into the branch; re-running targeted gates + `next build` on the merged tree before push. `apps/api` diff
+vs `origin/main` remains EMPTY (B3 is FE-only). Files listed above, plus this doc. Not touching any other
+session's active claims (ORCH-EXEC's MON-*/B5/B7/D.*/routers/agents.py, sidebar.tsx deletion).
+
+- **Expected deploy window:** next `aether-autodeploy.timer` cycle (5-min) after `HEAD:main` push.
+
+## 2026-08-14T19:0xZ — session 9c6a2ba6 CLAIMS a web deploy (dashboard below-floor 409 hotfix)
+- Prod bug: Dashboard "Needs Approval" inline Approve leaked the U2c quality-floor 409 as a raw exception + dropped the card (mislabeled "already handled"). Fix: resolveApproval detects the below-floor 409 (acknowledge_below_floor token), offers Approve-anyway, re-sends with the flag. Files: apps/web/src/app/dashboard/page.tsx + its test. Push HEAD:main → auto-deploy web rebuild.
+
+## Claim — session 9c6a2ba6, slice admin-full, 2026-08-14T19:1xZ
+
+Landing `feat/admin-full` @ `8dc1510` (worktree `aether-wt-adminfull`, build `ecf70d3` + audit-atomicity
+`c067ae1` + session-invalidation/§14.7 fix `8dc1510`). Re-review verdict of record:
+`uat/reports/evidence/market-perf/admin-full/ADMIN-SECURITY-RE*.md`. Closes both re-review findings
+(flaky `test_admin_sets_a_password_hashes_it_and_invalidates_sessions` made deterministic against the
+`_IAT_GRACE_SECONDS` window; `sessionsInvalidated` now computed/honest instead of a hardcoded `true`)
+plus the §14.7 reset-flow adjudication (env-managed admin identity refuses in-app password
+changes with a 409 instead of silently reverting at next restart).
+
+- Files: `apps/api/app/middleware/auth.py`, `apps/api/app/repositories/admin.py`,
+  `apps/api/app/routers/admin.py`, `apps/api/app/routers/auth.py`,
+  `apps/api/tests/test_admin_full_user_management.py`, `apps/api/tests/test_env_managed_admin_password.py`
+  (new), `apps/web/src/app/admin/users/[id]/page.tsx` + test, `apps/web/src/app/reset-password/` + test,
+  `apps/web/src/lib/api/admin.ts`, `apps/web/src/lib/api/auth.ts`, `apps/web/src/__tests__/auth/auth-api-client.test.ts`.
+  No migration.
+- Side-fix (deploy-blocking, unrelated to admin-full but required to reach a working auto-deploy):
+  this session's own stray untracked test-fixture/debug-script files from earlier today
+  (`apps/api/tests/fixtures/llm/cover_letter/quality2.json`,
+  `apps/api/tests/fixtures/llm/cover_letter_refine/{quality,quality2}.json`,
+  `apps/web/shot_cover_qa.cjs`, `apps/web/shot_resume_qa.cjs`) were outside `auto-deploy.sh`'s
+  `KNOWN_FOREIGN_UNTRACKED` allowlist and had been failing every deploy attempt since 17:50Z
+  ("unexpected untracked file(s)"). Backed up byte-exact + SHA256SUMS to
+  `/home/ubuntu/aether-backups/foreign-wip-20260814T190418Z-9c6a2ba6/` and removed from the shared
+  deploy checkout so `git pull --ff-only` can proceed again. Not touching any other session's tracked
+  claims or the still-allowlisted `test_blocker010_board_sweep_abort_recovery.py` / `cover_letter/{quality,retry3}.json`.
+- Expected deploy window: next `aether-autodeploy.timer` cycle after `HEAD:main` push.
+- Not touching any other session's active claims (ORCH-EXEC's MON-*/B5/B7/D.*, u2c, uagi-p1a).

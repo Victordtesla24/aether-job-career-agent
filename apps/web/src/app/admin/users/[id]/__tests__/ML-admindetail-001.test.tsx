@@ -58,6 +58,9 @@ vi.mock("../../../../../lib/api/admin", async (importOriginal) => {
   return {
     ...actual,
     fetchAdminUser: (...args: unknown[]) => fetchAdminUserMock(...args),
+    // ADMIN-FULL: the page also loads the per-user audit trail. Stub it so this
+    // spec makes no real request (the page already tolerates a failure here).
+    fetchUserAuditLog: async () => ({ entries: [], total: 0, limit: 25, offset: 0 }),
     setSpendCap: (...args: unknown[]) => setSpendCapMock(...args),
     setSuspended: (...args: unknown[]) => setSuspendedMock(...args),
   };
@@ -101,7 +104,10 @@ const DETAIL = {
 
 async function renderLoaded() {
   render(<AdminUserDetailPage />);
-  const input = await screen.findByRole("textbox");
+  // ADMIN-FULL: the page now carries several text inputs (identity + override
+  // note), so the spend-cap field is addressed by its accessible name rather
+  // than by "the only textbox". The assertions below are unchanged.
+  const input = await screen.findByLabelText("Spend cap in US dollars");
   await waitFor(() => expect(fetchAdminUserMock).toHaveBeenCalled());
   return input;
 }
