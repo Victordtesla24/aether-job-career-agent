@@ -22,10 +22,15 @@ draws this model; the completeness verifier measures the produced artifact
 against this same model. Neither can silently disagree with the other about
 what the résumé contains, because there is only one answer.
 
-Bullet lines are recognised with the SAME line-walk the ingestion pipeline uses
-(:mod:`app.services.resume_tailor`), so a bullet is never both dropped from the
-prose and absent from the bullet list: whatever ``extract_bullets`` claimed is
-exactly what this model reserves a slot for.
+Bullet lines are recognised by literally CALLING the ingestion pipeline's walk
+(:func:`app.services.resume_tailor.walk_blocks`), so a bullet is never both
+dropped from the prose and absent from the bullet list: whatever
+``extract_bullets`` claimed is exactly what this model reserves a slot for.
+Until round 4 that sentence described an intended invariant rather than a
+code-sharing relationship — this module kept its own hand-written copy of the
+walk, and round 3's new boundary had to be hand-added to both copies and a
+third in ``resume_tailor``. It reached all three; the flat-text case reached
+none of them.
 
 ROUND 3 (2026-08-14) closed the last way the three could still disagree. A
 tailored version's stored ``raw_text`` was not built from this model at all: it
@@ -48,12 +53,10 @@ from typing import Any
 # ``extract_bullets`` consumed, or the render would either duplicate a bullet
 # (once as prose, once from the bullet list) or lose one.
 from app.services.resume_tailor import (
-    _ends_bullet,
     _is_bullet_marker,
     _is_section_banner,
-    _job_header_indices,
-    marks_wrapping_by_indent,
     reading_order,
+    walk_blocks,
 )
 
 #: Section banners a résumé actually uses. Only these end the name block at the
@@ -75,8 +78,6 @@ _MAX_NAME_LINES = 3
 
 #: Contact keys that are NOT contact details (they name the person/role).
 _NON_CONTACT_KEYS = ("name", "title", "headline", "role")
-
-_MARKER_CHARS = "•●▪- \t"
 
 #: Indent given to a bullet when the document is written back out. A bullet
 #: prints inside its section's text column, one step in from the section's own
@@ -179,10 +180,6 @@ def _split_merged_banner(line: str) -> tuple[str, str]:
     return "", line
 
 
-def _bullet_head(line: str) -> str:
-    return line.lstrip(_MARKER_CHARS).strip()
-
-
 def _parse_header(raw_lines: list[str]) -> tuple[str, str, int]:
     """``(name, title, index of the first body line)``.
 
@@ -229,64 +226,28 @@ def _parse_sections(
 ) -> list[DocSection]:
     """Walk the résumé body into sections of lines and bullet slots.
 
-    A bullet's wrapped continuation lines are folded into the bullet itself
-    (identically to ``resume_tailor.extract_bullets``), so they are never drawn
-    twice — once as loose prose and once inside the bullet. A line printed back
-    out at the bullet marker's own column is a NEW block, not that bullet's
-    wrapping: it stays the line it is, which is how the live résumé's second
-    degree stops being swallowed by the one-word ``"• Honors"`` above it.
+    The walk is not this function's own: it is
+    :func:`app.services.resume_tailor.walk_blocks`, the single bullet-boundary
+    state machine the ingestion pipeline reads too. This function only decides
+    which section each block belongs to, so a bullet's wrapped continuation
+    lines are folded into exactly the bullet ``extract_bullets`` claimed — never
+    drawn twice, once as loose prose and once inside the bullet — and a line the
+    walk says opens a NEW block stays the line it is, which is how the live
+    résumé's second degree stops being swallowed by the one-word ``"• Honors"``
+    above it.
     """
-    header_indices = _job_header_indices(raw_lines)
-    column_wrapped = marks_wrapping_by_indent(indents)
     sections: list[DocSection] = []
     heading = ""
     items: list[DocItem] = []
-    buffer: list[str] | None = None
-    marker_indent = 0
-
-    def close_bullet() -> None:
-        nonlocal buffer
-        if buffer is not None:
-            text = " ".join(part for part in buffer if part).strip()
-            if text:
-                items.append(DocItem("bullet", text))
-        buffer = None
-
-    def close_section() -> None:
-        close_bullet()
-        if heading or items:
-            sections.append(DocSection(heading=heading, items=tuple(items)))
-
-    for i in range(start, len(raw_lines)):
-        line = raw_lines[i]
-        if _is_bullet_marker(line):
-            close_bullet()
-            head = _bullet_head(line)
-            buffer = [head] if head else []
-            marker_indent = indents[i]
-            if head and _ends_bullet(head):
-                close_bullet()
+    for block in walk_blocks(raw_lines, indents, start):
+        if block.kind == "line" and _is_section_banner(block.text):
+            if heading or items:
+                sections.append(DocSection(heading=heading, items=tuple(items)))
+            heading, items = block.text, []
             continue
-        if _is_section_banner(line):
-            close_section()
-            heading, items = line, []
-            continue
-        if buffer is not None:
-            if i in header_indices or (
-                column_wrapped and indents[i] <= marker_indent
-            ):
-                close_bullet()
-                items.append(DocItem("line", line))
-                continue
-            if buffer and buffer[-1].endswith("-"):
-                buffer[-1] += line
-            else:
-                buffer.append(line)
-            if _ends_bullet(line):
-                close_bullet()
-            continue
-        items.append(DocItem("line", line))
-    close_section()
+        items.append(DocItem(block.kind, block.text))
+    if heading or items:
+        sections.append(DocSection(heading=heading, items=tuple(items)))
     return sections
 
 
