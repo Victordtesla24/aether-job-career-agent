@@ -6,6 +6,8 @@ fixtures, no in-process dictionaries, no demo personas.
 """
 from __future__ import annotations
 
+import logging
+import time
 from typing import Annotated, Any
 
 from email_validator import EmailNotValidError, validate_email
@@ -24,6 +26,21 @@ from app.services.career_data import refresh_career_data
 from app.services.offers import create_offer, delete_offer, fetch_offers_payload
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
+
+# MON-002: an expired/revoked Google credential (or any other Google-API-shaped
+# failure — ``GmailError`` and its subclasses ``GmailAuthError``/
+# ``GmailNotConnectedError``) used to be retried on EVERY ``GET
+# /emails/inbox`` poll past the freshness TTL, since a failed sync never
+# stamps ``lastSyncedAt`` (see ``is_email_sync_fresh``). That produced ~50
+# Gmail 403s/hour in production. This process-local negative cache, keyed by
+# userId, makes a request within the window skip the inline sync attempt
+# entirely instead of hammering Gmail with a credential that is known-bad.
+# ``value = (deadline_monotonic, account_ids_in_backoff)`` — mirrors the
+# existing ``_cache: dict[str, tuple[float, ...]]`` TTL-cache idiom in
+# ``app.services.apply_channel_resolver``.
+_GMAIL_SYNC_BACKOFF_SECONDS = 15 * 60
+_gmail_sync_backoff: dict[str, tuple[float, frozenset[Any]]] = {}
 
 
 def _email_provider_connected(user_id: str) -> bool:
@@ -474,11 +491,24 @@ def email_inbox(
         # Best-effort sync of EVERY connected inbox; a hiccup on one account must
         # never 500 the inbox or block the others.
         from app.services.gmail_service import (
-            GmailAuthError,
-            GmailNotConnectedError,
+            GmailError,
             GmailService,
             is_email_sync_fresh,
         )
+
+        # MON-002: a still-active backoff for this user means at least one
+        # account's credential was PROVEN dead on a recent request — skip the
+        # sync attempt for exactly those accounts instead of re-hammering
+        # Gmail every poll. An expired entry is dropped so the next attempt
+        # below can retry (and clear it on success, or re-arm it on another
+        # failure).
+        backoff_entry = _gmail_sync_backoff.get(uid)
+        backoff_account_ids: frozenset[Any] = frozenset()
+        if backoff_entry is not None:
+            deadline, backoff_account_ids = backoff_entry
+            if time.monotonic() >= deadline:
+                _gmail_sync_backoff.pop(uid, None)
+                backoff_account_ids = frozenset()
 
         for acc in account_rows:
             # W-6 TTL gate: one sync is threads().list() + up to 25
@@ -490,12 +520,43 @@ def email_inbox(
             # retried on the next request rather than being cached as "fresh".
             if is_email_sync_fresh(acc.get("lastSyncedAt")):
                 continue
+            acc_id = acc.get("id")
+            if acc_id in backoff_account_ids:
+                auth_failed_account_ids.add(acc_id)
+                continue
             try:
-                GmailService(uid, account_id=acc.get("id")).sync_threads_to_db()
-            except (GmailAuthError, GmailNotConnectedError):
-                auth_failed_account_ids.add(acc.get("id"))
-            except Exception:  # noqa: BLE001 — a Gmail hiccup must not 500 the inbox
+                GmailService(uid, account_id=acc_id).sync_threads_to_db()
+            except GmailError:
+                # Covers GmailAuthError/GmailNotConnectedError AND the plain
+                # GmailError a real Google 403 ("insufficientPermissions" /
+                # invalid_grant) actually arrives as (gmail_service.py
+                # list_threads wraps every HttpError into GmailError, not
+                # just auth-shaped ones) — this is the exact case that used
+                # to fall through to the silent `except Exception: pass`
+                # below and get retried on every single poll.
+                auth_failed_account_ids.add(acc_id)
+                already_backed_off = uid in _gmail_sync_backoff
+                _gmail_sync_backoff[uid] = (
+                    time.monotonic() + _GMAIL_SYNC_BACKOFF_SECONDS,
+                    frozenset(auth_failed_account_ids),
+                )
+                if not already_backed_off:
+                    # One structured warning on ENTERING backoff, not one per
+                    # request — subsequent polls within the window hit the
+                    # `continue` above and never reach this except block.
+                    logger.warning(
+                        "gmail_sync_backoff_entered user_id=%s account_id=%s "
+                        "backoff_seconds=%s",
+                        uid,
+                        acc_id,
+                        _GMAIL_SYNC_BACKOFF_SECONDS,
+                    )
+            except Exception:  # noqa: BLE001 — a non-Gmail hiccup must not 500 the inbox
                 pass
+            else:
+                # A successful sync proves the credential is good again —
+                # clear any backoff this user was previously in.
+                _gmail_sync_backoff.pop(uid, None)
 
     # The inbox query reads/joins on the additive Gmail linkage columns plus the
     # additive aiScore column; ensure they exist even for a user who has never
