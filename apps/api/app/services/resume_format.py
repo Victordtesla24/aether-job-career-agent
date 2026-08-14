@@ -36,7 +36,7 @@ claims: "low confidence ⇒ faithful re-render + EXPLICIT fidelity report".
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from app.services.resume_docx import DOCX_CONTENT_TYPE
@@ -91,12 +91,19 @@ class FormatFidelity:
     changes_applied: int | None = None
     changes_dropped: int | None = None
     dropped_changes: tuple[dict[str, Any], ...] = ()
+    #: Whether the WHOLE persisted résumé reached the produced file — headings,
+    #: every bullet (tracked or not) and the contact details. ``None`` when no
+    #: completeness measurement was made, never a guess (U2b CRITICAL round).
+    content_complete: bool | None = None
+    missing_content: tuple[str, ...] = ()
 
     def as_dict(self) -> dict[str, Any]:
         report: dict[str, Any] = {
             "method": self.method,
             "confidence": self.confidence,
             "note": self.note,
+            "contentComplete": self.content_complete,
+            "missingContent": list(self.missing_content),
         }
         if self.verification is not None:
             report.update({
@@ -232,7 +239,10 @@ def pending_fidelity(base: FormatFidelity) -> FormatFidelity:
 
 
 def native_fallback_fidelity(
-    *, unreadable: bool = False, stored_original: bool = True
+    *,
+    unreadable: bool = False,
+    stored_original: bool = True,
+    content_incomplete: bool = False,
 ) -> FormatFidelity:
     """The honest report when an in-document rewrite could not complete.
 
@@ -251,13 +261,24 @@ def native_fallback_fidelity(
     from Settings" pointer is dropped instead of promising a file that may not
     exist.
     """
-    reason = (
-        "Your stored original file could not be opened, so this download is "
-        "rendered in the Aether template"
-        if unreadable
-        else "A reworded line could not be located in your original document, "
-        "so this download is rendered in the Aether template"
-    )
+    if unreadable:
+        reason = (
+            "Your stored original file could not be opened, so this download is "
+            "rendered in the Aether template"
+        )
+    elif content_incomplete:
+        # U2b CRITICAL: an in-document render that re-reading proved had lost
+        # part of the user's own résumé (a section, a bullet, their contact
+        # details) is worse than an honest re-format, so it is never shipped.
+        reason = (
+            "Part of your résumé was missing from the tailored copy of your own "
+            "document, so this download is rendered in the Aether template"
+        )
+    else:
+        reason = (
+            "A reworded line could not be located in your original document, "
+            "so this download is rendered in the Aether template"
+        )
     pointer = (
         " The file you uploaded is unchanged and can still be downloaded from Settings."
         if stored_original
@@ -274,8 +295,57 @@ def native_fallback_fidelity(
     )
 
 
+#: How many missing items the honest note names before it summarises the rest.
+_NAMED_MISSING = 3
+
+
+def _with_completeness(report: FormatFidelity, completeness: Any) -> FormatFidelity:
+    """Re-state ``report`` from what the WHOLE-document check proved (U2b CRITICAL).
+
+    The per-change verifier can only see the rewrites it asked for. Live
+    production shipped a download whose every tracked claim was true and which
+    was still missing a third of the user's own résumé — contact block,
+    education, skills, certifications and 8 untracked bullets — while the report
+    beside it read as an assurance
+    (``uat/reports/evidence/agents-uplift/u2b/verify-final/``, 2026-08-14).
+
+    So a render that lost persisted content is not a faithful rendering of the
+    version, whatever the mechanism could do in principle and however many
+    tracked edits landed: ``preserved`` becomes ``False``, confidence drops to
+    ``partial``, and the note NAMES what is gone. A file that could not be
+    re-read makes no completeness claim in either direction.
+    """
+    if completeness is None:
+        return report
+    if not getattr(completeness, "text_extracted", False):
+        return report
+    missing = tuple(completeness.missing)
+    if not missing:
+        return replace(report, content_complete=True, missing_content=())
+    named = ", ".join(missing[:_NAMED_MISSING])
+    remainder = len(missing) - _NAMED_MISSING
+    if remainder > 0:
+        named += f", and {remainder} more item{'s' if remainder != 1 else ''}"
+    return replace(
+        report,
+        confidence=CONFIDENCE_PARTIAL,
+        preserved=False,
+        note=(
+            f"{report.note} Part of your résumé is missing from the file this "
+            f"download produces — {named}. The complete text is on this version "
+            "in Resume Studio; do not send this file until it is fixed."
+        ),
+        content_complete=False,
+        missing_content=missing,
+    )
+
+
 def verified_fidelity(
-    base: FormatFidelity, verification: Any, *, byte_identical: bool = False
+    base: FormatFidelity,
+    verification: Any,
+    *,
+    byte_identical: bool = False,
+    completeness: Any = None,
 ) -> FormatFidelity:
     """``base``, re-stated from what re-reading the produced artifact proved.
 
@@ -298,31 +368,37 @@ def verified_fidelity(
     stands there with the caveat spelled out in the note.
     """
     if byte_identical:
-        return FormatFidelity(
-            method=base.method,
-            confidence=base.confidence,
-            note=base.note,
-            preserved=base.preserved,
-            verification=VERIFICATION_BYTE_IDENTITY,
-            changes_requested=0,
-            changes_applied=0,
-            changes_dropped=0,
+        return _with_completeness(
+            FormatFidelity(
+                method=base.method,
+                confidence=base.confidence,
+                note=base.note,
+                preserved=base.preserved,
+                verification=VERIFICATION_BYTE_IDENTITY,
+                changes_requested=0,
+                changes_applied=0,
+                changes_dropped=0,
+            ),
+            completeness,
         )
     requested = int(getattr(verification, "requested", 0))
     if not getattr(verification, "text_extracted", False):
-        return FormatFidelity(
-            method=base.method,
-            confidence=CONFIDENCE_PENDING,
-            note=(
-                f"{base.note} Aether could not re-read the produced file to "
-                "check the tailored wording, so this download is reported as "
-                "unverified rather than assumed correct."
+        return _with_completeness(
+            FormatFidelity(
+                method=base.method,
+                confidence=CONFIDENCE_PENDING,
+                note=(
+                    f"{base.note} Aether could not re-read the produced file to "
+                    "check the tailored wording, so this download is reported as "
+                    "unverified rather than assumed correct."
+                ),
+                preserved=base.preserved,
+                verification=VERIFICATION_POST_RENDER,
+                changes_requested=requested,
+                changes_applied=0,
+                changes_dropped=0,
             ),
-            preserved=base.preserved,
-            verification=VERIFICATION_POST_RENDER,
-            changes_requested=requested,
-            changes_applied=0,
-            changes_dropped=0,
+            completeness,
         )
     applied = int(verification.applied_count)
     dropped = verification.dropped
@@ -334,20 +410,23 @@ def verified_fidelity(
             if requested
             else ""
         )
-        return FormatFidelity(
-            method=base.method,
-            confidence=base.confidence,
-            note=f"{base.note}{checked}",
-            preserved=base.preserved,
-            verification=VERIFICATION_POST_RENDER,
-            changes_requested=requested,
-            changes_applied=applied,
-            changes_dropped=0,
+        return _with_completeness(
+            FormatFidelity(
+                method=base.method,
+                confidence=base.confidence,
+                note=f"{base.note}{checked}",
+                preserved=base.preserved,
+                verification=VERIFICATION_POST_RENDER,
+                changes_requested=requested,
+                changes_applied=applied,
+                changes_dropped=0,
+            ),
+            completeness,
         )
     excerpt = str(dropped[0].after).strip()
     if len(excerpt) > 120:
         excerpt = f"{excerpt[:117]}…"
-    return FormatFidelity(
+    return _with_completeness(FormatFidelity(
         method=base.method,
         confidence=CONFIDENCE_PARTIAL,
         note=(
@@ -366,7 +445,7 @@ def verified_fidelity(
         changes_applied=applied,
         changes_dropped=len(dropped),
         dropped_changes=tuple(outcome.as_dict() for outcome in dropped),
-    )
+    ), completeness)
 
 
 def stamp_fidelity(

@@ -299,12 +299,49 @@
   box-shadow: none;
 }
 
-.ag-node-focused {
-  border-color: rgba(255, 107, 53, 0.5);
-  background-image: linear-gradient(180deg, rgba(255, 107, 53, 0.1), rgba(255, 107, 53, 0.022));
+/*
+ * ORCH-RUN — a node picked for a multi-agent run.
+ *
+ * DELIBERATELY NOT CORAL. On this console coral means one thing only ("live
+ * run — the only thing that moves", as the map's own legend states), and a
+ * selected node is a node that has not run yet. Selection is therefore a
+ * neutral white ring at the same weight the hover state already uses — visible
+ * at a glance, impossible to mistake for the bloom two cards over
+ * (reference-pack rules 3 and 9: one accent, one meaning; minimal active
+ * states carried by the hairline rather than by fill).
+ */
+.ag-node-selected {
+  border-color: rgba(255, 255, 255, 0.34);
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.085), rgba(255, 255, 255, 0.03));
   box-shadow:
-    inset 0 1px 0 0 rgba(255, 255, 255, 0.07),
-    0 0 0 1px rgba(255, 107, 53, 0.16);
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.09),
+    0 0 0 1px rgba(255, 255, 255, 0.14);
+}
+
+/*
+ * The per-node run affordance. Hidden by OPACITY, never by `display:none` or
+ * `visibility` — it stays in the tab order at all times, and `:focus-within`
+ * brings it into view the moment a keyboard reaches it, so the feature is not
+ * mouse-only. It re-appears unconditionally while it has something to say
+ * (`data-persist` = dispatching, or carrying a result), and on touch devices,
+ * where there is no hover to reveal it with.
+ */
+.ag-node-run {
+  opacity: 0;
+  transition: opacity var(--dur) var(--ease);
+}
+
+.ag-node-shell:hover .ag-node-run,
+.ag-node-shell:focus-within .ag-node-run,
+.ag-node-run:focus-visible,
+.ag-node-run[data-persist="true"] {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .ag-node-run {
+    opacity: 1;
+  }
 }
 
 /*
