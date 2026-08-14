@@ -5471,7 +5471,8 @@ def test_run(body: TestRunRequest, current_user: CurrentUser) -> dict[str, Any]:
 # Generic trigger — declared last so specific routes above win.
 @router.post("/{name}/run")
 def run_named_agent(
-    name: str, current_user: CurrentUser, params: dict[str, Any] | None = None
+    name: str, current_user: CurrentUser, response: Response,
+    params: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Trigger any registered agent by name with free-form params (P2-S08).
 
@@ -5483,9 +5484,43 @@ def run_named_agent(
     (``runAgent(AGENT_ROUTE[backend] ?? backend)``,
     apps/web/src/app/dashboard/agents/page.tsx), so the bare 500 was
     customer-reachable, not merely a scripting inconvenience.
+
+    D.524: this was the LAST fully-synchronous run route — probe 5
+    (``uat/reports/evidence/orch-exec/MON-RESIDUALS-EVIDENCE-2026-08-14.md``)
+    measured it carrying ~24% of all ``/run`` traffic (every agent with no
+    dedicated route, plus any dedicated agent's alternate/camelCase alias),
+    the same Cloudflare-524 exposure shape MON-020 already fixed for
+    ``scout`` and GAP-P7-ASYNC-001 already fixed for the dedicated
+    ``tailor``/``cover-letter`` routes. When ``AETHER_ASYNC_GENERATION`` is
+    ON, this mirrors those dedicated routes EXACTLY: the SAME
+    ``_enqueue_single_agent`` background-job machinery, the SAME
+    ``202 {"job_id", "status": "enqueued"}`` envelope — WITHOUT
+    ``singleton=True`` (binding orchestrator ruling OQ-2: unlike ``scout``,
+    the generic route makes no single-run-per-agent claim, so concurrent runs
+    of the same agent are all accepted, exactly like tailor/coverLetter
+    today). When OFF (the default), behaviour is BYTE-IDENTICAL to before
+    this change.
+
+    The agent name is resolved through the SAME pure ``_agent_callable`` seam
+    on both paths, so an unknown agent name or a missing required param (e.g.
+    ``coverLetter``'s ``job_id``) gets the identical honest 404/422 whichever
+    path is taken — resolved BEFORE anything is persisted, reserved, or
+    queued, never discovered only after an async job was already accepted.
     """
+    user_id = current_user["id"]
+    params = params or {}
+    if async_generation_enabled():
+        # Validate/resolve FIRST (same seam _dispatch uses internally) so an
+        # unknown agent (HTTPException 404, raised directly by
+        # _agent_callable) or a missing required param (e.g. HTTPException
+        # 422 from _require_job_id) is refused before anything is enqueued,
+        # reserved or persisted — identical to the synchronous path below.
+        canonical, _ = _agent_callable(user_id, name, params)
+        job_id = _enqueue_single_agent(user_id, canonical, params)
+        response.status_code = status.HTTP_202_ACCEPTED
+        return {"job_id": job_id, "status": "enqueued"}
     try:
-        return _dispatch(current_user["id"], name, params or {})
+        return _dispatch(user_id, name, params)
     except LookupError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
     except (FabricationError, StructuralError) as exc:
