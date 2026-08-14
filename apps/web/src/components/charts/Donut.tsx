@@ -55,9 +55,9 @@ export interface DonutProps {
 
 const RADIUS = 42;
 const STROKE_WIDTH = 14;
-const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
+export const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 /** 1px visual gap between adjacent arcs, expressed in path length. */
-const GAP = 1.5;
+export const GAP = 1.5;
 /**
  * The shortest a REAL arc may ever render, after `GAP` is subtracted —
  * analogous to `geometry.ts`'s `MIN_VALUE_LENGTH` for the bar-shaped charts,
@@ -72,13 +72,126 @@ const GAP = 1.5;
  * that arc, identical to a genuine absence. Set to `GAP + 0.5` so the floor
  * stays strictly above the gap it follows regardless of how `GAP` is tuned.
  */
-const MIN_ARC_LENGTH = GAP + 0.5;
+export const MIN_ARC_LENGTH = GAP + 0.5;
 
 interface RenderedArc {
   label: string;
   value: number;
   colour: string;
   members?: readonly DonutSegment[];
+}
+
+export interface ArcLayoutResult {
+  length: number;
+  /** Drawn stroke length. Always `<= length`, by construction — see
+   *  `layoutDonutArcs`. */
+  visible: number;
+  /** Cumulative start position on the ring, matching how `stroke-dashoffset`
+   *  measures distance (0 at the rotated origin, increasing clockwise). */
+  offset: number;
+}
+
+/**
+ * Lay out every arc's slice of the ring, floor included, WITHOUT ever
+ * letting a floored arc's drawn (`visible`) length exceed the raw slice
+ * (`length`) it was proportionally allotted.
+ *
+ * Round 2 of this fix floored `visible` in isolation
+ * (`Math.max(MIN_ARC_LENGTH, length - GAP)`) and shipped a second defect:
+ * for a group whose raw `length` is itself below `MIN_ARC_LENGTH` (share
+ * below `(GAP + MIN_ARC_LENGTH) / CIRCUMFERENCE`, ≈1.33% at this file's
+ * constants), the floored `visible` came out LARGER than the arc's own raw
+ * slice on the ring. Because each arc's start `offset` only ever advances by
+ * the raw, unadjusted `length` (never by the floored `visible`), an
+ * over-floored arc's drawn stroke ran past the boundary where the next
+ * arc's slice begins — for the LAST arc in ring order that means wrapping
+ * past 360° back into the FIRST arc's own drawn stroke. Two real, disclosed,
+ * nonzero arcs overlapping on the primary visual is strictly worse than the
+ * one-real-arc-invisible defect this floor was added to fix.
+ *
+ * The fix: a floor can buy legibility only with pixels it takes from
+ * somewhere real, never for free. When an arc needs flooring, the exact
+ * delta (`minSlot - length`) is subtracted from the single LARGEST arc's own
+ * `length` — the arc with the most slack to give up without needing a floor
+ * itself. That keeps `sum(length)` pinned at exactly `circumference`
+ * (nothing borrowed from outside the ring, nothing left over), which in turn
+ * guarantees `visible <= length` for every arc — no overlap, no wrap past
+ * 360°, by construction rather than by coincidence of the input data.
+ *
+ * Every `segment.value` handed in must be `> 0` — Donut filters a genuine
+ * `value === 0` out of `arcs` long before this function is called (see the
+ * component's C-1 docstring); this function has no zero/null case.
+ */
+export function layoutDonutArcs<T extends { label: string; value: number }>(
+  segments: readonly T[],
+  circumference: number,
+  gap: number,
+  minArcLength: number,
+): (T & ArcLayoutResult)[] {
+  const total = segments.reduce((sum, s) => sum + s.value, 0);
+  if (segments.length === 0 || total <= 0) return [];
+
+  // The minimum raw slice an arc needs so its floored `visible` never has to
+  // borrow: exactly enough for the gap plus the visibility floor.
+  const minSlot = gap + minArcLength;
+  const rawLengths = segments.map((s) => (s.value / total) * circumference);
+  const lengths = [...rawLengths];
+
+  let totalDeficit = 0;
+  lengths.forEach((length, index) => {
+    if (length < minSlot) {
+      totalDeficit += minSlot - length;
+      lengths[index] = minSlot;
+    }
+  });
+
+  if (totalDeficit > 0) {
+    let donor = -1;
+    let donorRaw = -Infinity;
+    rawLengths.forEach((length, index) => {
+      // Only an arc that did NOT itself need flooring may lend — otherwise
+      // we would be taking pixels from an arc that has none to spare.
+      if (length >= minSlot && length > donorRaw) {
+        donorRaw = length;
+        donor = index;
+      }
+    });
+    if (donor === -1) {
+      // No arc is large enough to fund every floor without going below its
+      // own — a genuine geometry impossibility for this data + these
+      // constants. Fail loudly rather than render an overlapping ring.
+      throw new Error(
+        `layoutDonutArcs: cannot floor every undersized arc to ${minArcLength} — ` +
+          `no arc is large enough to lend the difference without breaching its own floor.`,
+      );
+    }
+    lengths[donor] -= totalDeficit;
+    if (lengths[donor] < minSlot) {
+      throw new Error(
+        `layoutDonutArcs: flooring the undersized arcs would push the donor arc ` +
+          `"${segments[donor]?.label}" below its own visibility floor.`,
+      );
+    }
+  }
+
+  // Total-arc-length invariant: the ring can neither gain nor lose length —
+  // every pixel a floor adds was taken from the donor, never manufactured.
+  const totalLength = lengths.reduce((sum, l) => sum + l, 0);
+  if (Math.abs(totalLength - circumference) > 1e-6) {
+    throw new Error(
+      `layoutDonutArcs: redistributed arc lengths sum to ${totalLength}, not the ring's ` +
+        `circumference ${circumference} — the ring would overlap or leave a gap.`,
+    );
+  }
+
+  let offset = 0;
+  return segments.map((segment, index) => {
+    const length = lengths[index] as number;
+    const visible = Math.max(0, length - gap);
+    const laidOut = { ...segment, length, visible, offset };
+    offset += length;
+    return laidOut;
+  });
 }
 
 export function Donut({
@@ -121,7 +234,7 @@ export function Donut({
     });
   }
 
-  let offset = 0;
+  const laidOutArcs = layoutDonutArcs(arcs, CIRCUMFERENCE, GAP, MIN_ARC_LENGTH);
 
   return (
     <ChartFrame
@@ -238,15 +351,8 @@ export function Donut({
               stroke={SURFACE.s2}
               strokeWidth={STROKE_WIDTH}
             />
-            {arcs.map((arc) => {
-              const length = total > 0 ? (arc.value / total) * CIRCUMFERENCE : 0;
-              // Floor applies only when there IS a real length to floor — a
-              // `length` of exactly 0 only happens when `total` is 0 (the
-              // whole ring is moot), never for a real arc.value > 0, so the
-              // floor can never manufacture visibility for something absent.
-              const visible = length > 0 ? Math.max(MIN_ARC_LENGTH, length - GAP) : 0;
-              const dashOffset = -offset;
-              offset += length;
+            {laidOutArcs.map((arc) => {
+              const dashOffset = -arc.offset;
               return (
                 <circle
                   key={`${uid}-${arc.label}`}
@@ -258,8 +364,8 @@ export function Donut({
                   fill="none"
                   stroke={arc.colour}
                   strokeWidth={STROKE_WIDTH}
-                  strokeDasharray={`${visible} ${CIRCUMFERENCE - visible}`}
-                  strokeDashoffset={motion.atOrigin ? dashOffset - visible : dashOffset}
+                  strokeDasharray={`${arc.visible} ${CIRCUMFERENCE - arc.visible}`}
+                  strokeDashoffset={motion.atOrigin ? dashOffset - arc.visible : dashOffset}
                   transform="rotate(-90 50 50)"
                   style={{ transition: motion.transition("stroke-dashoffset") }}
                 >
