@@ -846,6 +846,8 @@ def _render_resume(
         from app.services.format_verification import verify_changes
         from app.services.resume_completeness import (
             build_resume_content as _brc,
+        )
+        from app.services.resume_completeness import (
             verify_completeness as _vc,
         )
 
