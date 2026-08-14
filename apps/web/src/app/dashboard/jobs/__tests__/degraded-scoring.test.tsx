@@ -77,6 +77,12 @@ function insightsFixture(degraded: boolean, semanticScoreOverride?: number) {
     semantic: semanticScore,
     semanticPath: degraded ? "degraded" : "local",
     semanticDegraded: degraded,
+    // R-04 (round 3): `atsMeasured` is now emitted on EVERY insights payload
+    // and read fail-closed by the page (absent => not measured), so a fixture
+    // must state it — the same discipline `lib/scoring/provenance.ts` already
+    // applies to `conversionMetrics`. Both cases here are engine-measured; it
+    // is the SEMANTIC half that degrades, which is what this file is about.
+    atsMeasured: true,
     experience: 70,
     skillsMatched: 4,
     skillsTotal: 5,

@@ -25,10 +25,21 @@ export interface TailoringDimension {
 }
 
 export interface TailoringImpactProps {
-  beforeAts: number;
-  afterAts: number;
+  /** R-01: `null` means the half was NOT measured — the API withholds the
+   *  number rather than flagging it (`GET /resumes/{id}/tailoring-impact`
+   *  returns `ats: null` whenever `atsMeasured` is false), so this component
+   *  cannot render a placeholder-contaminated score as a bold headline even by
+   *  accident. `overall` is 0.4*keyword + 0.4*semantic + 0.2*experience, i.e.
+   *  40% neutral placeholder when the semantic path is untrusted — the exact
+   *  number that used to print as "Before 58 → After 61.4 (+3.4 ATS)" directly
+   *  above a "Role Alignment — → — n/a" row derived from the same value. */
+  beforeAts: number | null;
+  afterAts: number | null;
   beforeDimensions: TailoringDimension[];
   afterDimensions: TailoringDimension[];
+  /** Why an absent ATS number is absent. A bare "—" tells a paying subscriber
+   *  nothing; this turns it into a statement. */
+  atsUnmeasuredReason?: string | null;
 }
 
 const DIMENSION_THRESHOLD = 80;
@@ -52,8 +63,12 @@ export default function TailoringImpact({
   afterAts,
   beforeDimensions,
   afterDimensions,
+  atsUnmeasuredReason,
 }: TailoringImpactProps) {
-  const atsDelta = afterAts - beforeAts;
+  // Same rule the dimension rows below already follow: a delta is only
+  // meaningful when BOTH sides are measurements. One missing half yields
+  // "n/a", never a subtraction against a placeholder.
+  const atsDelta = beforeAts !== null && afterAts !== null ? afterAts - beforeAts : null;
 
   return (
     <section
@@ -67,21 +82,45 @@ export default function TailoringImpact({
       <div className="mt-3 flex flex-wrap items-center gap-3">
         <div>
           <p className="text-[10px] uppercase tracking-wide text-aether-muted-dim">Before (baseline)</p>
-          <p className="mono text-2xl font-bold" data-testid="ats-before">
-            {beforeAts}
+          <p
+            className={`mono text-2xl font-bold ${beforeAts === null ? "text-aether-muted-dim" : ""}`}
+            data-testid="ats-before"
+          >
+            {beforeAts === null ? "—" : beforeAts}
           </p>
         </div>
         <span className="text-aether-muted-dim">→</span>
         <div>
           <p className="text-[10px] uppercase tracking-wide text-aether-muted-dim">After (tailored)</p>
-          <p className="mono text-2xl font-bold text-aether-green" data-testid="ats-after">
-            {afterAts}
+          <p
+            className={`mono text-2xl font-bold ${
+              afterAts === null ? "text-aether-muted-dim" : "text-aether-green"
+            }`}
+            data-testid="ats-after"
+          >
+            {afterAts === null ? "—" : afterAts}
           </p>
         </div>
-        <span className={`mono ml-1 text-sm font-semibold ${deltaTone(atsDelta)}`}>
-          {formatDelta(atsDelta)} ATS
+        <span
+          className={`mono ml-1 text-sm font-semibold ${
+            atsDelta === null ? "text-aether-muted-dim" : deltaTone(atsDelta)
+          }`}
+          data-testid="ats-delta"
+        >
+          {atsDelta === null ? "n/a" : `${formatDelta(atsDelta)} ATS`}
         </span>
       </div>
+
+      {beforeAts === null || afterAts === null ? (
+        <p
+          className="mt-2 text-xs text-aether-muted-dim"
+          data-testid="ats-unmeasured-caveat"
+        >
+          Not measured
+          {atsUnmeasuredReason ? ` — ${atsUnmeasuredReason}` : "."} We show a dash
+          rather than a score that was never taken.
+        </p>
+      ) : null}
 
       <div className="mt-4" data-testid="dimension-threshold-line">
         <p className="text-[10px] uppercase tracking-wide text-aether-muted-dim">

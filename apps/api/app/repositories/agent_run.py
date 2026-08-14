@@ -246,6 +246,42 @@ class AgentRunRepository:
                 rows = rows_to_dicts(cur)
         return {row["agentName"]: row for row in rows}
 
+    def policy_tier_history(
+        self, user_id: str, limit: int = 500
+    ) -> tuple[list[dict[str, Any]], int]:
+        """``(runs_that_recorded_a_tier, runs_that_did_not)`` — oldest first.
+
+        U-AX build spec item 2(c) ("trend of policy tier over time vs the
+        metrics it responds to"). Reads ONLY the already-instrumented columns:
+        a run whose ``policyTier`` is NULL predates the policy loop (or failed
+        to resolve one) and is EXCLUDED from the series rather than
+        back-stamped with today's verdict — but it is counted and returned, so
+        the surface can say how much history is genuinely un-instrumented
+        instead of implying the series is complete.
+        """
+        ensure_agent_run_policy_columns()
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    '''
+                    SELECT "id", "agentName", "createdAt", "policyTier",
+                           "metricSnapshot"
+                    FROM "AgentRun"
+                    WHERE "userId" = %s AND "policyTier" IS NOT NULL
+                    ORDER BY "createdAt" ASC, "id" ASC
+                    LIMIT %s
+                    ''',
+                    (user_id, limit),
+                )
+                rows = rows_to_dicts(cur)
+                cur.execute(
+                    'SELECT COUNT(*) FROM "AgentRun"'
+                    ' WHERE "userId" = %s AND "policyTier" IS NULL',
+                    (user_id,),
+                )
+                without = int((cur.fetchone() or [0])[0] or 0)
+        return rows, without
+
     def finish(
         self,
         run_id: str,

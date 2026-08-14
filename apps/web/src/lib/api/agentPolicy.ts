@@ -145,3 +145,95 @@ export async function fetchOrchestrationMap(
     await apiRequest<unknown>("/agents/orchestration-map", options),
   );
 }
+
+// ---------------------------------------------------------------------------
+// GET /analytics/agent-policy/history — U-AX item 2(c)
+// ---------------------------------------------------------------------------
+
+export const PolicyHistoryPointSchema = z.object({
+  at: z.string().nullish(),
+  tier: z.string(),
+  /** How many consecutive runs this unchanged point covers — repeats are
+   *  collapsed server-side so a flat period reads as flat, not as activity. */
+  runs: z.number().default(1),
+  /** Percentage (0-100), converted at the API boundary like every other
+   *  analytics surface. */
+  conversionRate: z.number().default(0),
+  sampleSize: z.number().default(0),
+  interviewCount: z.number().default(0),
+  dimensionsBelowFloor: z.array(z.string()).default([]),
+  dimensionsEvaluated: z.number().default(0),
+  triggers: z.array(z.string()).default([]),
+});
+
+export type PolicyHistoryPoint = z.infer<typeof PolicyHistoryPointSchema>;
+
+export const PolicyHistorySchema = z.object({
+  available: z.boolean().default(false),
+  reason: z.string().nullish(),
+  /** Runs that recorded NO tier (everything predating the loop). Reported so
+   *  the series can say how much history is genuinely un-instrumented instead
+   *  of implying it is complete. */
+  runsWithoutPolicy: z.number().default(0),
+  thresholds: z
+    .object({
+      interviewConversionTarget: z.number().nullish(),
+      dimensionFloor: z.number().nullish(),
+      minSampleSize: z.number().nullish(),
+    })
+    .nullish(),
+  points: z.array(PolicyHistoryPointSchema).default([]),
+});
+
+export type PolicyHistory = z.infer<typeof PolicyHistorySchema>;
+
+export async function fetchPolicyHistory(
+  options: RequestOptions = {},
+): Promise<PolicyHistory> {
+  return PolicyHistorySchema.parse(
+    await apiRequest<unknown>("/analytics/agent-policy/history", options),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// GET /analytics/agent-policy/cohorts — U-AX item 3
+// ---------------------------------------------------------------------------
+
+export const PolicyCohortSchema = z.object({
+  tier: z.string(),
+  label: z.string(),
+  submitted: z.number().default(0),
+  interviewed: z.number().default(0),
+  /** `null` when the cohort is below the minimum sample: one application that
+   *  did not convert is not "0%", and printing a rate there would invite the
+   *  wrong conclusion about the tier that produced it. */
+  conversionRate: z.number().nullish(),
+  sufficientSample: z.boolean().default(false),
+  meetsTarget: z.boolean().nullish(),
+  gapPoints: z.number().nullish(),
+});
+
+export type PolicyCohort = z.infer<typeof PolicyCohortSchema>;
+
+export const PolicyCohortsSchema = z.object({
+  target: z.number().default(20),
+  minSampleSize: z.number().default(5),
+  cohorts: z.array(PolicyCohortSchema).default([]),
+  untagged: z
+    .object({
+      submitted: z.number().default(0),
+      interviewed: z.number().default(0),
+      reason: z.string().nullish(),
+    })
+    .default({ submitted: 0, interviewed: 0 }),
+});
+
+export type PolicyCohorts = z.infer<typeof PolicyCohortsSchema>;
+
+export async function fetchPolicyCohorts(
+  options: RequestOptions = {},
+): Promise<PolicyCohorts> {
+  return PolicyCohortsSchema.parse(
+    await apiRequest<unknown>("/analytics/agent-policy/cohorts", options),
+  );
+}

@@ -11,6 +11,10 @@ import { useRealtimeResources } from "../../../hooks/useRealtime";
 import MetricTooltip from "../../../components/MetricTooltip";
 import AgentPolicyPanel from "../../../components/agents/AgentPolicyPanel";
 import {
+  PolicyCohortProgress,
+  PolicyTierHistory,
+} from "../../../components/agents/PolicyProgress";
+import {
   fetchAgentRoi,
   fetchAtsDistribution,
   fetchConversion,
@@ -23,7 +27,14 @@ import {
   type Funnel,
   type Period,
 } from "../../../lib/api/analytics";
-import { fetchAgentPolicy, type AgentPolicy } from "../../../lib/api/agentPolicy";
+import {
+  fetchAgentPolicy,
+  fetchPolicyCohorts,
+  fetchPolicyHistory,
+  type AgentPolicy,
+  type PolicyCohorts,
+  type PolicyHistory,
+} from "../../../lib/api/agentPolicy";
 
 const PERIODS: Period[] = ["7d", "30d", "90d", "all"];
 
@@ -39,6 +50,11 @@ export default function AnalyticsPage() {
   // independently so a failure here never blanks the rest of the page (same
   // degrade pattern the dashboard summary already uses below).
   const [policy, setPolicy] = useState<AgentPolicy | null>(null);
+  // U-AX item 2(c) / item 3 (R-06): the tier's history and the per-tier cohort
+  // outcomes. Independent of `policy` so one endpoint failing cannot blank the
+  // other two panels — each degrades to absent, never to a fabricated default.
+  const [policyHistory, setPolicyHistory] = useState<PolicyHistory | null>(null);
+  const [policyCohorts, setPolicyCohorts] = useState<PolicyCohorts | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -75,6 +91,18 @@ export default function AnalyticsPage() {
         // U-AX policy panel is additive — its own failure must not take down
         // the funnel/conversion/ATS panels above.
         setPolicy(null);
+      }
+
+      try {
+        setPolicyHistory(await fetchPolicyHistory());
+      } catch {
+        setPolicyHistory(null);
+      }
+
+      try {
+        setPolicyCohorts(await fetchPolicyCohorts());
+      } catch {
+        setPolicyCohorts(null);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load analytics");
@@ -177,11 +205,22 @@ export default function AnalyticsPage() {
         </p>
       ) : null}
 
-      {/* U-AX item 2(a)/(c): the self-improvement loop's live state — the
-          exact tier every real agent is currently obeying, why, and what it
+      {/* U-AX item 2(a): the self-improvement loop's live state — the exact
+          tier every real agent is currently obeying, why, and what it
           changes. Additive to the page; a load failure leaves it absent
           rather than blocking anything above. */}
       {policy ? <AgentPolicyPanel policy={policy} /> : null}
+
+      {/* U-AX item 2(c) + item 3 (R-06): the tier's own history against the
+          metrics it responds to, and the outcome of the applications actually
+          submitted under each tier. Round 2 claimed 2(c) in a comment and
+          shipped neither surface. */}
+      {policyHistory || policyCohorts ? (
+        <div className="grid gap-6 lg:grid-cols-2">
+          {policyHistory ? <PolicyTierHistory history={policyHistory} /> : null}
+          {policyCohorts ? <PolicyCohortProgress cohorts={policyCohorts} /> : null}
+        </div>
+      ) : null}
 
       {dashboard === null && !error ? (
         /* Space reservation while the summary loads — rendering nothing and
@@ -349,11 +388,16 @@ export default function AnalyticsPage() {
                     // `insufficient_data` explicitly does not (quality_policy.py
                     // rule 2) and must say so, not claim an escalation that
                     // isn't happening.
+                    // R-05: AgentPolicyPanel renders ABOVE this section, so
+                    // "see below" pointed the reader at nothing. The claim was
+                    // honest and the directions were not — which is its own
+                    // kind of dishonesty on a page whose whole promise is that
+                    // what it says can be checked.
                     policy?.tier === "heightened"
-                    ? `${(20 - conversion.interview_conversion_rate).toFixed(1)} points below the 1-in-5 (20%) target — the agent policy has escalated to heightened rigor (see below) until this closes.`
+                    ? `${(20 - conversion.interview_conversion_rate).toFixed(1)} points below the 1-in-5 (20%) target — the agent policy has escalated to heightened rigor (see Agent Performance Policy above) until this closes.`
                     : policy?.tier === "insufficient_data"
-                      ? `${(20 - conversion.interview_conversion_rate).toFixed(1)} points below the 1-in-5 (20%) target this period — not enough submitted applications yet, all-time, for the policy to honestly decide whether to escalate (see Agent Performance Policy below).`
-                      : `${(20 - conversion.interview_conversion_rate).toFixed(1)} points below the 1-in-5 (20%) target this period — the agent policy escalates rigor automatically once its own all-time metrics cross a threshold (see Agent Performance Policy below).`}
+                      ? `${(20 - conversion.interview_conversion_rate).toFixed(1)} points below the 1-in-5 (20%) target this period — not enough submitted applications yet, all-time, for the policy to honestly decide whether to escalate (see Agent Performance Policy above).`
+                      : `${(20 - conversion.interview_conversion_rate).toFixed(1)} points below the 1-in-5 (20%) target this period — the agent policy escalates rigor automatically once its own all-time metrics cross a threshold (see Agent Performance Policy above).`}
               </p>
             ) : null}
           </>

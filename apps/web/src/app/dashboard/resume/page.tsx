@@ -11,17 +11,17 @@ import { useRealtimeResources } from "../../../hooks/useRealtime";
 import { apiRequest } from "../../../lib/api/client";
 import type { Job } from "../../../lib/api/jobs";
 import { conversionImpactFrom, type ConversionImpact } from "../../../lib/scoring/provenance";
-import TailoringImpact, {
-  type TailoringDimension,
-} from "../../../components/analytics/TailoringImpact";
+import TailoringImpact from "../../../components/analytics/TailoringImpact";
 import {
   downloadResume,
   fetchResumeDiff,
   fetchResumes,
+  fetchTailoringImpact,
   runTailorAgent,
   type ConversionMetrics,
   type Resume,
   type ResumeDiff,
+  type TailoringImpact as TailoringImpactPair,
 } from "../../../lib/api/resumes";
 
 /** Real ATS engine breakdown for a tailored version vs its target job. */
@@ -44,138 +44,26 @@ type AtsScore = {
 };
 
 /**
- * U-AX build spec item 3 — the 10-dimension fit set, verbatim from
- * `GET /jobs/{id}/insights` (`apps/api/app/routers/jobs.py::_build_insights`),
- * which is ALWAYS scored against this user's IMMUTABLE base resume
- * (`resolve_user_resume_text`, never a tailored version) — the honest
- * "before" snapshot for any tailored version of the same job.
- */
-export interface JobInsightsDimension {
-  label: string;
-  score: number;
-  degraded: boolean;
-}
-
-interface JobInsights {
-  scored: boolean;
-  overall: number;
-  keywordMatch: number;
-  semantic: number;
-  experience: number;
-  dimensions: JobInsightsDimension[];
-}
-
-const DIMENSION_ORDER = [
-  "Technical Skills",
-  "Experience Level",
-  "Industry Match",
-  "Role Alignment",
-  "Culture Fit",
-  "Salary Fit",
-  "Location Match",
-  "Career Growth",
-  "Company Stability",
-  "North Star Align",
-] as const;
-
-/**
- * The "after" (tailored) 10-dimension snapshot, derived from a REAL re-score
- * of the tailored resume text (`GET /resumes/{id}/ats`) against the same job
- * the baseline `JobInsights` above was scored against — never guessed.
+ * R-03 (round 3). `JobInsights`, `DIMENSION_ORDER` and `deriveTailoredDimensions`
+ * used to live here: a browser-side re-implementation of
+ * `routers/jobs.py::_build_insights`'s blend, applied to the wire's
+ * already-1-decimal subscores, to produce the "after" half of the Resume
+ * Studio before/after panel while the "before" half arrived pre-rounded to
+ * integers from a different endpoint.
  *
- * Every dimension is EXACT or algebraically exact, mirroring the SAME blend
- * `_build_insights` uses server-side (jobs.py):
- * - Technical Skills / Experience Level / Industry Match / Role Alignment /
- *   Culture Fit / North Star Align are recomputed directly from the tailored
- *   resume's own keyword/experience/semantic/overall subscores — a genuine
- *   second measurement, not an estimate.
- * - Salary Fit / Location Match / Company Stability depend ONLY on the job
- *   (salary bounds, remote flag, source) — tailoring the resume's WORDS
- *   cannot move them, so the honest "after" value is the same measured
- *   baseline, never a fabricated guess.
- * - Career Growth blends a title-derived seniority term (identical for both
- *   snapshots — same job) with 0.4×overall; the seniority term cancels out
- *   algebraically, so "after" is the measured baseline plus the resume-
- *   dependent overall movement, exact to backend rounding.
+ * Two defect classes came out of that duplication and neither was fixable
+ * where it stood: a mixed-granularity delta (up to ±0.5 of pure rounding
+ * artefact against a product lift that averages ~2 ATS points) and a second,
+ * hand-maintained copy of the provenance rules, which is how a
+ * placeholder-contaminated baseline reached the screen flagged as measured.
+ *
+ * Both halves now come from `GET /resumes/{id}/tailoring-impact`
+ * (`fetchTailoringImpact`), blended and rounded by ONE authority
+ * (`routers/jobs.py::build_fit_dimensions` + `_round`). The parity this file's
+ * deleted test asserted by re-implementing the formulas is now structural, and
+ * is pinned server-side by
+ * `apps/api/tests/test_uax_r3_provenance.py::test_before_half_is_byte_identical_to_the_jobs_insights_panel`.
  */
-// F-UAX-03: exported (alongside the page's default export, which Next.js
-// permits for non-reserved names) so a parity test can call the EXACT
-// function the page renders from, rather than reimplementing its formulas —
-// `deriveTailoredDimensions` previously had zero test coverage.
-export function deriveTailoredDimensions(
-  baseline: JobInsightsDimension[],
-  baselineOverall: number,
-  tailored: {
-    overall: number;
-    keyword_match: number;
-    semantic_similarity: number;
-    experience_gap: number;
-    /** GMV4-ats-002 sentinel — "local"/"hf_api" is a genuine measurement,
-     *  anything else (incl. missing) is untrusted. Drives `degraded` below
-     *  with the SAME whitelist the badge at `semanticTrusted` uses. */
-    semantic_path?: string | null;
-  },
-): TailoringDimension[] {
-  // F-UAX-03: keyed on the FULL baseline entry (score + degraded), never
-  // just the score — a label the backend ever stops sending is now an
-  // honestly-dropped row (filtered out below), not a fabricated 0 that
-  // would read as a catastrophic delta.
-  const baselineByLabel = new Map(baseline.map((d) => [d.label, d]));
-  // F-UAX-03: clamp to [0,100] and round to the SAME integer granularity as
-  // the backend's `_round` (jobs.py) — the table must never mix an integer
-  // baseline figure with a 1-decimal tailored one, and Career Growth's
-  // additive blend must never be allowed to drift past 100.
-  const round = (n: number) => Math.max(0, Math.min(100, Math.round(n)));
-  const overallDelta = tailored.overall - baselineOverall;
-  // F-UAX-02: mirrors jobs.py's own `sem_trusted` whitelist exactly, so a
-  // dimension whose backend counterpart would be flagged `degraded` is
-  // flagged degraded here too — a placeholder can never present as a
-  // measurement on either side of the before/after comparison.
-  const semanticTrusted =
-    tailored.semantic_path === "local" || tailored.semantic_path === "hf_api";
-  return DIMENSION_ORDER.filter((label) => baselineByLabel.has(label)).map(
-    (label): TailoringDimension => {
-      const base = baselineByLabel.get(label)!;
-      switch (label) {
-        case "Technical Skills":
-          return { label, score: round(tailored.keyword_match), degraded: false };
-        case "Experience Level":
-          return { label, score: round(tailored.experience_gap), degraded: false };
-        case "Industry Match":
-          return { label, score: round(tailored.semantic_similarity), degraded: !semanticTrusted };
-        case "Role Alignment":
-          return { label, score: round(tailored.overall), degraded: !semanticTrusted };
-        case "Culture Fit":
-          return {
-            label,
-            score: round(0.5 * tailored.semantic_similarity + 0.5 * tailored.experience_gap),
-            degraded: !semanticTrusted,
-          };
-        case "North Star Align":
-          return {
-            label,
-            score: round(0.6 * tailored.overall + 0.4 * tailored.semantic_similarity),
-            degraded: !semanticTrusted,
-          };
-        case "Career Growth":
-          // Blends the baseline's own seniority-derived score with the
-          // resume-dependent overall movement — the movement term is
-          // contaminated whenever the tailored `overall` was itself built
-          // from an untrusted semantic component.
-          return {
-            label,
-            score: round(base.score + 0.4 * overallDelta),
-            degraded: !semanticTrusted,
-          };
-        default:
-          // Salary Fit / Location Match / Company Stability — job-only;
-          // tailoring the resume's WORDS cannot move them, so "after" is
-          // the same measured baseline value and provenance.
-          return { label, score: round(base.score), degraded: base.degraded };
-      }
-    },
-  );
-}
 
 /** How many version cards to show before "Show more" (MV-resume-studio-005). */
 const VERSIONS_PAGE_SIZE = 8;
@@ -227,14 +115,11 @@ export default function ResumePage() {
   const [diff, setDiff] = useState<ResumeDiff | null>(null);
   const [ats, setAts] = useState<AtsScore | null>(null);
   // U-AX item 3: honest before(baseline)/after(tailored) ATS + all 10
-  // fit-radar dimensions for the SELECTED tailored version. Null whenever
-  // either real re-score is unavailable — never a partial/guessed panel.
-  const [tailoringImpact, setTailoringImpact] = useState<{
-    beforeAts: number;
-    afterAts: number;
-    beforeDimensions: TailoringDimension[];
-    afterDimensions: TailoringDimension[];
-  } | null>(null);
+  // fit-radar dimensions for the SELECTED tailored version, served whole by
+  // GET /resumes/{id}/tailoring-impact. R-03: the browser no longer derives
+  // the "after" half — one server-side blend, one rounding authority, so the
+  // two sides of a delta can never carry different granularities.
+  const [tailoringImpact, setTailoringImpact] = useState<TailoringImpactPair | null>(null);
   const [conversion, setConversion] = useState<ConversionImpact | null>(null);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -379,36 +264,15 @@ export default function ResumePage() {
       } catch {
         setAts(null);
       }
-      // U-AX item 3: the baseline snapshot for the SAME job — GET
-      // /jobs/{id}/insights is always scored against the immutable base
-      // resume, so it is the honest "before" half regardless of which
-      // tailored version is selected.
-      if (tailoredAts) {
-        try {
-          const insights = await apiRequest<JobInsights>(`/jobs/${resume.sourceJobId}/insights`);
-          if (insights.scored) {
-            setTailoringImpact({
-              beforeAts: insights.overall,
-              afterAts: tailoredAts.overall,
-              // F-UAX-02: carry `degraded` through — dropping it here is what
-              // let a placeholder render as a measured score in the panel.
-              beforeDimensions: insights.dimensions.map((d) => ({
-                label: d.label,
-                score: d.score,
-                degraded: d.degraded,
-              })),
-              afterDimensions: deriveTailoredDimensions(insights.dimensions, insights.overall, {
-                overall: tailoredAts.overall,
-                keyword_match: tailoredAts.keyword_match,
-                semantic_similarity: tailoredAts.semantic_similarity,
-                experience_gap: tailoredAts.experience_gap,
-                semantic_path: tailoredAts.semantic_path,
-              }),
-            });
-          }
-        } catch {
-          setTailoringImpact(null);
-        }
+      // U-AX item 3 / R-03: BOTH halves come from one endpoint, blended and
+      // rounded by one server-side authority (routers/jobs.py::
+      // build_fit_dimensions + _round) against one JD corpus. Nothing is
+      // re-derived here, so there is no second formula to drift and no second
+      // rounding hop to invent a delta the engine never measured.
+      try {
+        setTailoringImpact(await fetchTailoringImpact(resume.id));
+      } catch {
+        setTailoringImpact(null);
       }
     }
   };
@@ -859,11 +723,24 @@ export default function ResumePage() {
                 {ats.company ? ` @ ${ats.company}` : ""}
               </p>
             </div>
+            {/* R-01 (round 3): `overall` is 0.4*keyword + 0.4*semantic +
+                0.2*experience, so a degraded semantic half makes this headline
+                40% neutral placeholder — the same value the "Semantic
+                similarity (40%)" row directly below already refuses to print.
+                A "treat as directional" footnote under a bold, colour-coded
+                number is not a caveat a reader acts on; the number itself has
+                to go. */}
             <span
-              className={`font-mono text-2xl font-bold ${ats.overall >= 60 ? "text-aether-green" : "text-aether-amber"}`}
+              className={`font-mono text-2xl font-bold ${
+                !semanticTrusted
+                  ? "text-aether-muted-dim"
+                  : ats.overall >= 60
+                    ? "text-aether-green"
+                    : "text-aether-amber"
+              }`}
               data-testid="ats-overall"
             >
-              {ats.overall}
+              {semanticTrusted ? ats.overall : "—"}
             </span>
           </div>
           <div className="mt-3 grid gap-3 sm:grid-cols-3">
@@ -903,8 +780,9 @@ export default function ResumePage() {
           {!semanticTrusted ? (
             <p className="mt-3 text-xs text-aether-muted-dim" data-testid="semantic-degraded-note">
               Semantic similarity could not be measured for this score — a neutral
-              placeholder stood in instead, so the overall score above should be
-              treated as directional until this is available again.
+              placeholder stood in instead. The overall ATS score is 40% built
+              from it, so it is shown as “—” rather than as a measurement until
+              semantic scoring is available again.
             </p>
           ) : null}
           {ats.missing_keywords.length > 0 ? (
@@ -923,10 +801,15 @@ export default function ResumePage() {
           deltas never clamped or hidden. */}
       {tailoringImpact ? (
         <TailoringImpact
-          beforeAts={tailoringImpact.beforeAts}
-          afterAts={tailoringImpact.afterAts}
-          beforeDimensions={tailoringImpact.beforeDimensions}
-          afterDimensions={tailoringImpact.afterDimensions}
+          beforeAts={tailoringImpact.before.ats}
+          afterAts={tailoringImpact.after.ats}
+          beforeDimensions={tailoringImpact.before.dimensions}
+          afterDimensions={tailoringImpact.after.dimensions}
+          atsUnmeasuredReason={
+            tailoringImpact.before.ats === null
+              ? tailoringImpact.before.unmeasuredReason
+              : tailoringImpact.after.unmeasuredReason
+          }
         />
       ) : null}
 
