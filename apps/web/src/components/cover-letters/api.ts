@@ -58,6 +58,16 @@ export const LetterInsightsSchema = z.object({
       finalScore: z.number(),
       delta: z.number(),
       methodology: z.string(),
+      /**
+       * U2c — the letter's 80%-across-all-dimensions verdict, computed and
+       * stamped server-side (`services/quality_gate.py`). `nullish` because
+       * letters scored before the gate existed carry none, and the panel must
+       * then claim neither a pass nor a failure.
+       */
+      qualityGate: z.unknown().nullish(),
+      belowQualityFloor: z.boolean().nullish(),
+      failingDimensions: z.array(z.string()).nullish(),
+      gateAttemptsUsed: z.number().nullish(),
     })
     .nullish(),
 });

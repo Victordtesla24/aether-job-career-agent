@@ -69,8 +69,10 @@ from app.db import (
     get_connection,
     rows_to_dicts,
 )
+from app.repositories.evidence_corpus import EvidenceCorpusRepository
 from app.repositories.story import StoryRepository
 from app.services.dedup import compute_story_content_hash
+from app.services.story_corpus import story_corpus_item, story_item_id
 from app.services.story_paraphrase import (
     BULK_MIGRATION_THRESHOLDS,
     SimilarityThresholds,
@@ -215,13 +217,27 @@ def merge_duplicate_stories(
             "generated_at": _now_iso(),
             "batch_id": None,
             "reconciled": True,
+            # U-STORY-1 E2: a dry run reconciles no mirror because it moves no
+            # row. Reported as real zeros rather than omitted, so a caller
+            # never has to guess whether the key's absence meant "none" or
+            # "this build predates the reconciliation".
+            "mirror_retracted": 0,
+            "mirror_refreshed": 0,
         }
 
     ensure_story_dedup_column()
     ensure_story_archive_columns()
+    # U-STORY-1 E2: the mirror is reconciled INSIDE the transaction below, so
+    # its lazily-created table must exist BEFORE that transaction opens — the
+    # bootstrap takes an advisory-locked connection of its own and must never
+    # run nested inside the sweep's.
+    corpus_repo = EvidenceCorpusRepository()
+    corpus_repo.ensure_table()
     batch = batch_id or uuid.uuid4().hex
     account = _executing_account()
     merged = 0
+    mirror_retracted = 0
+    mirror_refreshed = 0
     with get_connection() as conn:
         with conn.cursor() as cur:
             for proposal in proposals:
@@ -288,6 +304,32 @@ def merge_duplicate_stories(
                         f"{user_id!r}, archived {cur.rowcount} — nothing is "
                         "committed"
                     )
+                # U-STORY-1 ruling E2 — RECONCILE THE EVIDENCE MIRROR, HERE.
+                #
+                # ``StoryRepository`` mirrors every story into
+                # ``EvidenceCorpusItem`` so the guards can cite it, and this
+                # sweep moved rows straight past that mirror. The result was a
+                # live-evidence hole in both directions: the archived row's
+                # claim kept grounding generated documents even though the user
+                # could no longer see the story, and the SURVIVOR's mirror still
+                # held its pre-merge wording — stale evidence of exactly the
+                # class the retraction fixes, wearing the other row's label.
+                #
+                # Both writes run on THIS cursor, inside THIS transaction: the
+                # sweep's safety property is all-or-nothing with a counted
+                # reconciliation, and a mirror write on its own connection would
+                # survive a rollback — deleting a user's evidence for a merge
+                # that never happened.
+                mirror_retracted += corpus_repo.delete_items_with_cursor(
+                    cur, user_id, [story_item_id(proposal["duplicate_id"])]
+                )
+                survivor_item = story_corpus_item(
+                    {"id": proposal["survivor_id"], **content}
+                )
+                if survivor_item is not None:
+                    mirror_refreshed += corpus_repo.upsert_many_with_cursor(
+                        cur, user_id, [survivor_item]
+                    )
                 merged += 1
         conn.commit()
 
@@ -301,8 +343,10 @@ def merge_duplicate_stories(
         )
     logger.info(
         "merge_duplicate_stories: archived %d duplicate row(s) for user %s "
-        "(batch %s, before=%d after=%d, reconciled=%s)",
+        "(batch %s, before=%d after=%d, reconciled=%s, mirror retracted=%d "
+        "refreshed=%d)",
         merged, user_id, batch, before_count, after_count, reconciled,
+        mirror_retracted, mirror_refreshed,
     )
     return {
         "dry_run": False,
@@ -315,6 +359,11 @@ def merge_duplicate_stories(
         "batch_id": batch,
         "generated_at": _now_iso(),
         "reconciled": reconciled,
+        #: U-STORY-1 E2: what this sweep did to the evidence mirror, counted —
+        #: an unreported reconciliation is indistinguishable from one that
+        #: never ran, and this result IS the sweep's audit record.
+        "mirror_retracted": mirror_retracted,
+        "mirror_refreshed": mirror_refreshed,
     }
 
 
@@ -526,6 +575,10 @@ def restore_merged_stories(
             "plan": plan,
             "unrestorable": unrestorable,
             "blocked": blocked,
+            # U-STORY-1 E2: a dry run republishes nothing because it restores
+            # nothing. Real zeros, never an omitted key.
+            "mirror_republished": 0,
+            "mirror_refreshed": 0,
         }
 
     if blocked:
@@ -545,6 +598,13 @@ def restore_merged_stories(
     by_id = {row["id"]: row for row in restorable_rows}
     before_count = len(StoryRepository().list_by_user(user_id))
     restored = 0
+    mirror_republished = 0
+    mirror_refreshed = 0
+    # U-STORY-1 E2: same rule as the merge path — the mirror is reconciled
+    # inside the restore's own transaction, so its lazy table bootstrap has to
+    # happen first, on its own advisory-locked connection.
+    corpus_repo = EvidenceCorpusRepository()
+    corpus_repo.ensure_table()
     with get_connection() as conn:
         with conn.cursor() as cur:
             for entry in plan:
@@ -586,6 +646,23 @@ def restore_merged_stories(
                         f"user {user_id!r} did not un-archive (got "
                         f"{cur.rowcount}) — nothing is committed"
                     )
+                # U-STORY-1 ruling E2, the reverse direction. The restored row
+                # is live again, so it must be citable again: without this its
+                # own true, user-visible content reads as unsupported evidence
+                # to the fabrication and claim guards. The survivor is
+                # re-mirrored from the SAME ``before`` snapshot its row was just
+                # rewritten with, so the corpus and the story bank tell one
+                # story. Both writes are on this transaction's cursor.
+                mirror_republished += corpus_repo.upsert_many_with_cursor(
+                    cur, user_id, [item for item in [story_corpus_item(row)] if item]
+                )
+                survivor_item = story_corpus_item(
+                    {"id": row["mergedIntoId"], **before}
+                )
+                if survivor_item is not None:
+                    mirror_refreshed += corpus_repo.upsert_many_with_cursor(
+                        cur, user_id, [survivor_item]
+                    )
                 restored += 1
         conn.commit()
 
@@ -604,8 +681,10 @@ def restore_merged_stories(
         )
     logger.info(
         "restore_merged_stories: restored %d archived row(s) for user %s "
-        "(batch %s, before=%d after=%d, reconciled=%s)",
+        "(batch %s, before=%d after=%d, reconciled=%s, mirror republished=%d "
+        "refreshed=%d)",
         restored, user_id, batch_id, before_count, after_count, reconciled,
+        mirror_republished, mirror_refreshed,
     )
     return {
         "dry_run": False,
@@ -618,4 +697,7 @@ def restore_merged_stories(
         "before_count": before_count,
         "after_count": after_count,
         "reconciled": reconciled,
+        #: U-STORY-1 E2, counted for the same reason the merge path counts it.
+        "mirror_republished": mirror_republished,
+        "mirror_refreshed": mirror_refreshed,
     }

@@ -27,6 +27,7 @@ from app.repositories.job import JobRepository
 from app.repositories.story import StoryRepository
 from app.repositories.user import UserRepository
 from app.services.career_data import build_career_corpus
+from app.services.cover_letter_evidence import build_guard_corpora
 from app.services.cover_letter_quality import (
     BANNED_OPENERS as _quality_banned_openers,
 )
@@ -37,10 +38,10 @@ from app.services.cover_letter_quality import (
     CONTENT_WORD_RE as _quality_content_word_re,
 )
 from app.services.cover_letter_quality import CTA_CUES as _quality_cta_cues
+from app.services.cover_letter_quality import CoverLetterQuality, score_cover_letter
 from app.services.cover_letter_quality import (
     grounding_confidence as _quality_grounding_confidence,
 )
-from app.services.cover_letter_quality import score_cover_letter
 from app.services.cover_letter_quality import (
     split_paragraphs as _quality_split_paragraphs,
 )
@@ -55,6 +56,13 @@ from app.services.llm_client import (
     llm_failure_user_message,
     remaining_budget_seconds,
     shared_budget,
+)
+from app.services.quality_gate import (
+    GateVerdict,
+    evaluate_cover_letter,
+    failing_labels,
+    gate_extra_attempts,
+    is_below_floor,
 )
 from app.services.resume_grounding import require_user_resume_text
 from app.services.resume_tailor import unsupported_claim_tokens
@@ -101,6 +109,160 @@ def _corrective_retry_labels(
         requested = _MIN_CORRECTIVE_RETRIES
     count = max(_MIN_CORRECTIVE_RETRIES, min(requested, _MAX_CORRECTIVE_RETRIES))
     return tuple("retry" if i == 0 else f"retry{i + 1}" for i in range(count))
+
+
+def gate_pass_labels() -> tuple[str, ...]:
+    """Fixture-stable labels for the U2c quality-gate improvement passes.
+
+    ``("quality", "quality2", ...)`` — ``"quality"`` is preserved BYTE-FOR-BYTE
+    because it is the ``fixture_key`` the single historic improvement pass was
+    recorded under; renaming it would silently invalidate that fixture. The
+    count is the SAME env-capped budget the résumé gate spends
+    (``services.quality_gate.gate_extra_attempts``), so one operator knob bounds
+    both artifacts' extra LLM spend rather than two that can drift apart.
+    """
+    count = gate_extra_attempts()
+    return tuple("quality" if i == 0 else f"quality{i + 1}" for i in range(count))
+
+
+def gate_pass_affordable() -> bool:
+    """Whether the remaining LLM budget can still afford ONE more gate pass.
+
+    Both gated cover-letter paths — ``CoverLetterAgent.run`` and
+    ``POST /cover-letters/{id}/refine`` — call THIS rather than each inlining
+    the comparison, for the same reason :func:`build_guard_corpora` exists: two
+    copies of one rule drift, and the copy that drifts here starves a live
+    generation (GAP-P6-COV-002 — a doomed call fired into a spent budget is
+    what produced the chronic 503s).
+
+    Skipping a pass is always safe: the already-clean letter ships, carrying
+    its honest score and gate verdict. Firing a call that cannot finish is not.
+    """
+    return remaining_budget_seconds() >= _QUALITY_PASS_MIN_SECONDS
+
+
+def needs_gate_pass(quality: "CoverLetterQuality") -> bool:
+    """True when another improvement pass could TRUTHFULLY close the gate.
+
+    Two conditions, both required:
+
+    * a dimension is genuinely below the floor, and
+    * at least one failing dimension was actually MEASURED — a failure caused
+      by an unmeasurable component (this posting yielded no evidence-supported
+      keyword, so alignment has no value) is not something a rewrite can move,
+      and paying for a generation against it is waste dressed as rigor. Same
+      rule ``tailoring_loop.split_gap_keywords`` applies to unreachable
+      keywords.
+    """
+    verdict = evaluate_cover_letter(quality)
+    return not verdict.passed and verdict.closable
+
+
+def accept_gate_candidate(
+    *, candidate: "CoverLetterQuality", incumbent_overall: float, guard_clean: bool
+) -> bool:
+    """Whether an improvement pass's draft REPLACES the letter in hand.
+
+    Cleanliness is a PRECONDITION, never a tiebreak: a draft the fabrication,
+    claim, structural or meta-reference guards rejected is discarded however
+    much better it scores. Buying a dimension with an unsupported claim is the
+    one thing this whole gate exists to make impossible, so the score is only
+    consulted after the guards have already passed the draft.
+    """
+    return guard_clean and candidate.overall > incumbent_overall
+
+
+def gate_improvement_instruction(
+    verdict: "GateVerdict", quality: "CoverLetterQuality"
+) -> str:
+    """The directive for one gate improvement pass.
+
+    Names the failing dimensions with their REAL numbers (a concrete, checkable
+    objective), the evidence-supported keywords that are genuinely closable,
+    and — explicitly — the job-description terms the candidate's evidence does
+    NOT support, so the model is told to stay off them rather than left to
+    guess. Naming a target never licenses inventing the evidence to hit it: the
+    guards adjudicate the resulting draft unchanged, and a draft that reaches
+    for a forbidden term is rejected exactly as before.
+    """
+    # ``measured`` is what makes ``score`` a real number rather than None —
+    # restated as an explicit score check so the type is narrowed by the same
+    # condition the honesty rule already depends on.
+    measured_failures = [
+        d for d in verdict.failing if d.measured and d.score is not None
+    ]
+    lines = [
+        "IMPORTANT: your previous draft is factually clean but falls below "
+        f"Aether's quality floor of {verdict.floor:.0f}% on "
+        + "; ".join(
+            f"{d.label} ({d.score:.1f}%)" for d in measured_failures
+        )
+        + ".",
+        "Rewrite it to raise those dimensions, keeping every existing grounded "
+        "claim, the three-paragraph structure and the call-to-action.",
+    ]
+    if quality.missing_keywords:
+        lines.append(
+            "TRUTHFULLY surface these job-description terms, each of which the "
+            "candidate's own résumé, story bank or career evidence already "
+            "proves: " + ", ".join(quality.missing_keywords) + "."
+        )
+    forbidden = (
+        "NEVER add a skill, tool, employer, certification or metric the "
+        "candidate's evidence does not prove — a higher score bought with an "
+        "unsupported claim is rejected outright."
+    )
+    if quality.unreachable_keywords:
+        forbidden += (
+            " In particular the posting mentions "
+            + ", ".join(quality.unreachable_keywords[:10])
+            + ", which their evidence does NOT support; those must stay out."
+        )
+    lines.append(forbidden)
+    return "\n".join(lines)
+
+
+def build_letter_quality(
+    *,
+    final_quality: "CoverLetterQuality",
+    passes: list[dict[str, Any]],
+    gate_attempts_used: int,
+) -> dict[str, Any]:
+    """The shipped letter's quality record — ONE shape, every surface.
+
+    Persisted to ``Application.coverLetterQuality`` and returned on the run
+    result, so the Studio panel, the run card and the approval modal quote the
+    same computation. U2c adds the gate verdict and its honest terminal state;
+    everything already there keeps its exact key names and meanings.
+    """
+    initial: dict[str, Any] = (
+        passes[0] if passes else final_quality.as_dict()
+    )
+    gate = evaluate_cover_letter(final_quality).as_dict()
+    return {
+        **final_quality.as_dict(),
+        "initialScore": initial["overall"],
+        "finalScore": final_quality.overall,
+        "delta": round(final_quality.overall - float(initial["overall"]), 2),
+        "passes": passes + [
+            {
+                "iteration": len(passes) + 1,
+                "stage": "shipped",
+                **final_quality.as_dict(),
+            }
+        ],
+        "qualityGate": gate,
+        "belowQualityFloor": is_below_floor(gate),
+        "failingDimensions": failing_labels(gate),
+        "gateAttemptsUsed": gate_attempts_used,
+        "methodology": (
+            "Deterministic: 40% coverage of the evidence-supported job-"
+            "description keywords, 40% evidence grounding of the letter's "
+            "content words, 20% the letter-format contract. Job-description "
+            "keywords the candidate's evidence does not support are excluded "
+            "and reported as unreachable — no truthful letter can contain them."
+        ),
+    }
 
 SYSTEM_PROMPT = (
     "You are a truthful cover-letter writer of elite craft: powerful, "
@@ -1569,35 +1731,35 @@ class CoverLetterAgent:
         # This is a strict WIDENING with candidate-own evidence the neighbouring
         # claim guard already trusts; an entity NOTHING supports is still
         # flagged, unchanged.
-        corpus = " ".join(
-            [
-                resume_text,
-                job["title"],
-                job["company"],
-                sanitized_description,
-                self._today(),
-                signer,
-                position,
-            ]
-            + ([career_corpus] if career_corpus else [])
-            + ([story_evidence] if story_evidence else [])
-            + ([corpus_evidence] if corpus_evidence else [])
-        )
-
-        # GAP-P6-COV-001: the candidate-claim evidence corpus is the candidate's
-        # OWN evidence only — résumé + story bank + career + profile + company
-        # NAME (so naming the target company is not flagged). The job DESCRIPTION
-        # is NEVER evidence: a claim backed only by the posting is a fabrication
+        #
+        # U-STORY-1 ruling E3: BOTH corpora are now assembled by the ONE shared
+        # function ``services.cover_letter_evidence.build_guard_corpora``, which
+        # the /refine path calls too. ML-W26 requires the two paths' evidence
+        # semantics to be identical; a shared assembly makes that true by
+        # construction instead of by vigilance, and is what closes the
+        # career-evidence asymmetry E3 was filed against.
+        #
+        # GAP-P6-COV-001 (unchanged, now enforced in one place): the
+        # candidate-claim evidence is the candidate's OWN evidence only —
+        # résumé + story bank + career + corpus + profile + company NAME (so
+        # naming the target company is not flagged). The job DESCRIPTION is
+        # NEVER evidence: a claim backed only by the posting is a fabrication
         # about the candidate. The job TITLE is the risk signal for the tempting
         # role-specialty terms a draft is most likely to over-claim ('intake').
-        claim_evidence = " ".join(
-            p
-            for p in (
-                resume_text, career_corpus, story_evidence, corpus_evidence,
-                signer, position, job["company"],
-            )
-            if p
+        corpora = build_guard_corpora(
+            resume_text=resume_text,
+            job_title=job["title"],
+            company=job["company"],
+            sanitized_description=sanitized_description,
+            letter_date=self._today(),
+            signer=signer,
+            position=position,
+            career_corpus=career_corpus,
+            story_evidence=story_evidence,
+            corpus_evidence=corpus_evidence,
         )
+        corpus = corpora.fabrication_corpus
+        claim_evidence = corpora.claim_evidence
         jd_risk = job["title"]
         # ML-W23: the job DESCRIPTION is the second risk signal — a PHRASE-level
         # one. QA3-F-04 proved the title alone is far too narrow: a letter
@@ -1679,12 +1841,19 @@ class CoverLetterAgent:
             # letter against. Deterministic and LLM-free, so this costs nothing
             # and cannot itself fail the run.
             quality_iterations: list[dict[str, Any]] = []
+            #: U2c: how many of the gate's bounded extra passes this run spent.
+            #: Recorded on the letter and on the AgentRun so the Supervisor's
+            #: directive loop (ADR-AGI-2) can see the effort, not just the score.
+            gate_attempts_used = 0
             first_quality = score_cover_letter(
                 body, jd_body, claim_evidence,
                 job_title=job["title"], company=job["company"],
             )
-            quality_iterations.append({"iteration": 1, "stage": "initial_draft",
-                                       **first_quality.as_dict()})
+            quality_iterations.append({
+                "iteration": 1, "stage": "initial_draft",
+                "qualityGate": evaluate_cover_letter(first_quality).as_dict(),
+                **first_quality.as_dict(),
+            })
             all_flagged: list[str] = list(flagged)
             all_claims: list[str] = list(claim_flags)
             for attempt in retries:
@@ -1761,6 +1930,7 @@ class CoverLetterAgent:
                 quality_iterations.append({
                     "iteration": len(quality_iterations) + 1,
                     "stage": attempt,
+                    "qualityGate": evaluate_cover_letter(retry_quality).as_dict(),
                     **retry_quality.as_dict(),
                 })
 
@@ -1776,32 +1946,31 @@ class CoverLetterAgent:
             # structural guards below still adjudicate the result unchanged).
             # The improved draft is kept ONLY if it is clean AND scores
             # strictly higher; otherwise the earlier letter stands.
-            best_quality = quality_iterations[-1]
-            if (
-                not flagged and not claim_flags and not issues and not meta
-                and not best_quality["reachedTarget"]
-                and best_quality["missingKeywords"]
-                and remaining_budget_seconds() >= _QUALITY_PASS_MIN_SECONDS
-            ):
+            # U2c: what fires this pass is now the 80%-all-dimensions GATE, not
+            # the headline ``reachedTarget``. A letter whose overall cleared 85
+            # while its grounding sat at 61 previously shipped untouched and
+            # unflagged, because the old condition never looked at a dimension.
+            # ``needs_gate_pass`` looks at every one of them, and refuses to
+            # spend a pass on a failure no rewrite can close.
+            best_quality = score_cover_letter(
+                body, jd_body, claim_evidence,
+                job_title=job["title"], company=job["company"],
+            )
+            for gate_label in gate_pass_labels():
+                if flagged or claim_flags or issues or meta:
+                    break
+                if not needs_gate_pass(best_quality):
+                    break
+                if not gate_pass_affordable():
+                    # Skipping is always safe: the already-clean letter ships
+                    # and its honest score — gate verdict included — is what
+                    # gets recorded. Firing a doomed call here is the exact
+                    # starvation failure GAP-P6-COV-002 fixed.
+                    break
                 improve_prompt = (
-                    f"{base_prompt}\n\nIMPORTANT: your previous draft is factually "
-                    "clean but under-sells the candidate against this posting. "
-                    "Rewrite it so it TRUTHFULLY surfaces the following, each of "
-                    "which the candidate's own résumé/story bank/career evidence "
-                    "already proves — use the posting's own word for it where the "
-                    "evidence supports it: "
-                    + ", ".join(best_quality["missingKeywords"])
-                    + ". Keep every existing grounded claim, keep the three-"
-                    "paragraph structure and the call-to-action, and change "
-                    "nothing else. NEVER add a skill, tool, employer or metric "
-                    "the candidate's evidence does not prove"
-                    + (
-                        " — in particular the posting mentions "
-                        + ", ".join(best_quality["unreachableKeywords"][:10])
-                        + ", which their evidence does NOT support; those must "
-                        "stay out."
-                        if best_quality["unreachableKeywords"]
-                        else "."
+                    f"{base_prompt}\n\n"
+                    + gate_improvement_instruction(
+                        evaluate_cover_letter(best_quality), best_quality
                     )
                 )
                 try:
@@ -1810,7 +1979,7 @@ class CoverLetterAgent:
                         cand_issues, cand_meta,
                     ) = self._draft(
                         improve_prompt, job, corpus, signer, position,
-                        fixture_key="quality", claim_evidence=claim_evidence,
+                        fixture_key=gate_label, claim_evidence=claim_evidence,
                         jd_risk=jd_risk, jd_body=jd_body,
                         injection_payloads=injection_payloads,
                         untrusted_text=raw_description,
@@ -1819,26 +1988,37 @@ class CoverLetterAgent:
                 except (LLMUnavailableError, LLMFixtureMissingError):
                     # An improvement pass is strictly optional — a failure here
                     # must never cost the user the clean letter they already
-                    # have, and must never be reported as a better score.
-                    cand_letter = None
-                if cand_letter is not None:
-                    cand_quality = score_cover_letter(
-                        cand_body, jd_body, claim_evidence,
-                        job_title=job["title"], company=job["company"],
-                    )
-                    clean = not (cand_flagged or cand_claims or cand_issues or cand_meta)
-                    accepted = clean and cand_quality.overall > best_quality["overall"]
-                    quality_iterations.append({
-                        "iteration": len(quality_iterations) + 1,
-                        "stage": "quality_pass",
-                        "accepted": accepted,
-                        "guardClean": clean,
-                        **cand_quality.as_dict(),
-                    })
-                    if accepted:
-                        letter, body = cand_letter, cand_body
-                        flagged, claim_flags = cand_flagged, cand_claims
-                        issues, meta = cand_issues, cand_meta
+                    # have, and must never be reported as a better score. A
+                    # second attempt would fail identically, so stop.
+                    break
+                gate_attempts_used += 1
+                cand_quality = score_cover_letter(
+                    cand_body, jd_body, claim_evidence,
+                    job_title=job["title"], company=job["company"],
+                )
+                clean = not (cand_flagged or cand_claims or cand_issues or cand_meta)
+                # THE CARDINAL SIN GUARD: cleanliness is a precondition, never
+                # a tiebreak. A draft that scored higher by claiming something
+                # the evidence does not prove is discarded, and the weaker but
+                # truthful letter stands.
+                accepted = accept_gate_candidate(
+                    candidate=cand_quality,
+                    incumbent_overall=best_quality.overall,
+                    guard_clean=clean,
+                )
+                quality_iterations.append({
+                    "iteration": len(quality_iterations) + 1,
+                    "stage": gate_label,
+                    "accepted": accepted,
+                    "guardClean": clean,
+                    "qualityGate": evaluate_cover_letter(cand_quality).as_dict(),
+                    **cand_quality.as_dict(),
+                })
+                if accepted:
+                    letter, body = cand_letter, cand_body
+                    flagged, claim_flags = cand_flagged, cand_claims
+                    issues, meta = cand_issues, cand_meta
+                    best_quality = cand_quality
         if flagged:
             raise FabricationError(flagged)
         if claim_flags:
@@ -1923,29 +2103,11 @@ class CoverLetterAgent:
         # `object` that float() could not narrow. The value is a real score from
         # the quality scorer, so this widens the local rather than defaulting it
         # — a silent default here would fabricate the `delta` shown to the user.
-        initial: dict[str, Any] = (
-            quality_iterations[0] if quality_iterations else final_quality.as_dict()
+        letter_quality: dict[str, Any] = build_letter_quality(
+            final_quality=final_quality,
+            passes=quality_iterations,
+            gate_attempts_used=gate_attempts_used,
         )
-        letter_quality: dict[str, Any] = {
-            **final_quality.as_dict(),
-            "initialScore": initial["overall"],
-            "finalScore": final_quality.overall,
-            "delta": round(final_quality.overall - float(initial["overall"]), 2),
-            "passes": quality_iterations + [
-                {
-                    "iteration": len(quality_iterations) + 1,
-                    "stage": "shipped",
-                    **final_quality.as_dict(),
-                }
-            ],
-            "methodology": (
-                "Deterministic: 40% coverage of the evidence-supported job-"
-                "description keywords, 40% evidence grounding of the letter's "
-                "content words, 20% the letter-format contract. Job-description "
-                "keywords the candidate's evidence does not support are excluded "
-                "and reported as unreachable — no truthful letter can contain them."
-            ),
-        }
         stored = self._letters.create(
             user_id, job_id, draft_resume["id"], letter, quality=letter_quality
         )
@@ -1961,6 +2123,10 @@ class CoverLetterAgent:
                 # Review-modal fields (preview/why/reasoning/confidence) so the
                 # human sees the letter + the agent's grounded reasoning rather
                 # than an empty box (MV-approval-modal-001).
+                # U2c: the SAME verdict the letter carries, so the modal's
+                # "Approve anyway — N dimensions below floor" gate and the
+                # Studio panel quote one computation, not two.
+                "qualityGate": letter_quality["qualityGate"],
                 **build_approval_extras(letter, job, corpus),
             },
             application_id=stored["id"],
