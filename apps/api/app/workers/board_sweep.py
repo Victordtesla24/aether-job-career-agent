@@ -1015,7 +1015,7 @@ def sweep_user_stretch(
             break
         except HTTPException as exc:
             if exc.status_code == 429:
-                detail = exc.detail if isinstance(exc.detail, dict) else {}
+                detail: dict[str, Any] = exc.detail if isinstance(exc.detail, dict) else {}
                 if detail.get("code") == "spend_cap_exceeded":
                     # The cap was crossed MID-JOB: this job's own earlier
                     # dispatch spent the last of the allowance, so
