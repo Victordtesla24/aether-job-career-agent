@@ -52,6 +52,7 @@ import { SPRING } from "../../lib/motion";
 import { isExpired } from "../approvals/lib";
 import { UserMenu } from "../user-menu";
 import { CommandPalette } from "./CommandPalette";
+import { QueueStatusBadge } from "./QueueStatusBadge";
 import { SystemStatus } from "./SystemStatus";
 
 /**
@@ -444,6 +445,9 @@ export function CommandBar({
               subscribe to nothing, where there is genuinely nothing to
               report. */}
           <SystemStatus compact className="max-w-[9.5rem] shrink-0 max-sm:hidden sm:max-w-none" />
+          {/* D-QDEPTH — honest worker-queue depth; renders only when there is
+              a real backlog to report (>=1 queued job), silent otherwise. */}
+          <QueueStatusBadge className="max-sm:hidden" />
           <div className="relative" ref={bellRef}>
             <button
               ref={bellButtonRef}
