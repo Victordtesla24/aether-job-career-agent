@@ -251,12 +251,20 @@ export default function ResumePage() {
       // and a missing flag (older cached payload) reads as unknown, never as
       // an affirmative claim (same "missing must read as unknown" rule as
       // the integrity strip below).
+      // U2b coherence round: the VERIFIED report for the open version outranks
+      // the listing flag, which describes the mechanism and cannot know whether
+      // every rewrite landed. A file measured to be missing tailored wording is
+      // not a "format-preserving PDF" whatever the mechanism row says.
+      const droppedHere =
+        fidelity && resume.id === selected?.id ? (fidelity.changesDropped ?? 0) : 0;
       setDownloadNote(
-        resume.formatPreserved === false
-          ? "Downloaded — format not preserved: this PDF uses the Aether standard template, not your original layout."
-          : resume.formatPreserved === true
-            ? "Downloaded — format-preserving PDF saved."
-            : "Downloaded — format preservation for this version is unknown; check the layout before relying on it.",
+        droppedHere > 0
+          ? `Downloaded — ${droppedHere} tailored change${droppedHere === 1 ? "" : "s"} could not be applied to this file; the full tailored wording is in the change summary.`
+          : resume.formatPreserved === false
+            ? "Downloaded — format not preserved: this PDF uses the Aether standard template, not your original layout."
+            : resume.formatPreserved === true
+              ? "Downloaded — format-preserving PDF saved."
+              : "Downloaded — format preservation for this version is unknown; check the layout before relying on it.",
       );
     } catch (e) {
       setDownloadNote(e instanceof Error ? e.message : "Download failed");
@@ -370,11 +378,23 @@ export default function ResumePage() {
     fidelity && typeof fidelity.changesRequested === "number" && fidelity.changesRequested > 0
       ? fidelity
       : null;
+  // U2b coherence round: the headline below is derived from the LISTING row,
+  // which by design cannot know whether a rewrite really landed in the produced
+  // document (it never re-renders one). The verified report can — and when the
+  // two disagree, the one that measured the artifact wins. Live production
+  // rendered the green "…margins preserved" claim directly above "1 could not
+  // be applied to this layout" for the same version (verify-truthround/,
+  // 2026-08-14); a paying subscriber must never be told their layout is intact
+  // over a notice that part of their tailoring is missing from the file.
+  const verifiedChangesDropped =
+    fidelityCounts && (fidelityCounts.changesDropped ?? 0) > 0
+      ? (fidelityCounts.changesDropped as number)
+      : 0;
   const formatPreservationKnown = selected != null && selected.formatPreserved != null;
   const formatExplicitlyUnpreserved = selected != null && selected.formatPreserved === false;
   const formatIntact = selected
     ? formatPreservationKnown
-      ? formatExplicitlyUnpreserved
+      ? formatExplicitlyUnpreserved || verifiedChangesDropped > 0
         ? false
         : selected.formatHash === baseHash
       : null
@@ -512,6 +532,16 @@ export default function ResumePage() {
             {!selected ? (
               <p className="mt-1 text-sm text-aether-muted-dim" data-testid="integrity-status">
                 Select a version to verify its layout against the immutable base.
+              </p>
+            ) : verifiedChangesDropped > 0 ? (
+              // Derived from the VERIFIED report for this exact version, and
+              // stated FIRST: it is the only measured fact in this panel, so it
+              // outranks both the listing's mechanism flag and the hash
+              // comparison — neither of which can see a missing rewrite.
+              <p className="mt-1 text-sm text-aether-amber" data-testid="integrity-status">
+                {verifiedChangesDropped} of {fidelityCounts?.changesRequested} tailored changes
+                could not be applied to the file you download — this version is not a complete
+                tailored resume. The full wording is in the change summary below.
               </p>
             ) : !formatPreservationKnown ? (
               <p className="mt-1 text-sm text-aether-muted-dim" data-testid="integrity-status">
