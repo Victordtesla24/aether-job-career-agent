@@ -20,7 +20,7 @@
  * retries; the store owns backoff, so retry policy lives in one place.
  */
 
-import { apiBaseUrl, getToken } from "../api/client";
+import { apiBaseUrl, gatewayErrorMessage, getToken, isNonApiHtmlBody } from "../api/client";
 import type {
   RealtimeTransportCallbacks,
   RealtimeTransportHandle,
@@ -91,16 +91,23 @@ export function openWorkspaceStream(
       // The server said no and said why (StreamSlots 429/503, auth 401). Pass
       // its own words through untouched — the UI shows them verbatim.
       let message = `The server declined the live update stream (HTTP ${response.status}).`;
-      try {
-        const body = await response.text();
-        const parsed = JSON.parse(body) as { detail?: unknown };
-        if (typeof parsed.detail === "string" && parsed.detail.trim()) {
-          message = parsed.detail;
-        } else if (body.trim()) {
-          message = body.trim().slice(0, 300);
+      const body = await response.text().catch(() => "");
+      if (isNonApiHtmlBody(response.headers.get("Content-Type"), body)) {
+        // MON-020: an intermediary (CDN / proxy) answered, not our API. Its
+        // markup is not "the server's own words" and must never be shown as
+        // them — same shared helpers `apiRequest` and `downloadResume` use.
+        message = gatewayErrorMessage(response.status);
+      } else {
+        try {
+          const parsed = JSON.parse(body) as { detail?: unknown };
+          if (typeof parsed.detail === "string" && parsed.detail.trim()) {
+            message = parsed.detail;
+          } else if (body.trim()) {
+            message = body.trim().slice(0, 300);
+          }
+        } catch {
+          // Non-JSON error body — the status-based message above stands.
         }
-      } catch {
-        // Non-JSON error body — the status-based message above stands.
       }
       finish({ kind: "refused", status: response.status, message });
       return;

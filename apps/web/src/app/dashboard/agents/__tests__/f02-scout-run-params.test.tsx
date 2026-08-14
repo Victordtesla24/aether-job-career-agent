@@ -124,10 +124,16 @@ describe("F-02 · Agents console Scout run", () => {
     fireEvent.click(screen.getByTestId("agent-run-scout"));
     await waitFor(() => expect(runAgent).toHaveBeenCalled());
 
-    expect(runAgent).toHaveBeenCalledWith("scout", {
-      query: "Senior Data Scientist",
-      location: "Sydney, Australia",
-    });
+    // MON-020 added two trailing arguments (request options, then the
+    // background opt-in that keeps a multi-minute scout off the request path).
+    // What F-02 is about — the params being the signed-in user's own — is
+    // asserted on the first two arguments exactly as before.
+    expect(runAgent).toHaveBeenCalledWith(
+      "scout",
+      { query: "Senior Data Scientist", location: "Sydney, Australia" },
+      {},
+      { background: true },
+    );
     expect(JSON.stringify(runAgent.mock.calls[0]).toLowerCase()).not.toContain("software engineer");
   });
 

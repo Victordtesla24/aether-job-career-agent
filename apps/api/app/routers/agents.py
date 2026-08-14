@@ -2194,7 +2194,12 @@ def _enqueue_to_arq(job_id: str) -> str | None:
 
 
 def _enqueue_single_agent(
-    user_id: str, agent_key: str, params: dict[str, Any], *, system_run: bool = False
+    user_id: str,
+    agent_key: str,
+    params: dict[str, Any],
+    *,
+    system_run: bool = False,
+    singleton: bool = False,
 ) -> str:
     """Enqueue a metered single-agent run (tailor / coverLetter), blueprint §3.2.
 
@@ -2205,9 +2210,23 @@ def _enqueue_single_agent(
     (never a silent success, never a silent sync fallthrough).
 
     ``system_run`` (ADR-P7-05) is honored for the paywall check exactly as the
-    sync path — but ONLY for ``_SYSTEM_RUN_EXEMPT_AGENTS`` (scout, fitScorer),
-    which are NOT enqueued here, so a metered agent with a valid secret still
-    hits the paywall (402). Threaded for parity + defense in depth."""
+    sync path — but ONLY for ``_SYSTEM_RUN_EXEMPT_AGENTS``, so a metered agent
+    with a valid secret still hits the paywall (402).
+
+    ``scout`` reaches this seam too since MON-020 (``/scout/run?background=true``).
+    It is not in :data:`_LLM_TIER_BY_BACKEND`, so ``_call_is_metered`` returns
+    False for it and no quota is reserved or refunded — identical to what the
+    synchronous ``_record_run`` path already does for scout. Nothing about the
+    metering, paywall or cooldown decision changes with the transport.
+
+    ``singleton`` (MON-020 round-2) makes the enqueue IDEMPOTENT for agents of
+    which one run per user is the whole unit of work: if a run is already in
+    flight, its job id comes back and nothing new is created or queued. It is a
+    SERVER-side guard on purpose — the browser's ``disabled`` flag is per
+    component, so it cannot cover a second tab, the three separate buttons that
+    reach this endpoint, or a direct POST. Deliberately 202-with-the-existing-id
+    rather than 409: the caller's intent ("make sure discovery is running") is
+    already satisfied, and the frontend polls the returned id either way."""
     # 1) Paywall FIRST (honest 402 before any row/reserve/enqueue) — scoped
     #    system-run exemption applies identically to the sync path.
     _require_active_subscription(user_id, agent_name=agent_key, system_run=system_run)
@@ -2227,6 +2246,22 @@ def _enqueue_single_agent(
             # upstream costs the user nothing; a real quota row keeps its 429.
             _raise_if_llm_circuit_open(provider, block)
             raise _quota_429(provider, block.get("expiresAt"))
+    repo = BackgroundJobRepository()
+    # 2b) Duplicate-run guard, part one (MON-020): hand back the run that is
+    #     already in flight instead of starting a second one. The lookup is
+    #     cheap and covers every ordinary double-submit; the same-millisecond
+    #     race is closed at the DB in step 4 (``create_singleton``), so this
+    #     read is an optimisation and a stale-job RELEASE, never the guarantee.
+    #     Applying the same lazy watchdog ``GET /agents/jobs/{id}`` applies is
+    #     what keeps a dead worker from locking the user out of syncing: a job
+    #     past the staleness window is failed (honestly, with its refund) here
+    #     and the new run proceeds.
+    if singleton:
+        active = repo.find_active(user_id, agent_key)
+        if active is not None:
+            active = _apply_stale_watchdog(active, repo)
+            if active.get("status") in ("enqueued", "processing"):
+                return str(active["id"])
     # 3) Atomic reserve AT ENQUEUE (metered calls only — ``_call_is_metered``
     #    keeps this seam in step with the sync path for opt-in-LLM backends).
     metered = _call_is_metered(agent_key, params)
@@ -2241,13 +2276,30 @@ def _enqueue_single_agent(
             raise _plan_quota_429("spend_cap_exceeded", reserved)
         reserved_flag = True
     # 4) AgentRun audit row + BackgroundJob row.
-    run = runs.start(user_id, agent_key, params)
-    _persist_billing_audit(runs, run["id"], audit)
-    repo = BackgroundJobRepository()
-    job_id = repo.create(
-        user_id, agent_key, run_id=run["id"], params=params,
-        quota_reserved=reserved_flag,
-    )
+    if singleton:
+        # Duplicate-run guard, part two: the job row is claimed FIRST, because
+        # that insert (advisory-locked + backed by the partial unique index) is
+        # the atomic claim. Only the winner then writes the AgentRun audit row,
+        # so a lost race leaves no orphan "running" run in the user's history.
+        job_id, created = repo.create_singleton(
+            user_id, agent_key, params=params, quota_reserved=reserved_flag
+        )
+        if not created:
+            # Another request claimed it between step 2b and here. We never ran
+            # anything, so anything we reserved goes straight back.
+            if reserved_flag and quota_repo is not None:
+                quota_repo.refund_run(user_id)
+            return job_id
+        run = runs.start(user_id, agent_key, params)
+        _persist_billing_audit(runs, run["id"], audit)
+        repo.set_run_id(job_id, run["id"])
+    else:
+        run = runs.start(user_id, agent_key, params)
+        _persist_billing_audit(runs, run["id"], audit)
+        job_id = repo.create(
+            user_id, agent_key, run_id=run["id"], params=params,
+            quota_reserved=reserved_flag,
+        )
     # 5) Enqueue; compensate on failure (refund + fail + honest 503).
     try:
         arq_job_id = _enqueue_to_arq(job_id)
@@ -2294,13 +2346,36 @@ def _enqueue_pipeline(
 def _job_stale_thresholds() -> tuple[int, int]:
     """(enqueued_secs, processing_secs) staleness windows (blueprint §7.4).
 
-    enqueued stale > 15 min; processing stale > 12 min. Tunable via
-    ``AETHER_JOB_STALE_SECONDS`` (the enqueued window; processing = that − 180)."""
+    ``enqueued`` stale > 15 min, tunable via ``AETHER_JOB_STALE_SECONDS``: how
+    long a job may sit unclaimed before we conclude no worker will claim it.
+
+    ``processing`` is a DIFFERENT question — "has the worker died mid-run?" —
+    so it is derived from the worker's own per-job execution ceiling
+    (:func:`app.workers.queue.job_timeout_seconds`) plus a 120s settling margin,
+    and overridable with ``AETHER_JOB_PROCESSING_STALE_SECONDS`` (MON-020).
+
+    It used to be ``enqueued − 180``, which only accidentally sat above the ARQ
+    ceiling. Now that background discovery runs share this queue (measured
+    255-473s typical, 968s worst case) the two numbers must not drift apart: a
+    processing window BELOW the ceiling makes the lazy watchdog mark a run
+    "generation timed out (worker unavailable)" — and refund it — while the
+    worker is still legitimately executing it, i.e. a fabricated failure on a
+    run that then completes. Deriving it from the ceiling makes that
+    structurally impossible rather than merely unlikely."""
+    from app.workers.queue import job_timeout_seconds
+
     try:
         enq = int(os.environ.get("AETHER_JOB_STALE_SECONDS", "900"))
     except ValueError:
         enq = 900
-    return enq, max(60, enq - 180)
+    default_proc = job_timeout_seconds() + 120
+    try:
+        proc = int(
+            os.environ.get("AETHER_JOB_PROCESSING_STALE_SECONDS", str(default_proc))
+        )
+    except ValueError:
+        proc = default_proc
+    return enq, max(60, proc)
 
 
 def _job_age_seconds(anchor: Any) -> float:
@@ -2575,9 +2650,51 @@ class ScoutRunRequest(BaseModel):
 
 @router.post("/scout/run", status_code=status.HTTP_202_ACCEPTED)
 def run_scout(
-    body: ScoutRunRequest, current_user: CurrentUser, request: Request
+    body: ScoutRunRequest,
+    current_user: CurrentUser,
+    request: Request,
+    background: bool = Query(
+        default=False,
+        description=(
+            "Enqueue the discovery pass onto the background worker and return "
+            "a job id to poll at GET /agents/jobs/{job_id}, instead of running "
+            "the whole pass inside this request."
+        ),
+    ),
 ) -> dict[str, Any]:
-    """Kick off a scout discovery run for the authenticated user."""
+    """Kick off a scout discovery run for the authenticated user.
+
+    TWO modes, and the DEFAULT is deliberately the synchronous one:
+
+    * ``background=false`` (default) — the pass runs in-request and the response
+      carries its real counts. ``scripts/discovery_cron.sh`` depends on exactly
+      this: it POSTs here and then immediately POSTs ``/agents/fit-scorer/run``
+      to score whatever landed, so scout MUST have finished first. Flipping the
+      default would silently break scheduled discovery for every user. The cron
+      calls 127.0.0.1 directly with no proxy in front of it and no client
+      timeout, so a multi-minute run is perfectly fine there.
+
+    * ``background=true`` (MON-020) — the pass is enqueued onto the SAME ARQ
+      ``run_agent_job`` machinery every other long-running agent already uses,
+      and the caller immediately gets ``{"status": "enqueued", "job_id"}`` to
+      poll at ``GET /agents/jobs/{job_id}``. This is what the browser uses (the
+      Jobs screen's Sync button, Settings' "Sync All Job Boards"): those calls
+      cross Cloudflare, which aborts a request at ~100s and answers with its own
+      HTML error page, while a real pass measures 255-473s (968s worst case).
+      Background mode is IDEMPOTENT per user: a POST while a pass is already
+      enqueued/processing returns that pass's ``job_id`` instead of starting a
+      second one (a second pass would search the same boards for the same user,
+      double the upstream calls and race its own upserts). The guard lives on
+      the server because the three buttons that call this — Jobs "Sync Now",
+      Settings' "Sync All Job Boards", the Agents console — each only know
+      their own component's disabled flag.
+
+    Both modes resolve the search target FIRST (F-02), so the AgentRun audit row
+    — and, in background mode, the queued job's params — record the search that
+    ACTUALLY runs: the caller's own profile values when the body omitted them,
+    never two nulls and never a borrowed persona. Both modes go through the same
+    entitlement/cooldown gates; background mode adds no bypass.
+    """
     user_id = current_user["id"]
     # F-02: resolve BEFORE dispatch (same as ``run_pipeline``) so the AgentRun
     # audit row records the search that ACTUALLY ran — the caller's own profile
@@ -2586,9 +2703,23 @@ def run_scout(
     # second DB read, and refuses identically if this route is bypassed.
     params = body.model_dump()
     params["query"], params["location"] = _resolve_scout_target(user_id, params)
+    system_run = _is_system_run(request)
+    if background:
+        # A queue outage raises an honest 503 from ``_enqueue_single_agent``.
+        # There is deliberately NO fallback to the synchronous path: silently
+        # falling back would reintroduce the very 100s proxy timeout this mode
+        # exists to escape, and would look to the caller like a slow success.
+        #
+        # ``singleton=True``: a user gets ONE discovery pass at a time. A second
+        # POST while one is running is answered with THAT run's job id — same
+        # 202 envelope, no second pass, no second set of upstream board calls.
+        job_id = _enqueue_single_agent(
+            user_id, "scout", params, system_run=system_run, singleton=True
+        )
+        return {"status": "enqueued", "job_id": job_id}
     output = _dispatch(
         user_id, "scout", params,
-        system_run=_is_system_run(request),
+        system_run=system_run,
     )
     return {
         "status": "accepted",

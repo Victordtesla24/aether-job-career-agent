@@ -33,6 +33,11 @@ vi.mock("../../../../lib/api/client", () => ({
   apiRequest: (...args: unknown[]) => apiRequest(...(args as [string])),
   apiBaseUrl: () => apiBaseUrl(),
   getToken: () => getToken(),
+  // MON-020: the page renders API failures through the shared friendly-error
+  // helper (which strips a proxy's raw HTML error page). Pass-through here —
+  // that helper has its own dedicated tests in lib/api/__tests__.
+  describeApiError: (e: unknown, fallback: string) =>
+    e instanceof Error ? e.message : fallback,
 }));
 
 vi.mock("../../../../lib/api/jobs", () => ({
@@ -81,10 +86,16 @@ const UNSCORED_JOB_B = {
 
 const JOBS_FIXTURE = [SCORED_JOB, UNSCORED_JOB_A, UNSCORED_JOB_B];
 
-/** Every scout/fit-scorer POST body this render observed, in call order. */
+/**
+ * Every scout POST body this render observed, in call order.
+ *
+ * MON-020 moved the screen onto the background mode of the same endpoint
+ * (`/agents/scout/run?background=true`), so the path is matched by prefix. What
+ * F-02 is about — the BODY being derived from the signed-in user — is unchanged.
+ */
 function scoutRunBodies(): Array<Record<string, unknown>> {
   return apiRequest.mock.calls
-    .filter((call) => call[0] === "/agents/scout/run")
+    .filter((call) => String(call[0]).startsWith("/agents/scout/run"))
     .map((call) => (call[1] as { body?: Record<string, unknown> })?.body ?? {});
 }
 
@@ -94,7 +105,18 @@ async function defaultApiRequestImpl(path: string) {
     throw new Error("insights unavailable in this fixture");
   }
   if (path === "/agents") return [{ name: "scout", last_run: "2026-08-01T00:00:00Z" }];
-  if (path === "/agents/scout/run") return { status: "accepted", persisted: 0, errors: [] };
+  if (path.startsWith("/agents/scout/run")) {
+    // MON-020 enqueue envelope: 202 + job id, polled below.
+    return { job_id: "bg-f02", status: "enqueued" };
+  }
+  if (path.startsWith("/agents/jobs/")) {
+    return {
+      job_id: "bg-f02",
+      status: "completed",
+      agentKey: "scout",
+      result: { status: "accepted", persisted: 0, updated: 0, errors: [] },
+    };
+  }
   if (path === "/agents/fit-scorer/run") return { status: "completed", scored: 0, errors: [] };
   throw new Error(`unexpected apiRequest(${path})`);
 }
