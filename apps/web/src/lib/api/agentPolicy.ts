@@ -237,3 +237,51 @@ export async function fetchPolicyCohorts(
     await apiRequest<unknown>("/analytics/agent-policy/cohorts", options),
   );
 }
+
+// ---------------------------------------------------------------------------
+// GET /agents/directives — B1b (ADR-AGI-2 P1,
+// ORCH-B1-BLUEPRINT-2026-08-14.md §5.2/§8). The Supervisor's bounded,
+// whitelisted, ratcheted amendments to an agent's rigor policy — "active
+// directive + the metrics that caused it" per the ADR's transparency pillar.
+// ---------------------------------------------------------------------------
+
+export const AgentDirectiveSchema = z.object({
+  id: z.string(),
+  agentKey: z.string(),
+  status: z.string(),
+  // Only whitelisted numeric/enum knobs ever land here (server-enforced) —
+  // kept permissive (`z.unknown()`) rather than re-declaring the whitelist
+  // client-side, which would be a second copy of the security boundary.
+  directive: z.record(z.unknown()).default({}),
+  clamped: z.record(z.unknown()).default({}),
+  rejectedKeys: z.array(z.string()).default([]),
+  // Rendered VERBATIM (§8.2) — the FE never composes its own explanation.
+  rationale: z.string().nullish(),
+  metricsCited: z.record(z.unknown()).default({}),
+  issuedBy: z.string().nullish(),
+  supersededById: z.string().nullish(),
+  outcome: z.record(z.unknown()).nullish(),
+  issuedAt: z.string().nullish(),
+  expiresAt: z.string().nullish(),
+});
+
+export type AgentDirective = z.infer<typeof AgentDirectiveSchema>;
+
+export const AgentDirectivesResponseSchema = z.object({
+  directives: z.array(AgentDirectiveSchema).default([]),
+  // true while AETHER_AGI_DIRECTIVES_ENABLED is off on the deployment — the
+  // array is still returned (history is never a lie); the FE renders these
+  // as "not currently applied" rather than hiding them.
+  paused: z.boolean().default(false),
+  pausedReason: z.string().nullish(),
+});
+
+export type AgentDirectivesResponse = z.infer<typeof AgentDirectivesResponseSchema>;
+
+export async function fetchAgentDirectives(
+  options: RequestOptions = {},
+): Promise<AgentDirectivesResponse> {
+  return AgentDirectivesResponseSchema.parse(
+    await apiRequest<unknown>("/agents/directives", options),
+  );
+}

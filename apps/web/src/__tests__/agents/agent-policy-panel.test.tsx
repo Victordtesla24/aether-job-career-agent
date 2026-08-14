@@ -15,7 +15,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
 import AgentPolicyPanel from "../../components/agents/AgentPolicyPanel";
-import type { AgentPolicy } from "../../lib/api/agentPolicy";
+import type { AgentDirective, AgentPolicy } from "../../lib/api/agentPolicy";
 
 afterEach(cleanup);
 
@@ -74,5 +74,140 @@ describe("AgentPolicyPanel — honest tier + trigger disclosure", () => {
   it("labels its metric window as all-time", () => {
     render(<AgentPolicyPanel policy={policy()} />);
     expect(screen.getByTestId("agent-policy-window").textContent).toMatch(/all-time/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// B1b (ADR-AGI-2 P1) — the "Supervisor directives" block,
+// ORCH-B1-BLUEPRINT-2026-08-14.md §8.1/§8.2.
+// ---------------------------------------------------------------------------
+
+function directive(overrides: Partial<AgentDirective> = {}): AgentDirective {
+  return {
+    id: "dir-1",
+    agentKey: "tailor",
+    status: "active",
+    directive: { maxIterations: 7, targetScore: 88 },
+    clamped: {},
+    rejectedKeys: [],
+    rationale: "Tighten tailoring effort — interview conversion 0.0% over 50 submissions.",
+    metricsCited: { conversionRate: 0, sampleSize: 50 },
+    issuedBy: "supervisor-rules",
+    supersededById: null,
+    outcome: null,
+    issuedAt: "2026-08-14T00:00:00Z",
+    expiresAt: null,
+    ...overrides,
+  };
+}
+
+describe("AgentPolicyPanel — B1b Supervisor directives (present/absent states)", () => {
+  it("renders NOTHING for the directives block when there are none (absent state)", () => {
+    render(<AgentPolicyPanel policy={policy({ knobs: { maxIterations: 5, targetScore: 85 } })} directives={[]} />);
+    expect(screen.queryByTestId("agent-policy-directives")).toBeNull();
+  });
+
+  it("renders NOTHING when the directives prop is simply omitted (backward-compatible default)", () => {
+    render(<AgentPolicyPanel policy={policy()} />);
+    expect(screen.queryByTestId("agent-policy-directives")).toBeNull();
+  });
+
+  it("renders an active directive with its rationale VERBATIM and the tier baseline beside it", () => {
+    render(
+      <AgentPolicyPanel
+        policy={policy({
+          tier: "heightened",
+          knobs: { maxIterations: 5, targetScore: 85, coverLetterRetries: 2 },
+        })}
+        directives={[directive()]}
+      />,
+    );
+    const block = screen.getByTestId("agent-policy-directives");
+    expect(block.textContent).toMatch(/1 active/i);
+    expect(block.textContent).toMatch(/Résumé Tailoring/i);
+    // Amended value AND baseline both legible — "tightened" must be a
+    // visible delta, never a bare number.
+    expect(block.textContent).toMatch(/7/);
+    expect(block.textContent).toMatch(/baseline 5/i);
+    // The rationale is the API's own string, unparaphrased.
+    expect(screen.getByTestId("agent-policy-directive-rationale").textContent).toBe(
+      "Tighten tailoring effort — interview conversion 0.0% over 50 submissions.",
+    );
+  });
+
+  it("renders multiple active directives, one row each", () => {
+    render(
+      <AgentPolicyPanel
+        policy={policy({ knobs: { maxIterations: 5, targetScore: 85, coverLetterRetries: 2 } })}
+        directives={[
+          directive({ id: "dir-1", agentKey: "tailor" }),
+          directive({
+            id: "dir-2",
+            agentKey: "coverLetter",
+            directive: { coverLetterRetries: 3 },
+            rationale: "Tighten cover-letter correction — cultureFit scored 45.0 against the 80 floor.",
+          }),
+        ]}
+      />,
+    );
+    const rows = screen.getAllByTestId("agent-policy-directive-row");
+    expect(rows).toHaveLength(2);
+    expect(screen.getByTestId("agent-policy-directives").textContent).toMatch(/2 active/i);
+    expect(rows[1].textContent).toMatch(/Cover Letter/i);
+  });
+
+  it("renders a clamped entry plainly (the clamp is a product-honesty feature)", () => {
+    render(
+      <AgentPolicyPanel
+        policy={policy({ knobs: { maxIterations: 5 } })}
+        directives={[
+          directive({
+            directive: { maxIterations: 10 },
+            clamped: { maxIterations: { requested: 12, applied: 10, reason: "ceiling" } },
+          }),
+        ]}
+      />,
+    );
+    const clamped = screen.getByTestId("agent-policy-directive-clamped");
+    expect(clamped.textContent).toMatch(/asked for 12/i);
+    expect(clamped.textContent).toMatch(/ceiling is 10/i);
+  });
+
+  it("never renders a directive AS the tier — the tier badge is unaffected by directives", () => {
+    render(
+      <AgentPolicyPanel
+        policy={policy({ tier: "standard", knobs: { maxIterations: 5 } })}
+        directives={[directive()]}
+      />,
+    );
+    expect(screen.getByTestId("agent-policy-tier").textContent).toMatch(/standard/i);
+    expect(screen.getByTestId("agent-policy-tier").textContent).not.toMatch(/heightened/i);
+  });
+
+  it("renders the paused caption and greys the block when directive issuance is paused", () => {
+    render(
+      <AgentPolicyPanel
+        policy={policy({ knobs: { maxIterations: 5 } })}
+        directives={[directive()]}
+        directivesPaused
+      />,
+    );
+    const block = screen.getByTestId("agent-policy-directives");
+    expect(block.getAttribute("data-paused")).toBe("true");
+    expect(block.textContent).toMatch(/not currently applied/i);
+    expect(block.textContent).toMatch(/paused/i);
+  });
+
+  it("does NOT show the paused caption when directives are live", () => {
+    render(
+      <AgentPolicyPanel
+        policy={policy({ knobs: { maxIterations: 5 } })}
+        directives={[directive()]}
+        directivesPaused={false}
+      />,
+    );
+    const block = screen.getByTestId("agent-policy-directives");
+    expect(block.getAttribute("data-paused")).toBe("false");
+    expect(block.textContent).not.toMatch(/paused/i);
   });
 });
