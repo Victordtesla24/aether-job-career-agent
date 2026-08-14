@@ -19,6 +19,13 @@ while IFS= read -r line || [ -n "$line" ]; do
     export "$key"="$value"
 done < /home/ubuntu/github_repos/aether-job-career-agent/.env
 
+# S-3 — this process's slice of the hosted 25-connection cap (see
+# apps/api/app/db.py ``_DEFAULT_POOL_MAX``): API 12 + worker 4 = 16, leaving 9
+# for scripts/psql/migrations. The worker runs at most `max_jobs=3` concurrent
+# jobs plus 3 cron ticks, so 4 pooled connections is its working set. Exported
+# AFTER the .env loop so an explicit value in .env still wins.
+export AETHER_DB_POOL_MAX="${AETHER_DB_POOL_MAX:-4}"
+
 # QA-FAIL-02: arq's own CLI configures ONLY the `arq` logger and leaves the
 # root logger at WARNING with no handler, so application `logger.info(...)`
 # calls (e.g. the admin-free-fallback audit marker in llm_client.py) never

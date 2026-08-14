@@ -45,6 +45,7 @@ NGINX_ORIGINAL_HOST="5cb5f0620.abacusai.cloud"
 KNOWN_FOREIGN_UNTRACKED=(
     "FOREIGN-WIP-MOVED.md"
     "apps/api/tests/fixtures/llm/cover_letter/quality.json"
+    "apps/api/tests/fixtures/llm/cover_letter/retry3.json"
     "apps/api/tests/test_blocker010_board_sweep_abort_recovery.py"
 )
 

@@ -893,6 +893,40 @@ _pipeline_job_ctx: contextvars.ContextVar[str | None] = contextvars.ContextVar(
 )
 
 
+class _SpendOnlyQuota:
+    """Quota facade for automated system runs: USD cap ON, run-count quota OFF.
+
+    S-4 split what used to be one ``skip_quota`` switch into its two genuinely
+    different halves. Skipping the RUN-COUNT quota is correct — the board sweep
+    is infrastructure and must not eat a subscriber's paid run allowance. But
+    the same switch also disabled the USD spend cap and the spend accounting, so
+    sweep-driven tailor/coverLetter calls spent real money that the cap could
+    neither see nor stop.
+
+    This object is handed to ``_execute_reserved_run`` in place of
+    ``UsageQuotaRepository`` for those runs, so:
+
+    * ``refund_run`` is an honest no-op — no run was ever reserved, and
+      decrementing ``runsUsed`` here would refund a run the user never spent,
+      handing them free quota every time the sweep failed.
+    * ``record_spend`` writes through unchanged, so realized sweep spend lands in
+      ``spendUsedUsd`` and the pre-dispatch cap check above halts the NEXT run
+      once the ceiling is reached.
+    """
+
+    def __init__(self) -> None:
+        self._repo = UsageQuotaRepository()
+
+    def refund_run(self, user_id: str) -> None:
+        return None
+
+    def record_spend(self, user_id: str, cost_usd: float) -> None:
+        self._repo.record_spend(user_id, cost_usd)
+
+    def get_by_user(self, user_id: str) -> dict[str, Any] | None:
+        return self._repo.get_by_user(user_id)
+
+
 def _record_run(
     user_id: str,
     agent_name: str,
@@ -918,11 +952,14 @@ def _record_run(
     ``_require_active_subscription``.
 
     ``skip_quota``: True when the caller is an automated system operation
-    (e.g. the board sweep) that MUST NOT consume the user's paid plan quota.
-    When True the plan-quota reserve / spend-cap gates are skipped entirely,
-    and the audit row is stamped ``systemRun: true`` so the exemption is
-    honestly traceable. The quota cooldown block check still runs — a
-    genuinely blocked user should never have system ops run either.
+    (e.g. the board sweep) that MUST NOT consume the user's paid plan RUN
+    allowance. The exemption covers the run-count reserve ONLY (S-4): the
+    per-user USD ``spendCapUsd`` is still enforced before dispatch and the
+    realized spend is still recorded afterwards (see ``_SpendOnlyQuota``),
+    because automated work spends the user's real dollars. The audit row is
+    stamped ``systemRun: true`` so the exemption is honestly traceable, and the
+    quota cooldown block check still runs — a genuinely blocked user should
+    never have system ops run either.
     """
     # Entitlement gate FIRST (GAP-P6-PAYWALL): no active paid subscription -> an
     # honest 402 before any audit row, quota reserve, or LLM call.
@@ -967,10 +1004,22 @@ def _record_run(
     # ``_OPTIONAL_LLM_BY_BACKEND``). Every call that does reach the model still
     # reserves atomically here, BEFORE execution, exactly as before.
     metered = _call_is_metered(agent_name, params)
-    quota_repo = (
-        UsageQuotaRepository() if (metered and not skip_quota) else None
-    )
-    if quota_repo is not None:
+    quota_repo: Any = None
+    if metered and skip_quota:
+        # S-4: the exemption is RUN-COUNT ONLY. An automated system run spends
+        # the USER's real dollars, so the per-user USD ceiling is checked here —
+        # BEFORE the AgentRun row and before any LLM call — and the realized
+        # spend is recorded afterwards through ``_SpendOnlyQuota`` exactly like a
+        # manual run. Without this the board sweep could spend without limit and
+        # the product's own spend cap could neither see it nor stop it.
+        capped = UsageQuotaRepository().get_or_create(user_id)
+        if capped is not None and float(capped["spendUsedUsd"]) >= float(
+            capped["spendCapUsd"]
+        ):
+            raise _plan_quota_429("spend_cap_exceeded", capped)
+        quota_repo = _SpendOnlyQuota()
+    elif metered:
+        quota_repo = UsageQuotaRepository()
         reserved = quota_repo.reserve(user_id)
         if reserved is None:
             raise _plan_quota_429("quota_exceeded", quota_repo.get_by_user(user_id))
