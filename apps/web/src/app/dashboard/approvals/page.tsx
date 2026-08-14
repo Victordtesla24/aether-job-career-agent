@@ -11,6 +11,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ApprovalModal } from "../../../components/approvals/ApprovalModal";
+import PageHeader from "../../../components/shell/PageHeader";
+import SegmentedControl from "../../../components/ui/SegmentedControl";
+import { button, chip } from "../../../components/ui/recipes";
 import { useRealtimeResources } from "../../../hooks/useRealtime";
 import {
   decideApproval,
@@ -421,77 +424,91 @@ export default function ApprovalsPage() {
     approvals?.filter((a) => a.status === "pending" && !isExpired(a)).length ?? 0;
 
   return (
-    <div className="space-y-6">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold">Approvals</h1>
-          <p className="text-sm text-aether-muted">
-            Nothing is sent without your sign-off. Requests expire after 48h.
-            {pendingCount !== null && filter === "pending" ? (
-              <span className="ml-2 font-mono text-xs text-aether-muted-dim" data-testid="pending-count">
-                {pendingCount} pending
-              </span>
-            ) : null}
-          </p>
-        </div>
-        {actionablePendingCount > 1 ? (
-          <div className="flex gap-2" data-testid="bulk-actions">
-            <button
-              type="button"
-              data-testid="bulk-approve-btn"
-              onClick={() => void bulkDecide("approve")}
-              disabled={busy !== null}
-              className="min-h-[44px] rounded-xl border border-aether-green/40 px-4 text-sm font-semibold text-aether-green hover:bg-aether-green/10 disabled:opacity-50 sm:min-h-0 sm:py-2"
-            >
-              Approve all ({actionablePendingCount})
-            </button>
-            <button
-              type="button"
-              data-testid="bulk-reject-btn"
-              onClick={() => void bulkDecide("reject")}
-              disabled={busy !== null}
-              className="min-h-[44px] rounded-xl border border-red-500/40 px-4 text-sm font-semibold text-red-300 hover:bg-red-500/10 disabled:opacity-50 sm:min-h-0 sm:py-2"
-            >
-              Reject all
-            </button>
-          </div>
-        ) : null}
-        {expiredCount > 0 ? (
-          <button
-            type="button"
-            data-testid="clear-expired-btn"
-            onClick={() => void clearExpired(expiredCount)}
-            disabled={busy === "purge-expired"}
-            className="min-h-[44px] rounded-xl border border-red-500/40 px-4 text-sm font-semibold text-red-300 hover:bg-red-500/10 disabled:opacity-50 sm:min-h-0 sm:py-2"
-          >
-            Clear expired ({expiredCount})
-          </button>
-        ) : null}
-        <div
-          className="flex gap-1 rounded-xl border border-white/10 p-1"
-          role="group"
-          aria-label="Filter approvals by status"
-        >
-          {(["pending", "approved", "rejected", "all"] as StatusFilter[]).map((s) => (
-            <button
-              key={s}
-              type="button"
-              aria-pressed={filter === s}
-              onClick={() => setFilter(s)}
-              className={`min-h-[44px] rounded-lg px-3 text-sm capitalize sm:min-h-0 sm:py-1 ${
-                filter === s ? "bg-aether-coral font-semibold text-white" : "text-aether-muted"
-              }`}
-            >
-              {s}
-            </button>
-          ))}
-        </div>
-      </header>
+    <div className="flex flex-col gap-5">
+      <section className="atmos-hero">
+        <PageHeader
+          /* The accessible name stays exactly "Approvals" — the gradient is a
+             span inside the h1, so `getByRole("heading", {name: "Approvals"})`
+             (e2e/approvals.spec.ts) still matches. */
+          title={<span className="text-gradient-brand">Approvals</span>}
+          subtitle={
+            <>
+              Nothing is sent without your sign-off. Requests expire after 48h.
+              {pendingCount !== null && filter === "pending" ? (
+                <span className="ml-2 font-mono text-xs text-aether-muted-dim" data-testid="pending-count">
+                  {pendingCount} pending
+                </span>
+              ) : null}
+            </>
+          }
+          action={
+            <>
+              {actionablePendingCount > 1 ? (
+                <div className="flex gap-2" data-testid="bulk-actions">
+                  {/* §5.5 — approve and reject at EQUAL visual weight, here and
+                      on every card below. Approval must not be the cheaper
+                      click just because it is the happier one. */}
+                  <button
+                    type="button"
+                    data-testid="bulk-approve-btn"
+                    onClick={() => void bulkDecide("approve")}
+                    disabled={busy !== null}
+                    className={button({ tone: "ok", size: "md", class: "min-h-[44px] rounded-xl sm:min-h-0" })}
+                  >
+                    Approve all ({actionablePendingCount})
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="bulk-reject-btn"
+                    onClick={() => void bulkDecide("reject")}
+                    disabled={busy !== null}
+                    className={button({ tone: "danger", size: "md", class: "min-h-[44px] rounded-xl sm:min-h-0" })}
+                  >
+                    Reject all
+                  </button>
+                </div>
+              ) : null}
+              {expiredCount > 0 ? (
+                <button
+                  type="button"
+                  data-testid="clear-expired-btn"
+                  onClick={() => void clearExpired(expiredCount)}
+                  disabled={busy === "purge-expired"}
+                  className={button({ tone: "danger", size: "md", class: "min-h-[44px] rounded-xl sm:min-h-0" })}
+                >
+                  Clear expired ({expiredCount})
+                </button>
+              ) : null}
+            </>
+          }
+          controls={
+            /* B2 GLOBAL CONTROLS PASS — the last hand-rolled filter strip in
+               the batch. It was the one place still painting a FULL coral fill
+               on an active control (reference rule 8's exact anti-pattern), and
+               a `role="group"` of `aria-pressed` buttons where the behaviour is
+               single-select. It is now the shared `<SegmentedControl>`: proper
+               `role="tablist"`/`aria-selected` single-select semantics, arrow
+               keys, and the same coral underline every other tab strip in the
+               product now uses. `setFilter` and the four values are verbatim. */
+            <SegmentedControl
+              items={(["pending", "approved", "rejected", "all"] as StatusFilter[]).map((s) => ({
+                value: s,
+                label: s.charAt(0).toUpperCase() + s.slice(1),
+              }))}
+              value={filter}
+              onChange={setFilter}
+              ariaLabel="Filter approvals by status"
+              idPrefix="approvals-filter"
+              testId="approvals-filter"
+            />
+          }
+        />
+      </section>
 
       {error ? (
         <p
           role="alert"
-          className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300"
+          className="rounded-xl border border-state-danger/30 bg-state-danger/10 p-3 text-sm text-state-danger"
         >
           {error}
         </p>
@@ -500,12 +517,12 @@ export default function ApprovalsPage() {
       {approvals === null ? (
         <div className="space-y-3" aria-busy="true">
           {[0, 1, 2].map((i) => (
-            <div key={i} className="glass h-24 animate-pulse rounded-2xl border border-white/10" />
+            <div key={i} className="elev-1 h-24 animate-pulse rounded-2xl" />
           ))}
         </div>
       ) : approvals.length === 0 ? (
         <div
-          className="glass rounded-2xl border border-white/10 p-10 text-center"
+          className="elev-1 rounded-2xl p-10 text-center"
           data-testid="approvals-empty-state"
         >
           <p className="text-lg font-semibold">Queue clear</p>
@@ -522,32 +539,41 @@ export default function ApprovalsPage() {
               <article
                 key={approval.id}
                 data-testid="approval-card"
-                className="glass rounded-2xl border border-white/10 p-5 transition hover:border-white/15"
+                className={`elev-1 rounded-2xl p-5 transition-colors duration-[--dur-fast] hover:border-hairline-strong ${
+                  expired ? "border-state-danger/25" : ""
+                }`}
               >
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <h2 className="min-w-0 break-words font-semibold">{summarize(approval)}</h2>
+                      {/* MV: the request summary must WRAP, never truncate — a
+                          clipped title hides which artefact you are approving.
+                          `min-w-0` + `break-words`, asserted by page.test.tsx. */}
+                      <h2 className="min-w-0 break-words text-[15px] font-semibold tracking-[-0.01em]">
+                        {summarize(approval)}
+                      </h2>
                       <span
-                        className={`rounded-full border px-2 py-0.5 text-xs ${
-                          approval.status === "pending"
-                            ? "border-aether-amber/40 text-aether-amber"
-                            : approval.status === "approved"
-                              ? "border-aether-green/40 text-aether-green"
-                              : "border-red-500/40 text-red-300"
-                        }`}
+                        className={chip({
+                          tone:
+                            approval.status === "pending"
+                              ? "warn"
+                              : approval.status === "approved"
+                                ? "ok"
+                                : "danger",
+                          class: "rounded-full px-2 py-0.5 text-[11px]",
+                        })}
                       >
                         {approval.status}
                       </span>
                       {details.confidence !== null ? (
-                        <span className="font-mono text-xs text-aether-green">
+                        <span className="mono text-xs text-state-ok">
                           {details.confidence}%
                         </span>
                       ) : null}
                       {needsSendRetry(approval) ? (
                         <span
                           data-testid="unsent-badge"
-                          className="rounded-full border border-aether-amber/40 bg-aether-amber/10 px-2 py-0.5 text-xs text-aether-amber"
+                          className={chip({ tone: "warn", class: "rounded-full px-2 py-0.5 text-[11px]" })}
                           title="Approved, but the send did not go through — nothing has been sent yet"
                         >
                           not sent
@@ -556,14 +582,14 @@ export default function ApprovalsPage() {
                       {expired ? (
                         <span
                           data-testid="expired-badge"
-                          className="rounded-full border border-red-500/40 bg-red-500/10 px-2 py-0.5 text-xs text-red-300"
+                          className={chip({ tone: "danger", class: "rounded-full px-2 py-0.5 text-[11px]" })}
                           title="Older than 48h — re-run the agent to get a fresh request"
                         >
                           expired
                         </span>
                       ) : null}
                     </div>
-                    <p className="mt-1 text-xs text-aether-muted-dim">
+                    <p className="mono mt-1 text-[11px] text-aether-muted-dim">
                       {approval.type} · requested {new Date(approval.createdAt).toLocaleString("en-AU")}
                       {approval.resolvedAt
                         ? ` · resolved ${new Date(approval.resolvedAt).toLocaleString("en-AU")}`
@@ -580,7 +606,7 @@ export default function ApprovalsPage() {
                       type="button"
                       data-testid="review-btn"
                       onClick={() => openReview(approval)}
-                      className="min-h-[44px] rounded-xl border border-aether-indigo/40 px-4 text-sm font-semibold text-[#A5B4FC] hover:bg-aether-indigo/10 sm:min-h-0 sm:py-2"
+                      className={button({ tone: "info", size: "md", class: "min-h-[44px] rounded-xl sm:min-h-0" })}
                     >
                       {approval.status === "pending" ? "Review" : "View"}
                     </button>
@@ -591,7 +617,7 @@ export default function ApprovalsPage() {
                           data-testid="approve-btn"
                           onClick={() => void decideFromCard(approval.id, "approve")}
                           disabled={busy === approval.id || expired}
-                          className="min-h-[44px] rounded-xl bg-aether-green/80 px-4 text-sm font-semibold text-black hover:opacity-90 disabled:opacity-50 sm:min-h-0 sm:py-2"
+                          className={button({ tone: "ok", size: "md", class: "min-h-[44px] rounded-xl sm:min-h-0" })}
                         >
                           Approve
                         </button>
@@ -600,7 +626,7 @@ export default function ApprovalsPage() {
                           data-testid="reject-btn"
                           onClick={() => void decideFromCard(approval.id, "reject")}
                           disabled={busy === approval.id || expired}
-                          className="min-h-[44px] rounded-xl border border-red-500/40 px-4 text-sm font-semibold text-red-300 hover:bg-red-500/10 disabled:opacity-50 sm:min-h-0 sm:py-2"
+                          className={button({ tone: "danger", size: "md", class: "min-h-[44px] rounded-xl sm:min-h-0" })}
                         >
                           Reject
                         </button>
@@ -612,7 +638,7 @@ export default function ApprovalsPage() {
                         data-testid="retry-send-btn"
                         onClick={() => void retrySend(approval)}
                         disabled={busy === approval.id}
-                        className="min-h-[44px] rounded-xl border border-aether-amber/40 px-4 text-sm font-semibold text-aether-amber hover:bg-aether-amber/10 disabled:opacity-50 sm:min-h-0 sm:py-2"
+                        className={button({ tone: "warn", size: "md", class: "min-h-[44px] rounded-xl sm:min-h-0" })}
                       >
                         Retry send
                       </button>
@@ -624,7 +650,7 @@ export default function ApprovalsPage() {
                         aria-label={`Remove ${approval.status === "pending" ? "expired" : approval.status} approval request`}
                         onClick={() => void removeFromCard(approval)}
                         disabled={busy === approval.id}
-                        className="min-h-[44px] rounded-xl border border-white/15 px-4 text-sm font-semibold text-aether-muted hover:border-red-500/40 hover:bg-red-500/10 hover:text-red-300 disabled:opacity-50 sm:min-h-0 sm:py-2"
+                        className={button({ tone: "neutral", size: "md", class: "min-h-[44px] rounded-xl hover:border-state-danger/40 hover:bg-state-danger/10 hover:text-state-danger sm:min-h-0" })}
                       >
                         Remove
                       </button>

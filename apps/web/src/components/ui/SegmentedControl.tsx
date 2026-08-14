@@ -6,9 +6,29 @@
  * separate implementations).
  *
  * `role="tablist"` with roving tabindex + arrow-key navigation, per the
- * WAI-ARIA tabs pattern. The active item uses a solid coral fill; note that
- * `globals.css` (DEF-053) already forces dark text on `bg-aether-coral` for
- * contrast, so no per-item text colour is set here.
+ * WAI-ARIA tabs pattern.
+ *
+ * ─── B2 GLOBAL CONTROLS PASS — the active state is a border, not a fill ───
+ *
+ * Reference-pack rule 8, measured across the whole study set: *"active-state
+ * indicators are minimal — a border or underline, never a full background
+ * fill"*. Attio's stepper is a thin coloured left border against 40%-opacity
+ * text; Superhuman's tab bar is a bottom-border underline and nothing else;
+ * PostHog's one filled pill is on an interactive DEMO, not on navigation. The
+ * Agents-console certification left this as a deferred "tab-pill ruling"; this
+ * closes it, and closes it APP-WIDE rather than per page, because a control
+ * that looks different on two screens is two controls.
+ *
+ * What replaced what: `bg-aether-coral` (a saturated fill, which also spent the
+ * screen's single loud-colour budget on a *navigation* affordance) → a coral
+ * underline + `surface-2` seat + full-opacity text, with inactive items at
+ * muted weight. The coral is still present and still unambiguous; it is simply
+ * no longer the loudest thing on a page whose data has more to say.
+ *
+ * Contrast note: the old fill relied on `globals.css` DEF-053 forcing dark text
+ * on `bg-aether-coral`. With the fill gone, the active label is `aether-text`
+ * (#F4F4F8) on the page ground — 15.9:1 — so that override no longer applies
+ * to this control and none is needed.
  */
 import { useRef } from "react";
 
@@ -30,6 +50,8 @@ export default function SegmentedControl<T extends string>({
   panelIdPrefix,
   size = "md",
   testId,
+  testIdFor,
+  className = "",
 }: {
   items: ReadonlyArray<SegmentedItem<T>>;
   value: T;
@@ -41,6 +63,17 @@ export default function SegmentedControl<T extends string>({
   panelIdPrefix?: string;
   size?: "sm" | "md";
   testId?: string;
+  /**
+   * Per-item `data-testid`. Defaults to `${idPrefix}-tab-${value}`.
+   *
+   * Exists so a page that already has a *pinned* testid contract (Applications'
+   * `view-board` / `view-sankey` / …, asserted by tests this batch may not
+   * edit) can adopt the shared control without renaming anything. Adapting the
+   * component to the existing contract is the correct direction: the contract
+   * is the tested surface, the class names are not.
+   */
+  testIdFor?: (value: T) => string;
+  className?: string;
 }) {
   const refs = useRef<Record<string, HTMLButtonElement | null>>({});
 
@@ -55,14 +88,14 @@ export default function SegmentedControl<T extends string>({
     requestAnimationFrame(() => refs.current[next.value]?.focus());
   };
 
-  const pad = size === "sm" ? "px-2.5 py-1 text-[11px]" : "px-3 py-1.5 text-[12px]";
+  const pad = size === "sm" ? "px-2.5 pb-1.5 pt-1 text-[11px]" : "px-3 pb-2 pt-1.5 text-[12px]";
 
   return (
     <div
       role="tablist"
       aria-label={ariaLabel}
       data-testid={testId}
-      className="elev-1 inline-flex max-w-full items-center gap-1 overflow-x-auto rounded-lg p-1"
+      className={`inline-flex max-w-full items-stretch gap-0.5 overflow-x-auto rounded-lg border-b border-hairline ${className}`}
     >
       {items.map((item) => {
         const active = item.value === value;
@@ -78,7 +111,7 @@ export default function SegmentedControl<T extends string>({
             aria-selected={active}
             aria-controls={panelIdPrefix ? `${panelIdPrefix}-${item.value}` : undefined}
             tabIndex={active ? 0 : -1}
-            data-testid={`${idPrefix}-tab-${item.value}`}
+            data-testid={testIdFor ? testIdFor(item.value) : `${idPrefix}-tab-${item.value}`}
             onClick={() => onChange(item.value)}
             onKeyDown={(e) => {
               if (e.key === "ArrowRight" || e.key === "ArrowDown") {
@@ -89,16 +122,31 @@ export default function SegmentedControl<T extends string>({
                 move(-1);
               }
             }}
-            className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md font-medium outline-none transition-[background-color,color] duration-150 focus-visible:ring-2 focus-visible:ring-aether-coral/70 ${pad} ${
+            className={`relative flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-t-md outline-none transition-[color,background-color] duration-[--dur-fast] focus-visible:ring-2 focus-visible:ring-aether-coral/70 ${pad} ${
               active
-                ? "bg-aether-coral font-semibold"
-                : "text-aether-muted hover:bg-surface-3 hover:text-aether-text"
+                ? // Rule 8: a 2px coral underline seated on the tablist's own
+                  // hairline, plus a barely-there surface lift. `-bottom-px`
+                  // puts the rule ON the hairline rather than above it, so the
+                  // active tab reads as continuous with its panel.
+                  "bg-surface-2/60 font-semibold text-aether-text after:absolute after:inset-x-0 after:-bottom-px after:h-0.5 after:rounded-full after:bg-aether-coral after:content-['']"
+                : "font-medium text-aether-muted hover:bg-surface-3/50 hover:text-aether-text"
             }`}
           >
-            {item.icon ? <i className={`fa-solid ${item.icon} text-[10px]`} aria-hidden="true" /> : null}
+            {item.icon ? (
+              <i
+                className={`fa-solid ${item.icon} text-[10px] ${active ? "text-aether-coral" : ""}`}
+                aria-hidden="true"
+              />
+            ) : null}
             {item.label}
             {typeof item.count === "number" ? (
-              <span className="font-mono text-[10px] tabular-nums opacity-70">{item.count}</span>
+              <span
+                className={`font-mono text-[10px] tabular-nums ${
+                  active ? "text-aether-coral" : "text-aether-muted-dim"
+                }`}
+              >
+                {item.count}
+              </span>
             ) : null}
           </button>
         );

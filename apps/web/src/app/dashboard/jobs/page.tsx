@@ -39,6 +39,10 @@ import type { Job, ScoutSourceStatus, SourceAvailability } from "../../../lib/ap
 import type { TailorRunResult } from "../../../lib/api/resumes";
 import MetricTooltip from "../../../components/MetricTooltip";
 import { sourceStatusView } from "../../../components/dashboard/sourceStatus";
+import PageHeader from "../../../components/shell/PageHeader";
+import SegmentedControl from "../../../components/ui/SegmentedControl";
+import VirtualList from "../../../components/ui/VirtualList";
+import { button, chip, listCard, scrollBody } from "../../../components/ui/recipes";
 
 // ---------------------------------------------------------------------------
 // Types (insights payload from GET /jobs/{id}/insights)
@@ -115,6 +119,31 @@ type SalaryFilter = (typeof SALARY_FILTERS)[number];
  * the list DOM is paginated.
  */
 const JOBS_RENDER_PAGE_SIZE = 60;
+
+/**
+ * S-UI B2 — the two-pane geometry.
+ *
+ * `JOB_ROW_ESTIMATE_PX` is only the virtualizer's first guess; every mounted
+ * row is then measured for real, so a card that grows an autopilot-suppression
+ * hint or a third skill tag still positions exactly.
+ *
+ * The viewport heights are `calc(100dvh - chrome)`: `dvh` (not `vh`) because on
+ * mobile Safari `vh` is the *largest* viewport, which would push the bottom of
+ * the list under the browser toolbar and re-create the very overflow this batch
+ * removes. Below `xl` the panes stack, so each is capped at a shorter height
+ * and the page still ends.
+ */
+const JOB_ROW_ESTIMATE_PX = 168;
+/** Row spacing. Matches the un-windowed container's `gap-2.5` (10px). */
+const JOB_ROW_GAP_PX = 10;
+const JOB_LIST_VIEWPORT = "min(calc(100dvh - 330px), 1180px)";
+const JOB_DETAIL_VIEWPORT = "min(calc(100dvh - 130px), 1180px)";
+
+/** The one form-field shell on this screen (see the filter bar). */
+const FIELD =
+  "elev-1 h-9 min-w-0 rounded-lg border-hairline bg-surface-2/60 px-3 text-xs text-aether-text " +
+  "outline-none transition-colors duration-[--dur-fast] hover:border-hairline-strong " +
+  "focus-visible:ring-2 focus-visible:ring-aether-coral/70";
 
 /** Display label + badge for a job source (wireframe source bar naming). */
 const SOURCE_LABEL: Record<string, string> = {
@@ -702,6 +731,15 @@ export default function JobsPage() {
   );
 
   const selected = visible.find((j) => j.id === selectedId) ?? (market === "saved" ? undefined : visible[0]);
+  /**
+   * Where the selected job sits INSIDE the rendered window, so the windowed
+   * list can keep it on screen. `-1` when the selection is outside the loaded
+   * window (or absent), which the list reads as "nothing to scroll to" — it
+   * must never guess an index and scroll the user somewhere arbitrary.
+   */
+  const selectedRenderedIndex = selected
+    ? renderedJobs.findIndex((j) => j.id === selected.id)
+    : -1;
   const selectedInsights = selected ? insights[selected.id] : undefined;
   // GMV4-ats-002 round 3: WHITELIST — trust the semantic-derived dimensions
   // (Industry Match / Culture Fit / North Star Align) only when the backend
@@ -987,7 +1025,7 @@ export default function JobsPage() {
   );
 
   return (
-    <div className="space-y-5">
+    <div className="flex flex-col gap-5">
       {/* Apply success toast (GOV-010 / GMV2 §10.2) */}
       {applyToast ? (
         <div
@@ -999,31 +1037,46 @@ export default function JobsPage() {
           ✓ {applyToast}
         </div>
       ) : null}
-      {/* Header + stats subtitle (jd03) */}
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold">Job Discovery</h1>
-          <p className="mono text-xs text-aether-muted-dim" data-testid="jobs-stats">
-            {stats.total} discovered · {stats.scored} scored against your résumé ·{" "}
-            {stats.unscored} not yet scored · {stats.newToday} new today · {stats.sources} sources connected
-          </p>
-        </div>
-        <button
-          type="button"
-          data-testid="run-discovery-btn"
-          onClick={() => void runDiscovery()}
-          disabled={running}
-          className="flex items-center gap-2 rounded-xl bg-aether-coral px-4 py-2 text-sm font-semibold hover:opacity-90 disabled:opacity-50"
-        >
-          {running ? "Syncing…" : "Sync Now"}
-        </button>
-      </header>
+      {/* Header + stats subtitle (jd03).
+          B2: the certified page frame — `<PageHeader>` inside `.atmos-hero`, so
+          this screen carries the same lit band and the same single coral→amber
+          gradient moment as Dashboard and Analytics (reference rule 3). The
+          stats line moves into the header's reserved `footnote` slot, which
+          renders it at 11px full-opacity instead of 10px/70% — D-ζ: the census
+          of what has and has not been scored is a truth claim, and it gets MORE
+          legible in a redesign, never less. Copy verbatim. */}
+      <section className="atmos-hero">
+        <PageHeader
+          title={
+            <>
+              <span className="text-gradient-brand">Job</span> Discovery
+            </>
+          }
+          subtitle="Every role below was discovered by your agents and scored against your résumé."
+          action={
+            <button
+              type="button"
+              data-testid="run-discovery-btn"
+              onClick={() => void runDiscovery()}
+              disabled={running}
+              className={button({ tone: "primary", size: "md" })}
+            >
+              {running ? "Syncing…" : "Sync Now"}
+            </button>
+          }
+          footnote={
+            <span className="mono" data-testid="jobs-stats">
+              {stats.total} discovered · {stats.scored} scored against your résumé ·{" "}
+              {stats.unscored} not yet scored · {stats.newToday} new today · {stats.sources} sources connected
+            </span>
+          }
+        />
 
       {/* F-02 — say plainly what Sync Now will search for, and where that came
           from. Rendered only once the profile lookup has settled, so the line
           never states a target before one is known. */}
       {profileSettled ? (
-        <p className="text-xs text-aether-muted-dim" data-testid="discovery-search-target">
+        <p className="mt-3 text-xs text-aether-muted-dim" data-testid="discovery-search-target">
           {searchTarget.status === "ready" ? (
             <>
               Sync Now searches for{" "}
@@ -1103,7 +1156,7 @@ export default function JobsPage() {
               data-testid="discovery-target-submit"
               onClick={() => void submitAskedTarget()}
               disabled={running}
-              className="rounded-xl bg-aether-coral px-4 py-2 text-sm font-semibold hover:opacity-90 disabled:opacity-50"
+              className={button({ tone: "primary", size: "md", class: "rounded-xl" })}
             >
               {running ? "Searching…" : "Search this"}
             </button>
@@ -1114,7 +1167,7 @@ export default function JobsPage() {
                 setAskOpen(false);
                 setAskError(null);
               }}
-              className="rounded-xl border border-white/15 px-4 py-2 text-sm font-semibold text-aether-muted hover:text-white"
+              className={button({ tone: "neutral", size: "md", class: "rounded-xl" })}
             >
               Cancel
             </button>
@@ -1133,157 +1186,168 @@ export default function JobsPage() {
           </p>
         </section>
       ) : null}
+      </section>
 
-      {/* Market tabs (jd20/jd21/jd41) */}
-      <div className="flex items-center gap-1 border-b border-white/10" role="tablist" aria-label="Market">
-        {([
-          { key: "au", label: "🇦🇺 Australia (Local)", count: counts.au },
-          { key: "intl", label: "🌏 International", count: counts.intl },
-          { key: "saved", label: "Saved", count: counts.saved },
-        ] as const).map((t) => {
-          const active = market === t.key;
-          return (
-            <button
-              key={t.key}
-              type="button"
-              role="tab"
-              aria-selected={active}
-              data-testid={`market-tab-${t.key}`}
-              onClick={() => {
-                setMarket(t.key);
-                if (t.key !== "saved") setDemoEmpty(false);
-              }}
-              className={`flex items-center gap-2 rounded-t-lg border-b-2 px-4 py-2.5 text-sm transition ${
-                active
-                  ? "border-aether-coral font-semibold text-white"
-                  : "border-transparent font-medium text-aether-muted hover:text-white"
-              }`}
-            >
-              {t.label}
-              <span
-                className={`mono rounded-md px-1.5 py-0.5 text-[10px] ${
-                  active ? "bg-aether-coral/15 text-aether-coral" : "bg-white/10 text-aether-muted-dim"
-                }`}
-              >
-                {t.count}
+      {/* Market tabs (jd20/jd21/jd41).
+          B2 GLOBAL CONTROLS PASS: this was the app's fourth hand-rolled tab
+          strip. It is now the ONE `<SegmentedControl>` — same `role="tab"`,
+          same `aria-selected`, same `market-tab-*` testids (the shared control's
+          default `${idPrefix}-tab-${value}` naming lands on them exactly, so
+          nothing had to be renamed), and it gains arrow-key roving navigation
+          the bespoke strip never had. `counts` still comes from the same derived
+          state; the labels are verbatim. */}
+      <SegmentedControl
+        items={[
+          { value: "au" as Market, label: "🇦🇺 Australia (Local)", count: counts.au },
+          { value: "intl" as Market, label: "🌏 International", count: counts.intl },
+          { value: "saved" as Market, label: "Saved", count: counts.saved },
+        ]}
+        value={market}
+        onChange={(next) => {
+          setMarket(next);
+          if (next !== "saved") setDemoEmpty(false);
+        }}
+        ariaLabel="Market"
+        idPrefix="market"
+        testId="market-tabs"
+        className="w-full"
+      />
+
+      {/*
+        SOURCES BAND (jd22–jd28 + GAP-SRC-003).
+        B2: the connected-boards rail and the per-source sync status were two
+        full-width stacked sections that together cost ~330px of vertical space
+        ABOVE the list on every visit — on a screen whose job is to show jobs.
+        They are now one `band-recessed` strip: the same two rails, the same
+        components, the same data, the same verbatim copy, composed side by side
+        and each scrolling horizontally inside its own container (X-1 / D-ε).
+        Nothing was removed — `source-bar`, `source-status-panel`,
+        `source-status-list`, `source-status-chip`, `source-status-badge` and
+        `source-status-error` all still render, with their tones unchanged.
+      */}
+      <div className="band-recessed -mx-4 rounded-2xl px-4 py-3.5 sm:-mx-5 sm:px-5">
+        <div className="grid gap-4 xl:grid-cols-2">
+          {/* Source integration bar (jd22–jd28) */}
+          <section data-testid="source-bar" aria-label="Connected job boards" className="min-w-0">
+            <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+              <span className="type-section">
+                Connected Job Boards — {market === "intl" ? "International" : "Australia"}
               </span>
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Source integration bar (jd22–jd28) */}
-      <section data-testid="source-bar" aria-label="Connected job boards">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <span className="text-xs font-semibold uppercase tracking-wide text-aether-muted-dim">
-            Connected Job Boards — {market === "intl" ? "International" : "Australia"}
-          </span>
-          <span className="mono text-[11px] text-aether-muted-dim">
-            {lastSync ? `Last synced: ${timeAgo(lastSync)}` : "Sync time unavailable"}
-          </span>
-        </div>
-        <div
-          className="flex items-stretch gap-3 overflow-x-auto pb-1"
-          role="region"
-          aria-label="Connected job board cards (scrollable)"
-          tabIndex={0}
-        >
-          {sourceCards.map((s) => (
-            <div key={s.source} className="glass-raised w-52 shrink-0 rounded-xl border border-white/10 p-3.5">
-              <div className="mb-2 flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/10 text-[10px] font-bold">
+              <span className="mono text-[11px] text-aether-muted-dim">
+                {lastSync ? `Last synced: ${timeAgo(lastSync)}` : "Sync time unavailable"}
+              </span>
+            </div>
+            <div
+              className="flex items-stretch gap-2 overflow-x-auto pb-1"
+              role="region"
+              aria-label="Connected job board cards (scrollable)"
+              tabIndex={0}
+            >
+              {sourceCards.map((s) => (
+                <div
+                  key={s.source}
+                  className="elev-1 flex w-[172px] shrink-0 items-center gap-2.5 rounded-xl p-2.5"
+                >
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/[0.07] text-[10px] font-bold">
                     {sourceBadge(s.source)}
                   </span>
-                  <span className="text-xs font-semibold">{SOURCE_LABEL[s.source] ?? s.source}</span>
-                </div>
-                <span className="h-2 w-2 rounded-full bg-aether-green" aria-hidden="true" />
-              </div>
-              <p className="mb-2.5 text-[11px] text-aether-green">
-                {s.count} live {s.count === 1 ? "job" : "jobs"} discovered
-              </p>
-            </div>
-          ))}
-          <div className="flex w-52 shrink-0 flex-col items-center justify-center rounded-xl border border-dashed border-white/15 p-3.5 text-center">
-            <p className="text-[11px] leading-relaxed text-aether-muted-dim">
-              Counts reflect live discovered jobs per source — run <span className="text-white">Sync Now</span> to
-              refresh from all connected boards
-            </p>
-          </div>
-        </div>
-      </section>
-
-      {/* Per-source sync status (GAP-SRC-003) — ok/error/skipped per board,
-          independent of whether that source has any discovered jobs. */}
-      <section data-testid="source-status-panel" aria-label="Per-source sync status">
-        <span className="mb-2 block text-xs font-semibold uppercase tracking-wide text-aether-muted-dim">
-          Sync Status
-        </span>
-        {scoutSources === null ? (
-          <div
-            className="flex gap-2 overflow-x-auto pb-1"
-            aria-busy="true"
-            role="region"
-            aria-label="Per-source sync status (loading)"
-            tabIndex={0}
-          >
-            {[0, 1, 2].map((i) => (
-              <div key={i} className="glass h-11 w-48 shrink-0 animate-pulse rounded-lg border border-white/10" />
-            ))}
-          </div>
-        ) : scoutSources.length === 0 ? (
-          <p className="text-[11px] text-aether-muted-dim">Sync status unavailable — run Sync Now to populate it.</p>
-        ) : (
-          <div className="flex flex-wrap items-stretch gap-2" data-testid="source-status-list">
-            {sourceStatusView(scoutSources).map((s) => (
-              <div
-                key={s.source}
-                data-testid="source-status-chip"
-                className={`flex min-w-0 items-center gap-2 rounded-lg border px-3 py-2 text-[11px] ${
-                  s.badge === "error"
-                    ? "border-red-500/30 bg-red-500/10"
-                    : s.badge === "ok"
-                      ? "border-aether-green/20 bg-aether-green/[0.06]"
-                      : "border-white/10 bg-white/5"
-                }`}
-              >
-                <span
-                  aria-hidden="true"
-                  className={`h-2 w-2 shrink-0 rounded-full ${
-                    s.badge === "error" ? "bg-red-400" : s.badge === "ok" ? "bg-aether-green" : "bg-aether-muted-dim"
-                  }`}
-                />
-                <span className="shrink-0 font-semibold">{SOURCE_LABEL[s.source] ?? s.source}</span>
-                <span
-                  data-testid="source-status-badge"
-                  className={s.badge === "error" ? "text-red-300" : s.badge === "ok" ? "text-aether-green" : "text-aether-muted-dim"}
-                >
-                  {s.badgeLabel}
-                </span>
-                <span className="shrink-0 text-aether-muted-dim">· {s.lastSyncLabel}</span>
-                {s.errorText ? (
-                  <span
-                    data-testid="source-status-error"
-                    title={s.errorText}
-                    // A quota pause is a neutral, self-healing state (S-FIX-A/S-2)
-                    // — it carries an explanation but must not read as a failure,
-                    // so the alarm colour follows the badge, not the presence of
-                    // text.
-                    className={`max-w-[220px] truncate ${
-                      s.badge === "error" ? "text-red-300/90" : "text-aether-muted-dim"
-                    }`}
-                  >
-                    — {s.errorText}
+                  <span className="min-w-0">
+                    <span className="block truncate text-[11px] font-semibold">
+                      {SOURCE_LABEL[s.source] ?? s.source}
+                    </span>
+                    <span className="mono block text-[10px] text-state-ok">
+                      {s.count} live {s.count === 1 ? "job" : "jobs"} discovered
+                    </span>
                   </span>
-                ) : null}
+                </div>
+              ))}
+              <div className="flex w-[210px] shrink-0 items-center rounded-xl border border-dashed border-hairline-strong p-2.5">
+                <p className="text-[11px] leading-snug text-aether-muted-dim">
+                  Counts reflect live discovered jobs per source — run{" "}
+                  <span className="text-aether-text">Sync Now</span> to refresh from all connected
+                  boards
+                </p>
               </div>
-            ))}
-          </div>
-        )}
-      </section>
+            </div>
+          </section>
 
-      {/* Filters (jd04–jd08, jd29) */}
-      <div className="flex flex-wrap items-center gap-2.5" data-testid="job-filter-bar">
+          {/* Per-source sync status (GAP-SRC-003) — ok/error/skipped per board,
+              independent of whether that source has any discovered jobs. */}
+          <section data-testid="source-status-panel" aria-label="Per-source sync status" className="min-w-0">
+            <span className="type-section mb-2 block">Sync Status</span>
+            {scoutSources === null ? (
+              <div
+                className="flex gap-2 overflow-x-auto pb-1"
+                aria-busy="true"
+                role="region"
+                aria-label="Per-source sync status (loading)"
+                tabIndex={0}
+              >
+                {[0, 1, 2].map((i) => (
+                  <div key={i} className="elev-1 h-11 w-48 shrink-0 animate-pulse rounded-lg" />
+                ))}
+              </div>
+            ) : scoutSources.length === 0 ? (
+              <p className="text-[11px] text-aether-muted-dim">Sync status unavailable — run Sync Now to populate it.</p>
+            ) : (
+              <div
+                className="flex max-h-[92px] flex-wrap items-start gap-1.5 overflow-y-auto overscroll-contain pr-1"
+                data-testid="source-status-list"
+              >
+                {sourceStatusView(scoutSources).map((s) => (
+                  <div
+                    key={s.source}
+                    data-testid="source-status-chip"
+                    className={chip({
+                      tone: s.badge === "error" ? "danger" : s.badge === "ok" ? "ok" : "neutral",
+                      class: "max-w-full py-1 text-[11px]",
+                    })}
+                  >
+                    <span
+                      aria-hidden="true"
+                      className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                        s.badge === "error"
+                          ? "bg-state-danger"
+                          : s.badge === "ok"
+                            ? "bg-state-ok"
+                            : "bg-aether-muted-dim"
+                      }`}
+                    />
+                    <span className="shrink-0 font-semibold text-aether-text">
+                      {SOURCE_LABEL[s.source] ?? s.source}
+                    </span>
+                    <span data-testid="source-status-badge">{s.badgeLabel}</span>
+                    <span className="mono shrink-0 text-aether-muted-dim">· {s.lastSyncLabel}</span>
+                    {s.errorText ? (
+                      <span
+                        data-testid="source-status-error"
+                        title={s.errorText}
+                        // A quota pause is a neutral, self-healing state (S-FIX-A/S-2)
+                        // — it carries an explanation but must not read as a failure,
+                        // so the alarm colour follows the badge, not the presence of
+                        // text.
+                        className={`max-w-[200px] truncate ${
+                          s.badge === "error" ? "text-state-danger/90" : "text-aether-muted-dim"
+                        }`}
+                      >
+                        — {s.errorText}
+                      </span>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        </div>
+      </div>
+
+      {/* Filters (jd04–jd08, jd29).
+          B2: one control language — every field is the same h-9 `surface-2`
+          well with a hairline edge, instead of four different `.glass`
+          treatments. Every value, handler, `aria-label`, testid and option list
+          is untouched; `isSourceUnavailable` still disables exactly the same
+          options and still says "(unavailable)" out loud. */}
+      <div className="flex flex-wrap items-center gap-2" data-testid="job-filter-bar">
         <input
           type="text"
           value={roleQuery}
@@ -1291,14 +1355,14 @@ export default function JobsPage() {
           placeholder="Role…"
           aria-label="Filter by role"
           data-testid="job-role-filter"
-          className="glass w-32 rounded-lg border border-white/10 bg-transparent px-3 py-2 text-xs placeholder:text-aether-muted-dim"
+          className={`${FIELD} w-32 placeholder:text-aether-muted-dim`}
         />
         <select
           value={sourceFilter}
           aria-label="Filter by source"
           onChange={(e) => setSourceFilter(e.target.value as SourceFilter)}
           data-testid="job-source-filter"
-          className="glass rounded-lg border border-white/10 bg-transparent px-3 py-2 text-xs"
+          className={FIELD}
         >
           {SOURCE_FILTERS.map((s) => (
             <option
@@ -1319,14 +1383,14 @@ export default function JobsPage() {
           placeholder="Location…"
           aria-label="Filter by location"
           data-testid="job-location-filter"
-          className="glass w-32 rounded-lg border border-white/10 bg-transparent px-3 py-2 text-xs placeholder:text-aether-muted-dim"
+          className={`${FIELD} w-32 placeholder:text-aether-muted-dim`}
         />
         <select
           value={salaryMinFilter}
           aria-label="Filter by minimum salary"
           onChange={(e) => setSalaryMinFilter(e.target.value as SalaryFilter)}
           data-testid="job-salary-filter"
-          className="glass rounded-lg border border-white/10 bg-transparent px-3 py-2 text-xs"
+          className={FIELD}
         >
           {SALARY_FILTERS.map((s) => (
             <option key={s} value={s} className="bg-black">
@@ -1339,11 +1403,11 @@ export default function JobsPage() {
           data-testid="remote-toggle"
           aria-pressed={remoteOnly}
           onClick={() => setRemoteOnly((v) => !v)}
-          className={`rounded-lg border px-3.5 py-2 text-xs font-medium transition ${
-            remoteOnly
-              ? "border-aether-indigo/25 bg-aether-indigo/15 text-[#a5b4fc]"
-              : "border-white/10 bg-white/5 hover:bg-white/10"
-          }`}
+          className={button({
+            tone: remoteOnly ? "info" : "neutral",
+            size: "sm",
+            class: "h-9",
+          })}
         >
           Remote · Hybrid
         </button>
@@ -1351,13 +1415,13 @@ export default function JobsPage() {
           value={sort}
           aria-label="Sort jobs"
           onChange={(e) => setSort(e.target.value as "fitScore" | "createdAt")}
-          className="glass rounded-lg border border-white/10 bg-transparent px-3 py-2 text-xs"
+          className={FIELD}
         >
           <option value="fitScore" className="bg-black">Sort: fit score</option>
           <option value="createdAt" className="bg-black">Sort: newest</option>
         </select>
-        <div className="flex items-center gap-2.5">
-          <span className="text-xs text-aether-muted-dim">Match ≥</span>
+        <div className="elev-1 flex h-9 items-center gap-2.5 rounded-lg border-hairline px-3">
+          <span className="text-[11px] text-aether-muted-dim">Match ≥</span>
           <span className="mono text-xs font-semibold text-aether-coral" data-testid="match-min-value">{matchMin}%</span>
           <input
             type="range"
@@ -1368,14 +1432,14 @@ export default function JobsPage() {
             aria-label="Minimum match score"
             data-testid="match-min-slider"
             onChange={(e) => setMatchMin(Number(e.target.value))}
-            className="h-1.5 w-28 accent-aether-coral"
+            className="h-1.5 w-24 accent-aether-coral"
           />
         </div>
         <button
           type="button"
           data-testid="clear-filters"
           onClick={clearAll}
-          className="ml-auto text-xs text-aether-muted transition hover:text-white"
+          className={button({ tone: "quiet", size: "sm", class: "ml-auto h-9 font-medium" })}
         >
           Clear filters
         </button>
@@ -1425,12 +1489,16 @@ export default function JobsPage() {
         </p>
       ) : null}
 
-      {/* Loading skeletons */}
+      {/* Loading skeletons — M7: the skeleton is the FINAL geometry (two panes,
+          list-width cards), so content arriving causes no layout shift. */}
       {jobs === null ? (
-        <div className="grid gap-4 md:grid-cols-2" aria-busy="true">
-          {[0, 1, 2, 3].map((i) => (
-            <div key={i} className="glass h-36 animate-pulse rounded-2xl border border-white/10" />
-          ))}
+        <div className="grid gap-5 xl:grid-cols-12" aria-busy="true">
+          <div className="flex flex-col gap-2.5 xl:col-span-5 2xl:col-span-4">
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className="elev-1 h-[168px] animate-pulse rounded-xl" />
+            ))}
+          </div>
+          <div className="elev-1 hidden h-[560px] animate-pulse rounded-2xl xl:col-span-7 xl:block 2xl:col-span-8" />
         </div>
       ) : market === "saved" ? (
         <SavedView
@@ -1439,7 +1507,7 @@ export default function JobsPage() {
           onApplyAll={(ids, trigger) => requestBulkApply(ids, trigger)}
         />
       ) : visible.length === 0 ? (
-        <div className="glass rounded-2xl border border-white/10 p-10 text-center" data-testid="jobs-empty-state">
+        <div className="elev-1 rounded-2xl p-10 text-center" data-testid="jobs-empty-state">
           <p className="text-lg font-semibold">No matching jobs</p>
           <p className="mt-1 text-sm text-aether-muted">
             {(jobs ?? []).length > 0
@@ -1462,11 +1530,19 @@ export default function JobsPage() {
           ) : null}
         </div>
       ) : (
-        <div className="grid gap-6 xl:grid-cols-5">
+        /*
+          TWO-PANE MASTER–DETAIL (§5.3). Each pane owns its scroll, so the
+          DOCUMENT stops growing with the data: measured on production before
+          this change the page was 12,172px at 1600 and 18,999px at 390 (D-ε
+          allows ~2,500). `min-h-0` on both panes is load-bearing — without it a
+          grid child refuses to shrink below its content and the inner
+          `overflow-y-auto` never engages.
+        */
+        <div className="grid min-h-0 gap-5 xl:grid-cols-12 xl:items-start">
           {/* Job list column (jd09–jd15) */}
-          <div className="min-w-0 xl:col-span-2">
+          <div className="flex min-h-0 min-w-0 flex-col xl:col-span-5 2xl:col-span-4">
             {/* Select-all + bulk actions (jd09–jd11) */}
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <label className="flex items-center gap-2 text-xs text-aether-muted">
                 <input
                   type="checkbox"
@@ -1476,7 +1552,7 @@ export default function JobsPage() {
                   data-testid="select-all"
                   className="h-[18px] w-[18px] accent-aether-coral"
                 />
-                Select all · <span className="text-white" data-testid="selected-count">{selectedIds.size} selected</span>
+                Select all · <span className="text-aether-text" data-testid="selected-count">{selectedIds.size} selected</span>
               </label>
               <div className="flex items-center gap-2">
                 <button
@@ -1489,7 +1565,7 @@ export default function JobsPage() {
                     )
                   }
                   disabled={selectedIds.size === 0 || running}
-                  className="rounded-lg bg-aether-coral px-3 py-1.5 text-xs font-medium hover:opacity-90 disabled:opacity-40"
+                  className={button({ tone: "primary", size: "sm" })}
                 >
                   Apply ({selectedIds.size})
                 </button>
@@ -1498,27 +1574,50 @@ export default function JobsPage() {
                   data-testid="bulk-skip"
                   onClick={() => setSelectedIds(new Set())}
                   disabled={selectedIds.size === 0}
-                  className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium transition hover:bg-white/10 disabled:opacity-40"
+                  className={button({ tone: "neutral", size: "sm" })}
                 >
                   Skip
                 </button>
               </div>
             </div>
 
-            <div className="grid content-start gap-3">
-              {renderedJobs.map((job) => {
+            {/*
+              THE WINDOWED LIST. `renderedJobs` is unchanged — the same 60-row
+              "Load more" data window the page always had, with the same counts
+              and the same button. What changed is that the window is no longer
+              also the DOM: `<VirtualList>` mounts only the rows near the
+              viewport and reports the true size/position of every row to
+              assistive tech (`aria-setsize`/`aria-posinset`). Arrow keys rove
+              between rows across the window boundary; `activeIndex` keeps the
+              selected row in view when selection changes from elsewhere.
+            */}
+            <VirtualList
+              items={renderedJobs}
+              getKey={(job) => job.id}
+              estimateSize={JOB_ROW_ESTIMATE_PX}
+              gap={JOB_ROW_GAP_PX}
+              height={JOB_LIST_VIEWPORT}
+              ariaLabel={`Discovered jobs, ${renderedJobs.length} of ${visible.length} matches loaded`}
+              className="flex flex-col gap-2.5"
+              testId="jobs-virtual-list"
+              activeIndex={selectedRenderedIndex}
+              onActivate={(index) => {
+                const job = renderedJobs[index];
+                if (job) setSelectedId(job.id);
+              }}
+            >
+              {(job) => {
                 const ins = insights[job.id];
                 const active = selected?.id === job.id;
                 return (
                   <article
-                    key={job.id}
                     data-testid="job-card"
                     onClick={() => setSelectedId(job.id)}
-                    className={`relative cursor-pointer overflow-hidden rounded-xl border p-4 transition ${
-                      active ? "border-aether-coral/40 bg-aether-coral/[0.08]" : "glass border-white/10 hover:border-white/20"
-                    }`}
+                    className={listCard({ selected: active, class: "group" })}
                   >
-                    {active ? <span className="absolute bottom-4 left-0 top-4 w-0.5 rounded-full bg-aether-coral" /> : null}
+                    {active ? (
+                      <span className="absolute bottom-3 left-0 top-3 w-[3px] rounded-r-full bg-aether-coral" />
+                    ) : null}
                     <div className="flex min-w-0 gap-3">
                       <input
                         type="checkbox"
@@ -1567,12 +1666,12 @@ export default function JobsPage() {
                             {ins ? (
                               <>
                                 {ins.matchedSkills.slice(0, 3).map((s) => (
-                                  <span key={s} className="rounded-md border border-aether-green/20 bg-aether-green/[0.12] px-2 py-0.5 text-[10px] text-aether-green">
+                                  <span key={s} className={chip({ tone: "ok" })}>
                                     {s}
                                   </span>
                                 ))}
                                 {ins.skillGap ? (
-                                  <span className="rounded-md border border-aether-yellow/20 bg-aether-yellow/[0.12] px-2 py-0.5 text-[10px] text-aether-yellow">
+                                  <span className={chip({ tone: "warn" })}>
                                     {ins.skillGap} (gap)
                                   </span>
                                 ) : null}
@@ -1581,7 +1680,7 @@ export default function JobsPage() {
                               <span className="h-[18px] w-24 animate-pulse rounded-md bg-white/5" />
                             )}
                           </div>
-                          <div className="mt-3 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+                          <div className="mt-2.5 flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
                             <span className="mono text-xs text-aether-muted">{salaryLabel(job)}</span>
                             <span className="flex min-w-0 items-center gap-2 text-[11px] text-aether-muted-dim">
                               {job.sourceUrl ? (
@@ -1592,17 +1691,20 @@ export default function JobsPage() {
                                   onClick={(e) => e.stopPropagation()}
                                   data-testid="job-source-link"
                                   title={`Open the original posting on ${SOURCE_LABEL[job.source] ?? job.source}`}
-                                  className="truncate rounded bg-white/8 px-1.5 py-0.5 font-medium text-aether-muted underline-offset-2 transition hover:bg-white/15 hover:text-white"
+                                  className={chip({ class: "truncate underline-offset-2 hover:border-hairline-strong hover:text-aether-text" })}
                                 >
                                   {SOURCE_LABEL[job.source] ?? job.source} ↗
                                 </a>
                               ) : (
-                                <span className="truncate rounded bg-white/8 px-1.5 py-0.5 font-medium text-aether-muted">
+                                <span className={chip({ class: "truncate" })}>
                                   {SOURCE_LABEL[job.source] ?? job.source}
                                 </span>
                               )}
+                              {/* BLOCKER-006 freshness label — verbatim, and it
+                                  keeps its own `title` disclosure of when the
+                                  posting was last confirmed at the source. */}
                               <span
-                                className="shrink-0"
+                                className="mono shrink-0"
                                 data-testid="job-listing-age"
                                 title={
                                   job.lastConfirmedAt
@@ -1617,7 +1719,7 @@ export default function JobsPage() {
                           {autopilotSuppressionHint(job) ? (
                             <p
                               data-testid="autopilot-suppressed-hint"
-                              className="mt-2 rounded-md border border-white/10 bg-white/[0.04] px-2 py-1 text-[11px] leading-snug text-aether-muted-dim"
+                              className="mt-2 rounded-md border border-hairline bg-white/[0.04] px-2 py-1 text-[11px] leading-snug text-aether-muted-dim"
                             >
                               {autopilotSuppressionHint(job)}
                             </p>
@@ -1626,12 +1728,15 @@ export default function JobsPage() {
                               SAME single-job confirmation gate + apply handler
                               the detail panel's "Review & Apply" button opens
                               (openGate/confirmSubmit below), never a second
-                              modal implementation (§13.1). */}
-                          <div className="mt-2.5 flex justify-end">
+                              modal implementation (§13.1).
+                              Row actions reveal on hover/focus-within (M3) and
+                              are always present for keyboard and AT — never
+                              `display:none`. */}
+                          <div className="mt-2.5 flex justify-end opacity-70 transition-opacity duration-[--dur-fast] group-hover:opacity-100 focus-within:opacity-100">
                             {job.status === "applied" ? (
                               <span
                                 data-testid="job-card-applied"
-                                className="rounded-lg border border-aether-green/25 bg-aether-green/10 px-3 py-1.5 text-[11px] font-semibold text-aether-green"
+                                className={chip({ tone: "ok", class: "px-2.5 py-1 text-[11px] font-semibold" })}
                               >
                                 ✓ Applied
                               </span>
@@ -1644,7 +1749,7 @@ export default function JobsPage() {
                                   e.stopPropagation();
                                   openGate(job.id, e.currentTarget);
                                 }}
-                                className="rounded-lg bg-aether-coral px-3 py-1.5 text-[11px] font-semibold transition hover:opacity-90"
+                                className={button({ tone: "primary", size: "xs" })}
                               >
                                 Apply
                               </button>
@@ -1655,15 +1760,15 @@ export default function JobsPage() {
                     </div>
                   </article>
                 );
-              })}
-            </div>
+              }}
+            </VirtualList>
             {visible.length > renderedJobs.length ? (
-              <div className="mt-4 flex justify-center">
+              <div className="mt-3 flex justify-center">
                 <button
                   type="button"
                   data-testid="jobs-load-more"
                   onClick={() => setRenderLimit((n) => n + JOBS_RENDER_PAGE_SIZE)}
-                  className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-xs font-medium text-aether-muted transition hover:bg-white/10 hover:text-white"
+                  className={button({ tone: "neutral", size: "sm" })}
                 >
                   Load more ({visible.length - renderedJobs.length} remaining)
                 </button>
@@ -1671,10 +1776,21 @@ export default function JobsPage() {
             ) : null}
           </div>
 
-          {/* Detail panel (jd16–jd36) */}
+          {/* Detail panel (jd16–jd36).
+              Its own scroll container, sticky under the command bar, so reading
+              a long role description never lengthens the document (D-ε). The
+              pane announces selection changes politely for screen-reader users
+              who moved here with the list's arrow keys. */}
           {selected ? (
-            <aside className="min-w-0 xl:col-span-3" data-testid="job-detail-panel">
-              <div className="glass h-fit rounded-2xl border border-white/10 p-6">
+            <aside
+              className="min-w-0 xl:sticky xl:top-20 xl:col-span-7 2xl:col-span-8"
+              data-testid="job-detail-panel"
+              aria-live="polite"
+            >
+              <div
+                className={`elev-1 rounded-2xl p-5 sm:p-6 ${scrollBody()}`}
+                style={{ maxHeight: JOB_DETAIL_VIEWPORT }}
+              >
                 {/* header */}
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="flex min-w-0 gap-4">
@@ -1864,7 +1980,7 @@ export default function JobsPage() {
                   {selectedInsights && selectedInsights.riskSignals.length > 0 ? (
                     <div className="grid gap-2.5 sm:grid-cols-2">
                       {selectedInsights.riskSignals.map((r) => (
-                        <div key={r.label} className="glass-raised flex items-center gap-2.5 rounded-lg border border-white/10 px-3 py-2.5" data-testid="risk-flag">
+                        <div key={r.label} className="elev-2 flex items-center gap-2.5 rounded-lg px-3 py-2.5" data-testid="risk-flag">
                           <span className={r.severity === "high" ? "text-[#F87171]" : "text-aether-yellow"}>●</span>
                           <span className="text-xs text-[#C8C8DC]">{r.label}</span>
                         </div>
@@ -1915,14 +2031,14 @@ export default function JobsPage() {
                         type="button"
                         data-testid="tailor-resume"
                         onClick={() => startTailoring(selected.id)}
-                        className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-aether-coral py-3 text-sm font-semibold shadow-lg shadow-aether-coral/25 hover:opacity-90"
+                        className={button({ tone: "primary", size: "md", class: "flex-1 rounded-xl py-3" })}
                       >
                         ✦ Tailor Resume →
                       </button>
                       <Link
                         href={`/dashboard/resume?job=${selected.id}`}
                         data-testid="preview-link"
-                        className="rounded-xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-medium transition hover:bg-white/10"
+                        className={button({ tone: "neutral", size: "md", class: "rounded-xl px-5 py-3" })}
                       >
                         Preview
                       </Link>
@@ -1932,7 +2048,7 @@ export default function JobsPage() {
                           target="_blank"
                           rel="noopener noreferrer"
                           data-testid="view-posting-link"
-                          className="rounded-xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-medium transition hover:bg-white/10"
+                          className={button({ tone: "neutral", size: "md", class: "rounded-xl px-5 py-3" })}
                         >
                           View posting ↗
                         </a>
@@ -1941,13 +2057,13 @@ export default function JobsPage() {
                         type="button"
                         data-testid="skip-job"
                         onClick={() => skipToNext(selected.id)}
-                        className="rounded-xl px-5 py-3 text-sm font-medium text-aether-muted transition hover:bg-white/5 hover:text-white"
+                        className={button({ tone: "quiet", size: "md", class: "rounded-xl px-5 py-3 font-medium" })}
                       >
                         Skip
                       </button>
                     </div>
                   ) : step === "tailoring" ? (
-                    <div className="glass-raised flex items-center gap-3 rounded-xl border border-aether-indigo/25 px-4 py-3" data-testid="tailoring-progress" aria-live="polite">
+                    <div className="elev-2 flex items-center gap-3 rounded-xl border-state-info/25 px-4 py-3" data-testid="tailoring-progress" aria-live="polite">
                       <span className="h-4 w-4 animate-spin rounded-full border-2 border-[#a5b4fc] border-t-transparent" />
                       <span className="text-sm text-[#C8C8DC]">
                         Tailoring your resume for <span className="font-semibold text-white">{selected.company}</span> — matching keywords, preserving your voice…
@@ -2014,7 +2130,7 @@ export default function JobsPage() {
                           type="button"
                           data-testid="review-apply"
                           onClick={(e) => openGate(selected.id, e.currentTarget)}
-                          className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-aether-coral py-3 text-sm font-semibold shadow-lg shadow-aether-coral/25 hover:opacity-90"
+                          className={button({ tone: "primary", size: "md", class: "flex-1 rounded-xl py-3" })}
                         >
                           ✈ Review &amp; Apply →
                         </button>
@@ -2022,7 +2138,7 @@ export default function JobsPage() {
                           type="button"
                           data-testid="retailor"
                           onClick={() => resetTailoring(selected.id)}
-                          className="rounded-xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-medium transition hover:bg-white/10"
+                          className={button({ tone: "neutral", size: "md", class: "rounded-xl px-5 py-3" })}
                         >
                           Re-tailor
                         </button>
@@ -2044,7 +2160,7 @@ export default function JobsPage() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="submitGateTitle"
-            className="glass-raised relative w-[480px] max-w-[92vw] rounded-2xl border border-aether-coral/40 p-6 shadow-2xl"
+            className="elev-3 relative w-[480px] max-w-[92vw] rounded-2xl border-aether-coral/35 p-6"
           >
             <div className="flex items-start gap-3">
               <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-aether-yellow/30 bg-aether-yellow/15 text-aether-yellow">⚠️</span>
@@ -2087,7 +2203,7 @@ export default function JobsPage() {
               <button type="button" onClick={closeGate} aria-label="Close" className="text-aether-muted transition hover:text-white">✕</button>
             </div>
 
-            <div className="mt-4 space-y-2 rounded-xl border border-white/10 bg-black/25 p-3.5 text-[12px]">
+            <div className="mt-4 space-y-2 rounded-xl border border-hairline bg-surface-0/60 p-3.5 text-[12px]">
               <div className="flex items-center justify-between"><span className="text-aether-muted-dim">Role</span><span className="text-[#C7C7D6]">{gateJob.title}</span></div>
               <div className="flex items-center justify-between"><span className="text-aether-muted-dim">Company</span><span className="text-[#C7C7D6]">{gateJob.company}</span></div>
               <div className="flex items-center justify-between">
@@ -2131,14 +2247,14 @@ export default function JobsPage() {
               </div>
             ) : (
               <div className="mt-5 flex items-center justify-end gap-2">
-                <button type="button" data-testid="submit-cancel" onClick={closeGate} className="glass-raised rounded-xl px-4 py-2.5 text-[13px] transition hover:border-white/20">Cancel</button>
+                <button type="button" data-testid="submit-cancel" onClick={closeGate} className={button({ tone: "neutral", size: "md", class: "rounded-xl" })}>Cancel</button>
                 <button
                   ref={gateConfirmRef}
                   type="button"
                   data-testid="submit-confirm"
                   onClick={() => void confirmSubmit()}
                   disabled={submitting}
-                  className="flex items-center gap-2 rounded-xl bg-aether-coral px-4 py-2.5 text-[13px] font-semibold hover:opacity-90 disabled:opacity-50"
+                  className={button({ tone: "primary", size: "md", class: "rounded-xl" })}
                 >
                   {submitting ? "Submitting…" : "✈ Submit Application"}
                 </button>
@@ -2159,7 +2275,7 @@ export default function JobsPage() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="bulkGateTitle"
-            className="glass-raised relative w-[520px] max-w-[92vw] rounded-2xl border border-aether-coral/40 p-6 shadow-2xl"
+            className="elev-3 relative w-[520px] max-w-[92vw] rounded-2xl border-aether-coral/35 p-6"
           >
             <div className="flex items-start gap-3">
               <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-aether-yellow/30 bg-aether-yellow/15 text-aether-yellow">⚠️</span>
@@ -2178,7 +2294,7 @@ export default function JobsPage() {
             </div>
 
             <div
-              className="mt-4 max-h-52 space-y-1.5 overflow-y-auto rounded-xl border border-white/10 bg-black/25 p-3.5 text-[12px]"
+              className="mt-4 max-h-52 space-y-1.5 overflow-y-auto overscroll-contain rounded-xl border border-hairline bg-surface-0/60 p-3.5 text-[12px]"
               data-testid="bulk-apply-gate-list"
             >
               {bulkGateJobs.map((j) => (
@@ -2203,7 +2319,7 @@ export default function JobsPage() {
                   type="button"
                   data-testid="bulk-apply-cancel"
                   onClick={closeBulkGate}
-                  className="glass-raised rounded-xl px-4 py-2.5 text-[13px] transition hover:border-white/20"
+                  className={button({ tone: "neutral", size: "md", class: "rounded-xl" })}
                 >
                   Cancel
                 </button>
@@ -2213,7 +2329,7 @@ export default function JobsPage() {
                   data-testid="bulk-apply-confirm"
                   onClick={() => void confirmBulkApply()}
                   disabled={bulkSubmitting}
-                  className="flex items-center gap-2 rounded-xl bg-aether-coral px-4 py-2.5 text-[13px] font-semibold hover:opacity-90 disabled:opacity-50"
+                  className={button({ tone: "primary", size: "md", class: "rounded-xl" })}
                 >
                   {bulkSubmitting
                     ? "Submitting…"
@@ -2242,8 +2358,8 @@ function SavedView({
 }) {
   if (jobs.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 text-center" data-testid="saved-jobs-empty-state">
-        <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl border border-white/10 bg-white/5 text-xl">🔖</div>
+      <div className="elev-1 flex flex-col items-center justify-center rounded-2xl py-16 text-center" data-testid="saved-jobs-empty-state">
+        <div className="elev-2 mb-3 flex h-14 w-14 items-center justify-center rounded-2xl text-xl">🔖</div>
         <p className="text-sm font-semibold">No saved jobs yet</p>
         <p className="mt-1 max-w-xs text-xs text-aether-muted-dim">
           Tap the bookmark on any role to save it here and revisit it later.
@@ -2253,9 +2369,9 @@ function SavedView({
   }
   return (
     <div data-testid="saved-view">
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="flex items-center gap-2 text-lg font-bold">
+          <h2 className="flex items-center gap-2 text-[17px] font-semibold tracking-[-0.01em]">
             🔖 Saved jobs <span className="mono text-xs font-semibold text-aether-muted-dim">· {jobs.length}</span>
           </h2>
           <p className="mt-0.5 text-xs text-aether-muted-dim">
@@ -2271,26 +2387,26 @@ function SavedView({
               e.currentTarget,
             )
           }
-          className="flex items-center gap-2 rounded-lg bg-aether-coral px-4 py-2 text-xs font-semibold shadow-lg shadow-aether-coral/25 hover:opacity-90"
+          className={button({ tone: "primary", size: "sm" })}
         >
           ✦ Apply to all ({jobs.length})
         </button>
       </div>
-      <div className="grid gap-3 md:grid-cols-2">
+      <div className="grid gap-2.5 md:grid-cols-2 2xl:grid-cols-3">
         {jobs.map((job) => (
-          <article key={job.id} data-testid="saved-card" className="glass relative rounded-xl border border-white/10 p-4 transition hover:border-white/20">
+          <article key={job.id} data-testid="saved-card" className={listCard({ interactive: false })}>
             <button
               type="button"
               data-testid="unsave"
               onClick={() => onUnsave(job.id)}
               title="Remove from saved"
               aria-label={`Remove ${job.title} from saved`}
-              className="absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-aether-coral transition hover:bg-white/10"
+              className="elev-2 absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-lg text-aether-coral transition-colors duration-[--dur-fast] hover:border-hairline-strong"
             >
               🔖
             </button>
             <div className="flex gap-3 pr-8">
-              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/10 text-sm font-bold">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/[0.07] text-sm font-bold">
                 {initials(job.company)}
               </span>
               <div className="min-w-0 flex-1">
@@ -2299,9 +2415,9 @@ function SavedView({
                   {job.company}
                   {job.location ? ` · ${job.location}` : ""}
                 </p>
-                <div className="mt-3 flex items-center justify-between">
+                <div className="mt-3 flex items-center justify-between gap-2">
                   <span className="mono text-xs text-aether-muted">{salaryLabel(job)}</span>
-                  <span className="flex items-center gap-2 text-[11px] text-aether-muted-dim">
+                  <span className="flex min-w-0 items-center gap-1.5 text-[11px] text-aether-muted-dim">
                     {job.sourceUrl ? (
                       <a
                         href={job.sourceUrl}
@@ -2309,16 +2425,16 @@ function SavedView({
                         rel="noopener noreferrer"
                         data-testid="saved-source-link"
                         title={`Open the original posting on ${SOURCE_LABEL[job.source] ?? job.source}`}
-                        className="rounded bg-white/8 px-1.5 py-0.5 font-medium text-aether-muted transition hover:bg-white/15 hover:text-white"
+                        className={chip({ class: "truncate hover:border-hairline-strong hover:text-aether-text" })}
                       >
                         {SOURCE_LABEL[job.source] ?? job.source} ↗
                       </a>
                     ) : (
-                      <span className="rounded bg-white/8 px-1.5 py-0.5 font-medium text-aether-muted">
+                      <span className={chip({ class: "truncate" })}>
                         {SOURCE_LABEL[job.source] ?? job.source}
                       </span>
                     )}
-                    {job.fitScore != null ? <span className="mono text-aether-green">{Math.round(job.fitScore)}</span> : null}
+                    {job.fitScore != null ? <span className="mono text-state-ok">{Math.round(job.fitScore)}</span> : null}
                   </span>
                 </div>
               </div>
