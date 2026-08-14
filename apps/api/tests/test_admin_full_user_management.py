@@ -480,3 +480,133 @@ def test_per_user_audit_trail_returns_only_that_users_entries(client):
     entries = r.json()["entries"]
     assert entries, "expected at least the override entry"
     assert {e["targetId"] for e in entries} == {target_id}
+
+
+# --------------------------------------------------------------------------- #
+# Audit atomicity — a mutation and the AdminAuditLog row that records it commit
+# together or not at all (ADMIN-FULL security review, criterion c).
+#
+# The gap this closes: the mutation used to commit on its OWN connection and the
+# audit row was appended afterwards on a SECOND connection. A failure in the
+# window between them (pool exhaustion -> 503, a transient DB blip, a worker
+# restart) left a DURABLE, UNAUDITED admin mutation — the exact thing the audit
+# requirement exists to make impossible. AUDIT is explicitly NOT a "restriction"
+# under the orchestrator scope ruling: it stays universal, so it must also stay
+# unskippable.
+#
+# Each test injects the failure at the seam (``write_audit`` raises, standing in
+# for any failure after the mutation SQL and before the audit row is durable) and
+# asserts the invariant: nothing durable happened, and no audit row exists.
+# --------------------------------------------------------------------------- #
+
+
+class _AuditWriteFailure(RuntimeError):
+    """Stands in for any failure between the mutation and the audit insert."""
+
+
+@pytest.fixture()
+def _audit_write_fails(monkeypatch):
+    """Make ``admin_repo.write_audit`` raise, as the router calls it."""
+    from app.routers import admin as admin_router
+
+    def _boom(*_args, **_kwargs):
+        raise _AuditWriteFailure("audit insert failed mid-request")
+
+    monkeypatch.setattr(admin_router.admin_repo, "write_audit", _boom)
+
+
+def _identity_row(user_id: str) -> dict:
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT "email","username","name" FROM "User" WHERE "id"=%s',
+                (user_id,),
+            )
+            row = cur.fetchone()
+    return {"email": row[0], "username": row[1], "name": row[2]}
+
+
+def test_password_change_rolls_back_when_the_audit_write_fails(
+    client, _audit_write_fails
+):
+    admin_headers, _ = _admin(client)
+    _, target_id, _ = _target(client)
+    before_hash = _password_hash(target_id)
+
+    with pytest.raises(_AuditWriteFailure):
+        client.post(
+            f"/admin/users/{target_id}/password",
+            json={"newPassword": "N3wSecretValue9"},
+            headers=admin_headers,
+        )
+
+    # No durable, unaudited mutation: the hash is untouched, so the target's
+    # sessions were NOT invalidated and their old password still works.
+    assert _password_hash(target_id) == before_hash
+    assert _audit_rows(target_id) == []
+
+
+def test_identity_change_rolls_back_when_the_audit_write_fails(
+    client, _audit_write_fails
+):
+    admin_headers, _ = _admin(client)
+    _, target_id, _ = _target(client)
+    before = _identity_row(target_id)
+
+    with pytest.raises(_AuditWriteFailure):
+        client.post(
+            f"/admin/users/{target_id}/identity",
+            json={"email": f"rolled-back-{uuid.uuid4().hex[:8]}@example.com"},
+            headers=admin_headers,
+        )
+
+    assert _identity_row(target_id) == before
+    assert _audit_rows(target_id) == []
+
+
+def test_entitlement_grant_rolls_back_when_the_audit_write_fails(
+    client, _audit_write_fails
+):
+    admin_headers, _ = _admin(client)
+    _, target_id, _ = _target(client)
+    assert entitlements.get_override(target_id) is None
+
+    with pytest.raises(_AuditWriteFailure):
+        client.post(
+            f"/admin/users/{target_id}/entitlement",
+            json={"kind": "tier", "planId": "pro"},
+            headers=admin_headers,
+        )
+
+    assert entitlements.get_override(target_id) is None
+    assert entitlements.resolve(target_id).override_active is False
+    assert _audit_rows(target_id) == []
+
+
+def test_entitlement_clear_rolls_back_when_the_audit_write_fails(client, monkeypatch):
+    admin_headers, admin_id = _admin(client)
+    _, target_id, _ = _target(client)
+    entitlements.set_override(
+        target_id, kind="unlimited", note="pre-existing", actor_id=admin_id
+    )
+    assert entitlements.get_override(target_id) is not None
+
+    from app.routers import admin as admin_router
+
+    def _boom(*_args, **_kwargs):
+        raise _AuditWriteFailure("audit insert failed mid-request")
+
+    monkeypatch.setattr(admin_router.admin_repo, "write_audit", _boom)
+
+    with pytest.raises(_AuditWriteFailure):
+        client.post(
+            f"/admin/users/{target_id}/entitlement",
+            json={"kind": "none"},
+            headers=admin_headers,
+        )
+
+    # The grant survives: an unaudited revocation is exactly as unacceptable as
+    # an unaudited grant.
+    assert entitlements.get_override(target_id) is not None
+    assert entitlements.resolve(target_id).unlimited is True
+    assert _audit_rows(target_id) == []

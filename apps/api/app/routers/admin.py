@@ -7,6 +7,13 @@ gets 401 (the ``get_current_user`` chain runs first). Every MUTATION appends an
 immutable ``AdminAuditLog`` row (actor, action, target, detail, ip) — no admin
 action is silent, and the audit log is append-only (no delete/edit routes).
 
+The ADMIN-FULL account-management routes go one step further: the mutation and
+its audit row share ONE cursor in ONE transaction (the pattern
+``billing.perform_admin_cancel`` / ``perform_admin_refund`` established), so a
+failure between them — pool exhaustion, a transient DB blip, a worker restart —
+rolls BOTH back. "Audited" is therefore not best-effort: a durable admin
+mutation with no audit row is not a state this router can reach.
+
 All spend figures are USD (LLM providers bill USD; §14.8) — never AUD.
 """
 from __future__ import annotations
@@ -17,6 +24,7 @@ from fastapi import APIRouter, HTTPException, Query, Request, status
 from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel, Field, StrictBool, ValidationError
 
+from app.db import ensure_password_reset_columns, get_connection
 from app.middleware.auth import AdminUser
 from app.repositories import admin as admin_repo
 from app.repositories.user import UserRepository, validate_password_policy
@@ -214,47 +222,60 @@ async def admin_set_entitlement(
     apply that plan's ceiling to ``UsageQuota`` IMMEDIATELY — while leaving the
     ``Subscription`` row (the Stripe truth) untouched, so a paying customer's
     billing record is never silently contradicted.
+
+    ATOMIC WITH ITS AUDIT ROW: the override write, the post-write ``resolve``
+    that produces the audit ``after``, and the ``AdminAuditLog`` insert all run
+    on ONE cursor in ONE transaction (the pattern ``perform_admin_cancel`` /
+    ``perform_admin_refund`` already use). A failure anywhere in that window
+    rolls the whole thing back, so there is no such thing as a durable,
+    unaudited entitlement change.
     """
     body = await _parse_json_object(request)
     _require_user(user_id)
     kind = str(body.get("kind") or "").strip().lower()
-    before = entitlements.resolve(user_id).as_dict()
-
-    if kind in ("none", "clear", ""):
-        entitlements.clear_override(user_id)
-        after = entitlements.resolve(user_id).as_dict()
-        admin_repo.write_audit(
-            admin["id"],
-            "clear_entitlement_override",
-            target_type="user",
-            target_id=user_id,
-            detail={"before": before, "after": after},
-            ip=_client_ip(request),
-        )
-        return {"userId": user_id, "entitlement": after}
-
+    clearing = kind in ("none", "clear", "")
     plan_id = body.get("planId")
     note = body.get("note")
-    try:
-        entitlements.set_override(
-            user_id,
-            kind=kind,
-            plan_id=str(plan_id) if plan_id else None,
-            note=str(note) if note else None,
-            actor_id=admin["id"],
-        )
-    except ValueError as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
 
-    after = entitlements.resolve(user_id).as_dict()
-    admin_repo.write_audit(
-        admin["id"],
-        "set_entitlement_override",
-        target_type="user",
-        target_id=user_id,
-        detail={"before": before, "after": after},
-        ip=_client_ip(request),
-    )
+    # Every lazy-DDL / row-seed side effect happens OUTSIDE the transaction:
+    # inside it, the cur paths issue no DDL and open no second connection.
+    entitlements.prepare_override_write(user_id)
+    admin_repo._ensure_admin_schema()
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            # ``before`` is read on the SAME cursor as the write, so the audit
+            # pair cannot straddle someone else's concurrent change.
+            before = entitlements.resolve(user_id, cur=cur).as_dict()
+            if clearing:
+                entitlements.clear_override(user_id, cur=cur)
+            else:
+                try:
+                    entitlements.set_override(
+                        user_id,
+                        kind=kind,
+                        plan_id=str(plan_id) if plan_id else None,
+                        note=str(note) if note else None,
+                        actor_id=admin["id"],
+                        cur=cur,
+                    )
+                except ValueError as exc:
+                    raise HTTPException(
+                        status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)
+                    ) from exc
+            after = entitlements.resolve(user_id, cur=cur).as_dict()
+            admin_repo.write_audit(
+                admin["id"],
+                "clear_entitlement_override"
+                if clearing
+                else "set_entitlement_override",
+                target_type="user",
+                target_id=user_id,
+                detail={"before": before, "after": after},
+                ip=_client_ip(request),
+                cur=cur,
+            )
+        conn.commit()
     return {"userId": user_id, "entitlement": after}
 
 
@@ -271,6 +292,11 @@ async def admin_set_password(
     before this moment (O-4). The plaintext is never logged, never echoed back,
     and never written to the audit row: the audit records that the event
     happened, not what it was.
+
+    ATOMIC WITH ITS AUDIT ROW: the hash write and the ``AdminAuditLog`` insert
+    share one cursor in one transaction. Before this, a failure between them
+    (pool exhaustion, a DB blip, a worker restart) left the target locked out of
+    every existing session by a password change nothing recorded.
     """
     body = await _parse_json_object(request)
     _require_user(user_id)
@@ -283,16 +309,24 @@ async def admin_set_password(
     if problems:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "; ".join(problems))
 
-    UserRepository().set_password(user_id, hash_password(new_password))
-    admin_repo.write_audit(
-        admin["id"],
-        "set_user_password",
-        target_type="user",
-        target_id=user_id,
-        # NEVER the value — not the password, not the hash, not a prefix.
-        detail={"sessionsInvalidated": True},
-        ip=_client_ip(request),
-    )
+    # Lazy DDL first, outside the transaction (see admin_set_entitlement).
+    ensure_password_reset_columns()
+    admin_repo._ensure_admin_schema()
+    password_hash = hash_password(new_password)
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            UserRepository().set_password(user_id, password_hash, cur=cur)
+            admin_repo.write_audit(
+                admin["id"],
+                "set_user_password",
+                target_type="user",
+                target_id=user_id,
+                # NEVER the value — not the password, not the hash, not a prefix.
+                detail={"sessionsInvalidated": True},
+                ip=_client_ip(request),
+                cur=cur,
+            )
+        conn.commit()
     return {"userId": user_id, "passwordChanged": True, "sessionsInvalidated": True}
 
 
@@ -304,6 +338,10 @@ async def admin_update_identity(
 
     Both login identities are UNIQUE, so a collision is an honest 409 rather than
     a silently-ignored write. The audit row carries the full before->after pair.
+
+    ATOMIC WITH ITS AUDIT ROW: the identity write and the ``AdminAuditLog``
+    insert share one cursor in one transaction, so a caller can never end up
+    logging in under an email nothing recorded the change of.
     """
     body = await _parse_json_object(request)
     _require_user(user_id)
@@ -326,25 +364,32 @@ async def admin_update_identity(
     if name is not None:
         name = str(name).strip()
 
-    try:
-        before, after = admin_repo.update_user_identity(
-            user_id, email=email, username=username, name=name
-        )
-    except admin_repo.IdentityConflictError as exc:
-        raise HTTPException(
-            status.HTTP_409_CONFLICT, f"That {exc} is already taken."
-        ) from exc
-    except LookupError as exc:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found") from exc
+    admin_repo._ensure_admin_schema()  # lazy DDL first, outside the transaction
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            try:
+                before, after = admin_repo.update_user_identity(
+                    user_id, email=email, username=username, name=name, cur=cur
+                )
+            except admin_repo.IdentityConflictError as exc:
+                raise HTTPException(
+                    status.HTTP_409_CONFLICT, f"That {exc} is already taken."
+                ) from exc
+            except LookupError as exc:
+                raise HTTPException(
+                    status.HTTP_404_NOT_FOUND, "User not found"
+                ) from exc
 
-    admin_repo.write_audit(
-        admin["id"],
-        "update_user_identity",
-        target_type="user",
-        target_id=user_id,
-        detail={"before": before, "after": after},
-        ip=_client_ip(request),
-    )
+            admin_repo.write_audit(
+                admin["id"],
+                "update_user_identity",
+                target_type="user",
+                target_id=user_id,
+                detail={"before": before, "after": after},
+                ip=_client_ip(request),
+                cur=cur,
+            )
+        conn.commit()
     return {"userId": user_id, "before": before, "after": after}
 
 

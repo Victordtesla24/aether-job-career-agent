@@ -149,7 +149,11 @@ def test_resolver_never_reports_an_unreadable_billing_store_as_unpaid(
 
     _, uid = _new_user(client, "dberr")
 
-    def _boom(self, _user_id):  # noqa: ANN001
+    # Signature MUST mirror the real method (including the optional ``cur`` the
+    # transaction-scoped resolve path passes): a stub that is narrower than what
+    # it replaces raises TypeError and would let this test "pass" for the wrong
+    # reason — or, as here, fail on the double rather than on the behaviour.
+    def _boom(self, _user_id, cur=None):  # noqa: ANN001
         raise RuntimeError("billing store unreadable")
 
     monkeypatch.setattr(
@@ -157,6 +161,11 @@ def test_resolver_never_reports_an_unreadable_billing_store_as_unpaid(
     )
     with pytest.raises(RuntimeError):
         entitlements.resolve(uid)
+    # Same guarantee on the transaction-scoped path the admin routes use.
+    with pytest.raises(RuntimeError):
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                entitlements.resolve(uid, cur=cur)
 
 
 # --------------------------------------------------------------------------- #

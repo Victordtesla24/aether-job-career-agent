@@ -146,54 +146,83 @@ class Entitlement:
         }
 
 
-def is_admin(user_id: str) -> bool:
+def is_admin(user_id: str, cur: Any = None) -> bool:
     """Whether this user id carries the platform admin flag.
 
     Read from the ``User`` row on every call — deliberately NOT cached and
     deliberately NOT taken from the JWT: a demotion must take effect on the very
     next request, exactly like ``get_current_user`` already re-reads ``isAdmin``.
+
+    ``cur`` (optional) makes the read join the caller's OPEN transaction so it
+    sees that transaction's own uncommitted writes; the caller is then
+    responsible for having ensured the schema first (see :func:`resolve`).
     """
     if not user_id:
         return False
-    ensure_admin_user_columns()
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                'SELECT COALESCE("isAdmin", false) FROM "User" WHERE "id"=%s',
-                (user_id,),
-            )
-            row = cur.fetchone()
+
+    def _run(c: Any) -> Any:
+        c.execute(
+            'SELECT COALESCE("isAdmin", false) FROM "User" WHERE "id"=%s',
+            (user_id,),
+        )
+        return c.fetchone()
+
+    if cur is not None:
+        row = _run(cur)
+    else:
+        ensure_admin_user_columns()
+        with get_connection() as conn:
+            with conn.cursor() as c:
+                row = _run(c)
     return bool(row[0]) if row else False
 
 
-def get_override(user_id: str) -> Optional[dict[str, Any]]:
-    """The admin-written entitlement override for this user, or None."""
+def get_override(user_id: str, cur: Any = None) -> Optional[dict[str, Any]]:
+    """The admin-written entitlement override for this user, or None.
+
+    ``cur`` (optional): read inside the caller's open transaction — see
+    :func:`is_admin`.
+    """
     if not user_id:
         return None
-    ensure_entitlement_schema()
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                'SELECT "userId","kind","planId","note","setBy","updatedAt"'
-                ' FROM "UserEntitlementOverride" WHERE "userId"=%s',
-                (user_id,),
-            )
-            rows = rows_to_dicts(cur)
+
+    def _run(c: Any) -> list[dict[str, Any]]:
+        c.execute(
+            'SELECT "userId","kind","planId","note","setBy","updatedAt"'
+            ' FROM "UserEntitlementOverride" WHERE "userId"=%s',
+            (user_id,),
+        )
+        return rows_to_dicts(c)
+
+    if cur is not None:
+        rows = _run(cur)
+    else:
+        ensure_entitlement_schema()
+        with get_connection() as conn:
+            with conn.cursor() as c:
+                rows = _run(c)
     return rows[0] if rows else None
 
 
-def _plan_limits(plan_id: str) -> Optional[tuple[int, float]]:
+def _plan_limits(plan_id: str, cur: Any = None) -> Optional[tuple[int, float]]:
     """``(runsPerMonth, spendCapUsdMonthly)`` for a plan id, or None if unknown."""
-    from app.repositories.billing import _ensure_billing_tables
 
-    _ensure_billing_tables()
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                'SELECT "runsPerMonth","spendCapUsdMonthly" FROM "Plan" WHERE "id"=%s',
-                (plan_id,),
-            )
-            row = cur.fetchone()
+    def _run(c: Any) -> Any:
+        c.execute(
+            'SELECT "runsPerMonth","spendCapUsdMonthly" FROM "Plan" WHERE "id"=%s',
+            (plan_id,),
+        )
+        return c.fetchone()
+
+    if cur is not None:
+        row = _run(cur)
+    else:
+        from app.repositories.billing import _ensure_billing_tables
+
+        _ensure_billing_tables()
+        with get_connection() as conn:
+            with conn.cursor() as c:
+                row = _run(c)
     if row is None:
         return None
     return int(row[0]), float(row[1])
@@ -207,10 +236,15 @@ def _apply_override_quota(user_id: str, kind: str, plan_id: Optional[str], cur: 
     billing side keeps reporting what the user actually pays for; the override is
     reported separately. Usage counters are never reset — an override grants
     headroom, it does not launder consumption.
+
+    With ``cur`` the UPDATE joins the caller's transaction; the caller owns the
+    ``ensure_user_billing`` seed that guarantees the ``UsageQuota`` row exists
+    (:func:`prepare_override_write`), because seeding it from inside an open
+    transaction would mean a second connection.
     """
     if kind == OVERRIDE_UNLIMITED or not plan_id:
         return
-    limits = _plan_limits(plan_id)
+    limits = _plan_limits(plan_id, cur=cur)
     if limits is None:
         return
     runs_allowed, spend_cap = limits
@@ -243,10 +277,30 @@ def reapply_override_limits(user_id: str, cur: Any = None) -> None:
     class of silent divergence this work exists to remove. A user with no
     override is a no-op.
     """
+    # Deliberately read on this function's OWN connection even when the caller
+    # supplied a cursor: the override row is never written by the caller's
+    # transaction (these callers are Stripe webhook handlers), and the separate
+    # read keeps ``ensure_entitlement_schema``'s lazy DDL on the path — a cold
+    # webhook worker must still create the table rather than fail on it.
     override = get_override(user_id)
     if override is None:
         return
     _apply_override_quota(user_id, str(override["kind"]), override.get("planId"), cur=cur)
+
+
+def prepare_override_write(user_id: str) -> None:
+    """Run every lazy-DDL / row-seed side effect an override write needs.
+
+    Callers that drive :func:`set_override` / :func:`clear_override` inside their
+    OWN transaction (so the write commits atomically with its audit row) must
+    call this FIRST, on the outside: the ``cur`` paths deliberately issue no DDL
+    and open no second connection, because doing either from inside an open
+    transaction is what makes "mutation committed, audit row lost" possible.
+    """
+    from app.repositories.billing import ensure_user_billing
+
+    ensure_entitlement_schema()
+    ensure_user_billing(user_id)
 
 
 def set_override(
@@ -256,70 +310,102 @@ def set_override(
     plan_id: Optional[str] = None,
     note: Optional[str] = None,
     actor_id: str,
+    cur: Any = None,
 ) -> dict[str, Any]:
     """Write (or replace) the admin entitlement override for ``user_id``.
 
     Raises ``ValueError`` for an unknown ``kind`` or a ``comp``/``tier`` grant
     without a real plan id — never a silent partial grant.
+
+    ``cur`` (optional) performs the whole write inside the caller's open
+    transaction and does NOT commit, so the caller can commit it together with
+    the ``AdminAuditLog`` row that records it. Call :func:`prepare_override_write`
+    before opening that transaction.
     """
     if kind not in OVERRIDE_KINDS:
         raise ValueError(f"unknown entitlement override kind: {kind!r}")
     if kind in (OVERRIDE_COMP, OVERRIDE_TIER):
         if not plan_id:
             raise ValueError(f"a {kind} override requires a planId")
-        if _plan_limits(plan_id) is None:
+        if _plan_limits(plan_id, cur=cur) is None:
             raise ValueError(f"unknown plan id: {plan_id!r}")
     else:
         plan_id = None
+
+    def _write(c: Any) -> None:
+        c.execute(
+            'INSERT INTO "UserEntitlementOverride"'
+            ' ("id","userId","kind","planId","note","setBy")'
+            " VALUES (%s,%s,%s,%s,%s,%s)"
+            ' ON CONFLICT ("userId") DO UPDATE SET'
+            ' "kind"=EXCLUDED."kind","planId"=EXCLUDED."planId",'
+            ' "note"=EXCLUDED."note","setBy"=EXCLUDED."setBy",'
+            ' "updatedAt"=now()',
+            (new_id(), user_id, kind, plan_id, note, actor_id),
+        )
+
+    if cur is not None:
+        _write(cur)
+        _apply_override_quota(user_id, kind, plan_id, cur=cur)
+        return dict(get_override(user_id, cur=cur) or {})
+
     ensure_entitlement_schema()
     with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                'INSERT INTO "UserEntitlementOverride"'
-                ' ("id","userId","kind","planId","note","setBy")'
-                " VALUES (%s,%s,%s,%s,%s,%s)"
-                ' ON CONFLICT ("userId") DO UPDATE SET'
-                ' "kind"=EXCLUDED."kind","planId"=EXCLUDED."planId",'
-                ' "note"=EXCLUDED."note","setBy"=EXCLUDED."setBy",'
-                ' "updatedAt"=now()',
-                (new_id(), user_id, kind, plan_id, note, actor_id),
-            )
+        with conn.cursor() as c:
+            _write(c)
         conn.commit()
     _apply_override_quota(user_id, kind, plan_id)
     return dict(get_override(user_id) or {})
 
 
-def clear_override(user_id: str) -> bool:
+def clear_override(user_id: str, cur: Any = None) -> bool:
     """Remove the override. True when a row was actually removed.
 
     The quota ceiling is deliberately NOT rolled back here: silently dropping a
     user's allowance mid-period would be a restriction applied without a billing
     event. The next Stripe sync (or an explicit admin spend-cap edit) sets it,
     and the admin UI shows the live numbers either way.
+
+    ``cur`` (optional): delete inside the caller's open transaction without
+    committing — see :func:`set_override`.
     """
+
+    def _write(c: Any) -> bool:
+        c.execute(
+            'DELETE FROM "UserEntitlementOverride" WHERE "userId"=%s', (user_id,)
+        )
+        return c.rowcount > 0
+
+    if cur is not None:
+        return _write(cur)
+
     ensure_entitlement_schema()
     with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                'DELETE FROM "UserEntitlementOverride" WHERE "userId"=%s', (user_id,)
-            )
-            removed = cur.rowcount > 0
+        with conn.cursor() as c:
+            removed = _write(c)
         conn.commit()
     return removed
 
 
-def resolve(user_id: str) -> Entitlement:
-    """THE entitlement verdict for ``user_id``. Every enforcement point calls this."""
+def resolve(user_id: str, cur: Any = None) -> Entitlement:
+    """THE entitlement verdict for ``user_id``. Every enforcement point calls this.
+
+    ``cur`` (optional) resolves the verdict INSIDE the caller's open transaction,
+    so an admin route can read the post-mutation entitlement (the ``after`` half
+    of its audit row) before that mutation is committed. Every read below then
+    runs on the one cursor — a second connection would still see the pre-mutation
+    state. Schema must already be ensured (:func:`prepare_override_write`).
+    """
     from app.repositories.billing import SubscriptionRepository
 
-    admin = is_admin(user_id)
-    override = get_override(user_id)
+    admin = is_admin(user_id, cur=cur)
+    override = get_override(user_id, cur=cur)
     # Deliberately NOT wrapped in a try/except. If the billing store cannot be
     # read, "unknown" is not "unpaid": swallowing the error here would paywall a
     # paying customer (402) and blame them for an outage on our side. The error
     # propagates so the caller fails honestly — ``get_connection`` already turns
     # a saturated pool into a 503, which is the truthful answer.
-    active_paid = SubscriptionRepository().has_active_paid_subscription(user_id)
+    active_paid = SubscriptionRepository().has_active_paid_subscription(user_id, cur=cur)
 
     override_kind = str(override["kind"]) if override else None
     override_plan = (override.get("planId") if override else None) or None
@@ -341,7 +427,7 @@ def resolve(user_id: str) -> Entitlement:
         plan_id = override_plan
     else:
         plan_id = None
-        sub = SubscriptionRepository().get_by_user(user_id)
+        sub = SubscriptionRepository().get_by_user(user_id, cur=cur)
         if sub:
             plan_id = sub["planId"]
 

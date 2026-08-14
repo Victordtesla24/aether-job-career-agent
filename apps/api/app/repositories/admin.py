@@ -735,6 +735,7 @@ def update_user_identity(
     email: Optional[str] = None,
     username: Optional[str] = None,
     name: Optional[str] = None,
+    cur: Any = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Change a user's login/display identity; return ``(before, after)``.
 
@@ -746,8 +747,12 @@ def update_user_identity(
 
     Only the fields the caller passed are touched; ``None`` means "leave alone".
     The returned pair is exactly what the audit row records (before -> after).
+
+    ``cur`` (optional) runs the whole read-check-write inside the caller's OPEN
+    transaction and does NOT commit, so the caller can commit it together with
+    the ``AdminAuditLog`` row that records it. The caller must have run
+    :func:`_ensure_admin_schema` before opening that transaction.
     """
-    _ensure_admin_schema()
     fields: dict[str, Any] = {}
     if email is not None:
         fields["email"] = email
@@ -755,66 +760,74 @@ def update_user_identity(
         fields["username"] = username or None
     if name is not None:
         fields["name"] = name or None
+
+    def _run(c: Any) -> tuple[dict[str, Any], dict[str, Any]]:
+        c.execute(
+            'SELECT "id","email","username","name" FROM "User" WHERE "id"=%s',
+            (user_id,),
+        )
+        rows = rows_to_dicts(c)
+        if not rows:
+            raise LookupError(user_id)
+        before = {
+            "email": rows[0]["email"],
+            "username": rows[0].get("username"),
+            "name": rows[0].get("name"),
+        }
+        if "email" in fields:
+            c.execute(
+                'SELECT 1 FROM "User" WHERE "email"=%s AND "id"<>%s',
+                (fields["email"], user_id),
+            )
+            if c.fetchone():
+                raise IdentityConflictError("email")
+        if fields.get("username"):
+            c.execute(
+                'SELECT 1 FROM "User" WHERE lower("username")=lower(%s)'
+                ' AND "id"<>%s',
+                (fields["username"], user_id),
+            )
+            if c.fetchone():
+                raise IdentityConflictError("username")
+        if fields:
+            assignments = ", ".join(f'"{col}"=%s' for col in fields)
+            try:
+                c.execute(
+                    f'UPDATE "User" SET {assignments}, "updatedAt"=now()'
+                    ' WHERE "id"=%s',
+                    (*fields.values(), user_id),
+                )
+            except UniqueViolation as exc:  # lost race against a concurrent write
+                # Name the FIELD, not the index: the message is shown to an
+                # admin. ``constraint_name`` can be absent on some servers,
+                # so fall back to the honest generic rather than "None".
+                constraint = (exc.diag.constraint_name or "").lower()
+                if "username" in constraint:
+                    field = "username"
+                elif "email" in constraint:
+                    field = "email"
+                else:
+                    field = "identity"
+                raise IdentityConflictError(field) from exc
+        c.execute(
+            'SELECT "email","username","name" FROM "User" WHERE "id"=%s',
+            (user_id,),
+        )
+        after_rows = rows_to_dicts(c)
+        return before, {
+            "email": after_rows[0]["email"],
+            "username": after_rows[0].get("username"),
+            "name": after_rows[0].get("name"),
+        }
+
+    if cur is not None:
+        return _run(cur)
+
+    _ensure_admin_schema()
     with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                'SELECT "id","email","username","name" FROM "User" WHERE "id"=%s',
-                (user_id,),
-            )
-            rows = rows_to_dicts(cur)
-            if not rows:
-                raise LookupError(user_id)
-            before = {
-                "email": rows[0]["email"],
-                "username": rows[0].get("username"),
-                "name": rows[0].get("name"),
-            }
-            if "email" in fields:
-                cur.execute(
-                    'SELECT 1 FROM "User" WHERE "email"=%s AND "id"<>%s',
-                    (fields["email"], user_id),
-                )
-                if cur.fetchone():
-                    raise IdentityConflictError("email")
-            if fields.get("username"):
-                cur.execute(
-                    'SELECT 1 FROM "User" WHERE lower("username")=lower(%s)'
-                    ' AND "id"<>%s',
-                    (fields["username"], user_id),
-                )
-                if cur.fetchone():
-                    raise IdentityConflictError("username")
-            if fields:
-                assignments = ", ".join(f'"{col}"=%s' for col in fields)
-                try:
-                    cur.execute(
-                        f'UPDATE "User" SET {assignments}, "updatedAt"=now()'
-                        ' WHERE "id"=%s',
-                        (*fields.values(), user_id),
-                    )
-                except UniqueViolation as exc:  # lost race against a concurrent write
-                    # Name the FIELD, not the index: the message is shown to an
-                    # admin. ``constraint_name`` can be absent on some servers,
-                    # so fall back to the honest generic rather than "None".
-                    constraint = (exc.diag.constraint_name or "").lower()
-                    if "username" in constraint:
-                        field = "username"
-                    elif "email" in constraint:
-                        field = "email"
-                    else:
-                        field = "identity"
-                    raise IdentityConflictError(field) from exc
-            cur.execute(
-                'SELECT "email","username","name" FROM "User" WHERE "id"=%s',
-                (user_id,),
-            )
-            after_rows = rows_to_dicts(cur)
+        with conn.cursor() as c:
+            before, after = _run(c)
         conn.commit()
-    after = {
-        "email": after_rows[0]["email"],
-        "username": after_rows[0].get("username"),
-        "name": after_rows[0].get("name"),
-    }
     return before, after
 
 
