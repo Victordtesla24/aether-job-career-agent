@@ -2,10 +2,13 @@
  * The renderer's OWN diff semantics, mirrored for the screen.
  *
  * WHY THIS EXISTS. Resume Studio's job is to show a subscriber what their
- * tailored résumé actually became. The document they download is drawn by
- * `apps/api/app/services/resume_pdf.py::render_branded_resume`, which decides
- * which bullets get the coral `#FF6B35` wash with two rules and a tolerant
- * text normaliser:
+ * tailored résumé actually became. The document is drawn by
+ * `apps/api/app/services/resume_pdf.py::create_branded_resume_pdf`, which
+ * decides which bullets COUNT AS REWORDED with two rules and a tolerant text
+ * normaliser — and, in its diff PREVIEW variant (`highlight=True`, RFMT-2),
+ * washes exactly those bullets in coral `#FF6B35`. The employer-facing
+ * download carries no wash at all; what the screen mirrors is the "which lines
+ * changed" decision, which is identical in both variants:
  *
  *   swaps    = { normalize(before): after   for (before, after) in changes if before and after }
  *   tailored = { normalize(after)            for (_before, after) in changes if after }
@@ -85,8 +88,10 @@ export interface RenderedBullet {
   /** The text the PDF draws — the tailored wording when a swap applies. */
   text: string;
   /**
-   * True exactly when `_draw_flow_bullet(..., tailored=True)` would run, i.e.
-   * when the downloaded document draws this line over the coral wash.
+   * True exactly when `_draw_flow_bullet(..., washed=True)` would run in the
+   * renderer's diff PREVIEW — the line the tailoring reworded. The downloaded
+   * document draws that same wording with NO wash behind it (RFMT-2); this
+   * flag is about which line changed, never about a tint in the download.
    */
   changed: boolean;
   /** The baseline wording this line replaced, when a swap fired. */

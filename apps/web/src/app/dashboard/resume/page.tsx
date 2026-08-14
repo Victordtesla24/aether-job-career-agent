@@ -15,8 +15,9 @@
  *
  * It now opens with the measured transformation — baseline ATS -> this
  * version's ATS with the exact delta, the changed lines with the words that
- * are genuinely new marked in the SAME coral the PDF renderer washes them in
- * (`components/resume/diff-semantics.ts` mirrors `services/resume_pdf.py`),
+ * are genuinely new marked in the SAME coral the PDF renderer's diff PREVIEW
+ * washes them in (`components/resume/diff-semantics.ts` mirrors
+ * `services/resume_pdf.py`; the downloaded file itself is unmarked — RFMT-2),
  * the file-level verification verdict exactly as `GET /resumes/{id}/fidelity`
  * reports it, and the 10-dimension scorecard with `—` wherever a dimension was
  * not measured. Nothing here renders a number the machinery did not measure,
@@ -43,6 +44,7 @@ import {
   fetchResumeDiff,
   fetchResumes,
   fetchTailoringImpact,
+  previewTailoredResume,
   runTailorAgent,
   type ConversionMetrics,
   type Resume,
@@ -318,6 +320,41 @@ export default function ResumePage() {
     }
   };
 
+  /**
+   * Show the SAME render with the reworded lines washed in the tailoring
+   * highlight (`?diff=true`, RFMT-2).
+   *
+   * The download above is deliberately unmarked — it is the file a subscriber
+   * sends to an employer — so the tint lives here, as an explicit "show me what
+   * changed" affordance, and is never saved to disk.
+   *
+   * The tab is opened SYNCHRONOUSLY, inside the click, because a window opened
+   * after an awaited fetch resolves is treated as an unsolicited pop-up and
+   * blocked. If the browser blocks it anyway the user is told so, rather than
+   * being left looking at nothing.
+   */
+  const previewHighlights = async (resume: Resume) => {
+    setDownloadNote(null);
+    const tab = typeof window !== "undefined" ? window.open("", "_blank") : null;
+    if (tab) tab.opener = null;
+    try {
+      const { url, revoke } = await previewTailoredResume(resume.id);
+      if (!tab) {
+        revoke();
+        setDownloadNote(
+          "Preview blocked by your browser's pop-up settings — allow pop-ups for this site to see the highlighted version. Your download is unaffected.",
+        );
+        return;
+      }
+      tab.location.href = url;
+      // The tab owns the blob now; release the object URL once it has loaded.
+      window.setTimeout(revoke, 60_000);
+    } catch (e) {
+      tab?.close();
+      setDownloadNote(e instanceof Error ? e.message : "Preview failed");
+    }
+  };
+
   const openResume = async (resume: Resume) => {
     setSelected(resume);
     setDetailLoading(true);
@@ -475,7 +512,9 @@ export default function ResumePage() {
     [changes],
   );
   /** The bullets the DOWNLOAD would draw, resolved through the renderer's own
-   *  swap/wash rules — so the studio and the produced file agree. */
+   *  swap/wash rules — so the studio and the produced file agree on WHICH lines
+   *  changed. The wash itself is preview-only (RFMT-2): the download draws the
+   *  same wording with no tint behind it. */
   const renderedBullets = useMemo(() => {
     if (!selected) return [];
     const sections = selected.sections as { bullets?: unknown };
@@ -728,7 +767,7 @@ export default function ResumePage() {
                   eyebrow="What changed"
                   title="Every rewritten line, and the evidence behind it"
                   testId="resume-diff"
-                  footnote="Highlighted words are the ones absent from your baseline sentence. The same lines are washed in coral in the document you download."
+                  footnote="Highlighted words are the ones absent from your baseline sentence. The highlight is a Studio marking: the document you download carries none of it — use “Preview highlights” to see these lines washed on the page."
                   action={
                     <span className="mono text-[11px] text-aether-muted-dim">
                       {counts.rewrites} rewritten · {counts.additions} added
@@ -777,19 +816,33 @@ export default function ResumePage() {
                 title={selected.label ?? undefined}
                 testId="version-detail"
                 action={
-                  <button
-                    type="button"
-                    data-testid="download-resume-btn"
-                    onClick={() => void download(selected)}
-                    className={button({ tone: "neutral", size: "sm" })}
-                  >
-                    <i className="fa-solid fa-arrow-down-to-line" aria-hidden="true" />
-                    Download
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {selected.parentId ? (
+                      <button
+                        type="button"
+                        data-testid="preview-highlights-btn"
+                        onClick={() => void previewHighlights(selected)}
+                        className={button({ tone: "quiet", size: "sm" })}
+                        title="Open this version with the reworded lines highlighted — a preview only; the file you download is unmarked."
+                      >
+                        <i className="fa-solid fa-highlighter" aria-hidden="true" />
+                        Preview highlights
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      data-testid="download-resume-btn"
+                      onClick={() => void download(selected)}
+                      className={button({ tone: "neutral", size: "sm" })}
+                    >
+                      <i className="fa-solid fa-arrow-down-to-line" aria-hidden="true" />
+                      Download
+                    </button>
+                  </div>
                 }
                 footnote={
                   renderedBullets.length > 0
-                    ? `${changedBulletCount} of ${renderedBullets.length} bullets carry tailored wording — the same lines the download washes in coral.`
+                    ? `${changedBulletCount} of ${renderedBullets.length} bullets carry tailored wording. The file you download is unmarked — “Preview highlights” shows those lines washed in coral on the document itself.`
                     : undefined
                 }
               >

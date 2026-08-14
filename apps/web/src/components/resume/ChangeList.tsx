@@ -6,8 +6,9 @@
  * The change cards under the aha hero. Each card is ONE entry of
  * `GET /resumes/{id}/diff`, rendered with the SAME semantics the PDF renderer
  * uses (`components/resume/diff-semantics.ts` mirrors
- * `services/resume_pdf.py`), so the coral wash on screen and the coral wash in
- * the downloaded document mean the same thing.
+ * `services/resume_pdf.py`), so the coral wash on screen marks exactly the
+ * lines the renderer counts as reworded. The download itself is unmarked; the
+ * same wash on the document is the Studio's "Preview highlights" (RFMT-2).
  *
  * Honesty rules encoded here:
  *  - A rewrite shows the baseline wording struck through ABOVE the tailored
