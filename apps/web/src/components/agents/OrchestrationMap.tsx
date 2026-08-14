@@ -56,10 +56,12 @@ import type { OrchestrationMapData } from "../../lib/api/agentPolicy";
 import StatusBadge from "../ui/StatusBadge";
 import {
   buildMapModel,
+  lastRunStatusText,
   nodeBadge,
   slugifyStage,
   STAGE_ORDER_FOOTNOTE,
   trendLabel,
+  visibleStageRange,
   type EdgeState,
   type MapModel,
   type MapNode,
@@ -75,7 +77,18 @@ const OrchestrationMapGL = dynamic(() => import("./OrchestrationMapGL"), {
   loading: () => null,
 });
 
-const NODE_H = 92; // S-UI §3.7: fixed-height NodeCard, so columns align.
+/**
+ * Fixed NodeCard height, so every stage column's rows align (S-UI §3.7).
+ *
+ * 104, not the spec's original 92: the binding U-AX-V4 constraint puts a THIRD
+ * line on the face (last-run time), and at the narrowest column a long badge
+ * ("LAST RUN FAILED") plus a tier chip legitimately wrap onto two rows. At 92
+ * the column-flex card silently shrank that new line to zero height and the
+ * `truncate` overflow hid it — MEASURED, not assumed: `after-1600-*` before this
+ * change showed "Last run 16 min ago" on the idle cards and nothing at all on
+ * the running/failed ones. Cards stay uniform, so the columns still align.
+ */
+const NODE_H = 104;
 
 /**
  * MEASURED geometry only — deliberately carries NO run state.
@@ -243,10 +256,25 @@ function NodeDetail({
               <span className="text-aether-muted-dim">Trend: </span>
               {trend ?? "—"}
             </span>
+            {/* Binding constraint (U-AX-V4): lastRunAt as RELATIVE time, with
+                the absolute stamp kept beside it — a relative label alone is
+                unauditable, an absolute one alone is unreadable. */}
             <span className="mt-0.5 block">
               <span className="text-aether-muted-dim">Last run: </span>
-              <span className="font-mono text-[11px] tabular-nums">
-                {formatRunTime(node.lastRunAt)}
+              <span className="tabular-nums">{node.lastRunText ?? "—"}</span>
+              {node.lastRunAt ? (
+                <span className="ml-1 font-mono text-[10px] tabular-nums text-aether-muted-dim">
+                  ({formatRunTime(node.lastRunAt)})
+                </span>
+              ) : null}
+            </span>
+            {/* …and lastRunStatus, the field U-AX-V4 was about, stated in
+                words. `lastRunStatusText` never lets a recorded "running" on a
+                dead row stand on its own. */}
+            <span className="mt-0.5 block">
+              <span className="text-aether-muted-dim">Last status: </span>
+              <span data-testid={`orchestration-node-status-${agent.agentKey}`}>
+                {lastRunStatusText(node)}
               </span>
             </span>
             {!agent.lastRunPolicyTier && !trend && node.lastRunAt === null ? (
@@ -318,7 +346,7 @@ function NodeCard({
               : "elev-1 hover:border-hairline-strong hover:bg-surface-2"
         }`}
       >
-        <span className="flex items-start justify-between gap-2">
+        <span className="flex shrink-0 items-start justify-between gap-2">
           <span className="flex min-w-0 items-center gap-1.5">
             <i
               className={`fa-solid fa-circle-nodes shrink-0 text-[11px] ${
@@ -351,7 +379,23 @@ function NodeCard({
           ) : null}
         </span>
 
-        <span className="flex flex-wrap items-center gap-1.5">
+        {/* U-AX-V4 (binding): the card itself states WHEN this agent last ran,
+            relatively — the defect it transfers from was 18/22 agents reading
+            "No runs recorded yet." while the payload knew otherwise. A planned
+            agent gets no line at all: it has nothing to be late for. */}
+        {isPlanned ? null : (
+          <span
+            data-testid={`orchestration-agent-lastrun-${agent.agentKey}`}
+            // `shrink-0`: this line is a fact, not slack. Without it the column
+            // flex box collapses it to zero height whenever the badge row wraps,
+            // and `truncate`'s overflow:hidden then hides it completely.
+            className="shrink-0 truncate text-[10px] leading-[1.3] tabular-nums text-aether-muted-dim"
+          >
+            {node.lastRunText ? `Last run ${node.lastRunText}` : "No runs recorded yet"}
+          </span>
+        )}
+
+        <span className="flex shrink-0 flex-wrap items-center gap-1.5">
           <StatusBadge tone={badge.tone}>{badge.label}</StatusBadge>
           {/* A planned agent never carries a tier chip — it has never run. */}
           {!isPlanned && agent.lastRunPolicyTier ? (
@@ -370,13 +414,39 @@ function NodeCard({
 // One map: stage columns + edge layer (+ optional GL enhancement)
 // ---------------------------------------------------------------------------
 
+interface ScrollState {
+  left: number;
+  client: number;
+  total: number;
+}
+
+const NO_SCROLL: ScrollState = { left: 0, client: 0, total: 0 };
+
 function MapGraph({ model, allowGl }: { model: MapModel; allowGl: boolean }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const stageRefs = useRef<Array<HTMLLIElement | null>>([]);
   const [geometry, setGeometry] = useState<Geometry>(EMPTY_GEOMETRY);
+  const [scroll, setScroll] = useState<ScrollState>(NO_SCROLL);
   const [focusedNode, setFocusedNode] = useState<string | null>(null);
 
   const stageCount = model.stages.length;
+
+  /** Where the horizontal viewport currently sits — the input to the honest
+   *  "showing stages X–Y of N" statement and to the edge scrims. */
+  const readScroll = useCallback(() => {
+    const host = hostRef.current;
+    if (!host) return;
+    const next: ScrollState = {
+      left: Math.round(host.scrollLeft),
+      client: Math.round(host.clientWidth),
+      total: Math.round(host.scrollWidth),
+    };
+    setScroll((prev) =>
+      prev.left === next.left && prev.client === next.client && prev.total === next.total
+        ? prev
+        : next,
+    );
+  }, []);
 
   const measure = useCallback(() => {
     const host = hostRef.current;
@@ -389,14 +459,19 @@ function MapGraph({ model, allowGl }: { model: MapModel; allowGl: boolean }) {
       return;
     }
 
+    // CONTENT coordinates, not viewport ones: `getBoundingClientRect` moves
+    // with the scroll offset, so a re-measure taken while the map is scrolled
+    // would otherwise shift every edge and every stage window by `scrollLeft`.
+    const originX = hostRect.left - host.scrollLeft;
+
     const columns: ColumnGeom[] = [];
     for (let i = 0; i < stageCount; i++) {
       const el = stageRefs.current[i];
       if (!el) break;
       const r = el.getBoundingClientRect();
       columns.push({
-        left: r.left - hostRect.left,
-        right: r.right - hostRect.left,
+        left: r.left - originX,
+        right: r.right - originX,
         top: r.top - hostRect.top,
         height: r.height,
       });
@@ -407,15 +482,24 @@ function MapGraph({ model, allowGl }: { model: MapModel; allowGl: boolean }) {
       const r = el.getBoundingClientRect();
       nodes.push({
         id: el.dataset.nodeId ?? "",
-        x: r.left - hostRect.left,
+        x: r.left - originX,
         y: r.top - hostRect.top,
         w: r.width,
         h: r.height,
       });
     });
 
+    // The drawing surface spans the whole CONTENT, not just the visible box:
+    // sized to the visible box, every edge past the right-hand fold fell
+    // outside the viewBox and simply was not drawn. It is derived from the
+    // measured stage columns and NEVER from `host.scrollWidth`, because the
+    // edge layer is itself a child of that scroller — feeding its own width
+    // back in would latch the map at the widest size it had ever been and
+    // manufacture an overflow that is not there.
+    const contentRight = columns.reduce((max, c) => Math.max(max, c.right), 0);
+
     const next: Geometry = {
-      width: hostRect.width,
+      width: Math.max(hostRect.width, contentRight),
       height: hostRect.height,
       columns,
       nodes,
@@ -423,7 +507,8 @@ function MapGraph({ model, allowGl }: { model: MapModel; allowGl: boolean }) {
     // Identity stability is what keeps the WebGL layer from remounting on a
     // clock tick or a no-op ResizeObserver callback.
     setGeometry((prev) => (sameGeometry(prev, next) ? prev : next));
-  }, [stageCount]);
+    readScroll();
+  }, [stageCount, readScroll]);
 
   useLayoutEffect(() => {
     measure();
@@ -441,6 +526,31 @@ function MapGraph({ model, allowGl }: { model: MapModel; allowGl: boolean }) {
     window.addEventListener("resize", onResize, { passive: true });
     return () => window.removeEventListener("resize", onResize);
   }, [measure]);
+
+  // Scroll fires far faster than React can usefully re-render; one frame's
+  // worth of coalescing keeps the scrims and the stage counter honest without
+  // turning a drag into a render storm.
+  const rafRef = useRef(0);
+  const onScroll = useCallback(() => {
+    if (typeof requestAnimationFrame === "undefined") {
+      readScroll();
+      return;
+    }
+    if (rafRef.current) return;
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = 0;
+      readScroll();
+    });
+  }, [readScroll]);
+
+  useEffect(
+    () => () => {
+      if (rafRef.current && typeof cancelAnimationFrame !== "undefined") {
+        cancelAnimationFrame(rafRef.current);
+      }
+    },
+    [],
+  );
 
   // Measured geometry × resolved run state, merged here and nowhere else, so
   // the SVG rendition and the WebGL rendition are drawing from one array.
@@ -471,6 +581,34 @@ function MapGraph({ model, allowGl }: { model: MapModel; allowGl: boolean }) {
   );
 
   const hasGeometry = geometry.width > 0 && edgeGeoms.length > 0;
+
+  // ---- Horizontal continuation (S-UI-1 review finding 2) ------------------
+  // Seven stage columns at a legible card width do not fit the content column
+  // below ~1440px, so the map scrolls there. A SILENT clip is the defect the
+  // review caught: the SUBMISSION stage ended at the viewport edge with no
+  // signal that anything followed. Everything below is measured — when nothing
+  // has been measured yet (SSR, hidden tab, jsdom) no claim is made at all.
+  const overflowing = scroll.total > scroll.client + 2;
+  const moreLeft = overflowing && scroll.left > 2;
+  const moreRight = overflowing && scroll.left + scroll.client < scroll.total - 2;
+  const stageWindow = useMemo(
+    () => visibleStageRange(geometry.columns, scroll.left, scroll.client),
+    [geometry.columns, scroll.left, scroll.client],
+  );
+  const continuation = useMemo(() => {
+    if (!overflowing || !stageWindow || stageWindow.hidden <= 0) return null;
+    const total = model.stages.length;
+    const nextIdx = stageWindow.last + 1 < total ? stageWindow.last + 1 : stageWindow.first - 1;
+    const nextStage = model.stages[nextIdx]?.stage;
+    const direction = stageWindow.last + 1 < total ? "right" : "left";
+    const shown =
+      stageWindow.first === stageWindow.last
+        ? `stage ${stageWindow.first + 1}`
+        : `stages ${stageWindow.first + 1}–${stageWindow.last + 1}`;
+    return nextStage
+      ? `Showing ${shown} of ${total} — scroll ${direction} for “${nextStage}”.`
+      : `Showing ${shown} of ${total} — scroll to see the rest.`;
+  }, [overflowing, stageWindow, model.stages]);
 
   // A single serialised signature keeps the GL layer's props referentially
   // stable across re-renders that changed nothing it can see (the 30s clock
@@ -518,89 +656,137 @@ function MapGraph({ model, allowGl }: { model: MapModel; allowGl: boolean }) {
 
   return (
     <div className="relative">
-      <div
-        ref={hostRef}
-        data-testid={`orchestration-graph-${model.key}`}
-        className="relative overflow-x-auto pb-1 snap-x [scrollbar-width:thin] lg:snap-none"
-      >
-        {/* ---- Edge layer (always present; the GL layer only adds to it) ---- */}
-        <svg
-          data-testid={`orchestration-edges-${model.key}`}
-          aria-hidden="true"
-          width={geometry.width || undefined}
-          height={geometry.height || undefined}
-          viewBox={hasGeometry ? `0 0 ${geometry.width} ${geometry.height}` : undefined}
-          className="pointer-events-none absolute inset-0 h-full w-full"
+      <div className="relative">
+        <div
+          ref={hostRef}
+          data-testid={`orchestration-graph-${model.key}`}
+          data-overflowing={overflowing || undefined}
+          onScroll={onScroll}
+          // WCAG 2.1.1: a scrollable region must be reachable from the keyboard
+          // in its own right, not only by tabbing through what it contains.
+          tabIndex={0}
+          role="group"
+          aria-label={`${model.name} stage map`}
+          className="relative overflow-x-auto pb-1 snap-x outline-none focus-visible:ring-2 focus-visible:ring-aether-coral/40 [scrollbar-width:thin] lg:snap-none"
         >
-          {edgeGeoms.map((e) => (
-            <g key={e.key} data-edge-state={e.state} data-motion={e.state === "active" ? "pulse" : "none"}>
-              <path
-                d={edgePath(e)}
-                fill="none"
-                stroke={
-                  e.state === "active"
-                    ? "#FF6B35"
-                    : e.state === "planned"
-                      ? "rgba(255,255,255,0.07)"
-                      : "rgba(255,255,255,0.13)"
-                }
-                strokeWidth={e.state === "active" ? 1.75 : 1.25}
-                strokeDasharray={e.state === "planned" ? "5 5" : undefined}
-                strokeLinecap="round"
-              />
-              {/* Rule: nothing moves unless something real moves. The dot only
-                  exists for an edge whose source stage has a live, non-stalled
-                  run — and the global prefers-reduced-motion block freezes it
-                  for a viewer who asked for stillness. */}
-              {e.state === "active" ? (
-                <circle r="3.5" fill="#FF6B35">
-                  <animateMotion dur="2.2s" repeatCount="indefinite" path={edgePath(e)} />
-                </circle>
-              ) : null}
-            </g>
-          ))}
-        </svg>
+          {/* ---- Edge layer (always present; the GL layer only adds to it) ---- */}
+          <svg
+            data-testid={`orchestration-edges-${model.key}`}
+            aria-hidden="true"
+            width={geometry.width || undefined}
+            height={geometry.height || undefined}
+            viewBox={hasGeometry ? `0 0 ${geometry.width} ${geometry.height}` : undefined}
+            style={{ width: geometry.width || undefined }}
+            className="pointer-events-none absolute inset-0 h-full"
+          >
+            {edgeGeoms.map((e) => (
+              <g key={e.key} data-edge-state={e.state} data-motion={e.state === "active" ? "pulse" : "none"}>
+                <path
+                  d={edgePath(e)}
+                  fill="none"
+                  stroke={
+                    e.state === "active"
+                      ? "#FF6B35"
+                      : e.state === "planned"
+                        ? "rgba(255,255,255,0.07)"
+                        : "rgba(255,255,255,0.13)"
+                  }
+                  strokeWidth={e.state === "active" ? 1.75 : 1.25}
+                  strokeDasharray={e.state === "planned" ? "5 5" : undefined}
+                  strokeLinecap="round"
+                />
+                {/* Rule: nothing moves unless something real moves. The dot only
+                    exists for an edge whose source stage has a live, non-stalled
+                    run — and the global prefers-reduced-motion block freezes it
+                    for a viewer who asked for stillness. */}
+                {e.state === "active" ? (
+                  <circle r="3.5" fill="#FF6B35">
+                    <animateMotion dur="2.2s" repeatCount="indefinite" path={edgePath(e)} />
+                  </circle>
+                ) : null}
+              </g>
+            ))}
+          </svg>
 
-        {/* ---- Optional WebGL enhancement, drawn from the SAME geometry ---- */}
-        {allowGl && hasGeometry ? (
-          <OrchestrationMapGL
-            mapKey={model.key}
-            width={glProps.width}
-            height={glProps.height}
-            edges={glProps.edges}
-            nodes={glProps.nodes}
+          {/* ---- Optional WebGL enhancement, drawn from the SAME geometry ---- */}
+          {allowGl && hasGeometry ? (
+            <OrchestrationMapGL
+              mapKey={model.key}
+              width={glProps.width}
+              height={glProps.height}
+              edges={glProps.edges}
+              nodes={glProps.nodes}
+            />
+          ) : null}
+
+          {/* ---- Stage columns (the semantic, accessible base) ----
+              136px is the measured floor at which a node card still holds the
+              verbatim "PLANNED — ROADMAP" badge and a readable name; `1fr` lets
+              every column grow to fill a wider screen. 7 stages × 136 + 6 × 20px
+              gaps = 1072px, which fits the real content column (viewport − the
+              fixed sidebar − page padding) from ~1440px up. Below that the map
+              scrolls — announced, never silently clipped. */}
+          <ol className="relative grid grid-flow-col auto-cols-[minmax(136px,1fr)] gap-x-5">
+            {model.stages.map((stage, i) => (
+              <li
+                key={stage.stage}
+                ref={(el) => {
+                  stageRefs.current[i] = el;
+                }}
+                data-testid={`orchestration-stage-${slugifyStage(stage.stage)}`}
+                className="min-w-0 snap-start"
+              >
+                <h4 className="mb-2 truncate text-[11px] font-semibold uppercase tracking-[0.08em] text-aether-muted-dim">
+                  {stage.stage}
+                </h4>
+                <ol className="space-y-3">
+                  {stage.nodes.map((node) => (
+                    <li key={node.agent.agentKey}>
+                      <NodeCard
+                        node={node}
+                        focused={focusedNode === node.agent.agentKey}
+                        onFocusNode={setFocusedNode}
+                      />
+                    </li>
+                  ))}
+                </ol>
+              </li>
+            ))}
+          </ol>
+        </div>
+
+        {/* ---- Continuation scrims: rendered ONLY while there really is more
+             content in that direction, so the affordance is never decorative. */}
+        {moreLeft ? (
+          <span
+            aria-hidden="true"
+            data-testid={`orchestration-scrim-left-${model.key}`}
+            className="pointer-events-none absolute inset-y-0 left-0 w-8 bg-gradient-to-r from-surface-1 to-transparent"
           />
         ) : null}
-
-        {/* ---- Stage columns (the semantic, accessible base) ---- */}
-        <ol className="relative grid grid-flow-col auto-cols-[minmax(190px,1fr)] gap-x-10">
-          {model.stages.map((stage, i) => (
-            <li
-              key={stage.stage}
-              ref={(el) => {
-                stageRefs.current[i] = el;
-              }}
-              data-testid={`orchestration-stage-${slugifyStage(stage.stage)}`}
-              className="min-w-0 snap-start"
-            >
-              <h4 className="mb-2 truncate text-[11px] font-semibold uppercase tracking-[0.08em] text-aether-muted-dim">
-                {stage.stage}
-              </h4>
-              <ol className="space-y-3">
-                {stage.nodes.map((node) => (
-                  <li key={node.agent.agentKey}>
-                    <NodeCard
-                      node={node}
-                      focused={focusedNode === node.agent.agentKey}
-                      onFocusNode={setFocusedNode}
-                    />
-                  </li>
-                ))}
-              </ol>
-            </li>
-          ))}
-        </ol>
+        {moreRight ? (
+          <span
+            aria-hidden="true"
+            data-testid={`orchestration-scrim-right-${model.key}`}
+            className="pointer-events-none absolute inset-y-0 right-0 w-10 bg-gradient-to-l from-surface-1 to-transparent"
+          />
+        ) : null}
       </div>
+
+      {/* ---- The clipped stage, stated in words (S-UI-1 review finding 2) ----
+          A fade alone is a hint; this is the fact. It names how many stages the
+          viewer can actually see and which one is next, so a stage that runs
+          past the fold can never be mistaken for the end of the pipeline. */}
+      {continuation ? (
+        <p
+          data-testid={`orchestration-scroll-hint-${model.key}`}
+          aria-live="polite"
+          className="mt-2 flex items-center gap-1.5 text-[11px] leading-[1.5] text-aether-muted"
+        >
+          <i className="fa-solid fa-arrows-left-right shrink-0 text-[10px]" aria-hidden="true" />
+          <span>{continuation}</span>
+        </p>
+      ) : null}
 
       {/* ---- Legend + the required, always-visible honesty footnote ---- */}
       <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-hairline pt-3 text-[11px] text-aether-muted-dim">

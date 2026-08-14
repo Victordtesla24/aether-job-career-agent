@@ -17,6 +17,14 @@
  *   4. Portal picker parity — moving the model list out of the grid cell must
  *      not change what selecting a model does: still one
  *      `updateAgentConfig(agentKey, { model })`, never `updateProvider`.
+ *   5. The BINDING transferred defect (U-AX-V4, S-UI-BINDING-CONSTRAINTS.md:12):
+ *      `lastRunStatus` + `lastRunAt` are read from the per-agent, UNWINDOWED
+ *      orchestration-map payload — not silently flattened to "Idle" when the
+ *      shared 50-row `GET /agents/runs` window happens not to hold that
+ *      agent's run — and both fields are rendered on the node.
+ *   6. Continuation honesty — a map wider than its content column states which
+ *      stages are actually visible and which one is next, and claims nothing
+ *      at all until it has measured itself.
  */
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -84,6 +92,13 @@ vi.mock("../../components/agents/api", async (importOriginal) => {
 
 import AgentsPage from "../../app/dashboard/agents/page";
 import OrchestrationMap from "../../components/agents/OrchestrationMap";
+import {
+  lastRunStatusText,
+  nodeBadge,
+  relativeRunLabel,
+  resolveNodeState,
+  visibleStageRange,
+} from "../../components/agents/orchestration-map-model";
 import type { Catalog, CatalogAgent, Provider } from "../../components/agents/api";
 import type { AgentRun } from "../../lib/api/agents";
 import type { OrchestrationMapData } from "../../lib/api/agentPolicy";
@@ -599,5 +614,220 @@ describe("S-UI-1 — the model picker moved out of the grid cell without changin
 
     fireEvent.keyDown(document, { key: "Escape" });
     await waitFor(() => expect(trigger.getAttribute("aria-expanded")).toBe("false"));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 5. The binding transferred defect (U-AX-V4): lastRunStatus + lastRunAt
+//    S-UI-BINDING-CONSTRAINTS.md:12-13 — "Slice-1's NodeCard MUST render
+//    lastRunAt (relative time) + lastRunStatus honestly, with test assertions
+//    on both fields."
+//
+//    `GET /agents/runs` is a GLOBAL 50-row window shared by all 22 agents;
+//    `GET /agents/orchestration-map` computes lastRunStatus/lastRunAt PER AGENT
+//    with no window at all. When an agent's real last run has aged out of the
+//    shared window, the unwindowed pair is the only truth left — and reading
+//    "idle" instead is the same status-flattening U-AX-V4 was about.
+// ---------------------------------------------------------------------------
+
+function isoAt(ms: number): string {
+  return new Date(ms).toISOString();
+}
+
+/** A real agent whose ONLY evidence is the unwindowed per-agent pair. */
+function agentWithLastRun(
+  key: string,
+  backend: string,
+  lastRunStatus: string | null,
+  lastRunAt: string | null,
+) {
+  return { ...realAgent(key, backend), lastRunStatus, lastRunAt };
+}
+
+function mapWith(agent: ReturnType<typeof agentWithLastRun>): OrchestrationMapData {
+  return {
+    maps: [
+      {
+        key: "application-pipeline",
+        name: "Application Pipeline",
+        subtitle: null,
+        stages: [{ stage: "tailoring", agents: [agent] }],
+      },
+    ],
+  };
+}
+
+describe("S-UI-1 — lastRunStatus is consulted as ground truth (U-AX-V4, binding)", () => {
+  it("reports a FAILED last run from agent.lastRunStatus when the shared run window has no row for that agent", () => {
+    const agent = agentWithLastRun("tailor", "tailor", "failed", isoAt(NOW - 3 * 60 * 60_000));
+
+    // The window contains 50 rows belonging to a busier agent — none for this one.
+    const node = resolveNodeState(agent, [run({ id: "other", agentName: "scout" })], NOW);
+
+    expect(node.lastRunStatus).toBe("failed");
+    expect(node.state).toBe("failed");
+    expect(node.source).toBe("catalog");
+    expect(node.lastRunAt).toBe(agent.lastRunAt);
+    expect(nodeBadge(node).label).toBe("Last run failed");
+    expect(nodeBadge(node).tone).toBe("danger");
+  });
+
+  it("renders that failed status on the node itself instead of a neutral 'Idle'", () => {
+    const agent = agentWithLastRun("tailor", "tailor", "failed", isoAt(NOW - 3 * 60 * 60_000));
+    render(<OrchestrationMap data={mapWith(agent)} runs={[]} now={NOW} />);
+
+    const node = screen.getByTestId("orchestration-agent-tailor");
+    expect(node.getAttribute("data-state")).toBe("failed");
+    expect(node.textContent ?? "").toContain("Last run failed");
+    expect(node.textContent ?? "").not.toMatch(/\bidle\b/i);
+    // lastRunAt, relative — the second field the binding constraint names.
+    expect(screen.getByTestId("orchestration-agent-lastrun-tailor").textContent).toBe(
+      "Last run 3 hr ago",
+    );
+    // …and lastRunStatus stated in words in the detail popover.
+    expect(screen.getByTestId("orchestration-node-status-tailor").textContent).toBe("failed");
+  });
+
+  it("never turns an unwindowed in-flight lastRunStatus into motion once it is stale", () => {
+    const stale = isoAt(NOW - (RUNNING_STALE_MS + 60 * 60_000));
+    const agent = agentWithLastRun("tailor", "tailor", "running", stale);
+    render(<OrchestrationMap data={mapWith(agent)} runs={[]} now={NOW} />);
+
+    const node = screen.getByTestId("orchestration-agent-tailor");
+    expect(node.getAttribute("data-state")).toBe("stalled");
+    expect(node.getAttribute("data-motion")).toBe("none");
+    expect(node.textContent ?? "").toMatch(/stalled/i);
+    // The card face never says "running" for a row nothing is working on…
+    expect(node.textContent ?? "").not.toMatch(/\brunning\b/i);
+    // …and where the raw value IS quoted, the elapsed time comes first.
+    const status = screen.getByTestId("orchestration-node-status-tailor").textContent ?? "";
+    expect(status).toMatch(/^stalled for /);
+    expect(status).toMatch(/recorded as "running", no worker attached/);
+  });
+
+  it("accepts an unwindowed in-flight lastRunStatus as live only inside the staleness window", () => {
+    const agent = agentWithLastRun("tailor", "tailor", "running", isoAt(NOW - 60_000));
+    const node = resolveNodeState(agent, [], NOW);
+
+    expect(node.state).toBe("live");
+    expect(node.lastRunStatus).toBe("running");
+    expect(lastRunStatusText(node)).toBe("running");
+  });
+
+  it("treats an undateable in-flight lastRunStatus as stalled, never as life", () => {
+    const node = resolveNodeState(agentWithLastRun("tailor", "tailor", "running", null), [], NOW);
+    expect(node.state).toBe("stalled");
+    expect(node.stalledText).toBe("stalled");
+  });
+
+  it("prefers the windowed run while it is the freshest evidence (it alone carries a heartbeat)", () => {
+    // Catalog remembers an older FAILED run; the window holds a newer completed one.
+    const agent = agentWithLastRun("tailor", "tailor", "failed", isoAt(NOW - 3 * 60 * 60_000));
+    const newer = run({
+      id: "r-new",
+      agentName: "tailor",
+      status: "completed",
+      createdAt: isoAt(NOW - 60_000),
+      startedAt: isoAt(NOW - 60_000),
+      completedAt: isoAt(NOW - 30_000),
+    });
+
+    const node = resolveNodeState(agent, [newer], NOW);
+    expect(node.source).toBe("runs");
+    expect(node.state).toBe("idle");
+    expect(node.lastRunStatus).toBe("completed");
+  });
+
+  it("prefers the unwindowed pair when it describes a strictly newer run than the window holds", () => {
+    const agent = agentWithLastRun("tailor", "tailor", "failed", isoAt(NOW - 30_000));
+    const older = run({
+      id: "r-old",
+      agentName: "tailor",
+      status: "completed",
+      createdAt: isoAt(NOW - 6 * 60 * 60_000),
+      startedAt: isoAt(NOW - 6 * 60 * 60_000),
+      completedAt: isoAt(NOW - 6 * 60 * 60_000),
+    });
+
+    const node = resolveNodeState(agent, [older], NOW);
+    expect(node.source).toBe("catalog");
+    expect(node.state).toBe("failed");
+    expect(node.lastRunStatus).toBe("failed");
+  });
+
+  it("keeps a planned agent planned even if a lastRunStatus somehow appears on it", () => {
+    const planned = { ...plannedAgent("compliance"), lastRunStatus: "running", lastRunAt: isoAt(NOW) };
+    const node = resolveNodeState(planned, [], NOW);
+
+    expect(node.state).toBe("planned");
+    expect(node.lastRunStatus).toBeNull();
+    expect(node.lastRunText).toBeNull();
+    expect(lastRunStatusText(node)).toBe("—");
+    expect(nodeBadge(node).label).toBe("Planned — roadmap");
+  });
+
+  it("says 'No runs recorded yet' only when NEITHER source has a run", () => {
+    const agent = agentWithLastRun("tailor", "tailor", null, null);
+    const node = resolveNodeState(agent, [], NOW);
+    expect(node.source).toBe("none");
+    expect(node.lastRunStatus).toBeNull();
+
+    render(<OrchestrationMap data={mapWith(agent)} runs={[]} now={NOW} />);
+    expect(screen.getByTestId("orchestration-agent-lastrun-tailor").textContent).toBe(
+      "No runs recorded yet",
+    );
+    expect(screen.getByTestId("orchestration-node-status-tailor").textContent).toBe("—");
+  });
+
+  it("formats lastRunAt relatively, and claims nothing when there is no stamp", () => {
+    expect(relativeRunLabel(null, NOW)).toBeNull();
+    expect(relativeRunLabel(isoAt(NOW - 5_000), NOW)).toBe("just now");
+    expect(relativeRunLabel(isoAt(NOW - 14 * 60_000), NOW)).toBe("14 min ago");
+    expect(relativeRunLabel(isoAt(NOW - 3 * 60 * 60_000), NOW)).toBe("3 hr ago");
+    expect(relativeRunLabel(isoAt(NOW - 8 * 24 * 60 * 60_000), NOW)).toBe("8 days ago");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 6. The map states how much of itself is visible (S-UI-1 review finding 2)
+// ---------------------------------------------------------------------------
+
+describe("S-UI-1 — a map wider than its column announces the stages past the fold", () => {
+  const columns = [
+    { left: 0, right: 136 },
+    { left: 156, right: 292 },
+    { left: 312, right: 448 },
+    { left: 468, right: 604 },
+    { left: 624, right: 760 },
+    { left: 780, right: 916 },
+    { left: 936, right: 1072 },
+  ];
+
+  it("reports only the stages that are FULLY visible — a half-clipped stage counts as hidden", () => {
+    // 926px of content column: the width the review measured at a 1280px viewport.
+    expect(visibleStageRange(columns, 0, 926)).toEqual({ first: 0, last: 5, hidden: 1 });
+  });
+
+  it("moves the window as the viewer scrolls", () => {
+    expect(visibleStageRange(columns, 146, 926)).toEqual({ first: 1, last: 6, hidden: 1 });
+  });
+
+  it("reports every stage visible once the map fits, which is when no hint is shown", () => {
+    expect(visibleStageRange(columns, 0, 1086)).toEqual({ first: 0, last: 6, hidden: 0 });
+  });
+
+  it("claims no window at all before anything has been measured", () => {
+    expect(visibleStageRange([], 0, 926)).toBeNull();
+    expect(visibleStageRange(columns, 0, 0)).toBeNull();
+  });
+
+  it("renders no scroll hint and no scrims in an unmeasured layout (jsdom) — never a guess", () => {
+    render(<OrchestrationMap data={MAP_DATA} runs={[]} now={NOW} />);
+    expect(screen.queryByTestId("orchestration-scroll-hint-application-pipeline")).toBeNull();
+    expect(screen.queryByTestId("orchestration-scrim-right-application-pipeline")).toBeNull();
+    // The scrollable region stays keyboard-reachable in its own right (WCAG 2.1.1).
+    const graph = screen.getByTestId("orchestration-graph-application-pipeline");
+    expect(graph.getAttribute("tabindex")).toBe("0");
+    expect(graph.getAttribute("role")).toBe("group");
   });
 });
