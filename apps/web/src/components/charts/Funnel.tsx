@@ -146,7 +146,24 @@ export function Funnel({
                       className="absolute inset-y-0 left-0 rounded-lg"
                       style={{
                         width: barPercent(length),
-                        background: `linear-gradient(90deg, ${CHART_PALETTE[0]}B3, #7C3AEDB3)`,
+                        /*
+                         * ONE HUE PER MARK (discrete-accents rule, B1
+                         * re-review §2). The fill used to run coral → violet
+                         * across its own length, which made the widest bar
+                         * ("Jobs found") the single place on either flagship
+                         * screen where the identity's two hues are BLENDED
+                         * into one mark instead of used as separate accents —
+                         * decorative where everything else is restrained, and
+                         * worse, a colour change along an axis that encodes
+                         * nothing: a reader is entitled to ask what the violet
+                         * end means, and the answer was "nothing".
+                         *
+                         * Now: coral only. The variation left is luminance
+                         * within that one hue (top edge brighter), which is
+                         * the same depth device the elevation ladder uses and
+                         * makes no claim of its own.
+                         */
+                        background: `linear-gradient(180deg, ${CHART_PALETTE[0]}D9, ${CHART_PALETTE[0]}A6)`,
                         transformOrigin: "left",
                         transform: motion.atOrigin ? "scaleX(0)" : undefined,
                         transition: motion.transition("transform"),

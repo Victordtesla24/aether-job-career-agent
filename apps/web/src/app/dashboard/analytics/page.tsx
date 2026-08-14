@@ -8,8 +8,10 @@ import { useCallback, useEffect, useState } from "react";
 
 import MarketPulse from "../../../components/analytics/MarketPulse";
 import { useRealtimeResources } from "../../../hooks/useRealtime";
+import { useUrlTab } from "../../../hooks/useUrlTab";
 import MetricTooltip from "../../../components/MetricTooltip";
 import StatBlock from "../../../components/ui/StatBlock";
+import SegmentedControl from "../../../components/ui/SegmentedControl";
 import Section from "../../../components/ui/Section";
 import { Funnel as FunnelChart, Histogram, Radar10 } from "../../../components/charts";
 import { atsBuckets, fitDimensions, funnelSteps } from "../../../lib/analytics/chart-adapters";
@@ -42,6 +44,56 @@ import {
 } from "../../../lib/api/agentPolicy";
 
 const PERIODS: Period[] = ["7d", "30d", "90d", "all"];
+
+/**
+ * FOUR LINKABLE VIEWS, ONE ROUTE — the B1 re-review's remaining aesthetics
+ * finding, closed structurally rather than by re-tiling.
+ *
+ * The page measured 3,737px at 1600w (`b1/close/before-notes.json`) and put
+ * twelve distinct blocks in one continuous scroll: current policy, two policy
+ * progress panels, a 7-card KPI band, funnel + stage conversion, ATS
+ * histogram + fit radar, three ROI tiles + two cost-per tiles, then the whole
+ * of MarketPulse. No reference capture in the pack (Linear / Mercury /
+ * Stripe) shows more than 2-3 compositional blocks in a single view.
+ *
+ * This is PRESENTATION ONLY, and deliberately the pattern the Agents console
+ * already ships (`app/dashboard/agents/page.tsx` + `useUrlTab`) rather than a
+ * second navigation paradigm:
+ *   · every block keeps its exact data, copy, honesty captions and testid —
+ *     blocks MOVE, nothing is deleted, reworded or re-scoped;
+ *   · EVERY panel stays MOUNTED and is hidden with the `hidden` attribute, so
+ *     a view switch issues no request at all, no chart re-animates, and every
+ *     control stays keyboard-reachable and readable by assistive tech that
+ *     walks the DOM;
+ *   · all four views are fed by the one `load()` above — no fetch moved, no
+ *     fetch was added, and the network profile of a page load is byte-for-byte
+ *     what it was (`close/netdiff-*`).
+ *
+ * VIEW MEMBERSHIP IS CONSTRAINED BY AN HONESTY CONTRACT, not only by theme:
+ * `interview-conversion-gap` tells the reader to see the Agent Performance
+ * Policy panel "above" it, and R-05 (`__tests__/policy-progress.test.tsx`)
+ * pins that the words match the real DOM order. So the policy panel stays in
+ * the SAME view as stage conversion, above it — moving it behind another tab
+ * would turn a true direction into a false one. The policy's HISTORY and
+ * per-tier cohort outcomes carry no such pointer and sit under Quality, where
+ * the question they answer ("is the rigor policy working?") belongs.
+ *
+ * WHY THREE VIEWS AND NOT FOUR. Agent ROI was drafted as its own tab. Measured
+ * at 1600x1100 it rendered one 280px panel above ~600px of empty ground —
+ * five numerals alone on a screen, which reads as an unfinished view, not a
+ * focused one. It joins Quality as the third row of that view: ATS spread and
+ * fit radar (how good are these matches), the policy's history and cohorts (is
+ * the rigor loop working), then what all of it cost. Every panel keeps its own
+ * heading, so nothing about what the reader is looking at becomes ambiguous.
+ */
+const TABS = ["overview", "quality", "market"] as const;
+type AnalyticsTab = (typeof TABS)[number];
+
+const TAB_ITEMS: ReadonlyArray<{ value: AnalyticsTab; label: string; icon: string }> = [
+  { value: "overview", label: "Overview", icon: "fa-gauge-high" },
+  { value: "quality", label: "Quality & ROI", icon: "fa-bullseye" },
+  { value: "market", label: "Market", icon: "fa-globe" },
+];
 
 /**
  * The 12-column spans that make the 7-card summary strip divide exactly:
@@ -87,6 +139,7 @@ function SUMMARY_CARDS(
 
 export default function AnalyticsPage() {
   const [period, setPeriod] = useState<Period>("all");
+  const [tab, setTab] = useUrlTab<AnalyticsTab>(TABS, "overview");
   const [funnel, setFunnel] = useState<Funnel | null>(null);
   const [ats, setAts] = useState<AtsDistribution | null>(null);
   const [roi, setRoi] = useState<AgentRoi | null>(null);
@@ -210,6 +263,21 @@ export default function AnalyticsPage() {
   // is shown honestly, good or bad.
   const hasApplications = funnel !== null && funnel.applied > 0;
 
+  /**
+   * Inactive views stay MOUNTED and are removed from the layout with the
+   * `hidden` attribute (never unmounted) — the same contract the Agents
+   * console ships. Tailwind's `space-y-*` is authored as
+   * `> :not([hidden]) ~ :not([hidden])`, so a hidden panel also drops out of
+   * the page's vertical rhythm instead of leaving a gap behind it.
+   */
+  const panelProps = (value: AnalyticsTab) => ({
+    id: `analytics-panel-${value}`,
+    role: "tabpanel" as const,
+    "aria-labelledby": `analytics-tabs-${value}`,
+    hidden: tab !== value,
+    "data-testid": `analytics-panel-${value}`,
+  });
+
   return (
     <div className="space-y-7">
       {/* BAND 1 — the hero moment: this screen's ONE saturated brand gesture
@@ -247,6 +315,22 @@ export default function AnalyticsPage() {
             ))}
           </div>
         </header>
+
+        {/* The view switcher lives INSIDE the lit band, under the title and
+            beside nothing — so the light rig frames the page's whole chrome
+            (title, period, view) the way the Dashboard's hero frames its KPI
+            strip, and the first panel begins on unlit ground. */}
+        <div className="mt-5">
+          <SegmentedControl
+            items={TAB_ITEMS}
+            value={tab}
+            onChange={setTab}
+            ariaLabel="Analytics views"
+            idPrefix="analytics-tabs"
+            panelIdPrefix="analytics-panel"
+            testId="analytics-tabs"
+          />
+        </div>
       </section>
 
       {error ? (
@@ -255,22 +339,11 @@ export default function AnalyticsPage() {
         </p>
       ) : null}
 
-      {/* U-AX item 2(a): the self-improvement loop's live state — the exact
-          tier every real agent is currently obeying, why, and what it
-          changes. Additive to the page; a load failure leaves it absent
-          rather than blocking anything above. */}
-      {policy ? <AgentPolicyPanel policy={policy} /> : null}
-
-      {/* U-AX item 2(c) + item 3 (R-06): the tier's own history against the
-          metrics it responds to, and the outcome of the applications actually
-          submitted under each tier. Round 2 claimed 2(c) in a comment and
-          shipped neither surface. */}
-      {policyHistory || policyCohorts ? (
-        <div className="grid gap-6 lg:grid-cols-2">
-          {policyHistory ? <PolicyTierHistory history={policyHistory} /> : null}
-          {policyCohorts ? <PolicyCohortProgress cohorts={policyCohorts} /> : null}
-        </div>
-      ) : null}
+      {/* ══ VIEW 1 — OVERVIEW (default) ══════════════════════════════════
+          Where the search stands: the period-scoped KPI band, the policy the
+          agents are obeying right now, and the funnel those numbers came
+          from, with its conversion column beside it. */}
+      <div {...panelProps("overview")} className="space-y-7">
 
       {dashboard === null && !error ? (
         /* Space reservation while the summary loads — rendering nothing and
@@ -325,6 +398,16 @@ export default function AnalyticsPage() {
           </dl>
         </section>
       ) : null}
+
+      {/* U-AX item 2(a): the self-improvement loop's live state — the exact
+          tier every real agent is currently obeying, why, and what it
+          changes. Additive to the page; a load failure leaves it absent
+          rather than blocking anything above.
+
+          It stays in THIS view, above stage conversion, because the
+          conversion gap sentence below points the reader at it by name and
+          by direction (R-05). */}
+      {policy ? <AgentPolicyPanel policy={policy} /> : null}
 
       {/*
         §5.2 — the funnel and the stage-conversion figures it implies now sit
@@ -476,6 +559,14 @@ export default function AnalyticsPage() {
       </section>
 
       </div>
+      </div>
+
+      {/* ══ VIEW 2 — QUALITY & ROI ═══════════════════════════════════════
+          How good the matches actually are, whether the rigor policy that
+          governs them is working, and what the whole thing cost: the ATS
+          spread and the fit radar on one row, the policy's own history and
+          per-tier cohort outcomes on the next, agent ROI closing the view. */}
+      <div {...panelProps("quality")} className="space-y-7">
 
       {/*
         THE QUALITY BAND — recomposed (doctrine D-δ; §8 leaves per-page layout
@@ -572,8 +663,29 @@ export default function AnalyticsPage() {
             />
           </Section>
         ) : null}
+      </div>
 
-        <section className="elev-1 rounded-2xl p-5 xl:col-span-12" data-testid="agent-roi">
+      {/* U-AX item 2(c) + item 3 (R-06): the tier's own history against the
+          metrics it responds to, and the outcome of the applications actually
+          submitted under each tier. Round 2 claimed 2(c) in a comment and
+          shipped neither surface. */}
+      {/* `lg:items-start`, matching every other paired row on this page. A
+          bare `lg:grid-cols-2` stretches both cards to the taller one's
+          height: the cohort panel has three short rows against the tier
+          history's four tall ones, so it was drawing ~340px of empty card
+          interior below its last line — the same dead-space defect the
+          closing band was recomposed to remove, just further down the page
+          where the old 3,737px scroll hid it. */}
+      {policyHistory || policyCohorts ? (
+        <div className="grid gap-6 lg:grid-cols-2 lg:items-start">
+          {policyHistory ? <PolicyTierHistory history={policyHistory} /> : null}
+          {policyCohorts ? <PolicyCohortProgress cohorts={policyCohorts} /> : null}
+        </div>
+      ) : null}
+
+        {/* What the agents cost, and what each outcome cost — including the
+            two places the honest answer is "—" rather than a number. */}
+        <section className="elev-1 rounded-2xl p-5" data-testid="agent-roi">
           <h2 className="type-section flex items-center gap-1.5">
             Agent ROI
             {/* No period support server-side (MV-analytics-004) — honest
@@ -678,7 +790,15 @@ export default function AnalyticsPage() {
         </section>
       </div>
 
-      <MarketPulse />
+      {/* ══ VIEW 3 — MARKET ══════════════════════════════════════════════
+          The outside world: MarketPulse keeps its own composition, its own
+          freshness stamps and its own retry affordance, whole and unedited —
+          it simply stops competing for attention with the two views before
+          it. It mounts with the page (never on tab switch), so its 8-15s
+          request starts at the same instant it always did. */}
+      <div {...panelProps("market")} className="space-y-7">
+        <MarketPulse />
+      </div>
     </div>
   );
 }
