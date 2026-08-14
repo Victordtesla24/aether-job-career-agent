@@ -22,6 +22,7 @@ from __future__ import annotations
 import csv
 import inspect
 import io
+import re
 import zipfile
 
 from app.repositories.career_profile import CareerProfileRepository
@@ -181,10 +182,9 @@ def test_full_export_zip_upload_endpoint_persists_like_paste(client, auth_header
 
 
 def test_upload_rejects_file_over_10mb(client, auth_headers, test_user_id):
-    ten_mb = 10 * 1024 * 1024
-    chunk = b"a" * 1024
-    oversized = chunk * (ten_mb // len(chunk) + 100)
-    assert len(oversized) > ten_mb + 1024 * 1024  # comfortably over (11MB-ish)
+    eleven_mb = 11 * 1024 * 1024
+    oversized = b"a" * eleven_mb
+    assert len(oversized) > 10 * 1024 * 1024
 
     resp = _upload(client, auth_headers, "huge_export.zip", oversized)
     assert resp.status_code in (413, 422), f"status={resp.status_code} body[:300]={resp.text[:300]!r}"
@@ -264,16 +264,23 @@ def test_single_known_csv_upload_ingests(client, auth_headers, test_user_id):
 
 def test_linkedin_ingestion_path_has_no_network_dependency():
     module_source = inspect.getsource(career_data)
-    assert "requests" not in module_source
-    assert "httpx" not in module_source
-    assert "linkedin.com" not in module_source.lower()
+    # An IMPORT of a real HTTP client, never a substring match — the module's
+    # honest GitHub-rate-limit copy legitimately contains the English word
+    # "requests" ("unauthenticated requests"), which a bare substring check
+    # would misfire on.
+    assert not re.search(r"^\s*(import|from)\s+(requests|httpx)\b", module_source, re.MULTILINE)
 
-    # The functions on the LinkedIn path specifically make no use of the
-    # module's own urllib-based fetchers (those are wired to GitHub/portfolio
-    # only) — by design, not by accident.
+    # The functions actually on the LinkedIn path make no use of the module's
+    # own urllib-based fetchers (those are wired to GitHub/portfolio only) —
+    # by design, not by accident — and never reference the domain itself.
+    # Scoped to just these functions (not the whole module, whose top-of-file
+    # compliance docstring legitimately explains "nothing touches
+    # linkedin.com" in prose) so this can't misfire on the documentation that
+    # states the very guarantee being tested.
     for fn in (ingest_linkedin, ingest_linkedin_export, normalize_linkedin_export, parse_linkedin_export_zip):
         src = inspect.getsource(fn)
         assert "urllib" not in src
         assert "_fetch_html" not in src
         assert "requests" not in src
         assert "httpx" not in src
+        assert "linkedin.com" not in src.lower()

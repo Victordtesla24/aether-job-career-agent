@@ -6,12 +6,16 @@
  * ingests) plus the same `CareerDataSource` shape the paste path returns.
  * These pin the pure copy-building helpers the Settings panel renders.
  *
- * RED before the fix: `components/settings/linkedin-upload` did not exist.
+ * RED before the fix: `buildLinkedinUploadNotice`/`summarizeIngestedCounts`
+ * did not exist on `components/settings/career-data`.
  */
 import { describe, expect, it } from "vitest";
 
-import { buildLinkedinUploadNotice, summarizeIngestedCounts } from "../../components/settings/linkedin-upload";
-import type { LinkedinExportUploadResult } from "../../lib/api/workspaces";
+import {
+  buildLinkedinUploadNotice,
+  summarizeIngestedCounts,
+  type LinkedinExportUploadResult,
+} from "../../components/settings/career-data";
 
 describe("summarizeIngestedCounts", () => {
   it("lists every non-zero section, singular/plural correctly", () => {
@@ -77,13 +81,5 @@ describe("buildLinkedinUploadNotice", () => {
       linkedinNote: "note",
     };
     expect(buildLinkedinUploadNotice(empty)).toBe("No usable data found.");
-  });
-});
-
-describe("describeUploadError re-export", () => {
-  it("re-exports the same helper /resumes/upload uses (shared rejection shape)", async () => {
-    const { describeUploadError } = await import("../../components/settings/linkedin-upload");
-    const { describeUploadError: original } = await import("../../components/settings/resume-upload");
-    expect(describeUploadError).toBe(original);
   });
 });
