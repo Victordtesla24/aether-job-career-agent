@@ -278,6 +278,49 @@ def ensure_admin_user_columns() -> None:
     _admin_user_columns_ready = True
 
 
+#: Guard so the additive password-reset support column on ``User`` is only
+#: ensured once per worker process (see ``ensure_password_reset_columns``).
+_password_reset_columns_ready = False
+
+
+def ensure_password_reset_columns() -> None:
+    """Idempotently add the additive ``User."passwordChangedAt"`` column.
+
+    O-4 (self-service password reset). Stamped by
+    ``UserRepository.set_password`` on every successful
+    ``POST /auth/reset-password``. ``app.middleware.auth.get_current_user``
+    compares it against the JWT's ``iat`` claim so a reset invalidates every
+    access token minted before it — the only "invalidate sessions" mechanism
+    available without a server-side session store, since tokens are otherwise
+    verified purely by signature + expiry. Lazy DDL (ADR-TR-1); NULL for every
+    pre-existing user reads as "never reset" and is skipped by that comparison,
+    so no existing session is affected until its owner actually resets. A
+    transaction-scoped advisory lock serializes concurrent first-hit callers;
+    ``TRUNCATE`` never drops columns, so this survives the test-suite teardown.
+    """
+    global _password_reset_columns_ready
+    if _password_reset_columns_ready:
+        return
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT count(*) FROM information_schema.columns"
+                " WHERE table_name = 'User'"
+                " AND table_schema = ANY(current_schemas(false))"
+                " AND column_name = 'passwordChangedAt'"
+            )
+            row = cur.fetchone()
+            if row and row[0] == 1:
+                _password_reset_columns_ready = True
+                return
+            cur.execute("SELECT pg_advisory_xact_lock(%s)", (7420260805,))
+            cur.execute(
+                'ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "passwordChangedAt" timestamptz'
+            )
+        conn.commit()
+    _password_reset_columns_ready = True
+
+
 #: Guard so the additive ``Resume`` approval + original-upload columns are only
 #: ensured once per worker process (see ``ensure_resume_columns``).
 _resume_columns_ready = False

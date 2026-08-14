@@ -19,8 +19,10 @@ from fastapi.responses import JSONResponse
 from app.config import get_settings
 from app.rate_limit import (
     SlidingWindowRateLimiter,
+    build_forgot_password_rate_limiter,
     build_login_rate_limiter,
     build_register_rate_limiter,
+    build_reset_password_rate_limiter,
 )
 from app.routers import (
     admin,
@@ -389,6 +391,10 @@ def create_app() -> FastAPI:
     # identifier; ``register_rate_limiter`` caps register attempts per email.
     app.state.login_rate_limiter = build_login_rate_limiter()
     app.state.register_rate_limiter = build_register_rate_limiter()
+    # O-4: forgot-password (per-email, every attempt counts) / reset-password
+    # (per-token, only failures count) — same per-app isolation rationale.
+    app.state.forgot_password_rate_limiter = build_forgot_password_rate_limiter()
+    app.state.reset_password_rate_limiter = build_reset_password_rate_limiter()
     # Billing limiters, keyed by user id (per-worker): checkout 5/hr, portal
     # 10/hr — blunt double-click session minting / portal abuse (billing §3).
     app.state.checkout_rate_limiter = SlidingWindowRateLimiter(
