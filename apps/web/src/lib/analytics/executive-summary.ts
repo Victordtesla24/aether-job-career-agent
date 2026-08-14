@@ -468,24 +468,35 @@ function spendTile(input: ExecutiveSummaryInput): ExecTileModel {
   const perApplication = comparable && funnel.applied > 0 ? source.cost / funnel.applied : null;
   const perInterview =
     comparable && funnel.interviewed > 0 ? source.cost / funnel.interviewed : null;
-  const mismatch = `agent spend is all-time but the funnel is scoped to ${period}`;
+
+  /*
+   * WHY A RATIO IS MISSING — three different reasons, never conflated.
+   *
+   * The windows failing to line up and the funnel simply not having loaded are
+   * not the same fact, and telling a reader to "select the all period" when the
+   * funnel endpoint is the thing that is down sends them somewhere that cannot
+   * help. `null` here means the stage itself is empty, which each row states in
+   * its own words below.
+   */
+  const blocked: string | null = !windowsAlign
+    ? `agent spend is all-time but the funnel is scoped to ${period}`
+    : funnel === null
+      ? "the funnel has not loaded, so there is no denominator to divide by"
+      : null;
 
   const data: ChartDatum[] = [
     {
       label: "Cost per submitted application",
       value: perApplication,
       display: perApplication === null ? undefined : money(perApplication),
-      note: comparable
-        ? "No application has been submitted yet, so there is nothing to divide by."
-        : mismatch,
+      note: blocked ?? "No application has been submitted yet, so there is nothing to divide by.",
     },
     {
       label: "Cost per interview",
       value: perInterview,
       display: perInterview === null ? undefined : money(perInterview),
-      note: comparable
-        ? "No application has reached an interview yet, so there is nothing to divide by."
-        : mismatch,
+      note:
+        blocked ?? "No application has reached an interview yet, so there is nothing to divide by.",
     },
   ];
 
@@ -502,9 +513,12 @@ function spendTile(input: ExecutiveSummaryInput): ExecTileModel {
     spark: {
       kind: "bars",
       data,
-      nullMeaning: comparable
-        ? "no application has reached that stage yet, so there is nothing to divide by"
-        : `agent spend is all-time and the funnel is scoped to ${period} — the two windows cannot be divided`,
+      nullMeaning:
+        blocked === null
+          ? "no application has reached that stage yet, so there is nothing to divide by"
+          : !windowsAlign
+            ? `agent spend is all-time and the funnel is scoped to ${period} — the two windows cannot be divided`
+            : blocked,
     },
     delta:
       source.runs > 0
@@ -519,9 +533,11 @@ function spendTile(input: ExecutiveSummaryInput): ExecTileModel {
     insight:
       perApplication !== null
         ? `${money(perApplication)} per submitted application.`
-        : comparable
+        : blocked === null
           ? "No application submitted yet, so cost per application cannot be divided."
-          : `Select the “all” period to compare spend with the funnel like for like.`,
+          : !windowsAlign
+            ? `Select the “all” period to compare spend with the funnel like for like.`
+            : "The funnel has not loaded, so cost per application cannot be divided.",
     basis,
     measured: true,
   };

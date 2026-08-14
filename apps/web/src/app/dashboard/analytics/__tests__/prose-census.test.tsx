@@ -485,6 +485,75 @@ describe("RULE 4 — no bulleted paragraphs", () => {
   });
 });
 
+/**
+ * ROUND 2 / F1 — the "Dashboard summary" StatBlock grid is deleted, and the
+ * SHAPE that let it exist is pinned shut behind it.
+ *
+ * Deleting the grid closes the instance. It does not close the class: the four
+ * rules above census PROSE, and seven bare numerals in a grid are not prose, so
+ * a chartless block could be re-added tomorrow without a single rule going red.
+ * That is precisely how F1 survived round 1 — every prose rule passed while a
+ * zero-chart section sat under the executive band restating it.
+ *
+ * So the mandate's other half ("ONLY visualisations… remove everything else")
+ * gets its own mechanical rule, at the granularity the defect had: a TOP-LEVEL
+ * BLOCK of a view. Anything a reader scrolls past as a distinct slab must draw
+ * something. Inside a block, a numeral beside its own mark is fine — the stage
+ * conversion `<dl>` sits in the same section as the bullet chart that judges it
+ * against target, and that is the attachment the mandate asks for.
+ */
+describe("RULE 5 — every top-level block in a view DRAWS", () => {
+  it("no longer renders the bare-numeral Dashboard summary grid", async () => {
+    const container = await renderPage();
+    expect(screen.queryByTestId("dashboard-summary")).toBeNull();
+    expect(text(container)).not.toContain("Dashboard summary");
+  });
+
+  /*
+   * A PINNED CENSUS, not a pass/fail with an escape hatch.
+   *
+   * Running this rule page-wide found a SECOND block of F1's exact class that
+   * no finding named: `agent-roi` on Quality & ROI is five bare-numeral tiles
+   * with no mark of any kind — and on the default "all" period its spend and
+   * its two cost-per ratios are the same figures the band's spend tile draws
+   * above, which is word for word the complaint F1 made about the deleted
+   * Dashboard summary.
+   *
+   * It is NOT fixed here and NOT exempted here. F1's remedy was deletion, and
+   * this slice's brief lists "ROI tile prose → captions" — keep the tiles — so
+   * deleting them is a ruling, not a fixer's call; while `/analytics/agent-roi`
+   * returns three scalars in three different units (dollars, a count, seconds),
+   * so there is no honest shared scale to draw them on either. Escalated as F3.
+   *
+   * Pinning the census rather than skipping the tab is what keeps this from
+   * being the F2 mistake (a mechanism used to pass a test instead of to satisfy
+   * the rule): a NEW chartless block fails this test, and so does removing this
+   * one — which forces the list back to `[]` the moment the ruling lands.
+   */
+  const CHARTLESS_AWAITING_RULING = ["analytics-panel-quality → Agent ROI"];
+
+  it("has exactly one chartless top-level block left, the one awaiting a ruling (F3)", async () => {
+    const container = await renderPage();
+    const chartless = (Array.from(container.querySelectorAll('[role="tabpanel"]')) as HTMLElement[])
+      .flatMap((panel) =>
+        (Array.from(panel.children) as HTMLElement[])
+          // A block that renders nothing claims nothing; the rule is about
+          // blocks that put content on screen without drawing it.
+          .filter((block) => text(block).length > 0)
+          .filter((block) => block.querySelector(VISUAL_SELECTOR) === null)
+          .map((block) => {
+            const view = panel.getAttribute("data-testid");
+            // Identify by the block's own heading, so the pin survives a copy
+            // edit inside the block but never survives a NEW block appearing.
+            const heading = block.querySelector("h1, h2, h3");
+            return `${view} → ${heading === null ? text(block).slice(0, 60) : text(heading).split("(")[0].trim()}`;
+          }),
+      );
+
+    expect(chartless).toEqual(CHARTLESS_AWAITING_RULING);
+  });
+});
+
 describe("the honesty content that used to be prose is still on screen", () => {
   it("keeps the conversion gap and its policy claim as an attached caption, not a hover", async () => {
     await renderPage();

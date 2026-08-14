@@ -263,6 +263,20 @@ describe("the spend tile refuses to divide two different windows", () => {
     expect(t.spark.nullMeaning).toContain("7d");
   });
 
+  it("does not blame the window when the FUNNEL is what failed", () => {
+    // Round 2: windows that cannot be divided and a denominator that never
+    // arrived are different facts. Telling a reader to "select the all period"
+    // while the funnel endpoint is down sends them somewhere that cannot help.
+    const t = tile("spend", { funnel: null });
+    expect(t.spark.data[0].value).toBeNull();
+    expect(t.spark.data[0].note).toBe(
+      "the funnel has not loaded, so there is no denominator to divide by",
+    );
+    expect(t.insight).toBe("The funnel has not loaded, so cost per application cannot be divided.");
+    expect(t.insight).not.toContain("Select the");
+    expect(t.spark.nullMeaning).not.toContain("all-time");
+  });
+
   it("withholds the ratio when the denominator is empty, and says why", () => {
     const t = tile("spend", {
       funnel: { period: "all", jobs_found: 3, applied: 0, screened: 0, interviewed: 0, offers: 0 },
