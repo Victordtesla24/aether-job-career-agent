@@ -15,25 +15,32 @@ So no caller may *assert* fidelity any more. This module re-reads the artifact
 that was just produced and answers one question per requested change: is the
 reworded text actually IN the file the user downloads?
 
-Why coverage instead of a plain substring test
-----------------------------------------------
+Why word-coverage instead of a plain substring test
+----------------------------------------------------
 A spliced PDF draws a bullet's bold lead-in and its grey body through two
-different PyMuPDF ``TextWriter``s, so the extracted text stream can interleave
-unrelated page content between them: a genuinely applied rewrite is then not a
-contiguous substring of the extracted text. Measured on the real production
-artifact above, exact-substring matching reported 2 of 3 applied changes as
-missing — it would have replaced one false claim with another. Word-shingle
-coverage separates the cases cleanly on that same file:
+different PyMuPDF ``TextWriter``s, and the splice commits the grey writer first
+and the bold writer last, so ``page.get_text`` can return the lead-in far from
+its body: a genuinely applied rewrite is then not a contiguous substring of the
+extracted text. Exact-substring matching reported 2 of 3 applied changes as
+missing on the real production artifact — it would have replaced one false claim
+with another. So a change is scored by how much of its wording the produced file
+carries (:func:`_coverage`), against the applied bar :data:`_APPLIED_COVERAGE`
+= 0.85.
 
-===========================  ==============  ================
-change                       after-coverage  truth
-===========================  ==============  ================
-bullet-0 (left rail)         0.087           NOT applied
-bullet-4 (bold lead-in)      0.917           applied
-bullet-8 / bullet-11         1.000           applied
-===========================  ==============  ================
+That coverage counts carried WORDS, not the fraction of intact word-shingles.
+The distinction is not academic: the shingle-FRACTION score this replaced sank a
+FULLY-present rewrite below the bar whenever a bullet was long enough for the
+two-writer seam (or a wrapped hyphenated compound) to break a handful of its
+shingles. The live two-column résumé cfe7a0f→c12187 is the proof — an applied
+bold-lead-in rewrite scored 0.839 and an untouched wrapped bullet 0.829, both
+under 0.85, so the whole preserved two-column layout was dropped to the 9.4 KB
+branded single-column template over content a raster + PyMuPDF re-extraction
+proved present verbatim (MODELS-LIVE R-FMT refix,
+``uat/reports/evidence/market-perf/resume-format/refix/``). Word-coverage forgives
+the seam — the words on both sides are each carried by shingles wholly inside
+their own run — while a genuinely dropped span still leaves its words in no
+surviving shingle and scores low, so the completeness guard is intact.
 
-Hence :data:`_APPLIED_COVERAGE` = 0.85, comfortably between the two clusters.
 A file that cannot be re-read at all reports ``text_extracted = False`` —
 honestly "unverified", never "everything was dropped".
 """
@@ -44,11 +51,11 @@ from typing import Sequence
 
 #: Words per shingle. Long enough that ordinary résumé phrasing ("and the
 #: team") cannot match by chance, short enough that a two-writer split costs
-#: only a handful of shingles.
+#: only the handful of words on the seam itself.
 _SHINGLE = 6
 
-#: Fraction of a rewrite's shingles that must be present in the produced
-#: artifact for it to count as genuinely applied (calibrated above).
+#: Fraction of a rewrite's WORDS that must be carried by the produced artifact
+#: (:func:`_coverage`) for it to count as genuinely applied (calibrated above).
 _APPLIED_COVERAGE = 0.85
 
 #: How many characters of a dropped rewrite are quoted back to the user.
@@ -103,16 +110,47 @@ def extract_artifact_text(data: bytes, media_type: str) -> str | None:
 
 
 def _coverage(text: str, haystack: str) -> float:
-    """Fraction of ``text``'s word shingles present in ``haystack`` (0.0–1.0)."""
+    """Fraction of ``text``'s WORDS carried by ``haystack`` (0.0–1.0).
+
+    A word counts as carried when it sits inside at least one of ``text``'s
+    :data:`_SHINGLE`-word phrases that appears verbatim in ``haystack`` — present
+    *in the company of its neighbours*, so an incidental single-word match can
+    never inflate the score, which is the whole reason a shingle (not a bare word)
+    is the unit.
+
+    Scoring carried WORDS rather than the fraction of intact shingles is what
+    makes the measure robust to how the renderer split the text into styled runs.
+    A two-writer bullet — a bold lead-in and a grey body drawn by separate
+    ``TextWriter``s (:func:`app.services.resume_pdf._render_block`) — is committed
+    to the PDF content stream as the grey ``reg`` writer first and the bold writer
+    last, so ``page.get_text`` returns the lead-in far from its body; likewise a
+    hyphenated compound that wraps a visual line ("test-" / "evidence") lands as
+    two tokens. Either way a handful of shingles STRADDLING that seam are absent
+    even though every word is on the page. Under the previous shingle-FRACTION
+    score those few seam misses sank a fully-present rewrite below
+    :data:`_APPLIED_COVERAGE`, and the live two-column résumé cfe7a0f→c12187 paid
+    for it: an applied bold-lead-in rewrite scored 0.839 and an untouched wrapped
+    bullet 0.829, so the whole preserved two-column layout was dropped to the
+    branded single-column template over content a raster + PyMuPDF re-extraction
+    proved present verbatim (MODELS-LIVE R-FMT refix,
+    ``uat/reports/evidence/market-perf/resume-format/refix/``). The words on BOTH
+    sides of a seam are still each carried by shingles wholly inside their own run,
+    so this score reads them as present; a genuinely DROPPED span leaves its words
+    in no surviving shingle and still scores low, so the completeness guard the
+    U2b round added is intact — the seam is forgiven, real loss is not.
+    """
     tokens = _normalize(text).split()
-    if not tokens:
+    total = len(tokens)
+    if total == 0:
         return 0.0
-    if len(tokens) <= _SHINGLE:
+    if total <= _SHINGLE:
         return 1.0 if " ".join(tokens) in haystack else 0.0
-    shingles = [
-        " ".join(tokens[i:i + _SHINGLE]) for i in range(len(tokens) - _SHINGLE + 1)
-    ]
-    return sum(1 for shingle in shingles if shingle in haystack) / len(shingles)
+    carried = [False] * total
+    for start in range(total - _SHINGLE + 1):
+        if " ".join(tokens[start:start + _SHINGLE]) in haystack:
+            for index in range(start, start + _SHINGLE):
+                carried[index] = True
+    return sum(carried) / total
 
 
 @dataclass(frozen=True)

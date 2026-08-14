@@ -973,3 +973,186 @@ def test_harness_docx_flags_a_changed_header_footer_and_media():
     media_diff = compare_docx_structure(original, changed_media)
     assert media_diff.styles_preserved is False, media_diff
     assert "word/media/image1.png" in media_diff.changed_style_parts, media_diff
+
+
+# ---------------------------------------------------------------------------
+# (10) REFIX — a LONG two-writer bullet (bold lead-in + grey body) is recognised
+#      as PRESENT.  The 19 short-bullet fixtures above missed this whole class.
+#
+#      On the real two-column résumé cfe7a0f→c12187 (baseline
+#      cfe7a0f27991821dc73f265cd → tailored child c12187d107bf994471844e09a, 10
+#      changes / 8 placed / 2 unplaceable) the in-place completeness check named
+#      TWO bullets "missing" that a raster + PyMuPDF re-extraction proved present
+#      verbatim, so the whole preserved two-column layout was dropped to the 9.4 KB
+#      branded single-column template — the exact live defect this slice exists to
+#      remove, still shipping.  Both false negatives came from the shingle-fraction
+#      matcher (``format_verification._coverage``) under-counting a bullet whose
+#      text the renderer split across styled runs:
+#
+#      * an APPLIED bold-lead-in rewrite scored 0.839 — ``resume_pdf._render_block``
+#        commits the grey ``reg`` writer first and the bold lead-in writer last, so
+#        ``page.get_text`` returns the lead-in far from its body and the handful of
+#        shingles straddling that seam were absent even though every word was on the
+#        page.  Below 0.85 it read as "dropped", so the completeness contract then
+#        expected the ORIGINAL wording (already redacted away) and reported it lost;
+#      * an UNTOUCHED wrapped bullet scored 0.829 — a hyphenated compound broke over
+#        a visual line ("test-" / "evidence"), so its own source bytes carried the
+#        whole bullet yet a few shingles crossed the wrap.
+#
+#      Evidence: uat/reports/evidence/market-perf/resume-format/refix/.
+# ---------------------------------------------------------------------------
+
+#: A fixed, deterministic rewrite body long enough that, paired with the ≥6-word
+#: bold lead-in below, the lead-in/body seam sinks the OLD shingle-fraction score
+#: to ~0.76 (below the 0.85 applied bar) while every word is on the page.
+_LONG_TWO_WRITER_AFTER_BODY = (
+    "Led the technical delivery of AI solutions including real-time telemetry "
+    "servers for large scale device concurrency and latency reduction."
+)
+
+
+def _long_lead_in_bundled_bullet() -> str:
+    """A bundled right-column work bullet with a LONG (≥6-word) bold lead-in.
+
+    Derived from the résumé asset at run time (never hard-coded prose), so the
+    fixture exercises the real two-writer geometry: the redraw keeps this long
+    lead-in in the bold weight and draws the reworded body in grey, which is the
+    split ``page.get_text`` reports non-adjacently.
+    """
+    from app.services.resume_pdf import extract_pdf_bullets
+
+    for bullet in extract_pdf_bullets(_bundled_pdf()):
+        head = bullet.split(":", 1)[0]
+        if ":" in bullet and len(head.split()) >= 6 and len(bullet) > 120:
+            return bullet
+    raise AssertionError("bundled résumé must have a long-lead-in work bullet")
+
+
+def test_coverage_counts_a_long_two_writer_bullet_split_across_runs_as_present():
+    """A LONG bold-lead-in rewrite the splice PLACES is scored APPLIED.
+
+    RED before the refix: the lead-in/body seam sinks the shingle-fraction score
+    to ~0.76, below the applied bar, even though every word is on the page —
+    exactly what marked change[3] of the live record "dropped".
+    """
+    from app.services.format_verification import (
+        _APPLIED_COVERAGE,
+        _coverage,
+        _normalize,
+        extract_artifact_text,
+        verify_changes,
+    )
+    from app.services.resume_pdf import render_tailored_pdf
+
+    bullet = _long_lead_in_bundled_bullet()
+    head = bullet.split(":", 1)[0]
+    after = f"{head}: {_LONG_TWO_WRITER_AFTER_BODY}"
+    spliced = render_tailored_pdf(_bundled_pdf(), [(bullet, after)])
+    haystack = _normalize(extract_artifact_text(spliced, "application/pdf") or "")
+
+    # The text really IS on the page: every word is present, and the bold lead-in
+    # and the grey body each appear verbatim — just NOT as one contiguous run,
+    # because the splice commits the grey writer first and the bold writer last.
+    assert all(word in haystack for word in _normalize(after).split()), (
+        "fixture sanity: every word of the rewrite must be on the page"
+    )
+    assert _normalize(head) in haystack, "the bold lead-in is present verbatim"
+    assert _normalize(_LONG_TWO_WRITER_AFTER_BODY) in haystack, "the grey body is present verbatim"
+    assert _normalize(after) not in haystack, (
+        "fixture sanity: the two-writer seam really does split the lead-in from "
+        "the body in the extracted text layer"
+    )
+
+    # The matcher must read the split-but-complete rewrite as PRESENT.
+    assert _coverage(after, haystack) >= _APPLIED_COVERAGE, (
+        "a two-writer bullet whose every word is on the page must clear the "
+        f"applied bar, got {_coverage(after, haystack):.3f}"
+    )
+    result = verify_changes(spliced, "application/pdf", [(bullet, after)])
+    assert result.applied_count == 1, [round(o.coverage, 3) for o in result.outcomes]
+
+
+def test_is_present_counts_an_untouched_wrapped_two_writer_bullet_as_present():
+    """An UNTOUCHED wrapped bullet reads as present against its own source bytes.
+
+    RED before the refix: a hyphenated compound broke across a visual line, so a
+    few shingles crossed the wrap and the shingle-fraction score fell to ~0.83 —
+    flagging a bullet the splice never even touched as "missing content" and
+    dropping the whole layout to branded.
+    """
+    from app.services.format_verification import _normalize, extract_artifact_text
+    from app.services.resume_completeness import _is_present
+    from app.services.resume_pdf import extract_pdf_bullets
+
+    source = _bundled_pdf().read_bytes()
+    haystack = _normalize(extract_artifact_text(source, "application/pdf") or "")
+    # Long work bullets whose text is NOT a contiguous run in the flat text layer
+    # (a line wrap split them) — the class the old matcher under-counted.
+    wrapped = [
+        bullet
+        for bullet in extract_pdf_bullets(_bundled_pdf())
+        if len(bullet) > 200 and _normalize(bullet) not in haystack
+    ]
+    assert wrapped, "fixture sanity: the bundled résumé must have a wrapped long bullet"
+    for bullet in wrapped:
+        assert _is_present(bullet, haystack), (
+            "an untouched wrapped bullet, carried verbatim by its own source "
+            f"bytes, must read as present: {bullet[:80]!r}"
+        )
+
+
+def test_long_two_writer_rewrite_ships_preserved_not_branded(client, auth_headers):
+    """End-to-end: a LONG two-writer rewrite ships the preserved two-column PDF.
+
+    The exact shape of the live cfe7a0f→c12187 failure: one right-column bullet
+    with a long bold lead-in is reworded (the splice PLACES it, but the seam sank
+    the old score below the applied bar → the completeness check then expected the
+    now-redacted original and dropped the whole layout to the branded template),
+    and one left-rail line is reworded (structurally unplaceable, kept as residue).
+    The download must be the preserved two-column splice, NOT branded.
+    """
+    from app.repositories.resume import ResumeRepository
+
+    left = _left_rail_line()
+    right = _long_lead_in_bundled_bullet()
+    user_id = _user_id(client, auth_headers)
+    repo = ResumeRepository()
+    baseline = repo.create(
+        user_id,
+        {
+            "raw_text": f"{left}\n{right}",
+            "bullets": [
+                {"text": left, "evidenceRef": "bullet-0"},
+                {"text": right, "evidenceRef": "bullet-1"},
+            ],
+            "contact": {},
+        },
+        hashlib.sha256(_bundled_pdf().read_bytes()).hexdigest(),
+        label="Baseline — long two-writer layout",
+        version=repo.next_version(user_id),
+    )
+    head = right.split(":", 1)[0]
+    long_after = f"{head}: {_LONG_TWO_WRITER_AFTER_BODY}"
+    child = _tailor_child(
+        client,
+        auth_headers,
+        baseline,
+        {"bullet-0": _left_after(left), "bullet-1": long_after},
+    )
+
+    fidelity = client.get(f"/resumes/{child['id']}/fidelity", headers=auth_headers).json()
+    assert fidelity["method"] == "pdf-in-place-splice", fidelity
+    assert fidelity["method"] != "reflow-template", (
+        "the LONG two-writer rewrite is placed and complete — the preserved "
+        f"two-column layout must ship, not the branded template: {fidelity}"
+    )
+    assert fidelity["formatPreserved"] is True, fidelity
+    assert fidelity["changesApplied"] == 1, fidelity
+    assert fidelity["changesDropped"] == 1, fidelity
+
+    child_dl = client.get(f"/resumes/{child['id']}/download", headers=auth_headers)
+    assert child_dl.headers["X-Aether-Format-Method"] == "pdf-in-place-splice"
+    text = " ".join(_pdf_text(child_dl.content).split())
+    assert "real-time telemetry servers" in text, (
+        "the reworded body must be present verbatim in the produced PDF"
+    )
