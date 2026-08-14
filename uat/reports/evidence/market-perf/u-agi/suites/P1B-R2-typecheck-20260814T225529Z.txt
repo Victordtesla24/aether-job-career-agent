@@ -1,0 +1,6 @@
+P1-B ROUND-2 — type-check gate (final tree)
+cmd: node_modules/.bin/tsc --noEmit   (== pnpm type-check, cwd apps/web)
+captured UTC: 2026-08-14T22:55:41Z
+exit code: 0
+----------------------------------------------------------------------
+(nothing between the rule and this line == zero type errors)

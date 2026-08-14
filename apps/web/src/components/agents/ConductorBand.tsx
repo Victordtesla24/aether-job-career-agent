@@ -325,7 +325,7 @@ export default function ConductorBand({
                 : runView?.tone === "warn"
                   ? "border-state-warn/40 bg-state-warn/10"
                   : runView?.tone === "error" || run.phase === "error"
-                    ? "border-state-err/40 bg-state-err/10"
+                    ? "border-state-danger/40 bg-state-danger/10"
                     : "border-hairline bg-surface-1"
             }`}
           >

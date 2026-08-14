@@ -382,7 +382,7 @@ const HOP = {
     to: "agent.jobDiscovery",
     kind: "triggers",
     mechanism: "_pipeline_core sequential _dispatch",
-    evidence: "apps/api/app/routers/agents.py:3675,3697",
+    evidence: "apps/api/app/routers/agents.py:3689,3711",
     discoveryEvidence: "apps/api/app/routers/agents.py:3380",
     anchors: ["def _pipeline_core(", 'scout_out = _dispatch(user_id, "scout", params)'],
     status: "live",

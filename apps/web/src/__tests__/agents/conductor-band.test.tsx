@@ -26,6 +26,10 @@
  *
  * Written BEFORE the implementation.
  */
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -162,6 +166,26 @@ function props(over: Partial<ConductorBandProps> = {}): ConductorBandProps {
     onRunEverything: vi.fn(),
     onDismissRun: vi.fn(),
     busyBackend: null,
+    ...over,
+  };
+}
+
+/** A recorded run plan, in the shape GET /agents/orchestration/plans/{id} returns. */
+function runRecord(over: Record<string, unknown>) {
+  return {
+    id: "plan-1",
+    status: "running",
+    initiator: "user",
+    concurrency: 1,
+    spacingSeconds: 5,
+    steps: [],
+    summary: null,
+    haltedAtStep: null,
+    haltReason: null,
+    startedAt: "2026-08-14T09:00:00",
+    finishedAt: null,
+    createdAt: "2026-08-14T09:00:00",
+    updatedAt: "2026-08-14T09:00:00",
     ...over,
   };
 }
@@ -437,22 +461,7 @@ describe("CONDUCTOR BAND — the plan view", () => {
 // ---------------------------------------------------------------------------
 
 describe("CONDUCTOR BAND — run states are honest", () => {
-  const record = (over: Record<string, unknown>) => ({
-    id: "plan-1",
-    status: "running",
-    initiator: "user",
-    concurrency: 1,
-    spacingSeconds: 5,
-    steps: [],
-    summary: null,
-    haltedAtStep: null,
-    haltReason: null,
-    startedAt: "2026-08-14T09:00:00",
-    finishedAt: null,
-    createdAt: "2026-08-14T09:00:00",
-    updatedAt: "2026-08-14T09:00:00",
-    ...over,
-  });
+  const record = runRecord;
 
   it("says running while the server says running, and claims no outcome", () => {
     render(
@@ -508,5 +517,134 @@ describe("CONDUCTOR BAND — run states are honest", () => {
     const status = screen.getByTestId("conductor-run-status");
     expect(status.textContent).toContain("A run plan is already in flight for this account");
     expect(status.textContent).not.toMatch(/success|complete/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 8. The failure signal is PAINTED, not just worded
+// ---------------------------------------------------------------------------
+/**
+ * P1-B round-1 review, must-fix #1.
+ *
+ * Every assertion in section 7 reads `textContent`. That is the whole hole: a
+ * class name naming a colour token Tailwind does not define keeps the words
+ * correct while emitting ZERO css rules, so the halted/failed banner — the one
+ * element in this component whose job is to signal that something went wrong —
+ * renders with no red tint and reads, at a glance, exactly like a healthy one.
+ * The shipped band did precisely that: `state-err` is not in the palette
+ * (apps/web/tailwind.config.ts defines ok/warn/danger/info/neutral/degraded).
+ *
+ * These tests close it generically rather than pinning one string: the palette
+ * is read out of the REAL Tailwind config at test time, and every `state-*`
+ * utility the band can paint with must name a token that file actually defines.
+ * A future invented token fails here whatever it is called.
+ */
+
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = path.resolve(HERE, "../../../../..");
+const TAILWIND_CONFIG = "apps/web/tailwind.config.ts";
+
+/** The colour utilities Tailwind can prefix a palette token with. */
+const COLOUR_UTILITY =
+  "(?:bg|text|border|ring|outline|fill|stroke|from|via|to|shadow|divide|decoration|accent|caret|placeholder)(?:-[trblxyse])?";
+
+/** The `state` palette, read out of the real config — never re-declared here. */
+function definedStateTokens(): string[] {
+  const source = readFileSync(path.join(REPO_ROOT, TAILWIND_CONFIG), "utf8");
+  const block = /\n\s*state:\s*\{([^}]*)\}/.exec(source);
+  if (!block) throw new Error(`no theme.extend.colors.state block in ${TAILWIND_CONFIG}`);
+  return Array.from(block[1].matchAll(/^\s*([A-Za-z][\w-]*)\s*:/gm)).map((m) => m[1]);
+}
+
+/** Every `state-<token>` a source file paints with, from a colour utility only. */
+function stateTokensInSource(relPath: string): string[] {
+  const source = readFileSync(path.join(REPO_ROOT, relPath), "utf8");
+  const found = source.matchAll(new RegExp(`${COLOUR_UTILITY}-state-([a-z][a-z0-9]*)`, "g"));
+  return Array.from(new Set(Array.from(found).map((m) => m[1])));
+}
+
+/** Every `state-<token>` actually present on a rendered node's class list. */
+function stateTokensInDom(root: HTMLElement): string[] {
+  const seen = new Set<string>();
+  root.querySelectorAll("[class]").forEach((node) => {
+    node.classList.forEach((cls) => {
+      const m = new RegExp(`^(?:[a-z-]+:)*${COLOUR_UTILITY}-state-([a-z][a-z0-9]*)`).exec(cls);
+      if (m) seen.add(m[1]);
+    });
+  });
+  return Array.from(seen);
+}
+
+describe("CONDUCTOR BAND — the status banner paints with tokens that exist", () => {
+  const record = runRecord;
+
+  it("reads a real state palette out of tailwind.config.ts (and it has no 'err')", () => {
+    const tokens = definedStateTokens();
+    expect(tokens).toContain("danger");
+    expect(tokens).toContain("ok");
+    expect(tokens).not.toContain("err");
+  });
+
+  it.each([
+    "apps/web/src/components/agents/ConductorBand.tsx",
+    "apps/web/src/components/agents/ConductorRail.tsx",
+  ])("%s paints only with defined state tokens, on every branch", (relPath) => {
+    const defined = definedStateTokens();
+    const used = stateTokensInSource(relPath);
+    const undefinedTokens = used.filter((t) => !defined.includes(t));
+    expect({ file: relPath, undefinedTokens }).toEqual({ file: relPath, undefinedTokens: [] });
+  });
+
+  const BANNER_CASES = {
+    halted: record({ status: "halted", haltedAtStep: "tailor", haltReason: "quota" }),
+    failed: record({ status: "failed" }),
+    partial: record({ status: "partial" }),
+    completed: record({ status: "completed" }),
+    running: record({}),
+  };
+
+  Object.entries(BANNER_CASES).forEach(([status, rec]) => {
+    it(`renders the ${status} banner with state classes Tailwind can resolve`, () => {
+      const { container } = render(
+        <ConductorBand
+          {...props({
+            run: { phase: "settled", planId: "plan-1", record: rec, error: null },
+          })}
+        />,
+      );
+      const defined = definedStateTokens();
+      expect(stateTokensInDom(container).filter((t) => !defined.includes(t))).toEqual([]);
+    });
+  });
+
+  it("tints the halted banner red — the border AND the background, not the words alone", () => {
+    render(
+      <ConductorBand
+        {...props({
+          run: {
+            phase: "settled",
+            planId: "plan-1",
+            record: record({ status: "halted", haltedAtStep: "tailor", haltReason: "quota" }),
+            error: null,
+          },
+        })}
+      />,
+    );
+    const status = screen.getByTestId("conductor-run-status");
+    expect(status.className).toContain("border-state-danger/40");
+    expect(status.className).toContain("bg-state-danger/10");
+  });
+
+  it("tints the 'plan did not start' banner red too", () => {
+    render(
+      <ConductorBand
+        {...props({
+          run: { phase: "error", planId: null, record: null, error: "upstream refused" },
+        })}
+      />,
+    );
+    const status = screen.getByTestId("conductor-run-status");
+    expect(status.className).toContain("border-state-danger/40");
+    expect(status.className).toContain("bg-state-danger/10");
   });
 });
