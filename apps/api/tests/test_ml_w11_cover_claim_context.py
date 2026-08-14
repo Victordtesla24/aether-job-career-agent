@@ -35,7 +35,11 @@ from __future__ import annotations
 import pytest
 from conftest import seed_own_resume
 
-from app.agents.cover_letter_agent import CoverLetterAgent, FabricationError
+from app.agents.cover_letter_agent import (
+    CoverLetterAgent,
+    FabricationError,
+    gate_pass_labels,
+)
 from app.repositories.job import JobRepository
 from app.services.fabrication_guard import FabricationGuard
 from app.services.resume_tailor import unsupported_claim_tokens
@@ -257,10 +261,17 @@ class _StubLLM:
         self.body = body
         self.calls = 0
         self.prompts: list[str] = []
+        self.fixture_keys: list[str] = []
 
     def complete_json(self, prompt_name, system, user, **kwargs):  # noqa: ANN001
         self.calls += 1
         self.prompts.append(user)
+        # U2c: the agent labels each draft with WHY it was made — "default",
+        # a corrective "retry"/"retry2" the guards forced, or a "quality"
+        # quality-gate pass. Recording the label lets a test assert the reason
+        # a draft happened instead of inferring it from a raw call count, which
+        # conflates two different budgets.
+        self.fixture_keys.append(str(kwargs.get("fixture_key") or "default"))
         return {"hook_reason": self.hook_reason, "body": self.body}
 
 
@@ -319,7 +330,16 @@ def test_honest_aspirational_letter_is_produced(client, auth_headers) -> None:
     assert "trust and safety" in result.cover_letter
     assert "marketplace challenges" in result.cover_letter
     assert result.approval_id, "no approval created for the drafted letter"
-    assert llm.calls == 1, f"an honest draft must not trigger a retry: {llm.calls}"
+    # THE claim: the guards accepted the first draft, so no CORRECTIVE retry was
+    # burned. U2c added a second, unrelated reason a draft can be re-run — the
+    # quality gate spending its small env-capped budget trying to lift a
+    # dimension above the 80% floor — so this asserts the STAGE rather than the
+    # raw call count, which would otherwise read a gate pass as a guard failure.
+    assert [k for k in llm.fixture_keys if k.startswith("retry")] == [], (
+        f"an honest draft must not trigger a corrective retry: {llm.fixture_keys}"
+    )
+    # ...and whatever the gate spent stayed inside its bounded budget.
+    assert llm.calls <= 1 + len(gate_pass_labels()), llm.fixture_keys
 
 
 def test_fabricated_experience_letter_is_still_rejected(client, auth_headers) -> None:

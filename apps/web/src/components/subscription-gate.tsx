@@ -57,6 +57,7 @@ const GATE_EXEMPT_PREFIXES: readonly string[] = ["/dashboard/settings"];
 const KNOWN_DASHBOARD_SECTIONS: readonly string[] = [
   "/dashboard/agents",
   "/dashboard/analytics",
+  "/dashboard/answer-bank",
   "/dashboard/applications",
   "/dashboard/approvals",
   "/dashboard/cover-letters",

@@ -50,6 +50,7 @@ import logging
 from collections.abc import Mapping
 from typing import Any
 
+from app.services.quality_gate import QUALITY_FLOOR
 from app.services.tailoring_loop import DEFAULT_MAX_ITERATIONS, DEFAULT_TARGET_SCORE
 
 logger = logging.getLogger(__name__)
@@ -63,7 +64,14 @@ INTERVIEW_CONVERSION_TARGET = 0.20
 #: The 10-dimensional fit floor: every dimension must be strictly ABOVE 80%
 #: ("10-dimensional fit score > 80% across ALL dimensions", same mandate). A
 #: dimension sitting exactly AT 80.0 has not cleared the bar and triggers.
-DIMENSION_FLOOR = 80.0
+#:
+#: U2c: BOUND to ``services.quality_gate.QUALITY_FLOOR`` rather than re-typed,
+#: so the floor this module escalates rigor on and the floor each individual
+#: artifact is now GATED on are the same number by construction. The constant
+#: lives in ``quality_gate`` (the leaf) because this module imports
+#: ``tailoring_loop``, which in turn imports ``quality_gate`` — defining it
+#: here would close that cycle.
+DIMENSION_FLOOR = QUALITY_FLOOR
 
 #: Below this many submitted applications the conversion rate is not a rate,
 #: it is an anecdote. 5 is the smallest sample at which the 1-in-5 target is
