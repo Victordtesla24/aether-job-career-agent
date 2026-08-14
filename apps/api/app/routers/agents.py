@@ -47,7 +47,7 @@ from app.repositories.user_provider_credential import (
     UserProviderCredentialRepository,
     _ensure_user_agent_tables,
 )
-from app.services import credential_vault
+from app.services import credential_vault, entitlements
 from app.services.agent_run_stream import (
     SSE_HEADERS,
     StreamCapExceeded,
@@ -68,6 +68,7 @@ from app.services.llm_client import (
     classify_llm_failure,
     get_accumulated_usage,
     get_active_credential_env_var,
+    get_last_fallback_reason,
     get_last_served_model,
     get_quota_block_hours,
     llm_failure_user_message,
@@ -878,12 +879,19 @@ def _require_active_subscription(
     ``system_run`` (ADR-P7-05) skips ONLY this check, and ONLY for
     ``agent_name`` in ``_SYSTEM_RUN_EXEMPT_AGENTS`` — every other guard below
     this call (quota block, plan quota reserve, spend cap) is unaffected.
+
+    ADMIN-FULL: the "is this caller entitled" question is answered by the ONE
+    resolver (``app.services.entitlements``) rather than by a local
+    ``has_active_paid_subscription`` call. For an ordinary user the verdict is
+    byte-identical (the resolver asks the very same repository); an admin, or a
+    user an admin granted a comp/tier/unlimited entitlement, passes here without
+    a Stripe subscription — which is the whole point of the mandate.
     """
     if not subscription_gate_enabled():
         return
     if system_run and agent_name in _SYSTEM_RUN_EXEMPT_AGENTS:
         return
-    if SubscriptionRepository().has_active_paid_subscription(user_id):
+    if entitlements.resolve(user_id).entitled:
         return
     raise HTTPException(
         status.HTTP_402_PAYMENT_REQUIRED,
@@ -1019,7 +1027,13 @@ def _record_run(
     # reserves atomically here, BEFORE execution, exactly as before.
     metered = _call_is_metered(agent_name, params)
     quota_repo: Any = None
-    if metered and skip_quota:
+    if metered and entitlements.unlimited(user_id):
+        # ADMIN-FULL: an admin (or an admin-granted unlimited entitlement) has no
+        # run allowance and no USD ceiling, so nothing is reserved and nothing is
+        # checked. Realized spend is STILL recorded through ``_SpendOnlyQuota`` —
+        # accounting is not a restriction, and /admin/spend must stay truthful.
+        quota_repo = _SpendOnlyQuota()
+    elif metered and skip_quota:
         # S-4: the exemption is RUN-COUNT ONLY. An automated system run spends
         # the USER's real dollars, so the per-user USD ceiling is checked here —
         # BEFORE the AgentRun row and before any LLM call — and the realized
@@ -1117,6 +1131,8 @@ def _execute_reserved_run(
     # exception is caught.
     _degraded_served_model: str | None = None
     _degraded_usage: dict[str, int] | None = None
+    _degraded_fallback_reason: str | None = None
+    _fallback_reason: str | None = None
     try:
         # Bind BOTH the credential context and the user's chosen model so the
         # deep LLM path resolves THIS user's key AND model.
@@ -1143,6 +1159,7 @@ def _execute_reserved_run(
                 # guard rejected the final draft's content — never the
                 # locally-authored refusal string built after the fact.
                 _degraded_usage = get_accumulated_usage()
+                _degraded_fallback_reason = get_last_fallback_reason()
                 raise
             # OBSERVE (never infer) which model actually served this run, while
             # the observation scope is still open — the LLM client publishes the
@@ -1151,6 +1168,11 @@ def _execute_reserved_run(
             # no successful call); the costing below then behaves exactly as it
             # did before this existed.
             _served_model = get_last_served_model()
+            # R-5: WHY the chain moved off its primary, published by the
+            # mechanism that engaged. Captured inside the scope, next to the
+            # served id, because ``served_model_capture``'s ``finally`` resets
+            # both on unwind.
+            _fallback_reason = get_last_fallback_reason()
             # QA4-F-01 (W-24): the SAME real accumulated char counts the
             # guard-rejection degrade branch already reads (MF-1) — captured
             # here, inside the scope, for the genuine-SUCCESS costing tail
@@ -1292,6 +1314,13 @@ def _execute_reserved_run(
             _intended_model = _model_for_agent(agent_name, override=_override_model)
             if _intended_model is not None and _intended_model != _degraded_served_model:
                 honest_output["requestedModel"] = _intended_model
+                # R-5: the same visibility triple as the success tail — a
+                # degraded run can be served by a fallback exactly like a
+                # successful one, and hiding that here would leave one of the
+                # two paths silently un-narratable.
+                honest_output["servedModel"] = _degraded_served_model
+                if _degraded_fallback_reason:
+                    honest_output["fallbackReason"] = _degraded_fallback_reason
             price_in, price_out = _price_guarding_down_pricing(
                 _degraded_served_model, honest_output.get("requestedModel")
             )
@@ -1335,6 +1364,11 @@ def _execute_reserved_run(
         exc.degradedUsage = {
             "model": honest_output["model"],
             "requestedModel": honest_output.get("requestedModel"),
+            # R-5: carried so the async worker's mirrored handler can render the
+            # same "served by fallback" chip the sync path does, without
+            # recomputing (or re-guessing) anything.
+            "servedModel": honest_output.get("servedModel"),
+            "fallbackReason": honest_output.get("fallbackReason"),
             "tokensIn": honest_output["tokensIn"],
             "tokensOut": honest_output["tokensOut"],
             "costUsd": honest_output["costUsd"],
@@ -1413,6 +1447,19 @@ def _execute_reserved_run(
             run_id, agent_name, model, _served_model,
         )
         output["requestedModel"] = model
+        # R-5 (ADR-ML-3 visibility half): the substitution was ALREADY recorded
+        # and correctly costed, and was invisible to the user — 19 green plan
+        # steps of which some ran on a rescue model is exactly the graceful
+        # fiction the design principle forbids. These two additive fields are
+        # what the run record and the plan narration render as a "served by
+        # fallback" chip. ``model`` already carries the served id, but naming it
+        # explicitly means the FE never has to know that ``model`` means
+        # "served"; ``fallbackReason`` is written ONLY when the client actually
+        # published one, so partial knowledge stays partial instead of being
+        # rounded up to a story.
+        output["servedModel"] = _served_model
+        if _fallback_reason:
+            output["fallbackReason"] = _fallback_reason
         model = _served_model
     # F-1 re-fix (ML-U1X-b regression): ``_model_for_agent`` now returns a real
     # id for a ROLE backend (``supervisor``/Orchestrator, ``_ROLE_MODEL_BACKENDS``)
@@ -1544,6 +1591,146 @@ _LLM_TIER_BY_BACKEND: dict[str, str] = {
     "reference": "REASONING",
     "sentimentAnalysis": "REASONING",
     "scheduling": "REASONING",
+}
+
+
+#: EXECUTION CHARTER (ADR-AGI-3 Decision 1) — the Supervisor's scheduler reads
+#: THIS and nothing else. Kept adjacent to :data:`_LLM_TIER_BY_BACKEND` because
+#: it is the same kind of thing: per-agent facts as DATA, in ONE place, so a
+#: scheduler never needs to know an agent's name (``DESIGN-PRINCIPLE.md`` line 9
+#: — per-agent branching in the scheduler fails review; a grep test enforces it).
+#:
+#: Every row was re-verified against the agent's ACTUAL writes at
+#: ``uat/reports/evidence/market-perf/u-agi/p1a/EXEC-CLASSES.md`` §2 (R-8: the
+#: original classification was scout TESTIMONY and contradicted itself, listing
+#: ``emailAgent`` as both SILO and INDEPENDENT). Field meanings:
+#:
+#: ``execClass``   governs ADMISSION only.
+#:   * ``sequential``  — placed by topological order; the application spine.
+#:   * ``independent`` — eligible for concurrency, subject to the plan ceiling.
+#:   * ``silo``        — at most one in flight per (user, backend), enforced by
+#:                       the partial unique index built from
+#:                       ``repositories.background_jobs._SINGLETON_AGENTS``. The
+#:                       two sets are pinned equal by a test: without the index
+#:                       this field would be decorative (F-R8-1).
+#: ``siloBasis``   present iff ``silo``. ``race-proven`` = an unguarded
+#:                 concurrent-write hazard is cited in EXEC-CLASSES §2;
+#:                 ``tier-conservative`` = no race proven, siloed because U-AGI
+#:                 §5.3 makes it a T3 real-world actor. Recording the difference
+#:                 stops the charter claiming a race it cannot cite.
+#: ``onRefusal``   governs PROPAGATION only: ``halt-chain`` ends the plan (the
+#:                 spine's shipped ``_pipeline_core`` semantics), ``isolate``
+#:                 leaves the rest of the plan running.
+#: ``dependsOn``   HARD topological predecessors — a refusal, no-op or degraded
+#:                 output follows without them. Sourced from EXEC-CLASSES §2,
+#:                 NOT from AGENT-GRAPH.json, which carries only the pipeline
+#:                 spine and would under-constrain the plan (§5 "semantic
+#:                 drift"): it has no edge for submission←tailor /
+#:                 submission←coverLetter (the hard 422 gates at
+#:                 ``submission_agent.py:364-383``) or coverLetter←tailor.
+#: ``enrichedBy``  SOFT read edges — display/ordering preference only. Never a
+#:                 gate: these agents degrade honestly with an empty input.
+#: ``coversCards`` the catalog cards ONE dispatch accounts for. This fact lived
+#:                 only in the browser (``orchestration-run-plan.ts``), so a
+#:                 server plan iterating catalog keys would bill ``fitScorer``
+#:                 three times for one unit of work (R-2a). Moved here.
+#:
+#: ``supervisor`` is deliberately ABSENT: it is not in :data:`_RUNNABLE_BACKENDS`
+#: so it is never a plan STEP — it is the thing that builds the plan. Its card
+#: (``orchestration``) is covered by the plan itself.
+_EXEC_CLASS_BY_BACKEND: dict[str, dict[str, Any]] = {
+    "scout": {
+        "execClass": "silo", "siloBasis": "race-proven", "onRefusal": "halt-chain",
+        "dependsOn": (), "enrichedBy": (), "coversCards": ("jobDiscovery",),
+    },
+    "fitScorer": {
+        "execClass": "sequential", "onRefusal": "halt-chain",
+        "dependsOn": ("scout",), "enrichedBy": (),
+        "coversCards": ("matchScoring", "atsOptimization", "skillGap"),
+    },
+    "matcher": {
+        "execClass": "sequential", "onRefusal": "halt-chain",
+        "dependsOn": ("fitScorer",), "enrichedBy": (),
+        "coversCards": ("jobMatching",),
+    },
+    # ``paramsFrom``: the matcher's chosen job IS the target for both drafting
+    # steps — the same value ``_pipeline_core`` threads by hand today. Declaring
+    # it as data means a plan can carry a real target without the scheduler
+    # knowing what a job is, and a matcher that selected nothing produces an
+    # honest "nothing to work on" skip rather than a 422 dressed as a failure.
+    "tailor": {
+        "execClass": "sequential", "onRefusal": "halt-chain",
+        "dependsOn": ("matcher",), "enrichedBy": ("storyExtractor",),
+        "paramsFrom": {"job_id": ("matcher", "top_job_id")},
+        "coversCards": ("resumeTailoring",),
+    },
+    "coverLetter": {
+        "execClass": "sequential", "onRefusal": "halt-chain",
+        "dependsOn": ("tailor", "matcher"), "enrichedBy": ("storyExtractor",),
+        "paramsFrom": {"job_id": ("matcher", "top_job_id")},
+        "coversCards": ("coverLetter",),
+    },
+    "submission": {
+        "execClass": "silo", "siloBasis": "race-proven", "onRefusal": "isolate",
+        "dependsOn": ("tailor", "coverLetter"), "enrichedBy": (),
+        "coversCards": ("submission",),
+    },
+    "emailAgent": {
+        "execClass": "silo", "siloBasis": "race-proven", "onRefusal": "isolate",
+        "dependsOn": (), "enrichedBy": (), "coversCards": ("emailAgent",),
+    },
+    "notification": {
+        "execClass": "silo", "siloBasis": "race-proven", "onRefusal": "isolate",
+        "dependsOn": (), "enrichedBy": (), "coversCards": ("notification",),
+    },
+    "recruiterOutreach": {
+        "execClass": "silo", "siloBasis": "tier-conservative", "onRefusal": "isolate",
+        "dependsOn": (), "enrichedBy": (), "coversCards": ("recruiterOutreach",),
+    },
+    "reference": {
+        "execClass": "silo", "siloBasis": "tier-conservative", "onRefusal": "isolate",
+        "dependsOn": (), "enrichedBy": (), "coversCards": ("reference",),
+    },
+    "storyExtractor": {
+        "execClass": "independent", "onRefusal": "isolate",
+        "dependsOn": (), "enrichedBy": (), "coversCards": ("storyExtraction",),
+    },
+    "compliance": {
+        "execClass": "independent", "onRefusal": "isolate",
+        "dependsOn": (), "enrichedBy": ("tailor", "coverLetter"),
+        "coversCards": ("compliance",),
+    },
+    "learningFeedback": {
+        "execClass": "independent", "onRefusal": "isolate",
+        "dependsOn": (), "enrichedBy": (), "coversCards": ("learningFeedback",),
+    },
+    "marketTrends": {
+        "execClass": "independent", "onRefusal": "isolate",
+        "dependsOn": (), "enrichedBy": ("scout",), "coversCards": ("marketTrends",),
+    },
+    "salaryIntelligence": {
+        "execClass": "independent", "onRefusal": "isolate",
+        "dependsOn": (), "enrichedBy": ("scout",),
+        "coversCards": ("salaryIntelligence",),
+    },
+    "companyResearch": {
+        "execClass": "independent", "onRefusal": "isolate",
+        "dependsOn": (), "enrichedBy": ("scout",), "coversCards": ("companyResearch",),
+    },
+    "interviewPrep": {
+        "execClass": "independent", "onRefusal": "isolate",
+        "dependsOn": (), "enrichedBy": ("scout", "storyExtractor"),
+        "coversCards": ("interviewPrep",),
+    },
+    "sentimentAnalysis": {
+        "execClass": "independent", "onRefusal": "isolate",
+        "dependsOn": (), "enrichedBy": ("emailAgent",),
+        "coversCards": ("sentimentAnalysis",),
+    },
+    "scheduling": {
+        "execClass": "independent", "onRefusal": "isolate",
+        "dependsOn": (), "enrichedBy": ("emailAgent",), "coversCards": ("scheduling",),
+    },
 }
 
 
@@ -2425,8 +2612,15 @@ def _enqueue_single_agent(
                 return str(active["id"])
     # 3) Atomic reserve AT ENQUEUE (metered calls only — ``_call_is_metered``
     #    keeps this seam in step with the sync path for opt-in-LLM backends).
+    #    ADMIN-FULL: the SAME resolver the sync path consults — an unlimited
+    #    caller reserves nothing here either, so the two seams can never
+    #    disagree about who is exempt.
     metered = _call_is_metered(agent_key, params)
-    quota_repo = UsageQuotaRepository() if metered else None
+    quota_repo = (
+        UsageQuotaRepository()
+        if metered and not entitlements.unlimited(user_id)
+        else None
+    )
     reserved_flag = False
     if quota_repo is not None:
         reserved = quota_repo.reserve(user_id)
@@ -2829,6 +3023,17 @@ def _guard_scout_cooldown(user_id: str, request: Request, system_run: bool) -> N
     limiter = getattr(request.app.state, "scout_rate_limiter", None)
     if limiter is None:  # app built without the limiter (older test harness)
         return
+    # ADMIN-FULL: this is a PER-USER rate limit, which the binding scope ruling
+    # classes as a restriction — so the ONE resolver exempts an admin here just
+    # as it does at the checkout/portal limiters. The SHARED protection this
+    # cooldown was built to defend is untouched: the deployment-wide Adzuna
+    # daily budget is enforced independently inside
+    # ``app.services.discovery.adzuna_adapter`` (``_daily_budget`` /
+    # ``budget_snapshot``), so an exempt admin still cannot spend past the
+    # ceiling — they simply are not throttled on their own clicks. The check
+    # short-circuits BEFORE ``allow()`` because that call consumes a token.
+    if entitlements.is_admin(user_id):
+        return
     if limiter.allow(user_id):
         return
     retry_after = limiter.retry_after(user_id)
@@ -3019,10 +3224,19 @@ def _sweep_eligible_users(limit: int) -> list[dict[str, str]]:
     entitled_clause = ""
     params: tuple[Any, ...] = (limit,)
     if subscription_gate_enabled():
+        # ADMIN-FULL: the sweep's SQL filter must agree with the ONE resolver, or
+        # an admin (and an admin-granted comp/tier/unlimited user) would be
+        # silently excluded from autopilot despite passing every runtime gate.
+        # Same three-way precedence as ``entitlements.resolve``, expressed as a
+        # set-returning predicate so the sweep stays one query.
+        entitlements.ensure_entitlement_schema()
         statuses = SubscriptionRepository._ENTITLED_STATUSES
         entitled_clause = (
-            ' AND EXISTS (SELECT 1 FROM "Subscription" s WHERE s."userId" = u."id"'
-            ' AND s."status" = ANY(%s) AND s."planId" <> \'free\')'
+            " AND (COALESCE(u.\"isAdmin\", false)"
+            ' OR EXISTS (SELECT 1 FROM "UserEntitlementOverride" o'
+            ' WHERE o."userId" = u."id")'
+            ' OR EXISTS (SELECT 1 FROM "Subscription" s WHERE s."userId" = u."id"'
+            ' AND s."status" = ANY(%s) AND s."planId" <> \'free\'))'
         )
         params = (list(statuses), limit)
     with get_connection() as conn:
@@ -4023,6 +4237,394 @@ def orchestration_map(current_user: CurrentUser) -> dict[str, Any]:
             }
         )
     return {"maps": maps}
+
+
+# ---------------------------------------------------------------------------
+# Supervisor RUN PLAN (ADR-AGI-3 Decision 1) — plan visibility first ($0), then
+# one server-owned execution of it. The scheduler itself is
+# ``app.services.run_scheduler``: pure planning, zero agent names. Everything
+# agent-specific lives in :data:`_EXEC_CLASS_BY_BACKEND` (charter DATA) and in
+# the seams below, which reuse the EXISTING dispatch chain rather than adding a
+# second billing path.
+# ---------------------------------------------------------------------------
+
+#: Env dial for plan concurrency. Code default 1 — identical to today's
+#: behaviour — and clamped by the worker's own ``max_jobs`` so a plan can never
+#: claim more parallelism than the machine owns (R-3).
+_ORCH_PLAN_CONCURRENCY_ENV = "AETHER_ORCH_PLAN_CONCURRENCY"
+#: Inter-step spacing, copied from the discovery sweep's shipped default so the
+#: fifth scheduler does not burst what the other four deliberately space out.
+_ORCH_PLAN_SPACING_ENV = "AETHER_ORCH_PLAN_SPACING_SECONDS"
+
+#: ``BackgroundJob.agentKey`` a whole plan runs under. Deliberately NOT a
+#: backend name: it is a composite, like ``pipeline``, so ``_call_is_metered``
+#: returns False for it and the plan row itself reserves nothing — every metered
+#: reserve happens per STEP, inside ``_record_run`` (R-2b / R-4).
+_ORCH_PLAN_AGENT_KEY = "orchestrationPlan"
+
+
+def _orch_plan_concurrency() -> int:
+    """The ceiling this plan will ACTUALLY run at.
+
+    ``MAX_PLAN_CONCURRENCY`` is the worker's own ``max_jobs`` (a test pins the
+    two equal). It is read from the scheduler rather than by importing
+    ``workers.settings`` here, which would drag the sweep modules and an ARQ
+    Redis import into every API request that renders a plan.
+    """
+    from app.services.run_scheduler import MAX_PLAN_CONCURRENCY, plan_concurrency_ceiling
+
+    try:
+        dial = int(os.environ.get(_ORCH_PLAN_CONCURRENCY_ENV, "1") or 1)
+    except ValueError:
+        dial = 1
+    return plan_concurrency_ceiling(
+        worker_max_jobs=MAX_PLAN_CONCURRENCY, admin_dial=dial
+    )
+
+
+def _orch_plan_spacing_seconds() -> float:
+    try:
+        return max(0.0, float(os.environ.get(_ORCH_PLAN_SPACING_ENV, "5") or 5))
+    except ValueError:
+        return 5.0
+
+
+def _build_supervisor_plan():
+    """The plan the Supervisor WOULD run, built from charter data alone.
+
+    Pure and free: no dispatch, no AgentRun row, no LLM call, no quota touched.
+    ``metered`` is resolved through the SAME ``_call_is_metered`` the dispatch
+    path uses, so the plan's "this step consumes a paid run" claim cannot drift
+    from what actually gets billed.
+    """
+    from app.services.run_scheduler import build_plan, normalize_charter
+
+    charter = normalize_charter(_EXEC_CLASS_BY_BACKEND)
+    metered = {b for b in charter if _call_is_metered(b, {})}
+    return build_plan(
+        charter,
+        concurrency=_orch_plan_concurrency(),
+        spacing_seconds=_orch_plan_spacing_seconds(),
+        metered=metered,
+    )
+
+
+def _plan_refusal_reason() -> str | None:
+    """Why "Run everything" cannot run right now, or ``None``.
+
+    ONE source of truth for the plan view's ``runnable`` flag and the POST's
+    503, so the button can never promise what the endpoint refuses.
+
+    Async-only is a PREREQUISITE, not a preference (R-1): the exclusive-slot
+    guard for silo-class steps lives on the BackgroundJob claim path, and a plan
+    executed inside an HTTP request would also have to finish inside the edge's
+    ~100 s ceiling. Without the async path the ``silo`` class would be a comment.
+    """
+    if not async_generation_enabled():
+        return (
+            "Running every agent needs background execution, which is currently "
+            "switched off on this deployment (AETHER_ASYNC_GENERATION). Without "
+            "it the exclusive-slot guard that stops two runs of the same "
+            "side-effecting agent would not apply, so the plan is refused "
+            "rather than run unguarded."
+        )
+    return None
+
+
+def _plan_step_payload(step) -> dict[str, Any]:
+    """One plan step as the API renders (and persists) it.
+
+    ``key`` is kept alongside ``backend``: the scheduler and the recorded plan
+    are keyed on ``key`` (the executor and the per-step state writer both match
+    on it), while ``backend`` is the name the product uses for the same thing.
+    Dropping one of them in favour of the other has been the source of exactly
+    one silent bug already — the state writer matching a field the stored rows
+    did not carry — so both are written, explicitly.
+    """
+    payload = step.as_dict()
+    payload["backend"] = payload["key"]
+    payload["cardNames"] = [
+        _CATALOG_BY_KEY[c]["name"] for c in step.covers_cards if c in _CATALOG_BY_KEY
+    ]
+    return payload
+
+
+@router.get("/orchestration/plan")
+def orchestration_plan(current_user: CurrentUser) -> dict[str, Any]:
+    """The Supervisor's plan, rendered BEFORE anything runs — and it costs $0.
+
+    ADR-AGI-3 Decision 2: plan visibility ships first because it is the cheapest
+    honesty win in the design — the user sees the Supervisor think (order,
+    parallel groups, exclusive slots, dedup notes, a rationale per step) before
+    a single run is billed. This endpoint dispatches nothing, records no
+    AgentRun row and makes no LLM call, which is why ``estimatedCostUsd`` is a
+    literal 0.0 rather than a projection nobody could verify.
+
+    Counts are DERIVED from the charter, never hardcoded: 19 dispatches covering
+    21 cards, plus the supervisor's own ``orchestration`` card, which the plan
+    itself covers.
+    """
+    plan = _build_supervisor_plan()
+    refusal = _plan_refusal_reason()
+    return {
+        "concurrency": plan.concurrency,
+        "concurrencyBasis": (
+            f"min(worker max_jobs, {_ORCH_PLAN_CONCURRENCY_ENV}) = "
+            f"{plan.concurrency}"
+        ),
+        "spacingSeconds": plan.spacing_seconds,
+        "agentCount": len(plan.steps),
+        "cardCount": len(plan.covered_cards),
+        "duplicateCardsCollapsed": plan.duplicate_targets_collapsed,
+        "meteredStepCount": plan.metered_step_count,
+        "estimatedCostUsd": 0.0,
+        "groups": [list(g) for g in plan.groups],
+        "steps": [_plan_step_payload(s) for s in plan.steps],
+        "notes": list(plan.notes),
+        "asyncEnabled": async_generation_enabled(),
+        "runnable": refusal is None,
+        "refusal": refusal,
+    }
+
+
+@router.get("/orchestration/plans/{plan_id}")
+def orchestration_plan_record(plan_id: str, current_user: CurrentUser) -> dict[str, Any]:
+    """A RECORDED plan and the live state of each of its steps.
+
+    Owner-scoped: another user's plan is a 404, never a confirmation that it
+    exists. This is the row the (P1-B) narration reads — a step may only be
+    narrated from a persisted transition, so this endpoint is that source.
+    """
+    from app.repositories.run_plan import RunPlanRepository
+
+    plan = RunPlanRepository().get_for_user(plan_id, current_user["id"])
+    if plan is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Run plan not found")
+    return plan
+
+
+def _plan_stale_thresholds() -> tuple[int, int]:
+    """(planned_secs, running_secs) after which a live plan is RELEASED.
+
+    Deliberately not a new pair of numbers: a plan is carried by exactly one
+    ``BackgroundJob`` on the same queue, under the same worker, so "will anything
+    ever claim this?" and "has the worker died mid-run?" are the identical two
+    questions :func:`_job_stale_thresholds` already answers — and its second
+    window is derived from the worker's own per-job execution ceiling. Inventing
+    a separate constant here is how the two drift until the release starts
+    failing plans a worker is still legitimately executing, which would both
+    fabricate a failure and let the same 19 dispatches run a second time.
+    """
+    return _job_stale_thresholds()
+
+
+@router.post("/orchestration/run-everything")
+def run_everything(current_user: CurrentUser, response: Response) -> dict[str, Any]:
+    """Run every runnable agent once, as ONE server-recorded plan.
+
+    What this is NOT: a loop over the catalog. Cards that share a backend are
+    covered by a single dispatch (R-2a — the shipped dedup was frontend-only, so
+    a naive server loop would bill ``fitScorer`` three times for one unit of
+    work), and every step goes through the SAME
+    ``_dispatch`` → ``_record_run`` → ``_execute_reserved_run`` chain as pressing
+    Run on one card: same paywall, same atomic reserve-before-the-LLM-call, same
+    refund-on-failure, same audit row. No exemption is threaded through here —
+    a plan run is a user-triggered run and consumes the user's plan allowance
+    exactly like a manual one (R-2b: the sweeps' run-count exemption stays
+    sweep-only).
+
+    ONE queue job carries the whole plan rather than 19 competing ones: 19 jobs
+    would defeat the ordering, the spacing and the SSE admission cap in a single
+    move (R-3).
+
+    And ONE live plan per user (R-1). The silo class already refuses a second
+    plan's ``scout``/``submission``/… step at the database, but the 13 non-silo
+    backends take no claim — so two rapid clicks or two tabs used to produce two
+    plans and up to 26 duplicate METERED dispatches from one user action. That
+    is the same "one unit of work asked for twice" the silo class exists for,
+    at plan granularity, so it gets the same answer: an honest 409 that names
+    the plan already running rather than a second bill.
+    """
+    user_id = current_user["id"]
+    refusal = _plan_refusal_reason()
+    if refusal is not None:
+        # Honest 503 BEFORE any row is written: a refused plan leaves no trace
+        # that could later be mistaken for an attempt.
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, refusal)
+    # Paywall FIRST, exactly like every other enqueue seam. The composite is
+    # always walled: ``_ORCH_PLAN_AGENT_KEY`` is not a system-run-exempt agent,
+    # so a valid system secret cannot buy a free plan.
+    _require_active_subscription(
+        user_id, agent_name=_ORCH_PLAN_AGENT_KEY, system_run=False
+    )
+
+    from app.repositories.run_plan import RunPlanRepository
+
+    plan = _build_supervisor_plan()
+    plans = RunPlanRepository()
+    planned_stale, running_stale = _plan_stale_thresholds()
+    plan_id, admitted = plans.create_admitted(
+        user_id,
+        steps=[_plan_step_payload(s) for s in plan.steps],
+        concurrency=plan.concurrency,
+        spacing_seconds=plan.spacing_seconds,
+        planned_stale_seconds=planned_stale,
+        running_stale_seconds=running_stale,
+        initiator="user",
+    )
+    if not admitted:
+        # Refused BEFORE the queue job, so the second click costs nothing and
+        # leaves nothing: no plan row, no BackgroundJob, no dispatch. The id of
+        # the LIVE plan goes back so the caller can open the run it already has
+        # instead of being told only "no" — the plan is already narratable at
+        # GET /agents/orchestration/plans/{id}.
+        live = plans.get_for_user(plan_id, user_id) or {}
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail={
+                "error": "plan_already_running",
+                "message": (
+                    "A run plan is already in flight for this account — running "
+                    "every agent a second time would repeat the same work and "
+                    "bill for it twice. Open the plan that is running, or wait "
+                    "for it to finish."
+                ),
+                "planId": plan_id,
+                "planStatus": live.get("status"),
+            },
+        )
+    repo = BackgroundJobRepository()
+    job_id = repo.create(
+        user_id,
+        _ORCH_PLAN_AGENT_KEY,
+        run_id=None,
+        params={"runPlanId": plan_id},
+        quota_reserved=False,
+    )
+    try:
+        arq_job_id = _enqueue_to_arq(job_id)
+    except Exception as exc:  # noqa: BLE001
+        repo.mark_failed(job_id, "generation queue temporarily unavailable")
+        plans.finish(
+            plan_id,
+            "failed",
+            summary={"reason": "generation queue temporarily unavailable"},
+        )
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "generation queue temporarily unavailable",
+        ) from exc
+    repo.set_arq_job_id(job_id, arq_job_id)
+    response.status_code = status.HTTP_202_ACCEPTED
+    return {
+        "job_id": job_id,
+        "planId": plan_id,
+        "status": "enqueued",
+        "stepCount": len(plan.steps),
+        "cardCount": len(plan.covered_cards),
+        "concurrency": plan.concurrency,
+    }
+
+
+def _plan_halting_reason(exc: BaseException) -> str | None:
+    """Which failures end the whole plan rather than just their own step (R-4).
+
+    A plan that presses on after a quota/spend-cap refusal collects N identical
+    429s while the first one was the answer, so a plan-wide stop is the honest
+    response — and the summary records exactly where it stopped and what was
+    never attempted. A 402 (no active subscription) is the same class of answer:
+    it cannot become true again inside this plan.
+    """
+    code = getattr(exc, "status_code", None)
+    if code == status.HTTP_429_TOO_MANY_REQUESTS:
+        return (
+            "the account's run quota or spend cap was reached, so the remaining "
+            "steps were not attempted"
+        )
+    if code == status.HTTP_402_PAYMENT_REQUIRED:
+        return "an active subscription is required, so the plan stopped"
+    return None
+
+
+def execute_run_plan(user_id: str, plan_id: str) -> dict[str, Any]:
+    """Drive a recorded plan to a terminal state. Called by the ARQ worker.
+
+    The scheduler package owns the LOOP; this function owns the seams it cannot
+    have (dispatch, the database admission claim, state persistence), so no
+    agent name and no billing rule leaks into ``run_scheduler``.
+
+    Admission (R-1): a silo-class step claims the SAME
+    ``(userId, agentKey)`` in-flight slot the async single-agent path uses — a
+    partial unique index in Postgres, not a disabled button in one browser tab
+    — so a plan cannot race the discovery sweep, another tab, or itself. A lost
+    claim is an honest ``refused``, never a silently duplicated side effect.
+    """
+    from app.repositories.run_plan import RunPlanRepository
+    from app.services.run_scheduler.executor import execute_plan
+
+    plans = RunPlanRepository()
+    row = plans.get(plan_id)
+    if row is None or row["userId"] != user_id:
+        raise ValueError(f"run plan {plan_id} not found for this user")
+    if not plans.mark_running(plan_id):
+        # Already running or already terminal — a re-delivered queue message
+        # must never restart a plan or double-dispatch its steps.
+        logger.info("run plan %s is not in the 'planned' state; skipping", plan_id)
+        return {"status": row["status"], "planId": plan_id, "steps": [], "notAttempted": []}
+
+    steps = list(row["steps"] or [])
+
+    repo = BackgroundJobRepository()
+
+    def _claim(backend: str) -> tuple[Any, bool]:
+        """Take the exclusive in-flight slot for a silo-class step."""
+        job_id, created = repo.create_singleton(
+            user_id, backend, params={"runPlanId": plan_id}, quota_reserved=False
+        )
+        if not created:
+            return None, False
+        # Move it to ``processing`` immediately: the ``enqueued`` staleness
+        # window is far shorter than a long discovery pass, and a watchdog that
+        # failed a live step would fabricate a failure on a run still executing.
+        repo.mark_processing(job_id)
+        return job_id, True
+
+    def _release(token: Any, backend: str, ok: bool) -> None:
+        if not token:
+            return
+        try:
+            if ok:
+                repo.mark_completed(token, {"runPlanId": plan_id, "backend": backend})
+            else:
+                repo.mark_failed(
+                    token, f"{backend} step did not complete", refunded=False
+                )
+        except Exception:  # noqa: BLE001 — releasing a slot must never fail a plan
+            logger.warning(
+                "run plan %s could not release the %s slot", plan_id, backend,
+                exc_info=True,
+            )
+
+    summary = execute_plan(
+        steps=steps,
+        dispatch=lambda backend, params: _dispatch(user_id, backend, dict(params)),
+        claim=_claim,
+        release=_release,
+        on_state=lambda key, state, detail: plans.record_step_state(
+            plan_id, key, state, dict(detail)
+        ),
+        halting_reason=_plan_halting_reason,
+        spacing_seconds=float(row["spacingSeconds"] or 0.0),
+    )
+    plans.finish(
+        plan_id,
+        summary["status"],
+        summary=summary,
+        halted_at_step=summary["haltedAtStep"],
+        halt_reason=summary["haltReason"],
+    )
+    summary["planId"] = plan_id
+    return summary
 
 
 @router.get("/catalog")

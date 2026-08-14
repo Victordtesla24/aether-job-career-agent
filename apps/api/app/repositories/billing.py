@@ -406,15 +406,31 @@ class SubscriptionRepository:
         '"cancelAtPeriodEnd","createdAt","updatedAt"'
     )
 
-    def get_by_user(self, user_id: str) -> Optional[dict[str, Any]]:
-        _ensure_billing_tables()
-        with get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    f'SELECT {self._COLS} FROM "Subscription" WHERE "userId" = %s',
-                    (user_id,),
-                )
-                rows = rows_to_dicts(cur)
+    def get_by_user(
+        self, user_id: str, cur: Any = None
+    ) -> Optional[dict[str, Any]]:
+        """The user's Subscription row, or None.
+
+        ``cur`` (optional) reads inside the caller's OPEN transaction instead of
+        opening a second connection — needed by ``entitlements.resolve(cur=...)``,
+        which must see that transaction's own uncommitted writes. Read-only:
+        no billing state is created, mutated or inferred on either path.
+        """
+
+        def _run(c: Any) -> list[dict[str, Any]]:
+            c.execute(
+                f'SELECT {self._COLS} FROM "Subscription" WHERE "userId" = %s',
+                (user_id,),
+            )
+            return rows_to_dicts(c)
+
+        if cur is not None:
+            rows = _run(cur)
+        else:
+            _ensure_billing_tables()
+            with get_connection() as conn:
+                with conn.cursor() as c:
+                    rows = _run(c)
         return rows[0] if rows else None
 
     #: Subscription statuses that count as an ENTITLED paid subscription.
@@ -425,7 +441,7 @@ class SubscriptionRepository:
     #: ``canceled`` status), which the webhook downgrades to Free.
     _ENTITLED_STATUSES: tuple[str, ...] = ("active", "trialing", "past_due")
 
-    def has_active_paid_subscription(self, user_id: str) -> bool:
+    def has_active_paid_subscription(self, user_id: str, cur: Any = None) -> bool:
         """True IFF the user holds an ENTITLED PAID subscription — ``status`` in
         (``active``, ``trialing``, ``past_due``) AND ``planId != 'free'``.
 
@@ -437,17 +453,27 @@ class SubscriptionRepository:
         paying customer out mid-cycle while Stripe retries (dunning grace);
         ``trialing`` is entitled so a Stripe-side trial is not blocked from the
         very features it trials. Purely additive read — no new schema.
+
+        ``cur`` (optional): read inside the caller's open transaction — see
+        :meth:`get_by_user`. The entitlement rule itself is identical on both
+        paths; only the connection differs.
         """
+
+        def _run(c: Any) -> bool:
+            c.execute(
+                'SELECT 1 FROM "Subscription" '
+                'WHERE "userId" = %s AND "status" = ANY(%s) '
+                "AND \"planId\" <> 'free' LIMIT 1",
+                (user_id, list(self._ENTITLED_STATUSES)),
+            )
+            return c.fetchone() is not None
+
+        if cur is not None:
+            return _run(cur)
         _ensure_billing_tables()
         with get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    'SELECT 1 FROM "Subscription" '
-                    'WHERE "userId" = %s AND "status" = ANY(%s) '
-                    "AND \"planId\" <> 'free' LIMIT 1",
-                    (user_id, list(self._ENTITLED_STATUSES)),
-                )
-                return cur.fetchone() is not None
+            with conn.cursor() as c:
+                return _run(c)
 
     def set_customer_id(self, user_id: str, customer_id: str) -> None:
         """Attach a Stripe customer id to the user's Subscription (create the

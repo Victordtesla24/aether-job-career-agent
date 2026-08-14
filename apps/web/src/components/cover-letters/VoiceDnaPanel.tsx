@@ -13,17 +13,17 @@ export function VoiceDnaPanel({
   onFormalityChange: (value: number) => void;
 }) {
   return (
-    <section className="glass rounded-2xl border border-white/10 p-5" data-testid="voice-dna-panel">
+    <section className="elev-1 rounded-2xl p-5" data-testid="voice-dna-panel">
       <div className="mb-4 flex items-center gap-2">
-        <i className="fa-solid fa-sliders text-sm text-aether-violet" aria-hidden="true" />
-        <h2 className="text-sm font-semibold">Voice DNA</h2>
+        <i className="fa-solid fa-sliders text-sm text-state-info" aria-hidden="true" />
+        <h2 className="text-[13px] font-semibold tracking-[-0.01em]">Voice DNA</h2>
       </div>
       <div className="mb-4">
         <div className="mb-1.5 flex items-center justify-between">
           <span className="text-[11px] text-aether-muted" id="tone-slider-label">
             Tone
           </span>
-          <span className="mono text-[11px] text-aether-violet" data-testid="tone-label">
+          <span className="mono text-[11px] text-state-info" data-testid="tone-label">
             {toneLabel(tone)}
           </span>
         </div>
@@ -44,7 +44,7 @@ export function VoiceDnaPanel({
           <span className="text-[11px] text-aether-muted" id="formality-slider-label">
             Formality
           </span>
-          <span className="mono text-[11px] text-aether-violet" data-testid="formality-label">
+          <span className="mono text-[11px] text-state-info" data-testid="formality-label">
             {formalityLabel(formality)}
           </span>
         </div>

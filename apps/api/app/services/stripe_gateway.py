@@ -186,6 +186,25 @@ def cancel_subscription(subscription_id: str) -> None:
     stripe.Subscription.cancel(subscription_id)
 
 
+def set_cancel_at_period_end(subscription_id: str, value: bool) -> dict[str, Any]:
+    """Schedule (or un-schedule) cancellation at the END of the paid period.
+
+    The gentle counterpart to :func:`cancel_subscription`: the customer keeps the
+    access they have already paid for and no further invoice is raised. Stripe
+    remains the source of truth — the caller mirrors the returned flag locally
+    and the ``customer.subscription.updated`` webhook reconciles either way, so
+    billing state is never hand-invented on our side.
+    """
+    stripe = _stripe()
+    updated = stripe.Subscription.modify(
+        subscription_id, cancel_at_period_end=bool(value)
+    )
+    return {
+        "id": _field(updated, "id") or subscription_id,
+        "cancelAtPeriodEnd": bool(_field(updated, "cancel_at_period_end")),
+    }
+
+
 def get_charge_customer(charge_id: str) -> str | None:
     """Resolve the customer id behind a charge (dispute payloads carry a charge
     id but not always a customer id)."""

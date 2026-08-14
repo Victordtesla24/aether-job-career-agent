@@ -1,7 +1,9 @@
 """JWT bearer-token dependency guarding protected routes (P2-S01)."""
 from __future__ import annotations
 
-from typing import Annotated, Any
+import math
+from datetime import datetime
+from typing import Annotated, Any, Optional
 
 import jwt
 from fastapi import Depends, HTTPException, status
@@ -32,6 +34,54 @@ _ADMIN_ERROR = HTTPException(
 #: Slack for the O-4 passwordChangedAt/iat comparison in ``get_current_user``
 #: — see the comment at that check for why this must be > 0.
 _IAT_GRACE_SECONDS = 1.0
+
+#: Extra slack on top of ``_IAT_GRACE_SECONDS`` in
+#: :func:`session_invalidation_boundary`, absorbing the difference between this
+#: process's clock (which stamps a JWT's ``iat``) and the DATABASE's clock
+#: (which stamps ``passwordChangedAt`` via ``now()``). Without it, a Postgres
+#: server running a fraction of a second behind the API would make an otherwise
+#: sound boundary land just short. Kept small: it is pure added latency on the
+#: one route that waits for it.
+_CLOCK_SKEW_MARGIN_SECONDS = 0.25
+
+
+def session_invalidation_boundary(received_at: float) -> float:
+    """Earliest ``passwordChangedAt`` that provably invalidates EVERY token
+    minted at or before ``received_at`` (both Unix seconds).
+
+    A caller that wants "every session that existed when this request arrived
+    is dead when it returns" cannot simply stamp ``now()``: ``iat`` is
+    truncated to whole seconds and :data:`_IAT_GRACE_SECONDS` deliberately
+    forgives a token that reads up to a second older than the stamp, so a token
+    minted earlier in the SAME second survives the change — and, because the
+    comparison is time-independent, survives for the rest of its 24h TTL rather
+    than for "an extra second".
+
+    Waiting until this instant closes that hole without weakening the grace: a
+    token minted at ``t <= received_at`` has ``iat = floor(t) <=
+    floor(received_at)``, which is strictly less than ``boundary -
+    _IAT_GRACE_SECONDS``, so ``get_current_user`` rejects it. A token minted
+    AFTER the stamp still passes, because its ``iat`` floors no lower than the
+    stamp's own second — which is the false-rejection the grace exists to
+    prevent. The wait is bounded by ``1 + _CLOCK_SKEW_MARGIN_SECONDS`` seconds.
+    """
+    return math.floor(received_at) + _IAT_GRACE_SECONDS + _CLOCK_SKEW_MARGIN_SECONDS
+
+
+def stamp_invalidates_tokens_minted_before(
+    changed_at: Optional[datetime], received_at: float
+) -> bool:
+    """Did ``changed_at`` actually invalidate every token minted at/before
+    ``received_at``? Evaluates the EXACT predicate ``get_current_user`` applies,
+    so a caller reports what its write really achieved instead of assuming.
+
+    ``False`` is a real, honest outcome (a clock skew larger than
+    :data:`_CLOCK_SKEW_MARGIN_SECONDS`, or a missing row) — never a reason to
+    retry silently or to claim success anyway.
+    """
+    if changed_at is None:
+        return False
+    return math.floor(received_at) < changed_at.timestamp() - _IAT_GRACE_SECONDS
 
 
 def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]) -> dict[str, Any]:

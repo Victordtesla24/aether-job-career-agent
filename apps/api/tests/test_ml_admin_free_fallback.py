@@ -464,12 +464,18 @@ def test_free_fallback_list_is_env_overridable(monkeypatch):
     assert get_admin_free_fallback_models() == ["vendor/a:free", "vendor/b:free"]
 
 
-def test_hardcoded_fallback_model_is_a_working_free_model():
-    """The D-0014 ``FALLBACK_MODEL`` constant must not point at the broken
-    ``openai/gpt-oss-20b:free`` any more (same mechanism, working model)."""
-    from app.services.llm_client import FALLBACK_MODEL
+def test_hardcoded_fallback_model_is_the_anthropic_subscription_not_openrouter():
+    """MODEL-DEFAULT (OWNER DIRECTIVE, 2026-08-14): the D-0014 ``FALLBACK_MODEL``
+    constant is now a bare ``claude-*`` served by the operator's Anthropic
+    subscription — the system default is Anthropic, NEVER OpenRouter. It is
+    DECOUPLED from this admin free-model rescue set (the nvidia ``:free`` pair),
+    which stays a separate, admin-only, HTTP-402-triggered mechanism."""
+    from app.services.llm_client import FALLBACK_MODEL, resolve_provider
 
-    assert FALLBACK_MODEL == _FREE_A
+    assert FALLBACK_MODEL == "claude-haiku-4-5"
+    assert resolve_provider(FALLBACK_MODEL) == "anthropic"
+    # The admin free rescue is unaffected — still the OpenRouter free pair.
+    assert FALLBACK_MODEL not in (_FREE_A, _FREE_B)
 
 
 # ---------------------------------------------------------------------------

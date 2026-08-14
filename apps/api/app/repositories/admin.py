@@ -24,6 +24,8 @@ import os
 import sys
 from typing import Any, Optional
 
+from psycopg2.errors import UniqueViolation
+
 from app.db import (
     ensure_admin_user_columns,
     ensure_user_profile_columns,
@@ -433,14 +435,36 @@ def write_audit(
         conn.commit()
 
 
-def list_audit(limit: int = 50, offset: int = 0) -> dict[str, Any]:
-    """Paginated append-only audit log, newest first."""
+def list_audit(
+    limit: int = 50,
+    offset: int = 0,
+    *,
+    target_type: Optional[str] = None,
+    target_id: Optional[str] = None,
+) -> dict[str, Any]:
+    """Paginated append-only audit log, newest first.
+
+    ``target_type``/``target_id`` narrow the log to ONE subject (ADMIN-FULL: the
+    per-user audit trail the admin user panel renders). Both default to None, so
+    the existing platform-wide call is byte-identical to before.
+    """
     _ensure_admin_schema()
     limit = max(1, min(int(limit), 200))
     offset = max(0, int(offset))
+    where: list[str] = []
+    filter_params: list[Any] = []
+    if target_type:
+        where.append('a."targetType" = %s')
+        filter_params.append(target_type)
+    if target_id:
+        where.append('a."targetId" = %s')
+        filter_params.append(target_id)
+    where_sql = (" WHERE " + " AND ".join(where)) if where else ""
     with get_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute('SELECT count(*) FROM "AdminAuditLog"')
+            cur.execute(
+                f'SELECT count(*) FROM "AdminAuditLog" a{where_sql}', filter_params
+            )
             total = int(cur.fetchone()[0])
             # QA M-05: join the actor's display name/email so the UI can show
             # a human-readable actor instead of a raw CUID. LEFT JOIN keeps
@@ -449,9 +473,10 @@ def list_audit(limit: int = 50, offset: int = 0) -> dict[str, Any]:
                 'SELECT a."id",a."actorUserId",a."action",a."targetType",a."targetId",'
                 'a."detailJson",a."ip",a."createdAt",u."name" AS "actorName",'
                 'u."email" AS "actorEmail" FROM "AdminAuditLog" a '
-                'LEFT JOIN "User" u ON u."id" = a."actorUserId" '
+                'LEFT JOIN "User" u ON u."id" = a."actorUserId"'
+                f"{where_sql} "
                 'ORDER BY a."createdAt" DESC, a."id" DESC LIMIT %s OFFSET %s',
-                (limit, offset),
+                [*filter_params, limit, offset],
             )
             rows = rows_to_dicts(cur)
     entries = [
@@ -540,8 +565,14 @@ def list_users(
     where: list[str] = []
     params: list[Any] = []
     if query:
-        where.append('(u."email" ILIKE %s OR u."name" ILIKE %s)')
-        params.extend([f"%{query}%", f"%{query}%"])
+        # ADMIN-FULL: username is a real login identity (``get_by_username_or_email``),
+        # so an admin searching for the credential a user actually types must find
+        # them. ``ensure_user_profile_columns`` (called by ``_ensure_admin_schema``)
+        # guarantees the column exists on the older test schema.
+        where.append(
+            '(u."email" ILIKE %s OR u."name" ILIKE %s OR u."username" ILIKE %s)'
+        )
+        params.extend([f"%{query}%", f"%{query}%", f"%{query}%"])
     if plan:
         where.append('s."planId" = %s')
         params.append(plan)
@@ -560,7 +591,7 @@ def list_users(
     )
 
     sql = f'''
-        SELECT u."id", u."email", u."name", u."isAdmin", u."suspended",
+        SELECT u."id", u."email", u."name", u."username", u."isAdmin", u."suspended",
                u."createdAt", u."lastLoginAt",
                COALESCE(s."planId", 'free') AS plan, s."status" AS "subStatus",
                COALESCE(sp.spend, 0) AS spend, COALESCE(sp.runs, 0) AS runs
@@ -585,6 +616,7 @@ def _user_row(r: dict[str, Any]) -> dict[str, Any]:
         "id": r["id"],
         "email": r["email"],
         "name": r.get("name"),
+        "username": r.get("username"),
         "isAdmin": bool(r.get("isAdmin")),
         "suspended": bool(r.get("suspended")),
         "plan": r.get("plan"),
@@ -603,8 +635,8 @@ def get_user_detail(user_id: str) -> Optional[dict[str, Any]]:
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                'SELECT u."id", u."email", u."name", u."isAdmin", u."suspended",'
-                ' u."createdAt", u."lastLoginAt",'
+                'SELECT u."id", u."email", u."name", u."username", u."isAdmin",'
+                ' u."suspended", u."createdAt", u."lastLoginAt",'
                 ' COALESCE(s."planId", \'free\') AS plan, s."status" AS "subStatus",'
                 ' COALESCE(sp.spend,0) AS spend, COALESCE(sp.runs,0) AS runs'
                 ' FROM "User" u'
@@ -678,7 +710,125 @@ def get_user_detail(user_id: str) -> Optional[dict[str, Any]]:
         "spendUsd": round(float(r.get("spend") or 0), 6),
         "runCount": int(r.get("runs") or 0),
         "currency": "USD",
+        # ADMIN-FULL: the ONE resolver's verdict for THIS user, so the panel
+        # shows why they are (or are not) restricted — including an admin grant
+        # sitting VISIBLY on top of whatever the Subscription row says. Detail
+        # only, never the list: one resolve per page, not per row.
+        "entitlement": _entitlement_view(user_id),
     }
+
+
+def _entitlement_view(user_id: str) -> dict[str, Any]:
+    """The ONE resolver's verdict, in the admin panel's wire shape."""
+    from app.services import entitlements
+
+    return entitlements.resolve(user_id).as_dict()
+
+
+class IdentityConflictError(Exception):
+    """Raised when an admin identity change would collide with another account."""
+
+
+def update_user_identity(
+    user_id: str,
+    *,
+    email: Optional[str] = None,
+    username: Optional[str] = None,
+    name: Optional[str] = None,
+    cur: Any = None,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Change a user's login/display identity; return ``(before, after)``.
+
+    Uniqueness is enforced BEFORE the write (and again by the ``User_email_key`` /
+    ``User_username_key`` unique indexes, which turn a lost race into a
+    ``IdentityConflictError`` rather than a duplicate account). ``username`` is
+    matched case-insensitively because ``get_by_username_or_email`` resolves it
+    that way — otherwise "Bob" and "bob" would be two logins for one name.
+
+    Only the fields the caller passed are touched; ``None`` means "leave alone".
+    The returned pair is exactly what the audit row records (before -> after).
+
+    ``cur`` (optional) runs the whole read-check-write inside the caller's OPEN
+    transaction and does NOT commit, so the caller can commit it together with
+    the ``AdminAuditLog`` row that records it. The caller must have run
+    :func:`_ensure_admin_schema` before opening that transaction.
+    """
+    fields: dict[str, Any] = {}
+    if email is not None:
+        fields["email"] = email
+    if username is not None:
+        fields["username"] = username or None
+    if name is not None:
+        fields["name"] = name or None
+
+    def _run(c: Any) -> tuple[dict[str, Any], dict[str, Any]]:
+        c.execute(
+            'SELECT "id","email","username","name" FROM "User" WHERE "id"=%s',
+            (user_id,),
+        )
+        rows = rows_to_dicts(c)
+        if not rows:
+            raise LookupError(user_id)
+        before = {
+            "email": rows[0]["email"],
+            "username": rows[0].get("username"),
+            "name": rows[0].get("name"),
+        }
+        if "email" in fields:
+            c.execute(
+                'SELECT 1 FROM "User" WHERE "email"=%s AND "id"<>%s',
+                (fields["email"], user_id),
+            )
+            if c.fetchone():
+                raise IdentityConflictError("email")
+        if fields.get("username"):
+            c.execute(
+                'SELECT 1 FROM "User" WHERE lower("username")=lower(%s)'
+                ' AND "id"<>%s',
+                (fields["username"], user_id),
+            )
+            if c.fetchone():
+                raise IdentityConflictError("username")
+        if fields:
+            assignments = ", ".join(f'"{col}"=%s' for col in fields)
+            try:
+                c.execute(
+                    f'UPDATE "User" SET {assignments}, "updatedAt"=now()'
+                    ' WHERE "id"=%s',
+                    (*fields.values(), user_id),
+                )
+            except UniqueViolation as exc:  # lost race against a concurrent write
+                # Name the FIELD, not the index: the message is shown to an
+                # admin. ``constraint_name`` can be absent on some servers,
+                # so fall back to the honest generic rather than "None".
+                constraint = (exc.diag.constraint_name or "").lower()
+                if "username" in constraint:
+                    field = "username"
+                elif "email" in constraint:
+                    field = "email"
+                else:
+                    field = "identity"
+                raise IdentityConflictError(field) from exc
+        c.execute(
+            'SELECT "email","username","name" FROM "User" WHERE "id"=%s',
+            (user_id,),
+        )
+        after_rows = rows_to_dicts(c)
+        return before, {
+            "email": after_rows[0]["email"],
+            "username": after_rows[0].get("username"),
+            "name": after_rows[0].get("name"),
+        }
+
+    if cur is not None:
+        return _run(cur)
+
+    _ensure_admin_schema()
+    with get_connection() as conn:
+        with conn.cursor() as c:
+            before, after = _run(c)
+        conn.commit()
+    return before, after
 
 
 def spend_overview() -> dict[str, Any]:
@@ -888,6 +1038,59 @@ def health_overview() -> dict[str, Any]:
 # --------------------------------------------------------------------------- #
 # §14.7 credential rotation (GATE-31 / SEC-001)
 # --------------------------------------------------------------------------- #
+
+
+#: Refusal text for an in-app password change on the identity §14.7 owns.
+#: Names the mechanism AND the real remedy; carries NO credential material (not
+#: the hash, not the address) so it is safe to return over HTTP and to log.
+ENV_MANAGED_PASSWORD_MESSAGE = (
+    "This account's password is managed by server configuration "
+    "(AETHER_ADMIN_PASSWORD_HASH) and is re-applied every time the API "
+    "restarts, so a password set here would be silently reverted at the next "
+    "restart. The change was refused instead of accepted-then-lost. To change "
+    "it for real, rotate AETHER_ADMIN_PASSWORD_HASH to a bcrypt hash of the "
+    "new password and restart the API."
+)
+
+
+def env_managed_admin_email() -> Optional[str]:
+    """The email address whose password §14.7 owns, or ``None``.
+
+    :func:`apply_admin_rotation` runs on EVERY app construction and, for
+    ``AETHER_ADMIN_EMAIL``, UPSERTs ``passwordHash`` from
+    ``AETHER_ADMIN_PASSWORD_HASH``. For that ONE identity the environment — not
+    the database — is the source of truth, so any in-app password change is
+    undone at the next restart. Both variables must be present: with no
+    configured hash there is nothing to re-apply and nothing to revert.
+
+    Deliberately NOT conditioned on ``_admin_credential_problem``. A refused
+    credential leaves ``passwordHash`` untouched TODAY (condition C2), but the
+    operator's fix is to rotate the variable — at which point the env value is
+    applied and an in-app change made in the meantime disappears. The
+    environment owns this password in both dispositions.
+
+    Reads ``os.environ`` on every call (never a module-level snapshot), so
+    unsetting the variables takes effect without a code change, and returns
+    only the ADDRESS — never the configured hash.
+    """
+    email = (os.environ.get("AETHER_ADMIN_EMAIL") or "").strip()
+    pw_hash = (os.environ.get("AETHER_ADMIN_PASSWORD_HASH") or "").strip()
+    if not email or not pw_hash:
+        return None
+    return email
+
+
+def password_is_env_managed(email: Optional[str]) -> bool:
+    """Is ``email`` the identity whose password §14.7 re-applies on every boot?
+
+    Compared case-insensitively, matching the rotation's own de-privilege step
+    (``lower("email")=lower(%s)``) and erring toward refusing a change that
+    would be reverted rather than accepting one silently.
+    """
+    managed = env_managed_admin_email()
+    if managed is None or not email:
+        return False
+    return email.strip().lower() == managed.lower()
 
 
 def apply_admin_rotation() -> dict[str, Any]:
