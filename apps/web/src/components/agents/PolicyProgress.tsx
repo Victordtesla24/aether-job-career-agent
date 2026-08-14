@@ -1,26 +1,36 @@
 "use client";
 
 /**
- * The two U-AX spec surfaces round 2 left undelivered (R-06).
+ * The two U-AX spec surfaces round 2 left undelivered (R-06), re-expressed as
+ * VISUALS for ANALYTICS-VIZ.
  *
  * (a) **Policy tier over time vs the metrics it responds to** — U-PLAN.md
- *     U-AX BUILD SPEC ADDITIONS item 2(c). Round 2 shipped only the CURRENT
- *     tier while labelling its panel "item 2(a)/(c)". Every point here is a
- *     tier an agent ACTUALLY obeyed, read from `AgentRun.policyTier` /
- *     `AgentRun.metricSnapshot` — not a reconstruction of what the policy
- *     would say today.
+ *     U-AX BUILD SPEC ADDITIONS item 2(c). Every point here is a tier an agent
+ *     ACTUALLY obeyed, read from `AgentRun.policyTier` /
+ *     `AgentRun.metricSnapshot` — not a reconstruction of what the policy would
+ *     say today.
  * (b) **Interview-conversion progress per policy-tier cohort** — item 3
  *     ("applications under each policy tier"), reading the previously
  *     write-only `Application.policyTierAtSubmission`. This is what turns the
  *     rigor loop from a claim into a measurement: if heightened rigor works,
  *     its cohort converts better; if it does not, that is visible here too.
  *
- * Deliberately NOT a chart. Two or three tier points over a few weeks is a
- * short ordered list, and drawing a line through them would imply a
- * continuity the data does not have (points are irregular — they exist only
- * where the tier or its inputs changed). Both panels degrade to a stated
- * reason rather than an empty axis.
+ * WHY THESE ARE NOW CHARTS. Round 3 deliberately shipped both as lists, on the
+ * argument that "two or three tier points over a few weeks is a short ordered
+ * list, and drawing a LINE through them would imply a continuity the data does
+ * not have". That argument was right about the line and wrong about the
+ * picture. `<TierBand>` draws no line: it partitions the band by RUNS, which
+ * is a measured quantity that exists at every point, and leaves the irregular
+ * dates as labels rather than as an axis. `<BulletChart>` draws each cohort
+ * against the target it is judged by, which is the comparison the reader was
+ * previously asked to perform in their head from a paragraph.
+ *
+ * The tier-point LIST is kept beneath the band, unchanged, because it carries
+ * per-point detail (dimensions at or below floor) at a fidelity a 9px band
+ * segment cannot, and because it is what `__tests__/policy-progress.test.tsx`
+ * pins as this panel's honesty contract.
  */
+import { BulletChart, TierBand, type BulletRow } from "../charts";
 import type { PolicyCohorts, PolicyHistory } from "../../lib/api/agentPolicy";
 
 const TIER_LABEL: Record<string, string> = {
@@ -64,6 +74,7 @@ function pct(value: number): string {
 
 export function PolicyTierHistory({ history }: { history: PolicyHistory }) {
   const target = history.thresholds?.interviewConversionTarget ?? 20;
+  const untracked = history.runsWithoutPolicy;
   return (
     <section
       className="glass rounded-2xl border border-white/10 p-5"
@@ -72,85 +83,139 @@ export function PolicyTierHistory({ history }: { history: PolicyHistory }) {
       <h2 className="text-sm font-semibold uppercase tracking-wide text-aether-muted-dim">
         Policy tier over time
       </h2>
-      <p className="mt-0.5 text-xs text-aether-muted-dim">
-        Every tier an agent actually ran under, next to the measurements that
-        forced it. Unchanged runs are grouped — a flat stretch reads as flat.
-      </p>
 
-      {history.points.length === 0 ? (
-        <p className="mt-3 rounded-xl border border-white/10 p-3 text-xs text-aether-muted-dim">
-          {history.reason ?? "No policy history recorded yet."}
-          {history.runsWithoutPolicy > 0 ? (
-            <>
-              {" "}
-              {history.runsWithoutPolicy} earlier run
-              {history.runsWithoutPolicy === 1 ? "" : "s"} predate this
-              instrumentation and carry no tier — they are not back-filled with
-              today&apos;s verdict.
-            </>
-          ) : null}
-        </p>
-      ) : (
-        <>
-          {/*
-            D-ε ("the page ends"): this list grows one row per recorded tier
-            point and had no bound — it drove /dashboard/analytics to 4,178 CSS
-            px at 1600×1100, well past the ~2,500 px ceiling. The doctrine's own
-            remedy is scroll containment, not truncation: every point stays in
-            the DOM and reachable, it just scrolls inside its own container
-            instead of extending the page.
-          */}
-          <ol className="mt-3 max-h-[26rem] space-y-2 overflow-y-auto pr-1">
-            {history.points.map((point, index) => (
-              <li
-                key={`${point.at ?? "unknown"}-${index}`}
-                data-testid="policy-tier-history-point"
-                className="rounded-xl border border-white/10 p-3 text-xs"
-              >
-                <div className="flex flex-wrap items-center gap-2">
-                  {tierBadge(point.tier)}
-                  <span className="text-aether-muted">{formatWhen(point.at)}</span>
-                  <span className="text-aether-muted-dim">
-                    · {point.runs} run{point.runs === 1 ? "" : "s"}
-                  </span>
+      <div className="mt-3">
+        <TierBand
+          title="Tier bands, sized by the runs that obeyed them"
+          windowLabel="all-time — every recorded tier point, oldest first"
+          points={history.points}
+          target={target}
+          tierLabels={TIER_LABEL}
+          emptyMessage={history.reason ?? "No policy history recorded yet."}
+          emptyHint={
+            untracked > 0
+              ? `${untracked} earlier run${
+                  untracked === 1 ? "" : "s"
+                } predate this instrumentation and carry no tier — they are not back-filled with today's verdict.`
+              : undefined
+          }
+          footnote={
+            untracked > 0
+              ? `${untracked} earlier run${
+                  untracked === 1 ? "" : "s"
+                } recorded no tier (they predate this instrumentation) and are excluded rather than guessed.`
+              : undefined
+          }
+        />
+      </div>
+
+      {history.points.length > 0 ? (
+        /*
+          D-ε ("the page ends"): this list grows one row per recorded tier
+          point and had no bound. Scroll containment, not truncation — every
+          point stays in the DOM and reachable. The band above now carries the
+          shape, so the list needs less of the page than it did: 16rem instead
+          of 26rem.
+        */
+        <ol className="mt-4 max-h-[16rem] space-y-2 overflow-y-auto pr-1">
+          {history.points.map((point, index) => (
+            <li
+              key={`${point.at ?? "unknown"}-${index}`}
+              data-testid="policy-tier-history-point"
+              className="rounded-xl border border-white/10 p-3 text-xs"
+            >
+              <div className="flex flex-wrap items-center gap-2">
+                {tierBadge(point.tier)}
+                <span className="text-aether-muted">{formatWhen(point.at)}</span>
+                <span className="text-aether-muted-dim">
+                  · {point.runs} run{point.runs === 1 ? "" : "s"}
+                </span>
+              </div>
+              <dl className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-aether-muted-dim">
+                <div className="flex gap-1">
+                  <dt>Interview conversion</dt>
+                  <dd className="mono text-aether-muted">{pct(point.conversionRate)}</dd>
+                  <dd>vs {pct(target)} target</dd>
                 </div>
-                <dl className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-aether-muted-dim">
+                <div className="flex gap-1">
+                  <dt>Submissions measured</dt>
+                  <dd className="mono text-aether-muted">{point.sampleSize}</dd>
+                </div>
+                {point.dimensionsBelowFloor.length > 0 ? (
                   <div className="flex gap-1">
-                    <dt>Interview conversion</dt>
-                    <dd className="mono text-aether-muted">{pct(point.conversionRate)}</dd>
-                    <dd>vs {pct(target)} target</dd>
+                    <dt>Dimensions at/below floor</dt>
+                    <dd className="text-aether-muted">
+                      {point.dimensionsBelowFloor.join(", ")}
+                    </dd>
                   </div>
-                  <div className="flex gap-1">
-                    <dt>Submissions measured</dt>
-                    <dd className="mono text-aether-muted">{point.sampleSize}</dd>
-                  </div>
-                  {point.dimensionsBelowFloor.length > 0 ? (
-                    <div className="flex gap-1">
-                      <dt>Dimensions at/below floor</dt>
-                      <dd className="text-aether-muted">
-                        {point.dimensionsBelowFloor.join(", ")}
-                      </dd>
-                    </div>
-                  ) : null}
-                </dl>
-              </li>
-            ))}
-          </ol>
-          {history.runsWithoutPolicy > 0 ? (
-            <p className="mt-2 text-[11px] text-aether-muted-dim">
-              {history.runsWithoutPolicy} earlier run
-              {history.runsWithoutPolicy === 1 ? "" : "s"} recorded no tier (they
-              predate this instrumentation) and are excluded rather than guessed.
-            </p>
-          ) : null}
-        </>
-      )}
+                ) : null}
+              </dl>
+            </li>
+          ))}
+        </ol>
+      ) : null}
     </section>
   );
 }
 
 export function PolicyCohortProgress({ cohorts }: { cohorts: PolicyCohorts }) {
-  const rows = cohorts.cohorts;
+  const rows: BulletRow[] = cohorts.cohorts.map((cohort) => ({
+    label: TIER_LABEL[cohort.tier] ?? cohort.tier,
+    value: cohort.conversionRate ?? null,
+    display:
+      cohort.conversionRate === null || cohort.conversionRate === undefined
+        ? undefined
+        : pct(cohort.conversionRate),
+    basis: `${cohort.interviewed} interview${
+      cohort.interviewed === 1 ? "" : "s"
+    } from ${cohort.submitted} submitted`,
+    // A withheld rate keeps its reason ON the row — the same words the list
+    // used, so "we will not print a rate from 3 submissions" survives the
+    // move from prose to chart intact.
+    note:
+      cohort.conversionRate === null || cohort.conversionRate === undefined
+        ? `not enough data yet — at least ${cohorts.minSampleSize} submissions are needed before a rate means anything`
+        : undefined,
+    testId: `policy-cohort-${cohort.tier}`,
+    trailing:
+      cohort.conversionRate === null || cohort.conversionRate === undefined ? null : (
+        <span
+          className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+            cohort.meetsTarget
+              ? "border-aether-green/40 text-aether-green"
+              : "border-aether-amber/40 text-aether-amber"
+          }`}
+        >
+          {cohort.meetsTarget
+            ? `at or above the ${pct(cohorts.target)} target`
+            : `${pct(cohort.gapPoints ?? 0)} to go`}
+        </span>
+      ),
+  }));
+
+  /**
+   * The denominator ribbon. Every tier's submissions, plus the ones that
+   * predate the instrumentation drawn as their own hatched segment — which is
+   * how "these rates describe 27 of 317 applications" becomes a proportion you
+   * can see rather than a sentence you might skip.
+   */
+  const coverage = [
+    ...cohorts.cohorts.map((cohort) => ({
+      label: TIER_LABEL[cohort.tier] ?? cohort.tier,
+      count: cohort.submitted,
+      kind: "attributed" as const,
+    })),
+    ...(cohorts.untagged.submitted > 0
+      ? [
+          {
+            label: "No tier recorded",
+            count: cohorts.untagged.submitted,
+            kind: "unattributed" as const,
+          },
+        ]
+      : []),
+  ];
+
   return (
     <section
       className="glass rounded-2xl border border-white/10 p-5"
@@ -159,75 +224,34 @@ export function PolicyCohortProgress({ cohorts }: { cohorts: PolicyCohorts }) {
       <h2 className="text-sm font-semibold uppercase tracking-wide text-aether-muted-dim">
         Interview conversion by policy tier
       </h2>
-      <p className="mt-0.5 text-xs text-aether-muted-dim">
-        Applications grouped by the rigor tier they were submitted under, each
-        against the {pct(cohorts.target)} (1-in-5) target. This is how you can
-        tell whether escalating rigor is actually working.
-      </p>
 
-      {rows.length === 0 ? (
-        <p className="mt-3 rounded-xl border border-white/10 p-3 text-xs text-aether-muted-dim">
-          No application has been submitted under a recorded policy tier yet.
-        </p>
-      ) : (
-        <ul className="mt-3 space-y-2">
-          {rows.map((cohort) => (
-            <li
-              key={cohort.tier}
-              data-testid={`policy-cohort-${cohort.tier}`}
-              className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 p-3 text-xs"
-            >
-              <div className="flex flex-wrap items-center gap-2">
-                {tierBadge(cohort.tier)}
-                <span className="text-aether-muted">
-                  {cohort.interviewed} interview
-                  {cohort.interviewed === 1 ? "" : "s"} from {cohort.submitted}{" "}
-                  submitted
-                </span>
-              </div>
-              {cohort.conversionRate === null || cohort.conversionRate === undefined ? (
-                <span className="text-right text-aether-muted-dim">
-                  <span className="mono mr-1 text-base font-bold">—</span>
-                  not enough data yet — at least {cohorts.minSampleSize} submissions
-                  are needed before a rate means anything
-                </span>
-              ) : (
-                <span className="text-right">
-                  <span
-                    className={`mono text-base font-bold ${
-                      cohort.meetsTarget ? "text-aether-green" : "text-aether-amber"
-                    }`}
-                  >
-                    {pct(cohort.conversionRate)}
-                  </span>
-                  <span className="ml-1 text-aether-muted-dim">
-                    {cohort.meetsTarget
-                      ? `at or above the ${pct(cohorts.target)} target`
-                      : `${pct(cohort.gapPoints ?? 0)} to go`}
-                  </span>
-                </span>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
+      <div className="mt-3">
+        <BulletChart
+          title="Each tier's cohort against the target"
+          windowLabel="all-time — applications grouped by the tier they were submitted under"
+          rows={rows}
+          target={{ value: cohorts.target, label: `${pct(cohorts.target)} target` }}
+          coverage={coverage}
+          emptyMessage="No application has been submitted under a recorded policy tier yet."
+          emptyHint="Cohorts appear here as soon as one submission carries a recorded tier."
+        />
+      </div>
 
       {cohorts.untagged.submitted > 0 ? (
         <p
-          className="mt-2 rounded-xl border border-white/10 p-3 text-[11px] text-aether-muted-dim"
+          data-prose="caption"
+          className="mt-2 text-[11px] leading-[1.45] text-aether-muted-dim"
           data-testid="policy-cohort-untagged"
         >
-          {cohorts.untagged.submitted} further submitted application
-          {cohorts.untagged.submitted === 1 ? " was" : "s were"}{" "}
-          {cohorts.untagged.reason ??
-            "submitted before the rigor policy was instrumented"}
-          , so {cohorts.untagged.submitted === 1 ? "its" : "their"} outcome
-          {cohorts.untagged.interviewed > 0
-            ? ` (${cohorts.untagged.interviewed} interview${
-                cohorts.untagged.interviewed === 1 ? "" : "s"
-              })`
-            : ""}{" "}
-          cannot honestly be credited to any tier.
+          {`${cohorts.untagged.submitted} not creditable to any tier${
+            cohorts.untagged.interviewed > 0
+              ? `, including ${cohorts.untagged.interviewed} interview${
+                  cohorts.untagged.interviewed === 1 ? "" : "s"
+                }`
+              : ""
+          } — ${
+            cohorts.untagged.reason ?? "submitted before the rigor policy was instrumented"
+          }.`}
         </p>
       ) : null}
     </section>
