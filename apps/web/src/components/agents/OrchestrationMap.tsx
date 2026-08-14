@@ -50,6 +50,23 @@
  * A dispatch in flight disables buttons and narrates itself in words; it never
  * lights a node up. Nothing here can make a node look alive that the run store
  * does not independently report as alive.
+ *
+ * U-STORY-3a — CROSS-WORKFLOW LINKAGES (2026-08-14 mandate: "story extraction
+ * and resume tailoring / cover letter agents are on separate workflows on the
+ * UI — users must be able to KNOW THE LINKAGES VISUALLY"). Two additions, both
+ * fed by ONE source: the checked-in, provenance-carrying table in
+ * `workflow-linkage.ts`.
+ *   - a quiet PORT on any node whose counterpart lives on another map
+ *     ("→ feeds Resume Tailoring (Application Pipeline)"), which jumps to that
+ *     counterpart and flashes it;
+ *   - a "Show connections" OVERLAY (`?links=1`, shareable) drawing those wires
+ *     across the three panels, with the selected node's neighbourhood lit and
+ *     the rest dimmed.
+ * These are STRUCTURAL edges — how the system is wired — and they are drawn as
+ * such: hairline, dotted, labelled, never coral, and NEVER animated. Motion on
+ * this console means one thing (a live run), and a wire is not a run. Run-level
+ * causal traces ("this run consumed stories X and Y") need a parent run id the
+ * API does not record yet, so they are not drawn, not faked, and not stubbed.
  */
 import dynamic from "next/dynamic";
 import {
@@ -65,6 +82,7 @@ import { createPortal } from "react-dom";
 
 import { useNow } from "../../hooks/useNow";
 import { useRenderCapabilities } from "../../hooks/useRenderCapabilities";
+import { useUrlFlag } from "../../hooks/useUrlFlag";
 import { parseServerTime } from "../../lib/agent-run-health";
 import { runErrorNotice, type Notice } from "../../lib/agents-feedback";
 import type { AgentRun } from "../../lib/api/agents";
@@ -90,6 +108,24 @@ import {
   stageNarration,
   type RunTarget,
 } from "./orchestration-run-plan";
+import {
+  buildLinkageLines,
+  crossMapLinks,
+  linkageSentences,
+  neighborhoodOf,
+  portsFor,
+  LINKAGE_DASH,
+  LINKAGE_LEGEND,
+  LINKAGE_STROKE,
+  LINKAGE_STROKE_DIM,
+  LINKAGE_STROKE_FOCUS,
+  LINKAGE_TOGGLE_LABEL,
+  type Box,
+  type Clip,
+  type CrossMapLink,
+  type LinkageRect,
+  type NodePort,
+} from "./workflow-linkage";
 
 /**
  * Binding constraint 2 — the three.js layer is code-split and NEVER server
@@ -343,11 +379,106 @@ interface NodeRunProps {
   onRun: () => void;
 }
 
+/**
+ * How many ports a node shows before it offers the rest behind a disclosure.
+ * Two, because a two-line chip is ~26px and a node that feeds four other
+ * workflows would otherwise be three times the height of its neighbours — the
+ * map's column rhythm is what makes it readable at a glance.
+ */
+const PORTS_SHOWN = 2;
+
+/** Stable empties, so a map with no wiring re-renders identically to before. */
+const EMPTY_PORTS: NodePort[] = [];
+const noopPort = (): void => {};
+
+/** The query-string flag that makes an overlay view shareable (`?links=1`). */
+const LINKS_URL_FLAG = "links";
+
+/** How long a jumped-to node stays ringed. Long enough to find, short enough
+ *  that it can never be mistaken for a state the node is in. */
+const FLASH_MS = 2000;
+
+/** Hold a label plate inside the drawing surface (narrow viewports). */
+function clampLabelX(x: number, width: number, canvas: number): number {
+  const half = width / 2;
+  if (canvas <= width + 8) return canvas / 2;
+  return Math.min(Math.max(x, half + 4), canvas - half - 4);
+}
+
+/** Measured node boxes for the cross-map overlay, in wrapper coordinates. */
+interface LinkGeometry {
+  width: number;
+  height: number;
+  boxes: Record<string, Box>;
+  clips: Record<string, Clip>;
+  /** Text the wire labels must not be printed over. */
+  keepOut: LinkageRect[];
+}
+
+const EMPTY_LINK_GEOM: LinkGeometry = {
+  width: 0,
+  height: 0,
+  boxes: {},
+  clips: {},
+  keepOut: [],
+};
+
+/**
+ * Everything on a map that is WORDS rather than surface: the map heading, the
+ * stage labels, the ports under the cards, the honesty footnotes and the
+ * legend. A wire label that lands on any of them makes two sentences
+ * unreadable instead of one, so the label placer routes around them.
+ */
+const LABEL_KEEP_OUT_SELECTOR = [
+  "h3",
+  "h4",
+  ".ag-stage-label",
+  "[data-testid^='orchestration-ports-']",
+  "[data-testid^='orchestration-footnote-']",
+  "[data-testid^='orchestration-scroll-hint-']",
+  "[data-testid='orchestration-links-bar']",
+].join(", ");
+
+/**
+ * Identity stability for the overlay geometry: a scroll or a clock tick that
+ * moved nothing must not produce a new object, or every wire would be rebuilt
+ * sixty times a second while a map is dragged.
+ */
+function sameLinkGeometry(a: LinkGeometry, b: LinkGeometry): boolean {
+  if (a.width !== b.width || a.height !== b.height) return false;
+  if (a.keepOut.length !== b.keepOut.length) return false;
+  if (
+    a.keepOut.some((r, i) => {
+      const o = b.keepOut[i];
+      return r.x !== o.x || r.y !== o.y || r.w !== o.w || r.h !== o.h;
+    })
+  ) {
+    return false;
+  }
+  const aKeys = Object.keys(a.boxes);
+  const bKeys = Object.keys(b.boxes);
+  if (aKeys.length !== bKeys.length) return false;
+  return aKeys.every((key) => {
+    const x = a.boxes[key];
+    const y = b.boxes[key];
+    if (!y) return false;
+    if (x.x !== y.x || x.y !== y.y || x.w !== y.w || x.h !== y.h) return false;
+    const ca = a.clips[key];
+    const cb = b.clips[key];
+    if (!ca || !cb) return ca === cb;
+    return ca.left === cb.left && ca.right === cb.right;
+  });
+}
+
 function NodeCard({
   node,
   selected,
   onToggleSelect,
   run,
+  ports,
+  onOpenPort,
+  linkage,
+  flash,
 }: {
   node: MapNode;
   /** Part of the current multi-run selection. Never true for a roadmap node. */
@@ -355,18 +486,32 @@ function NodeCard({
   onToggleSelect: ((key: string) => void) | null;
   /** `null` when the console handed the map no trigger — then no run UI exists. */
   run: NodeRunProps | null;
+  /** U-STORY-3a: this node's CROSS-MAP wiring. Empty ⇒ no port renders. */
+  ports: NodePort[];
+  onOpenPort: (port: NodePort) => void;
+  /**
+   * Where this node sits relative to the selected node's linkage neighbourhood
+   * while the overlay is on — `null` whenever there is nothing to highlight, so
+   * the console's default look is completely unchanged.
+   */
+  linkage: "focus" | "neighbour" | "dimmed" | null;
+  /** Briefly ringed because a port on another map just jumped here. */
+  flash: boolean;
 }) {
   const detailId = useId();
   const [hovered, setHovered] = useState(false);
+  const [allPorts, setAllPorts] = useState(false);
   const ref = useRef<HTMLButtonElement>(null);
   const agent = node.agent;
+  const shownPorts = allPorts ? ports : ports.slice(0, PORTS_SHOWN);
+  const hiddenPorts = ports.length - shownPorts.length;
   const isPlanned = node.state === "planned";
   const badge = nodeBadge(node);
   const open = hovered;
   const selectable = onToggleSelect !== null && (run?.runnable || selected);
 
   return (
-    <div className="ag-node-shell relative">
+    <div className="ag-node-shell relative" data-linkage={linkage ?? undefined}>
       <div className="relative" style={{ height: NODE_H }}>
       <button
         ref={ref}
@@ -374,6 +519,13 @@ function NodeCard({
         data-testid={`orchestration-agent-${agent.agentKey}`}
         data-node-id={agent.agentKey}
         data-state={node.state}
+        // U-STORY-3a. `data-linkage` says where this node sits in the SELECTED
+        // node's wiring neighbourhood; `data-flash` is the two-second ring a
+        // node gets when a port on another map jumped the viewer here. Neither
+        // is a run state, so neither may touch `data-motion` below — a wire and
+        // a wayfinding cue can never look like work in progress.
+        data-linkage={linkage ?? undefined}
+        data-flash={flash ? "true" : undefined}
         // Motion is a claim. `data-motion` is the single place that claim is
         // made, so a reviewer can grep it: only a genuinely in-flight,
         // non-stalled run is ever "pulse".
@@ -501,6 +653,67 @@ function NodeCard({
       ) : null}
       </div>
 
+      {/* ---- U-STORY-3a: the cross-map ports ----
+          One quiet chip per structural wire that leaves or enters this node
+          FROM ANOTHER WORKFLOW MAP. Same-map relationships are already drawn by
+          that map's stage order and are deliberately absent here.
+
+          A real <button>, not a hover affordance: it is in the tab order, it
+          carries the whole sentence ("→ feeds Resume Tailoring Agent
+          (Application Pipeline) — Stories the extractor banks become…") as its
+          accessible name, and activating it moves focus to the counterpart node
+          on its own map. The visible text is the short form because a stage
+          column is 136px at its narrowest; the full sentence never disappears —
+          it is the title and the accessible name. */}
+      {ports.length > 0 ? (
+        <ul
+          data-testid={`orchestration-ports-${agent.agentKey}`}
+          className="mt-1.5 flex flex-col gap-1"
+        >
+          {shownPorts.map((port) => (
+            <li key={`${port.direction}:${port.link.id}`}>
+              <button
+                type="button"
+                data-testid={`orchestration-port-${port.direction}-${port.link.id}`}
+                data-direction={port.direction}
+                title={port.description}
+                aria-label={port.description}
+                onClick={() => onOpenPort(port)}
+                className="ag-port flex w-full items-start gap-1 rounded-md border border-hairline px-1.5 py-1 text-left text-[10px] leading-[1.35] text-aether-muted outline-none transition-colors duration-[var(--dur-fast)] hover:border-hairline-strong hover:text-aether-text focus-visible:ring-2 focus-visible:ring-aether-coral/70"
+              >
+                <span aria-hidden="true" className="shrink-0 text-aether-muted-dim">
+                  {port.direction === "out" ? "→" : "←"}
+                </span>
+                {/* TWO LINES, and the reason is measured: at the map's real
+                    column width (~125px at 1600px) the counterpart name and its
+                    map name on one row truncated the NAME to three characters
+                    ("→ Mar… Context & Enrichment") — the half that matters lost
+                    to the half that repeats. Stacked, both survive. */}
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate">{port.counterpart.name}</span>
+                  <span className="block truncate text-[9px] text-aether-muted-dim">
+                    {port.counterpart.mapName}
+                  </span>
+                </span>
+              </button>
+            </li>
+          ))}
+          {hiddenPorts > 0 ? (
+            <li>
+              <button
+                type="button"
+                data-testid={`orchestration-ports-more-${agent.agentKey}`}
+                onClick={() => setAllPorts(true)}
+                aria-label={`Show ${hiddenPorts} more connection${hiddenPorts === 1 ? "" : "s"} for ${agent.name}`}
+                className="w-full rounded-md border border-dashed border-hairline px-1.5 py-1 text-left text-[10px] leading-[1.35] text-aether-muted-dim outline-none transition-colors duration-[var(--dur-fast)] hover:border-hairline-strong hover:text-aether-muted focus-visible:ring-2 focus-visible:ring-aether-coral/70"
+              >
+                +{hiddenPorts} more
+              </button>
+            </li>
+          ) : null}
+        </ul>
+      ) : null}
+
       {/* The result of the LAST dispatch of this node, verbatim — it is the
           same `agents-feedback` Notice the console banner shows, so a quota
           wall, a spend cap or an approval gate reads here in the API's own
@@ -561,14 +774,30 @@ interface MapRunApi {
   onRunNode: (agentKey: string) => void;
 }
 
+/**
+ * U-STORY-3a — everything one map needs to draw its share of the cross-map
+ * wiring. `null` only when the payload produced no cross-map linkage at all.
+ */
+interface MapLinkageApi {
+  /** Every cross-map link in this payload (both directions, all three maps). */
+  links: CrossMapLink[];
+  /** Highlight class per agent key while a node is selected, else empty. */
+  highlight: Record<string, "focus" | "neighbour" | "dimmed">;
+  /** The node currently flashing because a port jumped here. */
+  flashKey: string | null;
+  onOpenPort: (port: NodePort) => void;
+}
+
 function MapGraph({
   model,
   allowGl,
   runApi,
+  linkageApi,
 }: {
   model: MapModel;
   allowGl: boolean;
   runApi: MapRunApi | null;
+  linkageApi: MapLinkageApi | null;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const stageRefs = useRef<Array<HTMLLIElement | null>>([]);
@@ -921,6 +1150,10 @@ function MapGraph({
                           node={node}
                           selected={runApi?.selected.has(key) ?? false}
                           onToggleSelect={runApi ? runApi.onToggleSelect : null}
+                          ports={linkageApi ? portsFor(key, linkageApi.links) : EMPTY_PORTS}
+                          onOpenPort={linkageApi?.onOpenPort ?? noopPort}
+                          linkage={linkageApi?.highlight[key] ?? null}
+                          flash={linkageApi?.flashKey === key}
                           run={
                             runApi && availability
                               ? {
@@ -1070,11 +1303,64 @@ export default function OrchestrationMap({
   // run that dies while the screen is open keeps its live dot until reload.
   const clock = useNow();
   const now = nowProp ?? clock;
-  const { allowGl } = useRenderCapabilities();
+  const { allowGl, reducedMotion } = useRenderCapabilities();
 
   const models = useMemo(
     () => data.maps.map((entry) => buildMapModel(entry, runs, now)),
     [data, runs, now],
+  );
+
+  // ---- U-STORY-3a: cross-workflow wiring ----------------------------------
+  // The linkage TABLE is fixed and checked in; which of its edges are actually
+  // CROSS-MAP is decided from the payload that just loaded, so a backend that
+  // re-homes an agent silently and correctly changes what is drawn.
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  // `useId` can contain colons, which are not legal inside a `url(#…)`
+  // reference — stripped, so the arrow markers resolve in every browser.
+  const overlayId = `linkage-${useId().replace(/:/g, "")}`;
+  const [linksOn, setLinksOn] = useUrlFlag(LINKS_URL_FLAG);
+  const links = useMemo(() => crossMapLinks(models), [models]);
+  const [flashKey, setFlashKey] = useState<string | null>(null);
+  const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (flashTimer.current) clearTimeout(flashTimer.current);
+    },
+    [],
+  );
+
+  /**
+   * Follow a port to the node at the other end — the whole point of a port.
+   *
+   * It SCROLLS the counterpart into view, MOVES FOCUS to it (so the jump works
+   * from the keyboard and is announced, not just visually implied) and rings it
+   * for two seconds so the eye lands on the right card among twenty-two. The
+   * ring is wayfinding: neutral, time-boxed, and never the coral bloom that
+   * means a run is in flight.
+   */
+  const focusNode = useCallback(
+    (agentKey: string) => {
+      const host = wrapperRef.current;
+      if (!host) return;
+      const el = host.querySelector<HTMLElement>(`[data-node-id="${agentKey}"]`);
+      if (!el) return;
+      if (typeof el.scrollIntoView === "function") {
+        el.scrollIntoView({
+          block: "center",
+          inline: "center",
+          // A viewer who asked for less motion gets an instant jump.
+          behavior: reducedMotion ? "auto" : "smooth",
+        });
+      }
+      el.focus({ preventScroll: true });
+      setFlashKey(agentKey);
+      if (flashTimer.current) clearTimeout(flashTimer.current);
+      flashTimer.current = setTimeout(() => {
+        flashTimer.current = null;
+        setFlashKey((key) => (key === agentKey ? null : key));
+      }, FLASH_MS);
+    },
+    [reducedMotion],
   );
 
   // ---- Selection (one map at a time — the run bar is one bar) -------------
@@ -1192,6 +1478,154 @@ export default function OrchestrationMap({
   const batchActive = batch !== null && !batch.finished;
   const dispatchingBackend = batchActive ? (batch.targets[batch.index]?.backend ?? null) : null;
 
+  // ---- U-STORY-3a: measured geometry for the overlay ----------------------
+  // Only measured while the overlay is ON — an off overlay costs nothing, and
+  // an unmeasured end is a wire that is not drawn rather than one drawn to a
+  // guessed coordinate.
+  const [linkGeom, setLinkGeom] = useState<LinkGeometry>(EMPTY_LINK_GEOM);
+  const linkRaf = useRef(0);
+
+  const measureLinks = useCallback(() => {
+    const host = wrapperRef.current;
+    if (!host || !linksOn) {
+      setLinkGeom((prev) => (prev === EMPTY_LINK_GEOM ? prev : EMPTY_LINK_GEOM));
+      return;
+    }
+    const hostRect = host.getBoundingClientRect();
+    if (hostRect.width === 0 || hostRect.height === 0) {
+      setLinkGeom((prev) => (prev === EMPTY_LINK_GEOM ? prev : EMPTY_LINK_GEOM));
+      return;
+    }
+    const boxes: Record<string, Box> = {};
+    const clips: Record<string, Clip> = {};
+    host.querySelectorAll<HTMLElement>("[data-node-id]").forEach((el) => {
+      const id = el.dataset.nodeId;
+      if (!id) return;
+      const r = el.getBoundingClientRect();
+      boxes[id] = {
+        x: r.left - hostRect.left,
+        y: r.top - hostRect.top,
+        w: r.width,
+        h: r.height,
+      };
+      // Each map scrolls horizontally on its own. A node past its fold keeps
+      // its real position; the wire is clamped to the fold instead of being
+      // drawn across the panel in front of it.
+      const scroller = el.closest<HTMLElement>("[data-testid^='orchestration-graph-']");
+      if (scroller) {
+        const s = scroller.getBoundingClientRect();
+        clips[id] = { left: s.left - hostRect.left, right: s.right - hostRect.left };
+      }
+    });
+    const keepOut: LinkageRect[] = [];
+    host.querySelectorAll<HTMLElement>(LABEL_KEEP_OUT_SELECTOR).forEach((el) => {
+      const r = el.getBoundingClientRect();
+      if (r.width === 0 || r.height === 0) return;
+      keepOut.push({
+        x: r.left - hostRect.left,
+        y: r.top - hostRect.top,
+        w: r.width,
+        h: r.height,
+      });
+    });
+    const next: LinkGeometry = {
+      width: Math.round(hostRect.width),
+      height: Math.round(hostRect.height),
+      boxes,
+      clips,
+      keepOut,
+    };
+    setLinkGeom((prev) => (sameLinkGeometry(prev, next) ? prev : next));
+  }, [linksOn]);
+
+  useLayoutEffect(() => {
+    measureLinks();
+  }, [measureLinks, models, links]);
+
+  useEffect(() => {
+    if (!linksOn || typeof window === "undefined") return;
+    // Scroll fires far faster than a re-render is useful; one frame of
+    // coalescing keeps a drag smooth without dropping the wires behind it.
+    const onChange = () => {
+      if (typeof requestAnimationFrame === "undefined") {
+        measureLinks();
+        return;
+      }
+      if (linkRaf.current) return;
+      linkRaf.current = requestAnimationFrame(() => {
+        linkRaf.current = 0;
+        measureLinks();
+      });
+    };
+    window.addEventListener("resize", onChange, { passive: true });
+    // `capture: true` — the scroll that moves a node happens inside each map's
+    // own scroller, and those events do not bubble to window.
+    window.addEventListener("scroll", onChange, { passive: true, capture: true });
+    let ro: ResizeObserver | undefined;
+    if (typeof ResizeObserver !== "undefined" && wrapperRef.current) {
+      ro = new ResizeObserver(onChange);
+      ro.observe(wrapperRef.current);
+    }
+    return () => {
+      window.removeEventListener("resize", onChange);
+      window.removeEventListener("scroll", onChange, true);
+      ro?.disconnect();
+      if (linkRaf.current && typeof cancelAnimationFrame !== "undefined") {
+        cancelAnimationFrame(linkRaf.current);
+        linkRaf.current = 0;
+      }
+    };
+  }, [linksOn, measureLinks]);
+
+  const linkageLines = useMemo(
+    () =>
+      linksOn ? buildLinkageLines(links, linkGeom.boxes, linkGeom.clips, linkGeom.keepOut) : [],
+    [linksOn, links, linkGeom],
+  );
+
+  /**
+   * The neighbourhood highlight rides the selection the map ALREADY has (the
+   * one the run bar counts), so there is no second, competing notion of "the
+   * node I am looking at". It applies only while the overlay is on: dimming
+   * twenty nodes because someone ticked one for a run would be an ambush.
+   */
+  const neighborhood = useMemo(
+    () => (linksOn && selection.keys.length > 0 ? neighborhoodOf(selection.keys, links) : null),
+    [linksOn, selection.keys, links],
+  );
+
+  const highlight = useMemo(() => {
+    const out: Record<string, "focus" | "neighbour" | "dimmed"> = {};
+    if (!neighborhood) return out;
+    const focused = new Set(selection.keys);
+    models.forEach((model) =>
+      model.stages.forEach((stage) =>
+        stage.nodes.forEach((node) => {
+          const key = node.agent.agentKey;
+          out[key] = focused.has(key)
+            ? "focus"
+            : neighborhood.keys.has(key)
+              ? "neighbour"
+              : "dimmed";
+        }),
+      ),
+    );
+    return out;
+  }, [neighborhood, selection.keys, models]);
+
+  const linkageApi = useMemo<MapLinkageApi | null>(
+    () =>
+      links.length === 0
+        ? null
+        : {
+            links,
+            highlight,
+            flashKey,
+            onOpenPort: (port: NodePort) => focusNode(port.counterpart.agentKey),
+          },
+    [links, highlight, flashKey, focusNode],
+  );
+
   const selectedModel = models.find((m) => m.key === selection.mapKey) ?? null;
   const selectedSet = useMemo(() => new Set(selection.keys), [selection.keys]);
   const selectionPlan = useMemo(
@@ -1200,7 +1634,49 @@ export default function OrchestrationMap({
   );
 
   return (
-    <div className="space-y-4" data-testid="orchestration-map">
+    <div ref={wrapperRef} className="relative space-y-4" data-testid="orchestration-map">
+      {/* ---- U-STORY-3a: the "Show connections" control ----
+          Rendered only when this payload actually produced cross-map wiring —
+          a toggle for nothing is a promise the data cannot keep. The sentence
+          beside it names BOTH classes of edge: what this draws (system wiring)
+          and what it does not (live run traces), with no date attached to the
+          second, because none has been earned. */}
+      {links.length > 0 ? (
+        <div
+          data-testid="orchestration-links-bar"
+          className="flex flex-wrap items-center gap-x-3 gap-y-1.5"
+        >
+          <button
+            type="button"
+            data-testid="orchestration-links-toggle"
+            aria-pressed={linksOn}
+            onClick={() => setLinksOn(!linksOn)}
+            title={
+              linksOn
+                ? "Hide the cross-workflow connection lines"
+                : `Draw the ${links.length} structural connections between these workflows`
+            }
+            className={`flex shrink-0 items-center gap-2 rounded-md border px-2.5 py-1.5 text-[11.5px] font-medium outline-none transition-colors duration-[var(--dur-fast)] focus-visible:ring-2 focus-visible:ring-aether-coral/70 ${
+              linksOn
+                ? "border-hairline-strong bg-surface-3 text-aether-text"
+                : "border-hairline bg-surface-1 text-aether-muted hover:border-hairline-strong hover:text-aether-text"
+            }`}
+          >
+            <i className="fa-solid fa-diagram-project text-[9px]" aria-hidden="true" />
+            {LINKAGE_TOGGLE_LABEL}
+            <span className="font-mono text-[10.5px] tabular-nums text-aether-muted-dim">
+              {links.length}
+            </span>
+          </button>
+          <p
+            data-testid="orchestration-links-legend"
+            className="min-w-0 max-w-[80ch] text-[11px] leading-[1.5] text-aether-muted-dim"
+          >
+            {LINKAGE_LEGEND}
+          </p>
+        </div>
+      ) : null}
+
       {models.map((model) => {
         const plan = onRunAgent ? runTargets(model) : [];
         const mapBatch = batch && batch.mapKey === model.key ? batch : null;
@@ -1299,7 +1775,7 @@ export default function OrchestrationMap({
             />
           ) : null}
 
-          <MapGraph model={model} allowGl={allowGl} runApi={runApi} />
+          <MapGraph model={model} allowGl={allowGl} runApi={runApi} linkageApi={linkageApi} />
 
           {/* The edge layer is decorative (aria-hidden); this states the same
               topology in words so a screen reader loses nothing when the
@@ -1312,6 +1788,140 @@ export default function OrchestrationMap({
         </section>
         );
       })}
+
+      {/* ---- U-STORY-3a: the linkage overlay ----
+          One SVG over the whole stack of maps, so a wire can cross from the
+          Learning Loop panel into the Application Pipeline panel — which is the
+          entire point: those two panels are where "the stories you bank" and
+          "the resume that uses them" live, and nothing on screen said so.
+
+          STRUCTURAL STYLING, and the reasons are load-bearing:
+            - a fine DOT pattern, distinct from both strokes the maps already
+              spend (solid = implemented stage transition, 5-5 dash = roadmap);
+            - white at low alpha, NEVER coral — coral means "live run" here and
+              a wire is not a run;
+            - `data-motion="none"` on every wire and not one SMIL element in the
+              subtree, so no wire can ever look like something flowing. A
+              run-level trace would be a different, causal claim, and the data
+              for it (a parent run id) does not exist yet;
+            - drawn only from MEASURED boxes, so nothing is ever drawn to a
+              position a node does not occupy;
+            - `pointer-events: none`, so the overlay can never swallow a click
+              meant for a node, a run button or a port.  */}
+      {linksOn && linkGeom.width > 0 ? (
+        <svg
+          data-testid="orchestration-linkage-overlay"
+          aria-hidden="true"
+          width={linkGeom.width}
+          height={linkGeom.height}
+          viewBox={`0 0 ${linkGeom.width} ${linkGeom.height}`}
+          className="pointer-events-none absolute inset-0 z-30"
+        >
+          <defs>
+            <marker
+              id={`${overlayId}-arrow`}
+              markerWidth="7"
+              markerHeight="7"
+              refX="5.5"
+              refY="3"
+              orient="auto"
+            >
+              <path d="M0,0 L6,3 L0,6 Z" fill={LINKAGE_STROKE} />
+            </marker>
+            <marker
+              id={`${overlayId}-arrow-focus`}
+              markerWidth="7"
+              markerHeight="7"
+              refX="5.5"
+              refY="3"
+              orient="auto"
+            >
+              <path d="M0,0 L6,3 L0,6 Z" fill={LINKAGE_STROKE_FOCUS} />
+            </marker>
+          </defs>
+          {linkageLines.map((line) => {
+            const state = neighborhood
+              ? neighborhood.linkIds.has(line.id)
+                ? "focus"
+                : "dimmed"
+              : "idle";
+            const stroke =
+              state === "focus"
+                ? LINKAGE_STROKE_FOCUS
+                : state === "dimmed"
+                  ? LINKAGE_STROKE_DIM
+                  : LINKAGE_STROKE;
+            return (
+              <g
+                key={line.id}
+                data-testid={`orchestration-linkage-${line.id}`}
+                data-linkage={state}
+                data-structural="true"
+                // Grep-able, exactly like the node's own claim: a structural
+                // wire is "none" here, always, with no branch that can make it
+                // anything else.
+                data-motion="none"
+              >
+                <title>{line.description}</title>
+                <path
+                  d={line.path}
+                  fill="none"
+                  stroke={stroke}
+                  strokeWidth={state === "focus" ? 1.4 : 1}
+                  strokeDasharray={LINKAGE_DASH}
+                  strokeLinecap="round"
+                  markerEnd={`url(#${overlayId}-${state === "focus" ? "arrow-focus" : "arrow"})`}
+                />
+                {/* A wire with no name is decoration. The label is dropped only
+                    for a DIMMED wire, where the neighbourhood in focus is the
+                    thing being read. */}
+                {state === "dimmed" ? null : (
+                  <g>
+                    {/* Keep the plate inside the drawing surface: at 390px a
+                        label near the right edge was being clipped in half by
+                        the SVG viewport (captured, then fixed). */}
+                    {/* A plate, because a wire's name has to survive crossing a
+                        card, a stage label or another wire. Measured the hard
+                        way first: without it, two labels merged into an
+                        unreadable smear in the 1600px capture. */}
+                    <rect
+                      x={clampLabelX(line.labelX, line.labelWidth, linkGeom.width) - line.labelWidth / 2}
+                      y={line.labelY - 15}
+                      width={line.labelWidth}
+                      height={14}
+                      rx={3}
+                      fill="#0c0c13"
+                      fillOpacity={0.92}
+                      stroke="rgba(255,255,255,0.08)"
+                      strokeWidth={1}
+                    />
+                    <text
+                      x={clampLabelX(line.labelX, line.labelWidth, linkGeom.width)}
+                      y={line.labelY - 5}
+                      textAnchor="middle"
+                      fontSize={9.5}
+                      letterSpacing="0.01em"
+                      fill={state === "focus" ? "#c9c9d6" : "#8b8ba1"}
+                    >
+                      {line.label}
+                    </text>
+                  </g>
+                )}
+              </g>
+            );
+          })}
+        </svg>
+      ) : null}
+
+      {/* The overlay is decorative to a screen reader (aria-hidden), so the
+          same wiring is stated in words — the accessible equivalent, carrying
+          the artefact each pair shares and what the link means. */}
+      {linksOn && links.length > 0 ? (
+        <p className="sr-only" data-testid="orchestration-linkage-text">
+          Cross-workflow wiring, from the checked-in linkage table:{" "}
+          {linkageSentences(links).join(" ")}
+        </p>
+      ) : null}
 
       {/* ---- ORCH-RUN 2 — the multi-select run bar ----
           Appears only while a selection exists, states the count, and states
