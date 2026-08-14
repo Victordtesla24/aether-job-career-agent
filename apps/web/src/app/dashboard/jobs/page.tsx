@@ -20,6 +20,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
+  ApiError,
   apiBaseUrl,
   apiRequest,
   describeApiError,
@@ -738,7 +739,17 @@ export default function JobsPage() {
       setSyncResult(discoverySummary(out));
     } catch (e) {
       setSyncPhase(null);
-      setError(describeApiError(e, "Discovery run failed"));
+      // A structured backend refusal (the Sync cooldown 429 from
+      // /agents/scout/run, S-FIX-A/S-7) already says exactly what happened and
+      // when to retry. Show THAT sentence rather than the transport-level
+      // "POST /agents/scout/run failed (429): {…}" wrapper, which buries the
+      // honest message inside raw JSON. Anything else keeps the shared
+      // describeApiError rendering.
+      const detailMessage =
+        e instanceof ApiError && typeof e.detail?.message === "string"
+          ? e.detail.message
+          : null;
+      setError(detailMessage ?? describeApiError(e, "Discovery run failed"));
     } finally {
       setRunning(false);
     }
@@ -1245,7 +1256,13 @@ export default function JobsPage() {
                   <span
                     data-testid="source-status-error"
                     title={s.errorText}
-                    className="max-w-[220px] truncate text-red-300/90"
+                    // A quota pause is a neutral, self-healing state (S-FIX-A/S-2)
+                    // — it carries an explanation but must not read as a failure,
+                    // so the alarm colour follows the badge, not the presence of
+                    // text.
+                    className={`max-w-[220px] truncate ${
+                      s.badge === "error" ? "text-red-300/90" : "text-aether-muted-dim"
+                    }`}
                   >
                     — {s.errorText}
                   </span>

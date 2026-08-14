@@ -4,8 +4,7 @@ from __future__ import annotations
 import hashlib
 import os
 import urllib.parse
-import zipfile
-from io import BytesIO
+from dataclasses import dataclass
 from typing import Any
 
 from fastapi import APIRouter, File, Form, HTTPException, Response, UploadFile, status
@@ -13,6 +12,7 @@ from pydantic import BaseModel, Field
 
 from app.middleware.auth import CurrentUser
 from app.repositories.resume import ResumeRepository
+from app.services.resume_docx import DOCX_CONTENT_TYPE
 
 router = APIRouter()
 
@@ -24,14 +24,11 @@ router = APIRouter()
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 
 _PDF_MAGIC = b"%PDF"
-#: Local-file-header / empty-archive / spanned-archive ZIP signatures. A .docx
-#: is an OOXML ZIP, so this is the first (cheap) gate before opening it.
-_ZIP_MAGICS = (b"PK\x03\x04", b"PK\x05\x06", b"PK\x07\x08")
 
 _PDF_CONTENT_TYPE = "application/pdf"
-_DOCX_CONTENT_TYPE = (
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-)
+#: Re-exported from the DOCX engine so ingestion and rendering name the same
+#: WordprocessingML media type (U2b).
+_DOCX_CONTENT_TYPE = DOCX_CONTENT_TYPE
 _TEXT_EXTENSIONS = (".txt", ".text", ".md", ".markdown")
 
 #: Honest rejection copy (MON-012). Before U2a, ANY non-PDF upload was decoded
@@ -48,43 +45,44 @@ _UNSUPPORTED_FORMAT_DETAIL = (
 
 @router.get("")
 def list_resumes(current_user: CurrentUser) -> list[dict[str, Any]]:
-    return _with_format_preserved(ResumeRepository().list_by_user(current_user["id"]))
+    repo = ResumeRepository()
+    return _with_format_preserved(
+        repo.list_by_user(current_user["id"]),
+        repo.original_meta_by_user(current_user["id"]),
+    )
 
 
-def _with_format_preserved(resumes: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Stamp each résumé with an honest ``formatPreserved`` boolean (MON-011).
+def _with_format_preserved(
+    resumes: list[dict[str, Any]], original_meta: dict[str, dict[str, Any]] | None = None
+) -> list[dict[str, Any]]:
+    """Stamp each résumé with an honest ``formatPreserved`` + ``formatFidelity``.
 
-    ``True`` ONLY when ``GET /resumes/{id}/download`` would genuinely reproduce
-    the original document — i.e. when ``resolve_original_pdf`` finds a bundled
-    asset whose digest matches, which is the exact condition that endpoint
-    branches on, resolved through the SAME parent-then-self ``formatHash``
-    precedence it uses. Every other résumé (every real user upload, whose
-    ``formatHash`` is a digest of the user's OWN bytes/text and so can never
-    collide with a bundled asset) downloads as the re-flowed branded template,
-    and now says so.
+    ``formatPreserved`` is ``True`` ONLY when ``GET /resumes/{id}/download``
+    would genuinely reproduce the user's own document, ``False`` when it
+    re-renders in Aether's template, and ``None`` when the source version
+    cannot be resolved at all (MON-011 + U2b). ``formatFidelity`` — ``{method,
+    confidence, note}`` — says WHICH mechanism produces that outcome and states
+    it in the user's own terms, because R-F4 forbids a silent claim: a
+    docx-native preservation and a low-confidence PDF re-flow used to render
+    identical copy in Resume Studio.
 
-    Before this, the Resume Studio "Format Integrity Check" panel inferred a
+    The decision itself lives in :mod:`app.services.resume_format`, shared with
+    the download endpoint below, so the claim can never drift from the render.
+
+    Before MON-011, the Resume Studio "Format Integrity Check" panel inferred a
     preservation claim from ``formatHash === baseHash`` — a self-comparison
     that is trivially true for a base résumé and says nothing about the
     download path — so every paying user was told their typography, spacing,
     columns and margins were preserved for a file that re-flows.
 
     The parent lookup reads the SAME list (a résumé's parent is another of that
-    user's own versions), so this adds no query.
+    user's own versions), so this adds no query; ``original_meta`` is one extra
+    metadata-only query per listing and never loads a stored blob.
     """
+    from app.services.resume_format import stamp_fidelity
     from app.services.resume_pdf import bundled_format_hashes
 
-    bundled = bundled_format_hashes()
-    by_id = {resume["id"]: resume for resume in resumes}
-    stamped: list[dict[str, Any]] = []
-    for resume in resumes:
-        parent = by_id.get(resume.get("parentId"))
-        format_hash = (parent or resume).get("formatHash") or resume.get("formatHash")
-        stamped.append({
-            **resume,
-            "formatPreserved": bool(format_hash) and format_hash in bundled,
-        })
-    return stamped
+    return stamp_fidelity(resumes, bundled_format_hashes(), original_meta or {})
 
 
 class ResumeIngestRequest(BaseModel):
@@ -134,14 +132,13 @@ def _looks_like_docx(data: bytes) -> bool:
     bytes must be a readable ZIP that contains the WordprocessingML part
     (``word/document.xml``). Random bytes behind a ``.docx`` extension fail
     here and are rejected honestly instead of being decoded into garbage text.
+
+    Defined once, in :mod:`app.services.resume_docx`, so ingestion and the
+    format-preserving render agree byte-for-byte on what a .docx is.
     """
-    if not data.startswith(_ZIP_MAGICS):
-        return False
-    try:
-        with zipfile.ZipFile(BytesIO(data)) as archive:
-            return any(name.startswith("word/") for name in archive.namelist())
-    except (zipfile.BadZipFile, OSError):
-        return False
+    from app.services.resume_docx import looks_like_docx
+
+    return looks_like_docx(data)
 
 
 def _extract_pdf_text(data: bytes) -> str:
@@ -174,17 +171,18 @@ def _extract_docx_text(data: bytes) -> str:
     raises ``zlib.error``. Enumerating that family is a losing game and every
     miss is an unhandled 500 instead of the honest rejection MON-012 promises,
     so any parse failure is reported as an unprocessable entity.
+
+    U2b: the paragraph walk lives in :mod:`app.services.resume_docx` and now
+    marks Word's OWN list items with a ``"• "`` prefix. Word stores a bullet
+    glyph in ``numbering.xml``, not in the paragraph text, so a .docx résumé
+    previously extracted ZERO bullets through ``extract_bullets`` (a
+    line-marker state machine) — the upload succeeded and then nothing in it
+    could ever be tailored.
     """
-    from docx import Document
+    from app.services.resume_docx import extract_docx_lines
 
     try:
-        document = Document(BytesIO(data))
-        lines = [paragraph.text.strip() for paragraph in document.paragraphs]
-        for table in document.tables:
-            for row in table.rows:
-                cells = [cell.text.strip() for cell in row.cells if cell.text.strip()]
-                if cells:
-                    lines.append(" | ".join(cells))
+        lines = extract_docx_lines(data)
     except Exception as exc:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_ENTITY, f"Could not parse DOCX: {exc}"
@@ -499,20 +497,86 @@ def _branded_content(
     return name, title, objective, template_sections
 
 
-@router.get("/{resume_id}/download")
-def download_resume(resume_id: str, current_user: CurrentUser) -> Response:
-    """Download a resume as a format-preserving PDF.
+def _tailored_text_document(
+    data: bytes, changes: list[tuple[str, str]]
+) -> tuple[bytes, int]:
+    """A plain-text/Markdown résumé with ONLY the reworded lines replaced.
 
-    - **Base resume** (no parent) backed by a bundled asset: the original
-      bundled PDF bytes, verbatim.
-    - **Tailored resume**: the original PDF with *only* the reworded bullets
-      redrawn in place — same two-column layout, peach title panel, coral
-      accents and fonts — plus a subtle highlight behind each changed bullet.
-      Every unchanged element stays byte-for-byte identical to the source.
-    - **No bundled source PDF on disk** (e.g. an externally-ingested variant):
-      the resume is rebuilt from its structured content with the branded
-      two-page template — each reworded bullet washed coral on page 2.
+    R-F4's "TXT/MD trivially preserved" case: the file has no layout beyond its
+    own characters, so preserving the format means returning the user's own
+    bytes with the changed sentences substituted in place — line order,
+    indentation, blank lines and every untouched line survive exactly.
+
+    Returns ``(bytes, applied_count)``; the caller compares the count against
+    the number of requested changes, because a download that quietly drops a
+    rewrite would hand the user a file that is neither their baseline nor their
+    tailored résumé.
     """
+    text = data.decode("utf-8", errors="strict")
+    applied = 0
+    for before, after in changes:
+        if before and before in text:
+            text = text.replace(before, after, 1)
+            applied += 1
+    return text.encode("utf-8"), applied
+
+
+@dataclass(frozen=True)
+class _RenderedResume:
+    """A produced download plus the VERIFIED fidelity report for it."""
+
+    content: bytes
+    media_type: str
+    filename: str
+    fidelity: Any  # app.services.resume_format.FormatFidelity
+
+
+def _tailoring_changes(
+    resume: dict[str, Any], parent: dict[str, Any] | None
+) -> list[tuple[str, str]]:
+    """The reworded bullets of ``resume``, diffed against its parent."""
+    if parent is None:
+        return []
+    parent_by_ref = {
+        b.get("evidenceRef"): b.get("text", "")
+        for b in parent.get("sections", {}).get("bullets", [])
+    }
+    changes: list[tuple[str, str]] = []
+    for bullet in resume.get("sections", {}).get("bullets", []):
+        before = parent_by_ref.get(bullet.get("evidenceRef"))
+        after = bullet.get("text", "")
+        if before and after and before != after:
+            changes.append((before, after))
+    return changes
+
+
+def _render_resume(resume_id: str, user_id: str) -> _RenderedResume:
+    """Produce a résumé download AND verify the fidelity claim made about it.
+
+    Shared by ``GET /resumes/{id}/download`` and ``GET /resumes/{id}/fidelity``
+    so the report and the file can never disagree: the report is derived from
+    THIS artifact, by re-reading it, not from the résumé's metadata.
+
+    That distinction is not academic. Until this round the splice branch
+    described itself from a formatHash match alone and claimed "every other
+    element is identical to the source document" — a claim live production
+    falsified, because the in-place engine only edits right-column work bullets
+    and had silently skipped a rewrite aimed at the left rail
+    (uat/reports/evidence/agents-uplift/u2b/verify/, 2026-08-14).
+    """
+    from app.services.format_verification import verify_changes
+    from app.services.resume_docx import (
+        DOCX_CONTENT_TYPE,
+        DocxParseError,
+        render_tailored_docx_report,
+    )
+    from app.services.resume_format import (
+        describe_fidelity,
+        is_docx_content_type,
+        is_text_content_type,
+        native_fallback_fidelity,
+        verified_fidelity,
+    )
     from app.services.resume_pdf import (
         create_branded_resume_pdf,
         render_tailored_pdf,
@@ -520,37 +584,113 @@ def download_resume(resume_id: str, current_user: CurrentUser) -> Response:
     )
 
     repo = ResumeRepository()
-    resume = repo.get_by_id(resume_id, current_user["id"])
+    resume = repo.get_by_id(resume_id, user_id)
     if resume is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Resume not found")
-
     parent_id = resume.get("parentId")
-    parent = repo.get_by_id(parent_id, current_user["id"]) if parent_id else None
+    parent = repo.get_by_id(parent_id, user_id) if parent_id else None
+    is_tailored = parent is not None
+    changes = _tailoring_changes(resume, parent)
+    source = parent or resume
 
-    # The reworded bullets, diffed against the parent (empty for a base resume).
-    changes: list[tuple[str, str]] = []
-    if parent is not None:
-        parent_by_ref = {
-            b.get("evidenceRef"): b.get("text", "")
-            for b in parent.get("sections", {}).get("bullets", [])
-        }
-        for bullet in resume.get("sections", {}).get("bullets", []):
-            before = parent_by_ref.get(bullet.get("evidenceRef"))
-            after = bullet.get("text", "")
-            if before and after and before != after:
-                changes.append((before, after))
+    original = resolve_original_pdf(source.get("formatHash") or resume.get("formatHash"))
+    data: bytes | None = None
+    content_type: str | None = None
+    #: Set when a native in-document rewrite could not be completed, so the
+    #: branded render below reports WHY it happened instead of the generic
+    #: "not yet available for this upload type" copy.
+    fallback_report = None
 
-    original = resolve_original_pdf(
-        (parent or resume).get("formatHash") or resume.get("formatHash")
-    )
+    if original is None:
+        # The user's OWN stored upload backs this version — a tailored child
+        # derives from its parent's stored document, which is where the bytes
+        # live (a child is never itself an upload).
+        stored = repo.get_original_file(source["id"], user_id)
+        data = (stored or {}).get("originalFile")
+        content_type = (stored or {}).get("originalContentType")
+        native_report = describe_fidelity(
+            bundled_match=False,
+            has_original=bool(data),
+            content_type=content_type,
+            is_tailored=is_tailored,
+        )
+        # COMPLETENESS RULE for both native paths: the native render is served
+        # only when EVERY reworded bullet is verified present in the produced
+        # document. A partial splice would return a file that is neither the
+        # baseline nor the tailored résumé — a silent content loss, which is
+        # worse than an honest re-format — so an incomplete rewrite falls
+        # through to the branded template render, which is built from the
+        # résumé's structured content and therefore always content-complete.
+        if data and is_docx_content_type(content_type):
+            try:
+                if not is_tailored:
+                    return _RenderedResume(
+                        content=bytes(data),
+                        media_type=DOCX_CONTENT_TYPE,
+                        filename=f"resume-{resume_id[:8]}.docx",
+                        fidelity=verified_fidelity(
+                            native_report, None, byte_identical=True
+                        ),
+                    )
+                rendered, _applied = render_tailored_docx_report(data, changes)
+                verification = verify_changes(rendered, DOCX_CONTENT_TYPE, changes)
+                if verification.complete:
+                    return _RenderedResume(
+                        content=rendered,
+                        media_type=DOCX_CONTENT_TYPE,
+                        filename=f"resume-{resume_id[:8]}.docx",
+                        fidelity=verified_fidelity(native_report, verification),
+                    )
+                fallback_report = native_fallback_fidelity()
+            except DocxParseError:
+                # Stored bytes that no longer open as a package (they passed the
+                # upload gate, so this is corruption we did not cause): the user
+                # still gets their tailored content through the branded render
+                # instead of a 500.
+                fallback_report = native_fallback_fidelity(unreadable=True)
+        elif data and is_text_content_type(content_type):
+            media_type = str(content_type)
+            suffix = "md" if "markdown" in media_type else "txt"
+            try:
+                if not is_tailored:
+                    return _RenderedResume(
+                        content=bytes(data),
+                        media_type=media_type,
+                        filename=f"resume-{resume_id[:8]}.{suffix}",
+                        fidelity=verified_fidelity(
+                            native_report, None, byte_identical=True
+                        ),
+                    )
+                rewritten, _applied_count = _tailored_text_document(data, changes)
+                verification = verify_changes(rewritten, media_type, changes)
+                if verification.complete:
+                    return _RenderedResume(
+                        content=rewritten,
+                        media_type=media_type,
+                        filename=f"resume-{resume_id[:8]}.{suffix}",
+                        fidelity=verified_fidelity(native_report, verification),
+                    )
+                fallback_report = native_fallback_fidelity()
+            except UnicodeDecodeError:
+                fallback_report = native_fallback_fidelity(unreadable=True)
 
     if original is not None and original.exists():
         # A bundled source PDF backs THIS résumé (seeded base / BA variant) →
         # preserve its exact layout.
-        if parent is None:
+        splice_report = describe_fidelity(
+            bundled_match=True,
+            has_original=bool(data),
+            content_type=content_type,
+            is_tailored=is_tailored,
+        )
+        if not is_tailored:
             pdf_bytes = original.read_bytes()  # base → verbatim bytes
+            fidelity = verified_fidelity(splice_report, None, byte_identical=True)
         else:
             pdf_bytes = render_tailored_pdf(original, changes)  # splice in place
+            fidelity = verified_fidelity(
+                splice_report, verify_changes(pdf_bytes, _PDF_CONTENT_TYPE, changes)
+            )
     else:
         # No bundled source PDF for this résumé — a user-authored upload/ingest
         # (NF-final-B-005) → render from the résumé's OWN structured content with
@@ -559,11 +699,102 @@ def download_resume(resume_id: str, current_user: CurrentUser) -> Response:
         pdf_bytes = create_branded_resume_pdf(
             name, title, objective, sections, changes or None
         )
+        reflow_report = fallback_report or describe_fidelity(
+            bundled_match=False,
+            has_original=bool(data),
+            content_type=content_type,
+            is_tailored=is_tailored,
+        )
+        fidelity = verified_fidelity(
+            reflow_report, verify_changes(pdf_bytes, _PDF_CONTENT_TYPE, changes)
+        )
 
-    return Response(
+    return _RenderedResume(
         content=pdf_bytes,
-        media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="resume-{resume_id[:8]}.pdf"'},
+        media_type=_PDF_CONTENT_TYPE,
+        filename=f"resume-{resume_id[:8]}.pdf",
+        fidelity=fidelity,
+    )
+
+
+def _fidelity_headers(fidelity: Any) -> dict[str, str]:
+    """ASCII-safe fidelity summary for a binary download response.
+
+    The body of a download is a file, so the honest report has to travel
+    somewhere a client (or an operator verifying production) can read it
+    without a second call. The note itself is not header-safe (it carries the
+    user's own résumé wording and typographic punctuation), so only the
+    machine-readable summary is emitted; the full report lives at
+    ``GET /resumes/{id}/fidelity``.
+    """
+    return {
+        "X-Aether-Format-Method": str(fidelity.method),
+        "X-Aether-Format-Confidence": str(fidelity.confidence),
+        "X-Aether-Changes-Requested": str(fidelity.changes_requested or 0),
+        "X-Aether-Changes-Applied": str(fidelity.changes_applied or 0),
+        "X-Aether-Changes-Dropped": str(fidelity.changes_dropped or 0),
+    }
+
+
+@router.get("/{resume_id}/fidelity")
+def resume_fidelity(resume_id: str, current_user: CurrentUser) -> dict[str, Any]:
+    """What a download of THIS version really does — verified, not asserted.
+
+    Renders the version exactly as ``/download`` would, re-reads the produced
+    document, and reports per-change whether the tailored wording is genuinely
+    in it: ``changesRequested`` / ``changesApplied`` / ``changesDropped``, plus
+    the rewrites that could not be applied. Resume Studio renders this report
+    for the version the user opened; the listing (which cannot re-render every
+    version) says the check is pending rather than claiming an outcome.
+    """
+    rendered = _render_resume(resume_id, current_user["id"])
+    return {
+        "resume_id": resume_id,
+        "formatPreserved": rendered.fidelity.preserved,
+        **rendered.fidelity.as_dict(),
+    }
+
+
+@router.get("/{resume_id}/download")
+def download_resume(resume_id: str, current_user: CurrentUser) -> Response:
+    """Download a résumé in the baseline document's OWN format (U2b / R-F4).
+
+    The baseline the user uploaded is the immutable source of truth for content
+    AND format, so a tailored download changes words only — never the design:
+
+    - **Bundled-asset PDF** (the seeded operator résumés): base → the original
+      bytes verbatim; tailored → the original PDF with *only* the reworded
+      bullets redrawn in place (same two-column layout, panel, accents, fonts).
+    - **Stored .docx upload** → the flagship format-preserving path: base → the
+      user's own file, byte-identical; tailored → native run-level text
+      replacement inside their own document (``services/resume_docx.py``), so
+      styles, numbering, tables, headers and every untouched run are carried
+      through unchanged.
+    - **Stored .txt/.md upload** → the same idea, trivially: their own file with
+      the reworded lines substituted.
+    - **Anything else** (PDF uploads, and rows with no stored original — text
+      ingested through ``POST /resumes``, or uploaded before U2a kept files):
+      rebuilt from the résumé's structured content with the branded template.
+      This is a genuine re-format, so ``GET /resumes`` reports it as
+      ``formatPreserved: false`` with an explicit ``formatFidelity`` note
+      instead of claiming preservation (R-F2). Generalised in-place PDF
+      splicing for arbitrary uploads is the next slice, and until it ships the
+      product says so rather than implying fidelity it does not have.
+
+    Whichever branch runs, the produced file is re-read before it is returned
+    and the response carries the VERIFIED summary — ``X-Aether-Format-Method``,
+    ``X-Aether-Format-Confidence`` and the requested/applied/dropped change
+    counts. The full report (including any rewrite that could not be applied)
+    is at ``GET /resumes/{id}/fidelity``.
+    """
+    rendered = _render_resume(resume_id, current_user["id"])
+    return Response(
+        content=rendered.content,
+        media_type=rendered.media_type,
+        headers={
+            "Content-Disposition": _content_disposition(rendered.filename),
+            **_fidelity_headers(rendered.fidelity),
+        },
     )
 
 

@@ -183,6 +183,36 @@ class ResumeRepository:
             "originalContentType": row[2],
         }
 
+    def original_meta_by_user(self, user_id: str) -> dict[str, dict[str, Any]]:
+        """Per-résumé stored-upload metadata for ONE user, WITHOUT the bytes.
+
+        ``{resume_id: {"hasOriginal": bool, "originalContentType": str | None,
+        "originalFilename": str | None}}``. Selecting ``"originalFile" IS NOT
+        NULL`` rather than the column itself keeps a listing cheap: the blob
+        (up to 10MB per row) never leaves the database, while the format the
+        download path will actually take is still knowable per version — which
+        is what ``GET /resumes`` needs to report format fidelity honestly
+        (U2b / R-F2) instead of inferring it from a hash comparison.
+        """
+        ensure_resume_columns()
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    'SELECT "id", "originalFile" IS NOT NULL AS "hasOriginal", '
+                    '"originalContentType", "originalFilename" '
+                    'FROM "Resume" WHERE "userId" = %s',
+                    (user_id,),
+                )
+                rows = cur.fetchall()
+        return {
+            row[0]: {
+                "hasOriginal": bool(row[1]),
+                "originalContentType": row[2],
+                "originalFilename": row[3],
+            }
+            for row in rows
+        }
+
     def get_by_id(self, resume_id: str, user_id: str) -> dict[str, Any] | None:
         ensure_resume_columns()
         with get_connection() as conn:

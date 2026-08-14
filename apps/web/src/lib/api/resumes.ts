@@ -32,6 +32,20 @@ export const ResumeSchema = z.object({
   // or cached payload predating this field; a missing value is NOT treated as
   // an affirmative preservation claim (see page.tsx's per-version logic).
   formatPreserved: z.boolean().nullish(),
+  // U2b (R-F2/R-F4): the API's own per-version fidelity report — WHICH
+  // mechanism a download uses ("docx-native", "pdf-in-place-splice",
+  // "original-bytes", "text-native", "reflow-template", "unknown"), how
+  // confident that is, and an honest note in the user's own terms. A bare
+  // boolean cannot distinguish a genuine native-DOCX preservation from a
+  // low-confidence re-flow, so Resume Studio renders this note instead of
+  // hard-coded, mechanism-agnostic copy. Nullish for payloads predating it.
+  formatFidelity: z
+    .object({
+      method: z.string(),
+      confidence: z.string(),
+      note: z.string(),
+    })
+    .nullish(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });

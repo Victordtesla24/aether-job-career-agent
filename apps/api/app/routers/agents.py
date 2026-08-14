@@ -2648,6 +2648,48 @@ class ScoutRunRequest(BaseModel):
     location: str | None = Field(default=None, min_length=1)
 
 
+def _guard_scout_cooldown(user_id: str, request: Request, system_run: bool) -> None:
+    """Per-user manual-Sync cooldown (S-FIX-A / S-7).
+
+    Scout is deterministic and unmetered, so it is exempt from the plan-quota
+    and spend-cap machinery entirely — before this, nothing at all slowed a
+    user clicking Sync repeatedly, and every uncached run spends from the ONE
+    shared Adzuna daily budget (250 calls/day for the whole deployment). The
+    limiter lives on ``app.state`` (see ``app.main.create_app``) so each app —
+    and each test — owns isolated counters.
+
+    SCHEDULED runs are exempt: the platform's own sweep is already paced, and
+    counting it would let the automation lock a user out of their own button.
+    The refusal is an honest 429 naming the wait and the automatic fallback —
+    never a silent no-op or a fabricated "no new jobs".
+    """
+    if system_run:
+        return
+    limiter = getattr(request.app.state, "scout_rate_limiter", None)
+    if limiter is None:  # app built without the limiter (older test harness)
+        return
+    if limiter.allow(user_id):
+        return
+    retry_after = limiter.retry_after(user_id)
+    minutes = max(1, round(retry_after / 60))
+    raise HTTPException(
+        status.HTTP_429_TOO_MANY_REQUESTS,
+        detail={
+            "error": "scout_cooldown",
+            "message": (
+                f"Sync is cooling down — {limiter.max_calls} manual refreshes in "
+                f"{int(limiter.window_seconds // 60)} minutes is the cap. "
+                f"Try again in about {minutes} minute{'s' if minutes != 1 else ''}; "
+                "scheduled discovery keeps running for you in the background."
+            ),
+            "retryAfterSeconds": retry_after,
+            "limit": limiter.max_calls,
+            "windowSeconds": int(limiter.window_seconds),
+        },
+        headers={"Retry-After": str(retry_after)},
+    )
+
+
 @router.post("/scout/run", status_code=status.HTTP_202_ACCEPTED)
 def run_scout(
     body: ScoutRunRequest,
@@ -2696,6 +2738,7 @@ def run_scout(
     entitlement/cooldown gates; background mode adds no bypass.
     """
     user_id = current_user["id"]
+    _guard_scout_cooldown(user_id, request, _is_system_run(request))
     # F-02: resolve BEFORE dispatch (same as ``run_pipeline``) so the AgentRun
     # audit row records the search that ACTUALLY ran — the caller's own profile
     # values when the body omitted them — rather than the two nulls it was sent.
@@ -2777,6 +2820,160 @@ def run_fit_scorer(
         except Exception:  # noqa: BLE001 — best-effort; cron still fires
             pass
     return {"status": "completed", "scored": output["scored"], "errors": output["errors"]}
+
+
+def _positive_int_env(name: str, default: int) -> int:
+    """Positive int from the environment; malformed/non-positive -> ``default``.
+
+    Non-positive falls back deliberately: a 0 cap would silently disable the
+    sweep (and a 0 budget the guard), which is exactly the silent-no-op failure
+    these bounds exist to prevent.
+    """
+    try:
+        value = int(os.environ.get(name, default))
+    except (TypeError, ValueError):
+        return default
+    return value if value > 0 else default
+
+
+def _sweep_eligible_users(limit: int) -> list[dict[str, str]]:
+    """Every subscriber the scheduled sweep must serve (S-FIX-A / S-1).
+
+    "Must serve" = has a usable search target (a non-empty ``targetRole`` — a
+    run without one is refused by ``_resolve_scout_target`` rather than
+    completed with somebody else's persona), is not suspended, and — while the
+    subscription gate is ON — holds an ENTITLED PAID subscription by exactly
+    the same definition the paywall uses (``SubscriptionRepository``'s
+    ``_ENTITLED_STATUSES`` + ``planId != 'free'``). When the operator turns the
+    gate off (freemium), entitlement is not a filter, mirroring
+    ``_require_active_subscription``.
+
+    Oldest accounts first, bounded by ``limit``, so the sweep is deterministic
+    and its external-API cost is predictable.
+    """
+    from app.repositories.billing import _ensure_billing_tables
+
+    ensure_user_profile_columns()
+    _ensure_billing_tables()
+    entitled_clause = ""
+    params: tuple[Any, ...] = (limit,)
+    if subscription_gate_enabled():
+        statuses = SubscriptionRepository._ENTITLED_STATUSES
+        entitled_clause = (
+            ' AND EXISTS (SELECT 1 FROM "Subscription" s WHERE s."userId" = u."id"'
+            ' AND s."status" = ANY(%s) AND s."planId" <> \'free\')'
+        )
+        params = (list(statuses), limit)
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT u."id", u."email" FROM "User" u'
+                ' WHERE btrim(COALESCE(u."targetRole", \'\')) <> \'\''
+                ' AND COALESCE(u."suspended", false) = false'
+                f"{entitled_clause}"
+                ' ORDER BY u."createdAt" ASC LIMIT %s',
+                params,
+            )
+            return rows_to_dicts(cur)
+
+
+@router.post("/discovery/sweep")
+def run_discovery_sweep(request: Request) -> dict[str, Any]:
+    """Scheduled discovery for EVERY entitled subscriber (S-FIX-A / S-1).
+
+    THE GAP THIS CLOSES: the only automatic discovery path was
+    ``scripts/discovery_cron.sh``, which logs in as ONE hardcoded account and
+    runs scout + fit-scorer for that user alone. Every other paying subscriber
+    got zero automatic job discovery — their board only moved when they clicked
+    Sync. For a job-search product that is the core value, so it cannot depend
+    on the customer remembering to press a button.
+
+    Authenticated by the ``X-Aether-System-Run`` shared secret ALONE (no user
+    session — the platform has no password for its subscribers, and inventing
+    one would be far worse than a scoped secret). The secret is compared in
+    constant time by ``_is_system_run``; when ``AETHER_SYSTEM_RUN_SECRET`` is
+    unset the endpoint is unreachable (401) rather than open.
+
+    Each user's runs go through the SAME ``_dispatch`` as their own manual run,
+    with ``system_run=True`` — so the scoped paywall exemption for scout /
+    fit-scorer applies exactly as it already does for the cron, and every other
+    guard (quota reserve, spend cap, AgentRun audit row) is untouched. Runs are
+    SPACED (``AETHER_DISCOVERY_SWEEP_SPACING_SECONDS``) and bounded
+    (``AETHER_DISCOVERY_SWEEP_USER_CAP``) so N subscribers cannot burst the
+    shared Adzuna budget or the 25-connection database ceiling; the adapter's
+    own cache + daily-budget guard is the second line.
+
+    One user's failure is reported against THAT user and never aborts the rest,
+    and the response carries the live Adzuna budget so the operator can see
+    exactly how much of the day's quota the sweep consumed.
+    """
+    if not _is_system_run(request):
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "error": "system_run_required",
+                "message": (
+                    "The scheduled discovery sweep requires a valid "
+                    "X-Aether-System-Run secret."
+                ),
+            },
+        )
+    cap = _positive_int_env("AETHER_DISCOVERY_SWEEP_USER_CAP", 25)
+    spacing = max(
+        0.0, float(os.environ.get("AETHER_DISCOVERY_SWEEP_SPACING_SECONDS", "5") or 5)
+    )
+    users = _sweep_eligible_users(cap)
+    rows: list[dict[str, Any]] = []
+    for index, user in enumerate(users):
+        user_id = str(user["id"])
+        row: dict[str, Any] = {
+            "userId": user_id, "email": user.get("email"), "status": "ok",
+            "persisted": 0, "updated": 0, "scored": 0, "error": None,
+        }
+        try:
+            query, location = _resolve_scout_target(user_id, {})
+            scout = _dispatch(
+                user_id, "scout", {"query": query, "location": location},
+                system_run=True,
+            )
+            row["persisted"] = int(scout.get("persisted") or 0)
+            row["updated"] = int(scout.get("updated") or 0)
+            row["perSource"] = scout.get("per_source", [])
+            scored = _dispatch(user_id, "fitScorer", {"rescore": False}, system_run=True)
+            row["scored"] = int(scored.get("scored") or 0)
+            # Parity with POST /agents/fit-scorer/run (RT-008): newly scored
+            # jobs are exactly the board work the sweep consumes, so nudge it
+            # now instead of waiting up to 10 minutes for the ARQ cron.
+            # Best-effort — an enqueue hiccup must not taint an honest run.
+            if row["scored"] > 0:
+                try:
+                    from app.workers.board_sweep import enqueue_user_sweep
+
+                    enqueue_user_sweep(user_id)
+                except Exception:  # noqa: BLE001 — cron remains the floor
+                    pass
+        except Exception as exc:  # noqa: BLE001 — report, never abort the sweep
+            row["status"] = "error"
+            row["error"] = f"{type(exc).__name__}: {exc}"
+            logger.warning("discovery-sweep: user %s failed: %s", user_id, row["error"])
+        rows.append(row)
+        # Space the runs so N users do not burst the shared external API budget
+        # or the database connection ceiling. Never sleeps after the last user.
+        if spacing and index < len(users) - 1:
+            time.sleep(spacing)
+    from app.services.discovery.adzuna_adapter import budget_snapshot
+
+    logger.info(
+        "discovery-sweep: %d users swept (%d errors)",
+        len(rows), sum(1 for r in rows if r["status"] == "error"),
+    )
+    return {
+        "status": "completed",
+        "sweptUsers": len(rows),
+        "userCap": cap,
+        "users": rows,
+        "adzunaBudget": budget_snapshot(),
+    }
 
 
 @router.post("/board-sweep/trigger", status_code=status.HTTP_202_ACCEPTED)
