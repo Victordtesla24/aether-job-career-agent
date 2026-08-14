@@ -284,3 +284,32 @@ are CLOSED on `main`.
 
 ## 2026-08-14T19:0xZ — session 9c6a2ba6 CLAIMS a web deploy (dashboard below-floor 409 hotfix)
 - Prod bug: Dashboard "Needs Approval" inline Approve leaked the U2c quality-floor 409 as a raw exception + dropped the card (mislabeled "already handled"). Fix: resolveApproval detects the below-floor 409 (acknowledge_below_floor token), offers Approve-anyway, re-sends with the flag. Files: apps/web/src/app/dashboard/page.tsx + its test. Push HEAD:main → auto-deploy web rebuild.
+
+## Claim — session 9c6a2ba6, slice admin-full, 2026-08-14T19:1xZ
+
+Landing `feat/admin-full` @ `8dc1510` (worktree `aether-wt-adminfull`, build `ecf70d3` + audit-atomicity
+`c067ae1` + session-invalidation/§14.7 fix `8dc1510`). Re-review verdict of record:
+`uat/reports/evidence/market-perf/admin-full/ADMIN-SECURITY-RE*.md`. Closes both re-review findings
+(flaky `test_admin_sets_a_password_hashes_it_and_invalidates_sessions` made deterministic against the
+`_IAT_GRACE_SECONDS` window; `sessionsInvalidated` now computed/honest instead of a hardcoded `true`)
+plus the §14.7 reset-flow adjudication (env-managed admin identity refuses in-app password
+changes with a 409 instead of silently reverting at next restart).
+
+- Files: `apps/api/app/middleware/auth.py`, `apps/api/app/repositories/admin.py`,
+  `apps/api/app/routers/admin.py`, `apps/api/app/routers/auth.py`,
+  `apps/api/tests/test_admin_full_user_management.py`, `apps/api/tests/test_env_managed_admin_password.py`
+  (new), `apps/web/src/app/admin/users/[id]/page.tsx` + test, `apps/web/src/app/reset-password/` + test,
+  `apps/web/src/lib/api/admin.ts`, `apps/web/src/lib/api/auth.ts`, `apps/web/src/__tests__/auth/auth-api-client.test.ts`.
+  No migration.
+- Side-fix (deploy-blocking, unrelated to admin-full but required to reach a working auto-deploy):
+  this session's own stray untracked test-fixture/debug-script files from earlier today
+  (`apps/api/tests/fixtures/llm/cover_letter/quality2.json`,
+  `apps/api/tests/fixtures/llm/cover_letter_refine/{quality,quality2}.json`,
+  `apps/web/shot_cover_qa.cjs`, `apps/web/shot_resume_qa.cjs`) were outside `auto-deploy.sh`'s
+  `KNOWN_FOREIGN_UNTRACKED` allowlist and had been failing every deploy attempt since 17:50Z
+  ("unexpected untracked file(s)"). Backed up byte-exact + SHA256SUMS to
+  `/home/ubuntu/aether-backups/foreign-wip-20260814T190418Z-9c6a2ba6/` and removed from the shared
+  deploy checkout so `git pull --ff-only` can proceed again. Not touching any other session's tracked
+  claims or the still-allowlisted `test_blocker010_board_sweep_abort_recovery.py` / `cover_letter/{quality,retry3}.json`.
+- Expected deploy window: next `aether-autodeploy.timer` cycle after `HEAD:main` push.
+- Not touching any other session's active claims (ORCH-EXEC's MON-*/B5/B7/D.*, u2c, uagi-p1a).
