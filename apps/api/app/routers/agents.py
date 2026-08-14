@@ -2630,6 +2630,20 @@ def _enqueue_single_agent(
     reach this endpoint, or a direct POST. Deliberately 202-with-the-existing-id
     rather than 409: the caller's intent ("make sure discovery is running") is
     already satisfied, and the frontend polls the returned id either way."""
+    # INTERIM — superseded by ML-STOPALL-001 at ``_execute_reserved_run``.
+    # Same pre-side-effect refusal as ``_dispatch``: this async seam BYPASSES
+    # ``_dispatch`` (the worker body calls ``_execute_reserved_run`` directly),
+    # so without this check a user-stopped tailor/coverLetter still enqueued
+    # and SPENT (proven live 21:56Z: POST /agents/tailor/run billed $0.048
+    # while every AgentConfig row read enabled=false). Refuse before paywall,
+    # reserve, rows and queue — nothing to refund, nothing queued.
+    if _agent_paused_by_user(user_id, agent_key):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"agent_paused: {agent_key} is stopped by the user's agent controls "
+            "(Stop All / per-agent toggle). Re-enable the agent on the Agents "
+            "page to run it.",
+        )
     # 1) Paywall FIRST (honest 402 before any row/reserve/enqueue) — scoped
     #    system-run exemption applies identically to the sync path.
     _require_active_subscription(user_id, agent_name=agent_key, system_run=system_run)
