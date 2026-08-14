@@ -487,3 +487,10 @@ Real owner login (production `/login` form, not a minted token), real owner data
   discovery-sweep) — pre-existing, not B3-caused, no user-facing impact.
 
 B3 (Resume Studio aha moment, Cover Letter Studio, Story Bank fix) is VERIFIED-CLOSED on production.
+
+### ORCH-EXEC DEPLOY WINDOW CLAIM — 2026-08-14T20:5xZ (hotfix)
+
+Landing the operator-reported bulk-approve below-floor-409 fix (approvals/page.tsx, 2 commits,
+VERIFIED-CLOSED, mirrors b1eef41 contract) to main NOW. Deploy = the autodeploy timer's next pull
+(~5 min). FE-only; no schema, no env. 9c6a2ba6: approvals/page.tsx is released back to you after
+this lands — resume B4-mobile on it once you see the deploy.
