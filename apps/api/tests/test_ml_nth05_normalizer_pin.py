@@ -59,7 +59,7 @@ def _seed_job(user_id: str) -> str:
 
 
 def test_snake_case_cover_letter_unavailable_surfaces_as_camelcase_via_runs_list(
-    client, auth_headers, test_user_id, monkeypatch
+    client, auth_headers, test_user_id, monkeypatch, patch_agent_run
 ):
     """FAILS LOUDLY if the agents.py:823-827 normalizer is ever removed.
 
@@ -71,19 +71,25 @@ def test_snake_case_cover_letter_unavailable_surfaces_as_camelcase_via_runs_list
     monkeypatch.setenv("AETHER_ASYNC_GENERATION", "false")  # exercise the sync path
     job_id = _seed_job(test_user_id)
 
-    def _degraded_run(self, user_id, job_id):
+    def _degraded_run():
         return CoverLetterResult(
             cover_letter_unavailable=True,
             message="Your cover letter writing model was temporarily unavailable.",
         )
 
-    monkeypatch.setattr(CoverLetterAgent, "run", _degraded_run, raising=True)
+    # Signature-derived double (conftest ``patch_agent_run``): the stub only
+    # has to produce the snake_case-only result this pin is about, and can no
+    # longer fail merely because the real ``run`` grew a dispatch keyword.
+    cover_calls = patch_agent_run(CoverLetterAgent, _degraded_run)
 
     resp = client.post(
         "/agents/cover-letter/run", json={"job_id": job_id}, headers=auth_headers
     )
     assert resp.status_code == 200, resp.text
     assert resp.json().get("coverLetterUnavailable") is True
+    # The normalizer under test ran over THIS stub's output — the router
+    # genuinely reached the agent rather than short-circuiting somewhere.
+    assert cover_calls, "the router never reached CoverLetterAgent.run"
 
     runs = client.get("/agents/runs", headers=auth_headers).json()
     cover_runs = [r for r in runs if r["agentName"] == "coverLetter"]
