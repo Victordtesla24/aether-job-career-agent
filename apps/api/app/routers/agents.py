@@ -1984,6 +1984,54 @@ def _model_overridable(agent_name: "str | None") -> bool:
 _UI_KEY_FOR_BACKEND: dict[str, str] = {
     e["backend"]: e["key"] for e in AGENT_CATALOG if e.get("backend")
 }
+#: INTERIM (SEV-1 2026-08-14) — superseded by ML-STOPALL-001 at
+#: ``_execute_reserved_run``. Backend agent name -> EVERY UI card key that
+#: dispatches it: ``_UI_KEY_FOR_BACKEND`` keeps only the last card per backend,
+#: but ``fitScorer`` is dispatched by THREE cards (atsOptimization,
+#: matchScoring, skillGap), and the Stop-All guard needs the full set — a
+#: backend is paused only when every card that can dispatch it is disabled, so
+#: a partial stop never blocks a card the user deliberately left running.
+_ALL_UI_KEYS_FOR_BACKEND: dict[str, tuple[str, ...]] = {}
+for _catalog_entry in AGENT_CATALOG:
+    if _catalog_entry.get("backend"):
+        _ALL_UI_KEYS_FOR_BACKEND[_catalog_entry["backend"]] = (
+            _ALL_UI_KEYS_FOR_BACKEND.get(_catalog_entry["backend"], ())
+            + (_catalog_entry["key"],)
+        )
+
+
+def _agent_paused_by_user(user_id: str, backend_name: str) -> bool:
+    """INTERIM — superseded by ML-STOPALL-001 at ``_execute_reserved_run``.
+
+    Whether the user has stopped every UI agent card that dispatches
+    ``backend_name``. SEV-1 2026-08-14: "Stop All Agents" wrote
+    ``AgentConfig.enabled = false`` for all 22 cards at 12:31Z, but no dispatch
+    path read the flag — the board sweep kept dispatching (and spending) for
+    nine hours after the user's stop.
+
+    Semantics agreed with the permanent ML-STOPALL-001 enforcement so behaviour
+    does not flip when it lands: an absent row means enabled; a backend shared
+    by several cards is paused only when EVERY card is disabled; a read error
+    fails open (mirrors ``_user_model_override`` — a preference lookup can
+    never break a run; the permanent guard at the reserve point owns the
+    closed-world check).
+    """
+    ui_keys = _ALL_UI_KEYS_FOR_BACKEND.get(backend_name)
+    if not ui_keys:
+        return False
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    'SELECT "agentKey", "enabled" FROM "AgentConfig" '
+                    'WHERE "userId" = %s AND "agentKey" = ANY(%s)',
+                    (user_id, list(ui_keys)),
+                )
+                rows = cur.fetchall()
+    except Exception:  # noqa: BLE001 — best-effort, mirrors _user_model_override
+        return False
+    disabled = {key for key, enabled in rows if enabled is False}
+    return all(key in disabled for key in ui_keys)
 #: backend agent name -> its catalog ``recommended`` model. ``AgentConfig.model``
 #: is SEEDED with this recommended value (agents.py ~1624), so a stored value
 #: EQUAL to it is a phantom default, NOT a deliberate user choice — it must be
@@ -2434,6 +2482,18 @@ def _dispatch(
     ``skip_quota`` is threaded to ``_record_run`` so automated system operations
     (e.g. the board sweep) bypass the user's paid plan-quota reserve/spend-cap
     gates while still keeping the cooldown block and an honest audit trail."""
+    # INTERIM — superseded by ML-STOPALL-001 at ``_execute_reserved_run``.
+    # A user-stopped agent is refused HERE, before any side effect: no
+    # ``AgentRun`` row, no quota reserve, nothing to refund. The board sweep's
+    # per-job ``except HTTPException`` records the refusal and moves on; API
+    # callers get the coded 409.
+    if _agent_paused_by_user(user_id, name):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"agent_paused: {name} is stopped by the user's agent controls "
+            "(Stop All / per-agent toggle). Re-enable the agent on the Agents "
+            "page to run it.",
+        )
     # U-AX: resolve the rigor tier BEFORE binding the callable, so the agent
     # receives the knobs and the AgentRun row records the very same policy.
     params = _with_quality_policy(user_id, params)
