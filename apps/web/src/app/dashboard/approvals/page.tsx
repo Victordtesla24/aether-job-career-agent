@@ -38,6 +38,7 @@ import {
 } from "../../../lib/api/approvals";
 import { fetchApplySweepStatus } from "../../../lib/api/applications";
 import { automaticSubmissionDisclaimer } from "../../../components/applications/tracker-lib";
+import { ApiError } from "../../../lib/api/client";
 
 type StatusFilter = "pending" | "approved" | "rejected" | "all";
 
@@ -407,11 +408,34 @@ export default function ApprovalsPage() {
     setBusy(`bulk-${decision}`);
     let decisionFailed = 0;
     let sendFailed = 0;
+    // ticket/bulkapprove-409: the U2c below-quality-floor 409 (see
+    // apps/api/app/routers/approvals.py `_require_below_floor_acknowledgement`)
+    // is an informed-consent gate, NOT a decision failure — only an APPROVE can
+    // hit it. A bare `catch {}` used to fold every 409 into `decisionFailed`
+    // with zero explanation and no recourse (16 legitimate below-floor gates
+    // reported to the user as "16 of 16 bulk approve decisions failed — the
+    // rest were applied", which was also false: nothing had been applied).
+    // Collect the blocked ones separately and offer ONE acknowledgement retry
+    // after the first pass — mirrors the established contract from b1eef41
+    // (dashboard inline Approve) exactly, no forked contract.
+    const belowFloorBlocked: { approval: Approval; reason: string }[] = [];
     for (const approval of targets) {
       let resolved: Approval;
       try {
         resolved = await decideApproval(approval.id, decision);
-      } catch {
+      } catch (e) {
+        if (
+          decision === "approve" &&
+          e instanceof ApiError &&
+          e.status === 409 &&
+          /acknowledge_below_floor/.test(e.message)
+        ) {
+          const reason =
+            /Below quality floor:[^"]*?floor\.?/i.exec(e.message)?.[0] ??
+            "This artifact is below the quality floor.";
+          belowFloorBlocked.push({ approval, reason });
+          continue;
+        }
         decisionFailed += 1;
         continue;
       }
@@ -422,10 +446,57 @@ export default function ApprovalsPage() {
       const sendError = await sendIfSendable(resolved, decision);
       if (sendError) sendFailed += 1;
     }
+
+    let belowFloorApproved = 0;
+    let belowFloorLeftPending = 0;
+    if (belowFloorBlocked.length > 0) {
+      const n = belowFloorBlocked.length;
+      const noun = n === 1 ? "request is" : "requests are";
+      const pronoun = n === 1 ? "it" : "them";
+      const exampleReason = belowFloorBlocked[0].reason;
+      if (
+        window.confirm(
+          `${n} of ${targets.length} ${noun} below the quality floor ` +
+            `(example: ${exampleReason})\n\nApprove ${pronoun} anyway?`,
+        )
+      ) {
+        for (const { approval } of belowFloorBlocked) {
+          try {
+            const resolved = await decideApproval(approval.id, "approve", {
+              acknowledgeBelowFloor: true,
+            });
+            belowFloorApproved += 1;
+            const sendError = await sendIfSendable(resolved, "approve");
+            if (sendError) sendFailed += 1;
+          } catch {
+            decisionFailed += 1;
+          }
+        }
+      } else {
+        // No silent auto-acknowledge: declining leaves these pending, exactly
+        // as the gate intends — the human must act on each individually.
+        belowFloorLeftPending = n;
+      }
+    }
+
     const parts: string[] = [];
-    if (decisionFailed > 0) {
+    if (decisionFailed > 0 && decisionFailed === targets.length) {
+      parts.push(`All ${targets.length} bulk ${decision} decisions failed`);
+    } else if (decisionFailed > 0) {
       parts.push(
         `${decisionFailed} of ${targets.length} bulk ${decision} decisions failed — the rest were applied`,
+      );
+    }
+    if (belowFloorApproved > 0) {
+      parts.push(
+        `${belowFloorApproved} below-quality-floor request${belowFloorApproved === 1 ? "" : "s"} ` +
+          "approved with your acknowledgement",
+      );
+    }
+    if (belowFloorLeftPending > 0) {
+      parts.push(
+        `${belowFloorLeftPending} below-quality-floor request${belowFloorLeftPending === 1 ? "" : "s"} ` +
+          "left pending — approve individually to review each",
       );
     }
     if (sendFailed > 0) {
