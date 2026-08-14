@@ -11,7 +11,7 @@
  *      within a stage the order `GET /agents/orchestration-map` returned. That
  *      is the only ordering the payload actually defines (the same reason the
  *      map draws stage-to-stage edges and never agent-to-agent ones).
- *   2. CONCURRENCY MIRRORS "RUN ALL", WHICH IS SEQUENTIAL. The pipeline
+ *   2. CONCURRENCY MIRRORS "RUN PIPELINE", WHICH IS SEQUENTIAL. The pipeline
  *      endpoint (`apps/api/app/routers/agents.py::_pipeline_core`) dispatches
  *      supervisor → scout → fitScorer → matcher → tailor → coverLetter one at a
  *      time, and an exception from any step aborts the rest. A map run is that
@@ -19,7 +19,7 @@
  *   3. ONE BACKEND, ONE RUN. Three catalog agents (`matchScoring`,
  *      `atsOptimization`, `skillGap`) share the single `fitScorer` backend, so
  *      dispatching per NODE would bill three metered runs for one unit of work
- *      and Run All only ever dispatches it once. Targets are therefore deduped
+ *      and Run pipeline only ever dispatches it once. Targets are therefore deduped
  *      by backend, first-in-stage-order wins, and the nodes that share it are
  *      carried on `alsoCovers` so the UI can say so instead of hiding it.
  *   4. RUNNABILITY IS THE SERVER'S CALL, NOT THE UI'S. `agent.runnable` is
@@ -31,6 +31,7 @@
  *
  * Nothing here starts a run, reads a clock, or touches React.
  */
+import { RUN_PIPELINE_SHORT } from "./conductor";
 import type { MapModel, MapNode } from "./orchestration-map-model";
 
 /** Verbatim disabled reason for a roadmap node (never runnable, by construction). */
@@ -115,9 +116,9 @@ export function coveredKeys(targets: readonly RunTarget[]): string[] {
 /** What is in flight right now, from evidence the console genuinely holds. */
 export interface RunContext {
   /**
-   * The console-wide in-flight backend — `"pipeline"` while Run All is going,
+   * The console-wide in-flight backend — `"pipeline"` while Run pipeline is going,
    * an agent backend while a single trigger is, `null` when nothing is. This is
-   * the same `busy` value the Run All button already disables itself on.
+   * the same `busy` value the Run pipeline button already disables itself on.
    */
   busyBackend?: string | null;
   /** Backends THIS map has dispatched and not yet seen settle. */
@@ -136,7 +137,7 @@ export interface RunAvailability {
  *
  * A node reading `live` from the run store is the SSE/poll-fed truth that a run
  * is genuinely in flight for that backend; it is refused here for the same
- * reason Run All refuses while `busy` is set — the console runs one thing at a
+ * reason Run pipeline refuses while `busy` is set — the console runs one thing at a
  * time, exactly like the pipeline it mirrors.
  */
 export function runAvailability(node: MapNode, ctx: RunContext = {}): RunAvailability {
@@ -162,7 +163,7 @@ export function runAvailability(node: MapNode, ctx: RunContext = {}): RunAvailab
       runnable: false,
       reason:
         busy === "pipeline"
-          ? "Run All is in progress — one run at a time"
+          ? `${RUN_PIPELINE_SHORT} is in progress — one run at a time`
           : `${busy} is running — one run at a time`,
     };
   }

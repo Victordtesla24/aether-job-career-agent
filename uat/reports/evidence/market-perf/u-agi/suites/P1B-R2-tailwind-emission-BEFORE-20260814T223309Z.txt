@@ -1,0 +1,42 @@
+P1-B ROUND-2 MUST-FIX #1 — Tailwind CSS-emission probe, BEFORE the fix
+repo/branch : /home/ubuntu/github_repos/aether-wt-p1b @ feat/uagi-p1b
+tree HEAD   : 5ae56ecbd6a0d23ab8c955352904bfb9103b2396
+captured UTC: 2026-08-14T22:33:09Z
+tailwindcss : 3.4.19
+
+METHOD: a real tailwind build using the REAL apps/web/tailwind.config.ts with
+        content scoped to the single file under test, so the emitted stylesheet
+        contains exactly the utilities ConductorBand.tsx asks for.
+  temp config : apps/web/.p1b-probe.tailwind.config.ts (deleted after the probe)
+  input       : '@tailwind utilities;'
+  cmd         : node_modules/.bin/tailwindcss -c .p1b-probe.tailwind.config.ts -i /tmp/p1b-in.css -o /tmp/p1b-out.css
+
+SOURCE UNDER TEST (unfixed) — apps/web/src/components/agents/ConductorBand.tsx:
+219:            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-state-ok" aria-hidden="true" />
+254:            className="rounded-md border border-state-warn/40 bg-state-warn/10 px-3 py-2 text-[11.5px] leading-[1.5] text-state-warn"
+310:            <span className="w-full text-[12px] leading-[1.5] text-state-warn">
+324:                ? "border-state-ok/40 bg-state-ok/10"
+326:                  ? "border-state-warn/40 bg-state-warn/10"
+328:                    ? "border-state-err/40 bg-state-err/10"
+585:                      data-testid={`conductor-plan-state-${card.cardKey}`}
+
+PALETTE DEFINED — apps/web/tailwind.config.ts theme.extend.colors.state:
+        state: {
+          ok: "#34D399",
+          warn: "#F59E0B",
+          danger: "#F87171",
+          info: "#818CF8",
+          neutral: "#8B8BA3", // "no data" / "not measured" — NEVER green
+          degraded: "#C4B5FD", // honest degrade: distinct from ok AND error
+        },
+
+EMITTED RULE-TEXT MATCHES IN THE BUILT STYLESHEET:
+  state-err      0
+  state-danger   0
+  state-ok       3
+  state-warn     3
+
+READING: 'state-err' emits 0 rules — the halted/failed banner's border+background
+         resolve to nothing, so the most safety-critical honest-failure signal in
+         this component renders untinted. 'state-ok' / 'state-warn' emit 3 each,
+         which is the sanity control proving the probe itself works.

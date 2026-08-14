@@ -1,0 +1,23 @@
+P1-B ROUND-2 MUST-FIX #1 — GREEN (pass-after) capture
+repo/branch : /home/ubuntu/github_repos/aether-wt-p1b @ feat/uagi-p1b
+tree HEAD   : 5ae56ecbd6a0d23ab8c955352904bfb9103b2396 + this slice's working-tree fix
+test file   : IDENTICAL to the RED capture — only ConductorBand.tsx:328 changed
+component   : FIXED — 'border-state-danger/40 bg-state-danger/10'
+captured UTC: 2026-08-14T22:35:35Z
+cmd         : NO_COLOR=1 node_modules/.bin/vitest run src/__tests__/agents/conductor-band.test.tsx  (cwd apps/web)
+exit code   : 0
+----------------------------------------------------------------------
+(node:747314) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+ RUN  v2.1.9 /home/ubuntu/github_repos/aether-wt-p1b/apps/web
+
+(node:747352) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ src/__tests__/agents/conductor-band.test.tsx (32 tests) 820ms
+
+ Test Files  1 passed (1)
+      Tests  32 passed (32)
+   Start at  22:35:30
+   Duration  4.00s (transform 381ms, setup 0ms, collect 841ms, tests 820ms, environment 1.77s, prepare 194ms)
+

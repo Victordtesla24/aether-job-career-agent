@@ -1,0 +1,38 @@
+P1-B ROUND-2 — merge-induced linkage citation drift, re-pointed
+repo/branch : /home/ubuntu/github_repos/aether-wt-p1b @ feat/uagi-p1b
+captured UTC: 2026-08-14T22:55:15Z
+
+CAUSE (not this slice's fix): merging origin/main@3f707a4
+  ('fix(stopall-interim): close the async-enqueue gap — guard _enqueue_single_agent too')
+  inserted 14 lines at apps/api/app/routers/agents.py:2630, pushing two anchors down:
+    def _pipeline_core(                                3675 -> 3689
+    scout_out = _dispatch(user_id, "scout", params)     3697 -> 3711
+
+CHANGE: workflow-linkage.ts HOP.pipelineTriggersDiscovery.evidence 3675,3697 -> 3689,3711.
+  The ANCHOR strings are unchanged and still resolve — the wire is real, only its
+  receipt moved. `discoveryEvidence` is deliberately NOT touched: it is the
+  artefact's ORIGINAL discovery-time citation, kept frozen when HEAD moves
+  (workflow-linkage.ts:36, workflow-linkage-table.test.ts:146).
+  ORCH-EXEC's apps/api enforcement code is preserved verbatim — apps/api is
+  byte-identical to origin/main on this branch.
+
+cmd       : NO_COLOR=1 node_modules/.bin/vitest run workflow-linkage-provenance.test.ts workflow-linkage-table.test.ts
+exit code : 0
+----------------------------------------------------------------------
+(node:768108) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+ RUN  v2.1.9 /home/ubuntu/github_repos/aether-wt-p1b/apps/web
+
+(node:768146) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ src/__tests__/agents/workflow-linkage-provenance.test.ts (10 tests) 14ms
+(node:768191) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ src/__tests__/agents/workflow-linkage-table.test.ts (15 tests) 14ms
+
+ Test Files  2 passed (2)
+      Tests  25 passed (25)
+   Start at  22:55:13
+   Duration  1.67s (transform 172ms, setup 0ms, collect 204ms, tests 28ms, environment 0ms, prepare 346ms)
+

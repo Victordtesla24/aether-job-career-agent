@@ -1,0 +1,114 @@
+P1-B ROUND-2 MUST-FIX #1 — RED (fail-before) capture
+repo/branch : /home/ubuntu/github_repos/aether-wt-p1b @ feat/uagi-p1b
+tree HEAD   : 5ae56ecbd6a0d23ab8c955352904bfb9103b2396
+test file   : EXACTLY as committed in this slice (new section 8 guards)
+component   : ConductorBand.tsx:328 temporarily held at the DEFECT —
+              'border-state-err/40 bg-state-err/10' — to prove the guards bite.
+captured UTC: 2026-08-14T22:35:17Z
+cmd         : NO_COLOR=1 node_modules/.bin/vitest run src/__tests__/agents/conductor-band.test.tsx  (cwd apps/web)
+exit code   : 1
+----------------------------------------------------------------------
+(node:747079) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+ RUN  v2.1.9 /home/ubuntu/github_repos/aether-wt-p1b/apps/web
+
+(node:747121) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ❯ src/__tests__/agents/conductor-band.test.tsx (32 tests | 5 failed) 922ms
+   × CONDUCTOR BAND — the status banner paints with tokens that exist > apps/web/src/components/agents/ConductorBand.tsx paints only with defined state tokens, on every branch 16ms
+     → expected { …(2) } to deeply equal { …(2) }
+   × CONDUCTOR BAND — the status banner paints with tokens that exist > renders the halted banner with state classes Tailwind can resolve 11ms
+     → expected [ 'err' ] to deeply equal []
+   × CONDUCTOR BAND — the status banner paints with tokens that exist > renders the failed banner with state classes Tailwind can resolve 5ms
+     → expected [ 'err' ] to deeply equal []
+   × CONDUCTOR BAND — the status banner paints with tokens that exist > tints the halted banner red — the border AND the background, not the words alone 27ms
+     → expected 'flex flex-wrap items-start justify-be…' to contain 'border-state-danger/40'
+   × CONDUCTOR BAND — the status banner paints with tokens that exist > tints the 'plan did not start' banner red too 16ms
+     → expected 'flex flex-wrap items-start justify-be…' to contain 'border-state-danger/40'
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 5 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  src/__tests__/agents/conductor-band.test.tsx > CONDUCTOR BAND — the status banner paints with tokens that exist > apps/web/src/components/agents/ConductorBand.tsx paints only with defined state tokens, on every branch
+AssertionError: expected { …(2) } to deeply equal { …(2) }
+
+- Expected
++ Received
+
+  Object {
+    "file": "apps/web/src/components/agents/ConductorBand.tsx",
+-   "undefinedTokens": Array [],
++   "undefinedTokens": Array [
++     "err",
++   ],
+  }
+
+ ❯ src/__tests__/agents/conductor-band.test.tsx:595:48
+    593|     const used = stateTokensInSource(relPath);
+    594|     const undefinedTokens = used.filter((t) => !defined.includes(t));
+    595|     expect({ file: relPath, undefinedTokens }).toEqual({ file: relPath…
+       |                                                ^
+    596|   });
+    597| 
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/5]⎯
+
+ FAIL  src/__tests__/agents/conductor-band.test.tsx > CONDUCTOR BAND — the status banner paints with tokens that exist > renders the halted banner with state classes Tailwind can resolve
+ FAIL  src/__tests__/agents/conductor-band.test.tsx > CONDUCTOR BAND — the status banner paints with tokens that exist > renders the failed banner with state classes Tailwind can resolve
+AssertionError: expected [ 'err' ] to deeply equal []
+
+- Expected
++ Received
+
+- Array []
++ Array [
++   "err",
++ ]
+
+ ❯ src/__tests__/agents/conductor-band.test.tsx:616:79
+    614|       );
+    615|       const defined = definedStateTokens();
+    616|       expect(stateTokensInDom(container).filter((t) => !defined.includ…
+       |                                                                               ^
+    617|     });
+    618|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/5]⎯
+
+ FAIL  src/__tests__/agents/conductor-band.test.tsx > CONDUCTOR BAND — the status banner paints with tokens that exist > tints the halted banner red — the border AND the background, not the words alone
+AssertionError: expected 'flex flex-wrap items-start justify-be…' to contain 'border-state-danger/40'
+
+Expected: "border-state-danger/40"
+Received: "flex flex-wrap items-start justify-between gap-x-4 gap-y-2 rounded-md border px-3 py-2.5 text-[12px] leading-[1.55] border-state-err/40 bg-state-err/10"
+
+ ❯ src/__tests__/agents/conductor-band.test.tsx:634:30
+    632|     );
+    633|     const status = screen.getByTestId("conductor-run-status");
+    634|     expect(status.className).toContain("border-state-danger/40");
+       |                              ^
+    635|     expect(status.className).toContain("bg-state-danger/10");
+    636|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[3/5]⎯
+
+ FAIL  src/__tests__/agents/conductor-band.test.tsx > CONDUCTOR BAND — the status banner paints with tokens that exist > tints the 'plan did not start' banner red too
+AssertionError: expected 'flex flex-wrap items-start justify-be…' to contain 'border-state-danger/40'
+
+Expected: "border-state-danger/40"
+Received: "flex flex-wrap items-start justify-between gap-x-4 gap-y-2 rounded-md border px-3 py-2.5 text-[12px] leading-[1.55] border-state-err/40 bg-state-err/10"
+
+ ❯ src/__tests__/agents/conductor-band.test.tsx:647:30
+    645|     );
+    646|     const status = screen.getByTestId("conductor-run-status");
+    647|     expect(status.className).toContain("border-state-danger/40");
+       |                              ^
+    648|     expect(status.className).toContain("bg-state-danger/10");
+    649|   });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[4/5]⎯
+
+ Test Files  1 failed (1)
+      Tests  5 failed | 27 passed (32)
+   Start at  22:35:11
+   Duration  4.97s (transform 400ms, setup 0ms, collect 836ms, tests 922ms, environment 1.79s, prepare 156ms)
+
