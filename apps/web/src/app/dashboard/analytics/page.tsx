@@ -46,9 +46,11 @@ import {
   type Period,
 } from "../../../lib/api/analytics";
 import {
+  fetchAgentDirectives,
   fetchAgentPolicy,
   fetchPolicyCohorts,
   fetchPolicyHistory,
+  type AgentDirectivesResponse,
   type AgentPolicy,
   type PolicyCohorts,
   type PolicyHistory,
@@ -189,6 +191,10 @@ export default function AnalyticsPage() {
   // other two panels — each degrades to absent, never to a fabricated default.
   const [policyHistory, setPolicyHistory] = useState<PolicyHistory | null>(null);
   const [policyCohorts, setPolicyCohorts] = useState<PolicyCohorts | null>(null);
+  // B1b (ADR-AGI-2 P1): the Supervisor's active directives — independent of
+  // `policy` (same degrade rationale: one additive endpoint's failure must
+  // never blank an already-working panel).
+  const [directives, setDirectives] = useState<AgentDirectivesResponse | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -237,6 +243,14 @@ export default function AnalyticsPage() {
         setPolicyCohorts(await fetchPolicyCohorts());
       } catch {
         setPolicyCohorts(null);
+      }
+
+      try {
+        setDirectives(await fetchAgentDirectives());
+      } catch {
+        // Additive B1b surface — its own failure must not take down the
+        // policy/funnel/conversion panels above.
+        setDirectives(null);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load analytics");
@@ -441,7 +455,13 @@ export default function AnalyticsPage() {
           It stays in THIS view, above stage conversion, because the
           conversion gap sentence below points the reader at it by name and
           by direction (R-05). */}
-      {policy ? <AgentPolicyPanel policy={policy} /> : null}
+      {policy ? (
+        <AgentPolicyPanel
+          policy={policy}
+          directives={directives?.directives.filter((d) => d.status === "active") ?? []}
+          directivesPaused={directives?.paused ?? false}
+        />
+      ) : null}
 
       {/*
         §5.2 — the funnel and the stage-conversion figures it implies now sit

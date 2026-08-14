@@ -29,7 +29,7 @@
  *   "healthy" — a user with too few submissions has no trustworthy rate.
  */
 import { BulletChart, type BulletRow } from "../charts";
-import type { AgentPolicy } from "../../lib/api/agentPolicy";
+import type { AgentDirective, AgentPolicy } from "../../lib/api/agentPolicy";
 
 const TIER_LABEL: Record<string, string> = {
   standard: "Standard rigor",
@@ -101,7 +101,52 @@ function knobChips(knobs: Record<string, unknown> | null | undefined) {
     }));
 }
 
-export default function AgentPolicyPanel({ policy }: { policy: AgentPolicy }) {
+/**
+ * B1b (ADR-AGI-2 P1, ORCH-B1-BLUEPRINT-2026-08-14.md §8.1) — "Supervisor
+ * directives" block. A directive AMENDS the tier's baseline for one agent;
+ * it is never shown AS the tier (§8's honesty rule), so every knob it
+ * touches is rendered beside the tier's own baseline value for that same
+ * field, sourced from `policy.knobs` — the one computation this panel
+ * already renders above, never a re-derived number.
+ */
+const DIRECTIVE_AGENT_LABEL: Record<string, string> = {
+  tailor: "Résumé Tailoring",
+  coverLetter: "Cover Letter",
+  storyExtractor: "Story Extraction",
+};
+
+function directiveKnobPhrases(
+  directive: Record<string, unknown>,
+  baselineKnobs: Record<string, unknown> | null | undefined,
+): string[] {
+  return Object.entries(directive)
+    .filter(([, value]) => typeof value === "number" || typeof value === "string")
+    .map(([key, value]) => {
+      const label = KNOB_LABEL[key] ?? key;
+      const baseline = baselineKnobs?.[key];
+      const hasBaseline = typeof baseline === "number" || typeof baseline === "string";
+      return `${value} ${label}${hasBaseline ? ` (baseline ${String(baseline)})` : ""}`;
+    });
+}
+
+export default function AgentPolicyPanel({
+  policy,
+  directives = [],
+  directivesPaused = false,
+}: {
+  policy: AgentPolicy;
+  /** Active `AgentDirective` rows for this user, from `GET /agents/directives`
+   *  (§5.2). Additive and optional: a caller that has not wired the fetch yet
+   *  (or the fetch itself failed — additive endpoints degrade to absent, not
+   *  to a blanked panel) simply omits this and the panel renders exactly as
+   *  it did before B1b. */
+  directives?: AgentDirective[];
+  /** `GET /agents/directives`'s own `paused` flag (reflects
+   *  `AETHER_AGI_DIRECTIVES_ENABLED`) — directives may still be LISTED while
+   *  paused (history is never a lie); this only changes how they are
+   *  captioned. */
+  directivesPaused?: boolean;
+}) {
   const tierLabel = TIER_LABEL[policy.tier] ?? policy.tier;
   const tone = TIER_TONE[policy.tier] ?? "text-aether-muted-dim border-white/15";
   const snapshot = policy.metricSnapshot;
@@ -241,6 +286,72 @@ export default function AgentPolicyPanel({ policy }: { policy: AgentPolicy }) {
         >
           {policy.behaviour}
         </p>
+      ) : null}
+
+      {/* SUPERVISOR DIRECTIVES (B1b, §8.1) — bounded amendments on top of the
+          tier above. Absent entirely when there are none: an empty region is
+          never rendered as a stated empty state here, because "the
+          Supervisor issued nothing" is the default, unremarkable case, not a
+          fact worth a dedicated row the way "no trigger fired" is. */}
+      {directives.length > 0 ? (
+        <div
+          className={`mt-4 rounded-xl border p-3 ${
+            directivesPaused
+              ? "border-white/10 bg-white/[0.02] opacity-70"
+              : "border-aether-amber/25 bg-aether-amber/[0.05]"
+          }`}
+          data-testid="agent-policy-directives"
+          data-paused={directivesPaused ? "true" : "false"}
+        >
+          <h3 className="type-mono-micro text-aether-muted-dim">
+            Supervisor directive{directives.length === 1 ? "" : "s"} ({directives.length}{" "}
+            active)
+          </h3>
+          <p data-prose="caption" className="mt-1 text-[11px] leading-[1.4] text-aether-muted-dim">
+            {directivesPaused
+              ? "Not currently applied — directive issuance is paused."
+              : "The tier above is the baseline; these tighten it further."}
+          </p>
+          <ul className="mt-2 space-y-2">
+            {directives.map((directive) => {
+              const phrases = directiveKnobPhrases(directive.directive, policy.knobs);
+              const clampedEntries = Object.entries(directive.clamped ?? {});
+              return (
+                <li key={directive.id} data-testid="agent-policy-directive-row" className="text-[12px]">
+                  <span className="font-semibold text-aether-muted">
+                    {DIRECTIVE_AGENT_LABEL[directive.agentKey] ?? directive.agentKey}
+                  </span>
+                  {phrases.length > 0 ? (
+                    <span className="text-aether-muted-dim"> — {phrases.join(", ")}</span>
+                  ) : null}
+                  {directive.rationale ? (
+                    <p
+                      data-prose="caption"
+                      data-prose-source="server"
+                      data-testid="agent-policy-directive-rationale"
+                      className="mt-0.5 text-[11px] leading-[1.4] text-aether-muted-dim"
+                    >
+                      {directive.rationale}
+                    </p>
+                  ) : null}
+                  {clampedEntries.length > 0 ? (
+                    <ul className="mt-0.5" data-testid="agent-policy-directive-clamped">
+                      {clampedEntries.map(([field, info]) => {
+                        const record = info as { requested?: unknown; applied?: unknown };
+                        return (
+                          <li key={field} className="text-[11px] text-aether-muted-dim">
+                            Supervisor asked for {String(record.requested)} {KNOB_LABEL[field] ?? field};
+                            {" "}the ceiling is {String(record.applied)}.
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
       ) : null}
 
       {/* THE DIMENSIONS the "below floor" triggers are talking about, drawn
