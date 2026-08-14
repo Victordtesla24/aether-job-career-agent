@@ -9,6 +9,11 @@ import { useCallback, useEffect, useState } from "react";
 import MarketPulse from "../../../components/analytics/MarketPulse";
 import { useRealtimeResources } from "../../../hooks/useRealtime";
 import MetricTooltip from "../../../components/MetricTooltip";
+import AgentPolicyPanel from "../../../components/agents/AgentPolicyPanel";
+import {
+  PolicyCohortProgress,
+  PolicyTierHistory,
+} from "../../../components/agents/PolicyProgress";
 import {
   fetchAgentRoi,
   fetchAtsDistribution,
@@ -22,6 +27,14 @@ import {
   type Funnel,
   type Period,
 } from "../../../lib/api/analytics";
+import {
+  fetchAgentPolicy,
+  fetchPolicyCohorts,
+  fetchPolicyHistory,
+  type AgentPolicy,
+  type PolicyCohorts,
+  type PolicyHistory,
+} from "../../../lib/api/agentPolicy";
 
 const PERIODS: Period[] = ["7d", "30d", "90d", "all"];
 
@@ -33,6 +46,15 @@ export default function AnalyticsPage() {
   const [conversion, setConversion] = useState<Conversion | null>(null);
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // U-AX item 2(a): the self-improvement loop's current tier — loaded
+  // independently so a failure here never blanks the rest of the page (same
+  // degrade pattern the dashboard summary already uses below).
+  const [policy, setPolicy] = useState<AgentPolicy | null>(null);
+  // U-AX item 2(c) / item 3 (R-06): the tier's history and the per-tier cohort
+  // outcomes. Independent of `policy` so one endpoint failing cannot blank the
+  // other two panels — each degrades to absent, never to a fabricated default.
+  const [policyHistory, setPolicyHistory] = useState<PolicyHistory | null>(null);
+  const [policyCohorts, setPolicyCohorts] = useState<PolicyCohorts | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -61,6 +83,26 @@ export default function AnalyticsPage() {
       } catch {
         // Dashboard endpoint not yet deployed — degrade gracefully.
         setDashboard(null);
+      }
+
+      try {
+        setPolicy(await fetchAgentPolicy());
+      } catch {
+        // U-AX policy panel is additive — its own failure must not take down
+        // the funnel/conversion/ATS panels above.
+        setPolicy(null);
+      }
+
+      try {
+        setPolicyHistory(await fetchPolicyHistory());
+      } catch {
+        setPolicyHistory(null);
+      }
+
+      try {
+        setPolicyCohorts(await fetchPolicyCohorts());
+      } catch {
+        setPolicyCohorts(null);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load analytics");
@@ -112,7 +154,7 @@ export default function AnalyticsPage() {
     "Jobs Found": "Roles discovered by the Scout agent and matched against your profile.",
     "Avg Fit Score": "Average ATS/AI fit score (0–100) across all scored jobs — how well your resume matches each posting.",
     "Agent Runs": "Total number of agent executions (discovery, tailoring, scoring, etc.) in this period.",
-    "Agent Spend (AUD)": "Total agent cost incurred by agent runs in this period, shown in Australian dollars.",
+    "Agent Spend (USD)": "Total agent cost incurred by agent runs in this period, shown in US dollars — LLM providers bill in USD and no currency conversion is applied.",
   };
 
   const CONVERSION_TIP: Record<string, string> = {
@@ -163,6 +205,23 @@ export default function AnalyticsPage() {
         </p>
       ) : null}
 
+      {/* U-AX item 2(a): the self-improvement loop's live state — the exact
+          tier every real agent is currently obeying, why, and what it
+          changes. Additive to the page; a load failure leaves it absent
+          rather than blocking anything above. */}
+      {policy ? <AgentPolicyPanel policy={policy} /> : null}
+
+      {/* U-AX item 2(c) + item 3 (R-06): the tier's own history against the
+          metrics it responds to, and the outcome of the applications actually
+          submitted under each tier. Round 2 claimed 2(c) in a comment and
+          shipped neither surface. */}
+      {policyHistory || policyCohorts ? (
+        <div className="grid gap-6 lg:grid-cols-2">
+          {policyHistory ? <PolicyTierHistory history={policyHistory} /> : null}
+          {policyCohorts ? <PolicyCohortProgress cohorts={policyCohorts} /> : null}
+        </div>
+      ) : null}
+
       {dashboard === null && !error ? (
         /* Space reservation while the summary loads — rendering nothing and
            then inserting the 7-card grid shifted every section below it
@@ -196,7 +255,7 @@ export default function AnalyticsPage() {
               ["Jobs Found", dashboard.jobsFound, "text-aether-amber"],
               ["Avg Fit Score", `${dashboard.avgFitScore}%`, "text-aether-coral"],
               ["Agent Runs", dashboard.agentRuns, "text-aether-violet"],
-              ["Agent Spend (AUD)", `$${dashboard.agentCostUsd.toFixed(2)}`, "text-aether-green"],
+              ["Agent Spend (USD)", `$${dashboard.agentCostUsd.toFixed(2)}`, "text-aether-green"],
             ] as const
           ).map(([label, value, color]) => (
             <div key={label} className="glass rounded-2xl border border-white/10 p-4">
@@ -306,6 +365,41 @@ export default function AnalyticsPage() {
                 </span>
               )}
             </div>
+            {/* U-AX item 1/2: "what should the user DO with this?" — the raw
+                rate above is action-relevant only once it is framed against
+                the 20% target the self-improvement loop escalates against.
+                Never printed as a negative "gap" figure — the target minus
+                the rate, stated as the ground the agents still need to make
+                up, honestly zeroed out once the target is met. */}
+            {hasApplications ? (
+              <p
+                className="mt-2 text-xs text-aether-muted-dim"
+                data-testid="interview-conversion-gap"
+              >
+                {conversion.interview_conversion_rate >= 20
+                  ? "At or above the 1-in-5 (20%) interview-conversion target."
+                  : // F-UAX-04: this figure honours the selected period, while
+                    // the Agent Performance Policy tier below is computed
+                    // ALL-TIME (quality_policy.resolve_policy_for_user) — the
+                    // two can legitimately disagree, so the claim about what
+                    // the policy is DOING must be sourced from the policy's
+                    // own tier, never asserted unconditionally. `heightened`
+                    // is the only tier that actually escalates rigor;
+                    // `insufficient_data` explicitly does not (quality_policy.py
+                    // rule 2) and must say so, not claim an escalation that
+                    // isn't happening.
+                    // R-05: AgentPolicyPanel renders ABOVE this section, so
+                    // "see below" pointed the reader at nothing. The claim was
+                    // honest and the directions were not — which is its own
+                    // kind of dishonesty on a page whose whole promise is that
+                    // what it says can be checked.
+                    policy?.tier === "heightened"
+                    ? `${(20 - conversion.interview_conversion_rate).toFixed(1)} points below the 1-in-5 (20%) target — the agent policy has escalated to heightened rigor (see Agent Performance Policy above) until this closes.`
+                    : policy?.tier === "insufficient_data"
+                      ? `${(20 - conversion.interview_conversion_rate).toFixed(1)} points below the 1-in-5 (20%) target this period — not enough submitted applications yet, all-time, for the policy to honestly decide whether to escalate (see Agent Performance Policy above).`
+                      : `${(20 - conversion.interview_conversion_rate).toFixed(1)} points below the 1-in-5 (20%) target this period — the agent policy escalates rigor automatically once its own all-time metrics cross a threshold (see Agent Performance Policy above).`}
+              </p>
+            ) : null}
           </>
         )}
       </section>

@@ -608,27 +608,61 @@ def record_transmission(
     application the user has already moved further (screening/interview/offer)
     is never regressed. The transmission columns are written unconditionally,
     because they record something that demonstrably happened.
+
+    U-AX: the statement additionally returns the row's PRE-update status via a
+    locked self-join, so the status event recorded below states the transition
+    that was OBSERVED rather than the one assumed from the CASE expression. The
+    join keeps it a single atomic statement — a separate SELECT-then-UPDATE
+    could read 'draft', lose a race, and then record a transition that another
+    writer had already made.
     """
     ensure_application_transmission_columns()
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 '''
-                UPDATE "Application"
+                UPDATE "Application" AS a
                 SET "transmittedAt" = NOW(),
                     "transmittedTo" = %s,
                     "transmissionChannel" = %s,
                     "transmissionRef" = %s,
                     "status" = CASE
-                        WHEN "status" = 'draft'::"ApplicationStatus"
+                        WHEN a."status" = 'draft'::"ApplicationStatus"
                             THEN 'submitted'::"ApplicationStatus"
-                        ELSE "status" END,
+                        ELSE a."status" END,
                     "updatedAt" = NOW()
-                WHERE "id" = %s AND "userId" = %s
+                FROM (
+                    SELECT "id", "status"::text AS "prevStatus"
+                    FROM "Application"
+                    WHERE "id" = %s AND "userId" = %s
+                    FOR UPDATE
+                ) AS prev
+                WHERE a."id" = prev."id" AND a."userId" = %s
+                RETURNING a."jobId", a."resumeId", prev."prevStatus"
                 ''',
-                (recipient, channel, ref, application_id, user_id),
+                (recipient, channel, ref, application_id, user_id, user_id),
             )
+            stamped = cur.fetchone()
         conn.commit()
+    if stamped is not None and stamped[2] == "draft":
+        # A REAL transmission promoted this draft. The guard on the observed
+        # previous status means an application the user had already advanced
+        # records no phantom draft->submitted transition.
+        from app.repositories.application_status_event import (
+            record_status_event_best_effort,
+        )
+        from app.services.submission_snapshot import record_submission_snapshot
+
+        record_status_event_best_effort(
+            application_id, "draft", "submitted", f"transmission.{channel}"
+        )
+        if stamped[0]:
+            record_submission_snapshot(
+                user_id,
+                application_id,
+                str(stamped[0]),
+                str(stamped[1]) if stamped[1] else None,
+            )
 
 
 def submission_view(row: dict[str, Any]) -> dict[str, Any]:
@@ -646,6 +680,16 @@ def submission_view(row: dict[str, Any]) -> dict[str, Any]:
       own Gmail Sent folder).
     * ``autoSubmittable`` — whether the posting publishes an address Aether
       could send to at all.
+    * ``applyChannel`` / ``manualStepReason`` / ``manualStepDetail`` /
+      ``manualStepAt`` — U5's other half of the NO-PREPARED-ONLY invariant
+      (written by ``apply_channel_resolver`` / ``apply_executor.record_
+      manual_step``). Named here EXPLICITLY, not left to ride through on
+      ``row`` untouched by this function's own return dict: a caller that
+      ever rebuilds its response from ``submission_view()``'s return value
+      alone (instead of ``dict.update``-ing it onto the raw SELECT row, as
+      ``applications._with_submission`` does today) must not silently drop
+      them the way the pre-refix ``_COLUMNS`` gap did for the whole read
+      path (see ``applications.py`` ``_ensure_read_columns`` docstring).
     """
     transmitted_at = row.get("transmittedAt")
     transmitted = transmitted_at is not None
@@ -657,6 +701,10 @@ def submission_view(row: dict[str, Any]) -> dict[str, Any]:
         "transmissionChannel": row.get("transmissionChannel"),
         "transmissionRef": row.get("transmissionRef"),
         "autoSubmittable": bool(row.get("applyEmail")),
+        "applyChannel": row.get("applyChannel"),
+        "manualStepReason": row.get("manualStepReason"),
+        "manualStepDetail": row.get("manualStepDetail"),
+        "manualStepAt": row.get("manualStepAt"),
         "applyEmail": row.get("applyEmail"),
         "applyEmailSource": row.get("applyEmailSource"),
     }

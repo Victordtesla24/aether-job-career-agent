@@ -103,6 +103,13 @@ export default function PrivacyPolicyPage() {
                 interaction data (such as features used and application activity) that helps
                 us improve the product.
               </li>
+              <li>
+                <strong className="text-aether-text">Public GitHub profile data</strong> — if
+                you enter a GitHub username in Settings, we fetch that account&rsquo;s public
+                profile (bio, repositories, languages, and stars) from GitHub&rsquo;s public
+                API to build your portfolio card. No GitHub authentication or private data is
+                involved — only information already public on GitHub.
+              </li>
             </ul>
           </Section>
 
@@ -166,6 +173,17 @@ export default function PrivacyPolicyPage() {
                 <strong className="text-aether-text">Hosted PostgreSQL database</strong> —
                 your account and application data is stored in a single hosted
                 PostgreSQL database.
+              </li>
+              <li>
+                <strong className="text-aether-text">GitHub (public API)</strong> — used, only
+                when you supply a GitHub username, to read that account&rsquo;s public profile
+                for your portfolio card. This is an unauthenticated, read-only call to
+                GitHub&rsquo;s public API; no data of yours is sent to GitHub.
+              </li>
+              <li>
+                <strong className="text-aether-text">Adzuna</strong> — a licensed third-party
+                job-listings aggregator we query to source live job postings for the Jobs and
+                discovery pipeline. No personal data of yours is sent to Adzuna.
               </li>
             </ul>
           </Section>

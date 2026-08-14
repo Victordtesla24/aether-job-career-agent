@@ -41,6 +41,8 @@ import psycopg2
 from fastapi import HTTPException, status
 
 from app.db import ensure_application_unique_active_index, get_connection
+from app.repositories.application_status_event import record_status_event_best_effort
+from app.services.submission_snapshot import record_submission_snapshot
 
 logger = logging.getLogger(__name__)
 
@@ -244,6 +246,20 @@ def move_application_stage(
                     cur=cur,
                 )
             conn.commit()
+    if changed:
+        # U-AX instrumentation: the kanban move is a REAL status transition —
+        # this is the ONLY path by which an application ever reaches
+        # 'interview' or 'offer' today, so without it the conversion metric the
+        # rigor policy consumes would have no history at all. Recorded after
+        # the commit (its own connection) and guarded on ``changed`` so a
+        # same-stage drop writes nothing.
+        record_status_event_best_effort(
+            application_id, from_status, new_status, "stage_transitions.move"
+        )
+        if from_status == "draft" and new_status != "draft" and job_id:
+            # Leaving draft via the board IS a submission — snapshot it with
+            # the same facts the Apply button records.
+            record_submission_snapshot(user_id, application_id, str(job_id), None)
     return ApplicationMove(
         application_id=application_id,
         job_id=job_id,

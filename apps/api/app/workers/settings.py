@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import os
 
+from app.workers.apply_sweep import apply_sweep_cron, apply_sweep_user
 from app.workers.board_sweep import board_sweep_cron, board_sweep_user
+from app.workers.queue import job_timeout_seconds
 from app.workers.tasks import (
     reconcile_abandoned_agent_runs_cron,
     run_agent_job,
@@ -43,9 +45,30 @@ def _cron_jobs():
                 reconcile_abandoned_agent_runs_cron,
                 minute=set(range(2, 60, 5)),
             ),
+            # U5 NO-PREPARED-ONLY tick — every 15 min, offset off the board
+            # sweep so the two autopilots never contend for this 2-CPU VM. A
+            # no-op unless AETHER_APPLY_SWEEP_ENABLED is on AND the user has
+            # applications sitting on an APPROVED gate with no terminal state.
+            cron(apply_sweep_cron, minute=set(range(7, 60, 15))),
         ]
     except Exception:  # noqa: BLE001 — cron optional; enqueue path is primary
         return []
+
+
+def _apply_sweep_func():
+    """Register the apply sweep with headroom above the global 600s timeout.
+
+    One attempt drives a real browser twice (fetch the live form, then fill and
+    submit it) against an employer's site, so a pass of several applications
+    can legitimately outlast a normal job while still being bounded by
+    ``AETHER_APPLY_SWEEP_STRETCH_SECONDS``.
+    """
+    try:
+        from arq.worker import func
+
+        return func(apply_sweep_user, timeout=900)
+    except Exception:  # noqa: BLE001 — fall back to the plain coroutine
+        return apply_sweep_user
 
 
 def _sweep_func():
@@ -77,11 +100,15 @@ async def _on_startup(ctx) -> None:
 
 
 class WorkerSettings:
-    functions = [run_agent_job, _sweep_func()]
+    functions = [run_agent_job, _sweep_func(), _apply_sweep_func()]
     cron_jobs = _cron_jobs()
     on_startup = _on_startup
     redis_settings = _redis_settings()
     max_jobs = 3        # 2 vCPU / ~2.5 GB free -> modest concurrency
-    job_timeout = 600   # > largest worker LLM budget so ARQ never kills mid-run
+    # > largest worker LLM budget AND > the measured worst-case discovery pass,
+    # so ARQ never kills a healthy run mid-flight. Sourced from ONE authority
+    # (workers.queue.job_timeout_seconds) that the stale-job watchdog also
+    # derives from — see that function for the measurement behind the default.
+    job_timeout = job_timeout_seconds()
     keep_result = 300   # Postgres BackgroundJob is authoritative anyway
     max_tries = 3       # applies only to re-raised transient errors

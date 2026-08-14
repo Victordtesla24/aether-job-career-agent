@@ -1,0 +1,37 @@
+<!--
+  SYNTHETIC fixture — see README.md in this directory. This is a minimal
+  reproduction of Google reCAPTCHA v2's documented "challenge triggered"
+  markup (a visible iframe titled "recaptcha challenge expires in two
+  minutes" replacing the normal "I'm not a robot" checkbox state). It is
+  NOT a byte-for-byte capture of any specific employer's ATS page.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Apply — Example Co</title></head>
+<body>
+  <form id="application_form" action="/apply/submit" method="post">
+    <input id="first_name" name="first_name" type="text" aria-required="true" required>
+    <input id="last_name" name="last_name" type="text" aria-required="true" required>
+    <input id="email" name="email" type="email" aria-required="true" required>
+    <input id="resume" name="resume" type="file" aria-required="true" required>
+
+    <div class="g-recaptcha" data-sitekey="6Lc-example-sitekey">
+      <div style="width: 304px; height: 78px;">
+        <iframe
+          title="recaptcha challenge expires in two minutes"
+          src="https://www.google.com/recaptcha/api2/bframe?k=6Lc-example-sitekey"
+          width="400" height="580" role="presentation" name="c-example"
+          frameborder="0" scrolling="no">
+        </iframe>
+      </div>
+      <div id="rc-imageselect">
+        <div class="rc-imageselect-desc-wrapper">
+          <div class="rc-imageselect-desc">Select all images with traffic lights</div>
+        </div>
+      </div>
+    </div>
+
+    <button type="submit">Submit Application</button>
+  </form>
+</body>
+</html>

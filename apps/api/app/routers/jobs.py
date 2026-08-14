@@ -24,9 +24,11 @@ from app.agents.cover_letter_agent import (
 )
 from app.db import get_connection, new_id, rows_to_dicts
 from app.middleware.auth import CurrentUser
+from app.repositories.application_status_event import record_status_event_best_effort
 from app.repositories.job import VALID_STATUSES, JobRepository
 from app.services.discovery.active_feed import active_feed, annotate_listing_age
 from app.services.fit_evidence import job_evidence_text
+from app.services.submission_snapshot import record_submission_snapshot
 
 router = APIRouter()
 
@@ -221,6 +223,87 @@ def _dimension(label: str, score: int, *, degraded: bool) -> dict[str, Any]:
     return {"label": label, "score": score, "degraded": degraded}
 
 
+def build_fit_dimensions(
+    job: dict[str, Any],
+    *,
+    keyword_match: float,
+    semantic: float,
+    experience: float,
+    overall: float,
+    semantic_trusted: bool,
+    resume_measured: bool = True,
+) -> list[dict[str, Any]]:
+    """The 10-dimension fit radar — the ONE blend AND granularity authority.
+
+    Every before/after surface in the product reads its dimensions from here
+    (``_build_insights`` for the baseline half, ``routers/resumes.py``'s
+    tailoring-impact endpoint for the tailored half), so the two halves of a
+    comparison can never be blended by two different formulas or rounded to two
+    different granularities. Round 3 (R-03) exists because they were: an
+    integer server-side "before" was subtracted from a 1-decimal client-side
+    "after", putting up to ±0.5 of pure rounding artefact into a displayed
+    delta whose real magnitude averages ~2 ATS points.
+
+    Granularity: :func:`_round` — integer, clamped to [0, 100] — on BOTH sides,
+    applied to the full-precision inputs (never to already-rounded ones, which
+    is how a second rounding hop leaks a further point of drift).
+
+    PROVENANCE (R-01/R-02/R-04). Two independent ways a number here can fail to
+    be a measurement, and both must be declared:
+
+    * ``resume_measured=False`` — the ATS engine produced NO score for this
+      (résumé, posting) pair. ``routers/jobs.py``'s except branch then copies
+      ``Job.fitScore`` into all four subscores; a copied fit score is not a
+      measured keyword match and not a measured experience fit, so EVERY
+      résumé-derived dimension is degraded.
+    * ``semantic_trusted=False`` — the semantic component is the neutral
+      ``_DEGRADED_SEMANTIC_SCORE`` placeholder (GMV4-ats-002). Contamination is
+      transitive: ``overall`` is 0.4*keyword + 0.4*semantic + 0.2*experience,
+      so everything blended from ``semantic`` OR ``overall`` is degraded too.
+
+    The three résumé-INDEPENDENT dimensions (Salary Fit / Location Match /
+    Company Stability) are computed from the ``Job`` row alone. Failing them
+    closed as well would be its own dishonesty — they stay measured.
+    """
+    title = str(job.get("title") or "")
+    remote = bool(job.get("remote"))
+    au = _is_au(job)
+    resume_degraded = not resume_measured
+    # Transitive: anything built from `semantic` or from `overall` (which is
+    # itself 40% semantic) inherits the semantic flag as well as the engine one.
+    semantic_degraded = resume_degraded or not semantic_trusted
+    return [
+        _dimension("Technical Skills", _round(keyword_match), degraded=resume_degraded),
+        _dimension("Experience Level", _round(experience), degraded=resume_degraded),
+        _dimension("Industry Match", _round(semantic), degraded=semantic_degraded),
+        _dimension("Role Alignment", _round(overall), degraded=semantic_degraded),
+        _dimension(
+            "Culture Fit", _round(0.5 * semantic + 0.5 * experience),
+            degraded=semantic_degraded,
+        ),
+        _dimension("Salary Fit", _salary_fit(job), degraded=False),
+        _dimension(
+            "Location Match", 100 if remote else (95 if au else 70), degraded=False,
+        ),
+        _dimension(
+            "Career Growth", _round(0.6 * _seniority_score(title) + 0.4 * overall),
+            degraded=semantic_degraded,
+        ),
+        _dimension(
+            "Company Stability",
+            _round(
+                _SOURCE_STABILITY.get(str(job.get("source", "")).lower(), 76)
+                + (6 if (job.get("salaryMin") or job.get("salaryMax")) else 0)
+            ),
+            degraded=False,
+        ),
+        _dimension(
+            "North Star Align", _round(0.6 * overall + 0.4 * semantic),
+            degraded=semantic_degraded,
+        ),
+    ]
+
+
 #: Non-skill tokens the ATS keyword extractor surfaces (entity/boilerplate) that
 #: read poorly as "skills" — dropped from the displayed tags/gap only.
 _SKILL_NOISE = {
@@ -302,6 +385,9 @@ def _empty_insights(job: dict[str, Any]) -> dict[str, Any]:
         "overall": 0,
         "keywordMatch": 0,
         "semantic": 0,
+        # Same key on every insights payload shape, so a client never has to
+        # infer "was this measured?" from the absence of a field.
+        "atsMeasured": False,
         "experience": 0,
         "skillsMatched": 0,
         "skillsTotal": 0,
@@ -369,7 +455,6 @@ def _build_insights(job: dict[str, Any], user_id: str) -> dict[str, Any]:
         return _no_evidence_insights(job)
 
     title = job.get("title", "")
-    remote = bool(job.get("remote"))
     au = _is_au(job)
 
     # GMV4-ats-002: which path produced `sem` — "local"/"hf_api" (genuine) or
@@ -378,6 +463,12 @@ def _build_insights(job: dict[str, Any], user_id: str) -> dict[str, Any]:
     # below (`sem_trusted`) treats `None` the same as any other untrusted
     # value, so this fallback path is never mistaken for a real measurement.
     sem_path: str | None = None
+    # R-04: did the ATS ENGINE actually produce a score for this (résumé,
+    # posting) pair? Distinct from `scored` — which only says "there is a
+    # number to show" and is True on the except branch below, where the number
+    # is a COPY of Job.fitScore, not a measurement of anything this panel
+    # claims to measure.
+    ats_measured = True
     try:
         score = ATSEngine().score(resume_text, _job_text(job))
         km = float(score.keyword_match)
@@ -393,6 +484,7 @@ def _build_insights(job: dict[str, Any], user_id: str) -> dict[str, Any]:
         km = sem = exp = overall
         matched, missing = [], []
         scored = job.get("fitScore") is not None
+        ats_measured = False
 
     entities = _entity_tokens(job)
     matched = _clean_skills(matched, entities)
@@ -404,35 +496,21 @@ def _build_insights(job: dict[str, Any], user_id: str) -> dict[str, Any]:
     # be treated as NOT trustworthy (fails closed instead of open).
     sem_trusted = sem_path in ("local", "hf_api")
 
-    salary_fit = _salary_fit(job)
-    location_match = 100 if remote else (95 if au else 70)
-    career_growth = _round(0.6 * _seniority_score(title) + 0.4 * overall)
-    culture_fit = _round(0.5 * sem + 0.5 * exp)
-    stability = _round(_SOURCE_STABILITY.get(str(job.get("source", "")).lower(), 76)
-                       + (6 if (job.get("salaryMin") or job.get("salaryMax")) else 0))
-    north_star = _round(0.6 * overall + 0.4 * sem)
-
-    # Every dimension states its provenance explicitly (`_dimension` makes
-    # that mandatory), so the radar chart / dimension list can badge-or-
-    # exclude a placeholder-contaminated number instead of rendering it as
-    # fact. Round 4 (ESC-002): contamination is TRANSITIVE and was previously
-    # traced only one hop. `overall` is itself 0.4*keyword + 0.4*semantic +
-    # 0.2*experience (ats_engine.py), so "Role Alignment" (= overall) and
-    # "Career Growth" (0.6*seniority + 0.4*overall) are 40% and 16%
-    # placeholder respectively when `sem` was not measured — they now carry
-    # the same flag as the directly-semantic three.
-    dimensions = [
-        _dimension("Technical Skills", _round(km), degraded=False),
-        _dimension("Experience Level", _round(exp), degraded=False),
-        _dimension("Industry Match", _round(sem), degraded=not sem_trusted),
-        _dimension("Role Alignment", _round(overall), degraded=not sem_trusted),
-        _dimension("Culture Fit", culture_fit, degraded=not sem_trusted),
-        _dimension("Salary Fit", salary_fit, degraded=False),
-        _dimension("Location Match", location_match, degraded=False),
-        _dimension("Career Growth", career_growth, degraded=not sem_trusted),
-        _dimension("Company Stability", stability, degraded=False),
-        _dimension("North Star Align", north_star, degraded=not sem_trusted),
-    ]
+    # Round 4 (ESC-002) traced semantic contamination transitively; round 3 of
+    # U-AX adds the second, previously unflagged failure mode — an ATS-engine
+    # EXCEPTION, after which km/exp/sem/overall are all one copied
+    # ``Job.fitScore``. `build_fit_dimensions` is now the single authority for
+    # both the blend and its provenance (see its docstring), shared with the
+    # tailoring-impact endpoint so a before/after pair can never disagree.
+    dimensions = build_fit_dimensions(
+        job,
+        keyword_match=km,
+        semantic=sem,
+        experience=exp,
+        overall=overall,
+        semantic_trusted=sem_trusted,
+        resume_measured=ats_measured,
+    )
 
     skills_matched = len(matched)
     skills_total = len(matched) + len(missing)
@@ -484,6 +562,11 @@ def _build_insights(job: dict[str, Any], user_id: str) -> dict[str, Any]:
         # Round 3: WHITELIST, matching `sem_trusted` above.
         "semanticPath": sem_path,
         "semanticDegraded": not sem_trusted,
+        # R-04. `scored` above is True on the ATS-engine except branch too —
+        # there IS a number, it is just a copy of Job.fitScore. This flag is
+        # the honest one: False means no engine measured this pair, so the
+        # headline ATS and every résumé-derived dimension are placeholders.
+        "atsMeasured": ats_measured,
         "experience": _round(exp),
         "skillsMatched": skills_matched,
         "skillsTotal": skills_total,
@@ -687,7 +770,17 @@ def submit_application_for_job(user_id: str, job_id: str) -> dict[str, Any]:
                     ''',
                     (application_id, user_id, job_id, resume_id, "submitted", user_id, job_id),
                 )
+                inserted = cur.rowcount > 0
             conn.commit()
+        if inserted:
+            # U-AX: a NEW submitted row copied from the user's draft. The
+            # transition genuinely started at 'draft' (the SELECT above only
+            # matches a draft), so that is what is recorded — observed, not
+            # assumed.
+            record_status_event_best_effort(
+                application_id, "draft", "submitted", "jobs.apply"
+            )
+            record_submission_snapshot(user_id, application_id, job_id, resume_id)
     elif existing_application is not None and existing_application[1] == "draft":
         assert resume_id is not None
         # RT-009: a pipeline/autopilot cover-letter step leaves a DRAFT
@@ -707,7 +800,16 @@ def submit_application_for_job(user_id: str, job_id: str) -> dict[str, Any]:
                     ''',
                     (resume_id, application_id, user_id),
                 )
+                promoted = cur.rowcount > 0
             conn.commit()
+        if promoted:
+            # U-AX: the reused draft really moved. Guarded on rowcount so a
+            # racing second caller (whose UPDATE matched nothing) does not
+            # record a transition that never happened.
+            record_status_event_best_effort(
+                application_id, "draft", "submitted", "jobs.apply"
+            )
+            record_submission_snapshot(user_id, application_id, job_id, resume_id)
 
     updated = job if job.get("status") == "applied" else repository.update_status(job_id, "applied")
     assert updated is not None

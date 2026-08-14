@@ -88,6 +88,40 @@ def _ensure_offers_table() -> None:
     _offers_table_ready = True
 
 
+#: Guard so the additive ``Offer.applicationId`` column is only ensured once
+#: per worker process (see :func:`ensure_offer_application_id_column`).
+_offer_application_id_ready = False
+
+
+def ensure_offer_application_id_column() -> None:
+    """Idempotently add the additive ``Offer.applicationId`` column (U-AX
+    instrumentation item 1).
+
+    ``Offer`` rows are entered by the user in the offer comparison tool and had
+    NO link to the application that produced them, which is precisely why the
+    funnel's ``interview -> offer`` conversion could never be attributed: an
+    offer existed, but nothing said which submitted application it came from.
+    Nullable ``text`` (not an enforced FK) because an offer may legitimately
+    arrive through a channel Aether never tracked — the honest representation
+    of that is NULL, not a refused insert.
+
+    No backfill: every pre-existing offer's originating application genuinely
+    was not recorded, and pairing them by company name would be a guess
+    presented as data. Lazy DDL per ADR-TR-1.
+    """
+    global _offer_application_id_ready
+    if _offer_application_id_ready:
+        return
+    _ensure_offers_table()
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'ALTER TABLE "Offer" ADD COLUMN IF NOT EXISTS "applicationId" text'
+            )
+        conn.commit()
+    _offer_application_id_ready = True
+
+
 #: Default priority-weight rows. Returned for backward compatibility only — the
 #: UI no longer renders a weights panel (MV-offer-comparison-004: the weights
 #: never fed any score, and there is no honest per-dimension data source for

@@ -15,6 +15,7 @@ from __future__ import annotations
 import datetime
 import os
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -65,6 +66,40 @@ from app.services.resume_tailor import unsupported_claim_tokens
 #: always safe — the already-clean letter ships and its honest score is
 #: recorded with ``reachedTarget: false``.
 _QUALITY_PASS_MIN_SECONDS = 45.0
+
+#: The shipped corrective-retry count — the historic hardcoded
+#: ``for attempt in ("retry", "retry2")``. It is the FLOOR for every rigor
+#: tier: the U-AX policy may only ever raise it (see
+#: ``services.quality_policy``), never relax below what users already get.
+_MIN_CORRECTIVE_RETRIES = 2
+
+#: Hard ceiling on corrective retries regardless of tier. Each retry is a full
+#: cover-letter generation, and the plan spend cap is checked PRE-run (a run
+#: already in flight is never interrupted —
+#: docs/subscription/billing-architecture.md:432), so this loop must bound its
+#: own worst-case cost rather than relying on the cap to stop it.
+_MAX_CORRECTIVE_RETRIES = 4
+
+
+def _corrective_retry_labels(
+    policy_knobs: "Mapping[str, Any] | None",
+) -> tuple[str, ...]:
+    """Fixture-stable labels for the corrective-retry passes.
+
+    ``("retry", "retry2", ...)`` — the first two names are preserved BYTE-FOR-
+    BYTE because they are the ``fixture_key`` under which every recorded LLM
+    replay fixture was captured; renaming them would silently invalidate the
+    entire recorded corpus. Additional passes extend the sequence
+    (``"retry3"``), and replay mode with no matching fixture already breaks the
+    loop cleanly via ``LLMFixtureMissingError``.
+    """
+    raw = (policy_knobs or {}).get("coverLetterRetries")
+    try:
+        requested = int(raw) if raw is not None else _MIN_CORRECTIVE_RETRIES
+    except (TypeError, ValueError):
+        requested = _MIN_CORRECTIVE_RETRIES
+    count = max(_MIN_CORRECTIVE_RETRIES, min(requested, _MAX_CORRECTIVE_RETRIES))
+    return tuple("retry" if i == 0 else f"retry{i + 1}" for i in range(count))
 
 SYSTEM_PROMPT = (
     "You are a truthful cover-letter writer of elite craft: powerful, "
@@ -1419,7 +1454,27 @@ class CoverLetterAgent:
             compliance_hits,
         )
 
-    def run(self, user_id: str, job_id: str) -> CoverLetterResult:
+    def run(
+        self,
+        user_id: str,
+        job_id: str,
+        *,
+        policy_knobs: "Mapping[str, Any] | None" = None,
+    ) -> CoverLetterResult:
+        """Draft, guard and persist a cover letter for ``job_id``.
+
+        ``policy_knobs`` (U-AX) carries the deterministic rigor tier's
+        ``coverLetterRetries``, injected at the single dispatch seam
+        (``routers/agents.py::_with_quality_policy``). ``None``/``{}`` keeps the
+        shipped 2 corrective retries exactly. The count is clamped to
+        [``_MIN_CORRECTIVE_RETRIES``, ``_MAX_CORRECTIVE_RETRIES``] so a
+        heightened tier can never lower rigor below today's product, and can
+        never turn an unbounded number into unbounded cost — the spend cap is
+        a PRE-run soft ceiling that cannot interrupt a run in progress
+        (docs/subscription/billing-architecture.md:432), so this loop bounds
+        itself.
+        """
+        retries = _corrective_retry_labels(policy_knobs)
         job = self._jobs.get_by_id(job_id, user_id)
         if job is None:
             raise LookupError(f"Job {job_id} not found for user")
@@ -1596,7 +1651,7 @@ class CoverLetterAgent:
                                        **first_quality.as_dict()})
             all_flagged: list[str] = list(flagged)
             all_claims: list[str] = list(claim_flags)
-            for attempt in ("retry", "retry2"):
+            for attempt in retries:
                 # MV-cover-letter-studio-008: a draft that referenced the posting's
                 # instructions (``meta``) is regenerated too — the deterministic
                 # strip already cleaned it, but a fresh, naturally-clean draft is

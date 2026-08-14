@@ -11,6 +11,8 @@ from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 
 from app.db import (
+    ensure_application_apply_channel_column,
+    ensure_application_manual_step_columns,
     ensure_application_transmission_columns,
     ensure_application_unique_active_index,
     ensure_job_apply_contact_columns,
@@ -18,8 +20,10 @@ from app.db import (
     rows_to_dicts,
 )
 from app.middleware.auth import CurrentUser
+from app.repositories.application_status_event import record_status_event_best_effort
 from app.routers.analytics import get_application_counts
 from app.services.stage_transitions import move_application_stage, move_job_stage
+from app.services.submission_snapshot import record_submission_snapshot
 
 logger = logging.getLogger(__name__)
 
@@ -34,13 +38,42 @@ _STATUSES = frozenset(
 #: with EVERY application read, so no caller can render a "submitted" card
 #: without also having the fact of whether anything was actually transmitted.
 #: See ``app.services.application_submission.submission_view``.
+#:
+#: U5 (NO-PREPARED-ONLY invariant): the apply-channel and manual-step columns
+#: travel with every read for the SAME reason. TRANSMITTED is only half the
+#: invariant — the other half is the honest, actionable manual-step state
+#: (``manualStepReason``/``manualStepDetail``/``manualStepAt``, written by
+#: ``app.services.apply_executor.record_manual_step``; ``applyChannel``
+#: written by ``app.services.apply_channel_resolver``). If these are not
+#: SELECTed here, an application blocked by a CAPTCHA, a login wall or a
+#: question Aether refuses to fabricate an answer to is recorded honestly in
+#: Postgres and shows the user NOTHING — i.e. it reads as silently stuck in
+#: "prepared", which is exactly the outcome U5 forbids. Any new writer of a
+#: submission-outcome column must be added here in the same change.
 _COLUMNS = (
     'a."id", a."userId", a."jobId", a."resumeId", a."status", a."coverLetter", '
     'a."answers", a."createdAt", a."updatedAt", j."title" AS "jobTitle", '
     'j."company", j."sourceUrl" AS "applyUrl", j."fitScore", '
     'a."transmittedAt", a."transmittedTo", a."transmissionChannel", '
-    'a."transmissionRef", j."applyEmail", j."applyEmailSource"'
+    'a."transmissionRef", j."applyEmail", j."applyEmailSource", '
+    'a."applyChannel", a."manualStepReason", a."manualStepDetail", '
+    'a."manualStepAt"'
 )
+
+
+def _ensure_read_columns() -> None:
+    """Run the lazy additive DDL every ``_COLUMNS`` read depends on (ADR-TR-1).
+
+    ``_COLUMNS`` names columns added by additive lazy migrations, so the DDL
+    MUST run before any statement that reads them — a path that skipped the
+    equivalent call for ``contentHash`` raised UndefinedColumn -> HTTP 500 on
+    first use. Kept as ONE helper so a future column added to ``_COLUMNS``
+    cannot be ensured on one endpoint and forgotten on the other.
+    """
+    ensure_application_transmission_columns()
+    ensure_job_apply_contact_columns()
+    ensure_application_apply_channel_column()
+    ensure_application_manual_step_columns()
 
 
 def _with_submission(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -129,6 +162,30 @@ def funnel_sankey(current_user: CurrentUser) -> dict[str, Any]:
     }
 
 
+@router.get("/apply-sweep-status")
+def apply_sweep_status(current_user: CurrentUser) -> dict[str, Any]:
+    """Live read of the operator's apply-sweep kill-switch (SHOULD-FIX 6,
+    round-3 re-review of U5).
+
+    The FE's "automatic […] submission is not enabled on this deployment
+    yet" copy (``tracker-lib.ts`` ``notTransmittedReason`` /
+    ``automaticSubmissionDisclaimer``) used to be hardcoded — true only by
+    accident and false the instant an operator sets
+    ``AETHER_APPLY_SWEEP_ENABLED`` (the mandate's own end state, per
+    ``apps/api/app/workers/apply_sweep.py``). This mirrors the precedent at
+    ``app.workers.board_sweep.sweep_enabled()``, read live inside
+    ``POST /agents/board-sweep/trigger`` — a real capability signal instead
+    of an assumption baked into the client.
+
+    Registered ahead of ``GET /{application_id}`` (same fixed-path-before-
+    catch-all ordering as ``/funnel/sankey`` above) so this literal path
+    segment is never swallowed as an application id.
+    """
+    from app.workers.apply_sweep import sweep_enabled
+
+    return {"sweepEnabled": sweep_enabled()}
+
+
 @router.get("")
 def list_applications(
     current_user: CurrentUser,
@@ -178,12 +235,7 @@ def list_applications(
         clauses.append('j."status" = %s::"JobStatus"')
         params.append("applied")
     where = " AND ".join(clauses)
-    # W-SUB: ``_COLUMNS`` now names the additive transmission / apply-address
-    # columns, so the lazy DDL MUST run before the statement that reads them
-    # (ADR-TR-1 — a path that skipped the equivalent call for ``contentHash``
-    # raised UndefinedColumn -> HTTP 500 on first use).
-    ensure_application_transmission_columns()
-    ensure_job_apply_contact_columns()
+    _ensure_read_columns()
     with get_connection() as conn:
         with conn.cursor() as cur:
             # RT-004: ONE board card per job, however many letter-version rows
@@ -230,8 +282,7 @@ def list_applications(
 
 @router.get("/{application_id}")
 def get_application(application_id: str, current_user: CurrentUser) -> dict[str, Any]:
-    ensure_application_transmission_columns()
-    ensure_job_apply_contact_columns()
+    _ensure_read_columns()
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -244,6 +295,118 @@ def get_application(application_id: str, current_user: CurrentUser) -> dict[str,
     if not rows:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Application not found")
     return _with_submission(rows)[0]
+
+
+@router.post("/{application_id}/reconfirm-submission")
+def reconfirm_submission(application_id: str, current_user: CurrentUser) -> dict[str, Any]:
+    """One-click re-approval for a submission whose approval aged out (U5).
+
+    The sweep refuses to auto-execute an approval older than
+    ``AETHER_APPROVAL_MAX_AGE_DAYS`` (``apply_sweep._expire_stale_approval``)
+    and records ``manualStepReason = 'approval_expired'`` instead. This is the
+    honest way back: it creates a FRESH ``ApprovalRequest`` through the
+    EXISTING approval machinery (same repository, same approve() path, same
+    audit trail) and clears ONLY the expired state.
+
+    Deliberately narrow:
+
+    * it transmits NOTHING — it re-arms the gate, and the sweep (when the
+      operator has it enabled) does the work under all the usual guards;
+    * it refuses (409) for any other manual-step reason. A CAPTCHA or a login
+      wall is not solved by re-approving, and wiping that state would put the
+      row straight back into a loop that re-discovers the same obstacle;
+    * it never touches an application it does not own (404).
+    """
+    from app.repositories.admin import write_audit
+    from app.repositories.approval import ApprovalRepository
+
+    user_id = current_user["id"]
+    ensure_application_manual_step_columns()
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT "jobId", "manualStepReason" FROM "Application" '
+                'WHERE "id" = %s AND "userId" = %s',
+                (application_id, user_id),
+            )
+            row = cur.fetchone()
+            if row is None:
+                raise HTTPException(status.HTTP_404_NOT_FOUND, "Application not found")
+            job_id, manual_step_reason = row
+            if manual_step_reason != "approval_expired":
+                raise HTTPException(
+                    status.HTTP_409_CONFLICT,
+                    (
+                        "This application is not waiting on an expired approval, "
+                        "so there is nothing to re-confirm."
+                        if not manual_step_reason
+                        else (
+                            "This application is blocked by something a re-approval "
+                            f"cannot fix ({manual_step_reason}) — nothing was changed."
+                        )
+                    ),
+                )
+            cur.execute(
+                '''SELECT "payload" FROM "ApprovalRequest"
+                   WHERE "applicationId" = %s AND "userId" = %s
+                     AND "type" = 'application_submit'::"ApprovalType"
+                   ORDER BY "createdAt" DESC LIMIT 1''',
+                (application_id, user_id),
+            )
+            prior = cur.fetchone()
+    if prior is None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "This application has never been approved for submission, so there "
+            "is nothing to re-confirm.",
+        )
+    payload = prior[0] if isinstance(prior[0], dict) else {}
+    if not payload:
+        payload = {"kind": "site_apply", "job_id": job_id, "application_id": application_id}
+
+    repo = ApprovalRepository()
+    fresh = repo.create(user_id, "application_submit", payload, application_id=application_id)
+    approved = repo.approve(fresh["id"], user_id)
+    if approved is None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Could not re-confirm this application — please try again.",
+        )
+    # Only NOW is the expired state cleared, and only while it is still the
+    # expired state: if the approve above had failed, the row would keep its
+    # honest "reconfirm to submit" message instead of silently re-entering the
+    # queue with the same stale approval.
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                '''UPDATE "Application"
+                   SET "manualStepReason" = NULL, "manualStepDetail" = NULL,
+                       "manualStepAt" = NULL, "updatedAt" = NOW()
+                   WHERE "id" = %s AND "userId" = %s
+                     AND "manualStepReason" = 'approval_expired' ''',
+                (application_id, user_id),
+            )
+        conn.commit()
+    write_audit(
+        user_id,
+        "approval.reconfirm",
+        target_type="approval",
+        target_id=approved["id"],
+        detail={
+            "applicationId": application_id,
+            "reason": "approval_expired",
+            "previousApprovalReplaced": True,
+        },
+    )
+    return {
+        "reconfirmed": True,
+        "approvalId": approved["id"],
+        "applicationId": application_id,
+        "detail": (
+            "Approval refreshed. Nothing has been submitted yet — this "
+            "re-arms the submission gate with today's confirmation."
+        ),
+    }
 
 
 class SubmitRequest(BaseModel):
@@ -470,6 +633,11 @@ def submit_application(
     the active pipeline board and moves to the Applied view (phase4).
     """
     submitted_job_id: str | None = None
+    #: Bound inside the draft branch below; kept declared here so the U-AX
+    #: snapshot call after the transaction is unambiguously defined on every
+    #: path (it only runs when ``submitted_job_id`` is set, i.e. that branch
+    #: ran and assigned it).
+    tailored_resume_id: str | None = None
     ensure_application_unique_active_index()
     with get_connection() as conn:
         with conn.cursor() as cur:
@@ -590,6 +758,17 @@ def submit_application(
                 if cur.fetchone() is not None:
                     submitted_job_id = row[2]
                 conn.commit()
+    # U-AX instrumentation: ``submitted_job_id`` is set ONLY when the
+    # compare-and-swap above genuinely promoted this draft (RETURNING matched),
+    # so the loser of a double-submit race records nothing — the transition it
+    # would claim never happened.
+    if submitted_job_id is not None:
+        record_status_event_best_effort(
+            application_id, "draft", "submitted", "applications.submit"
+        )
+        record_submission_snapshot(
+            current_user["id"], application_id, submitted_job_id, tailored_resume_id
+        )
     # Phase 4: advance the parent job to 'applied' so the card flushes from
     # the active board. Guarded forward-only via advance_status — an
     # already-applied job is left untouched (idempotent).
