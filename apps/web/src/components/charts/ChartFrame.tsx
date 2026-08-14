@@ -105,7 +105,18 @@ function DataTable({
     : [...data];
 
   return (
-    <table className="sr-only" data-testid="chart-data-table">
+    /*
+     * D-ι. The sr-only box MUST be this wrapper `<div>`, not the table.
+     * Tailwind's `sr-only` hides via `width:1px; overflow:hidden`, and a
+     * `<table>` under the default `table-layout: auto` takes its used width
+     * from its content — so `sr-only` on the table left it 1115px wide and the
+     * page genuinely scrolled sideways (measured in Chromium on both
+     * /dashboard and /dashboard/analytics; see
+     * `__tests__/hidden-table-containment.test.tsx` for the numbers).
+     * `table-fixed` + `w-px` stops the table pushing the wrapper open in turn.
+     */
+    <div className="sr-only">
+    <table className="sr-only w-px table-fixed" data-testid="chart-data-table">
       <caption>
         {`${title} — ${windowLabel}`}
         {summarised
@@ -135,6 +146,7 @@ function DataTable({
         })}
       </tbody>
     </table>
+    </div>
   );
 }
 

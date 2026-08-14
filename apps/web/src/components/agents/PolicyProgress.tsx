@@ -92,7 +92,15 @@ export function PolicyTierHistory({ history }: { history: PolicyHistory }) {
         </p>
       ) : (
         <>
-          <ol className="mt-3 space-y-2">
+          {/*
+            D-ε ("the page ends"): this list grows one row per recorded tier
+            point and had no bound — it drove /dashboard/analytics to 4,178 CSS
+            px at 1600×1100, well past the ~2,500 px ceiling. The doctrine's own
+            remedy is scroll containment, not truncation: every point stays in
+            the DOM and reachable, it just scrolls inside its own container
+            instead of extending the page.
+          */}
+          <ol className="mt-3 max-h-[26rem] space-y-2 overflow-y-auto pr-1">
             {history.points.map((point, index) => (
               <li
                 key={`${point.at ?? "unknown"}-${index}`}

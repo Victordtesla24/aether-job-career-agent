@@ -9,6 +9,11 @@ import { useCallback, useEffect, useState } from "react";
 import MarketPulse from "../../../components/analytics/MarketPulse";
 import { useRealtimeResources } from "../../../hooks/useRealtime";
 import MetricTooltip from "../../../components/MetricTooltip";
+import StatBlock from "../../../components/ui/StatBlock";
+import Section from "../../../components/ui/Section";
+import { Funnel as FunnelChart, Histogram, Radar10 } from "../../../components/charts";
+import { atsBuckets, fitDimensions, funnelSteps } from "../../../lib/analytics/chart-adapters";
+import type { RealtimeResource } from "../../../lib/realtime/transport-types";
 import AgentPolicyPanel from "../../../components/agents/AgentPolicyPanel";
 import {
   PolicyCohortProgress,
@@ -37,6 +42,48 @@ import {
 } from "../../../lib/api/agentPolicy";
 
 const PERIODS: Period[] = ["7d", "30d", "90d", "all"];
+
+/**
+ * The 12-column spans that make the 7-card summary strip divide exactly:
+ * 3+3+3+3 on row one, 4+4+4 on row two. This is what removes the empty eighth
+ * cell a `lg:grid-cols-4` grid left behind.
+ */
+const SUMMARY_SPANS = [
+  "lg:col-span-3",
+  "lg:col-span-3",
+  "lg:col-span-3",
+  "lg:col-span-3",
+  "lg:col-span-4",
+  "lg:col-span-4",
+  "lg:col-span-4",
+] as const;
+
+/**
+ * The summary strip's cards. Labels are UNCHANGED — `SUMMARY_TIP` is keyed by
+ * them and each one carries a tested honesty contract about what is counted.
+ *
+ * `resource` drives the §3.4 T-B live delta chip and is set only where the
+ * displayed value IS a row count of that stream resource. "Avg Fit Score" is a
+ * mean and "Agent Spend" is a sum of costs, so neither may wear a row-count
+ * delta — they are deliberately absent rather than approximated.
+ */
+function SUMMARY_CARDS(
+  dashboard: Dashboard,
+): Array<{ label: string; value: string; unit?: string; resource?: RealtimeResource }> {
+  return [
+    {
+      label: "Applications (all stages)",
+      value: String(dashboard.totalApplications),
+      resource: "applications",
+    },
+    { label: "Interviews", value: String(dashboard.interviews), resource: "interviews" },
+    { label: "Offers", value: String(dashboard.offers), resource: "offers" },
+    { label: "Jobs Found", value: String(dashboard.jobsFound), resource: "jobs" },
+    { label: "Avg Fit Score", value: String(dashboard.avgFitScore), unit: "%" },
+    { label: "Agent Runs", value: String(dashboard.agentRuns), resource: "agentRuns" },
+    { label: "Agent Spend (USD)", value: `$${dashboard.agentCostUsd.toFixed(2)}` },
+  ];
+}
 
 export default function AnalyticsPage() {
   const [period, setPeriod] = useState<Period>("all");
@@ -121,18 +168,7 @@ export default function AnalyticsPage() {
     void load();
   });
 
-  const funnelStages = funnel
-    ? ([
-        ["Jobs Found", funnel.jobs_found],
-        ["Applied", funnel.applied],
-        ["Screened", funnel.screened],
-        ["Interviewed", funnel.interviewed],
-        ["Offers", funnel.offers],
-      ] as const)
-    : null;
 
-  const maxStage = funnelStages ? Math.max(1, ...funnelStages.map(([, v]) => v)) : 1;
-  const maxBucket = ats ? Math.max(1, ...ats.buckets.map((b) => b.count)) : 1;
 
   const SUMMARY_TIP: Record<string, string> = {
     // Honest about what's counted (data-consistency ruling,
@@ -175,29 +211,43 @@ export default function AnalyticsPage() {
   const hasApplications = funnel !== null && funnel.applied > 0;
 
   return (
-    <div className="space-y-6">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold">Analytics</h1>
-          <p className="text-sm text-aether-muted">
-            Funnel conversion, ATS score quality and agent spend.
-          </p>
-        </div>
-        <div className="flex gap-1 rounded-xl border border-white/10 p-1" data-testid="period-selector">
-          {PERIODS.map((p) => (
-            <button
-              key={p}
-              type="button"
-              onClick={() => setPeriod(p)}
-              className={`rounded-lg px-3 py-1 text-sm ${
-                period === p ? "bg-aether-coral font-semibold text-white" : "text-aether-muted"
-              }`}
-            >
-              {p}
-            </button>
-          ))}
-        </div>
-      </header>
+    <div className="space-y-7">
+      {/* BAND 1 — the hero moment: this screen's ONE saturated brand gesture
+          (reference rule 3) inside the atmospheric glow. */}
+      <section className="atmos-hero">
+        <header className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h1 className="type-page">
+              <span className="text-gradient-brand">Analytics</span>
+            </h1>
+            <p className="type-page-sub mt-1">
+              Funnel conversion, ATS score quality and agent spend.
+            </p>
+          </div>
+          <div
+            className="elev-1 flex gap-1 rounded-xl p-1"
+            role="group"
+            aria-label="Reporting period"
+            data-testid="period-selector"
+          >
+            {PERIODS.map((p) => (
+              <button
+                key={p}
+                type="button"
+                aria-pressed={period === p}
+                onClick={() => setPeriod(p)}
+                className={`rounded-lg px-3 py-1 text-sm transition-colors duration-[--dur] ${
+                  period === p
+                    ? "bg-aether-coral font-semibold text-white"
+                    : "text-aether-muted hover:text-white"
+                }`}
+              >
+                {p}
+              </button>
+            ))}
+          </div>
+        </header>
+      </section>
 
       {error ? (
         <p className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">
@@ -228,9 +278,12 @@ export default function AnalyticsPage() {
            (CLS 0.67 on prod load, W-E quality sweep). */
         <section aria-busy="true" data-testid="dashboard-summary-loading">
           <div className="mb-3 h-5 w-56 animate-pulse rounded bg-white/5" />
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {[0, 1, 2, 3, 4, 5, 6].map((i) => (
-              <div key={i} className="glass h-[92px] animate-pulse rounded-2xl border border-white/10" />
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-12">
+            {SUMMARY_SPANS.map((span, i) => (
+              <div key={i} className={`elev-1 h-[116px] rounded-2xl p-5 ${span}`}>
+                <div className="h-2.5 w-24 animate-pulse rounded bg-white/10" />
+                <div className="mt-4 h-7 w-16 animate-pulse rounded bg-white/5" />
+              </div>
             ))}
           </div>
         </section>
@@ -243,70 +296,88 @@ export default function AnalyticsPage() {
               the same way the sibling funnel/conversion sections do,
               instead of leaving this the only section with no period
               indicator. */}
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-aether-muted">
-            Dashboard summary ({period})
-          </h2>
-          <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {(
-            [
-              ["Applications (all stages)", dashboard.totalApplications, "text-aether-coral"],
-              ["Interviews", dashboard.interviews, "text-aether-violet"],
-              ["Offers", dashboard.offers, "text-aether-green"],
-              ["Jobs Found", dashboard.jobsFound, "text-aether-amber"],
-              ["Avg Fit Score", `${dashboard.avgFitScore}%`, "text-aether-coral"],
-              ["Agent Runs", dashboard.agentRuns, "text-aether-violet"],
-              ["Agent Spend (USD)", `$${dashboard.agentCostUsd.toFixed(2)}`, "text-aether-green"],
-            ] as const
-          ).map(([label, value, color]) => (
-            <div key={label} className="glass rounded-2xl border border-white/10 p-4">
-              <dt className="text-xs text-aether-muted">{label}</dt>
-              <dd className={`mono mt-1 text-2xl font-bold ${color}`}>
-                <MetricTooltip value={value} tooltip={SUMMARY_TIP[label] ?? "See the analytics glossary for how this metric is calculated."} />
-              </dd>
-            </div>
+          <h2 className="type-section mb-3">Dashboard summary ({period})</h2>
+          {/*
+            THE DEAD 4-COL SLOT, KILLED. Seven cards in a `lg:grid-cols-4` grid
+            occupy 7 of 8 cells and leave one visibly empty box on the second
+            row — an empty card is an implicit claim that content exists (the
+            same defect class as X-10). A 12-column grid divides exactly: four
+            cards at `col-span-3` fill row one, three at `col-span-4` fill row
+            two, with no orphan cell at any breakpoint.
+          */}
+          <dl className="grid grid-cols-2 gap-4 lg:grid-cols-12">
+          {SUMMARY_CARDS(dashboard).map(({ label, value, unit, resource }, i) => (
+            <StatBlock
+              key={label}
+              label={label}
+              value={value}
+              unit={unit}
+              resource={resource}
+              className={SUMMARY_SPANS[i]}
+              testId={`summary-${label.toLowerCase().replace(/[^a-z]+/g, "-").replace(/^-|-$/g, "")}`}
+            >
+              <MetricTooltip
+                value={value}
+                tooltip={SUMMARY_TIP[label] ?? "See the analytics glossary for how this metric is calculated."}
+              />
+            </StatBlock>
           ))}
           </dl>
         </section>
       ) : null}
 
-      <section className="glass rounded-2xl border border-white/10 p-5" data-testid="funnel-chart">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-aether-muted">
-          Application funnel ({period})
-        </h2>
-        {funnelStages === null ? (
+      {/*
+        §5.2 — the funnel and the stage-conversion figures it implies now sit
+        side by side instead of stacking as two full-width sections saying
+        overlapping things about the same five stages.
+      */}
+      <div className="grid gap-6 xl:grid-cols-12 xl:items-start">
+      <section className="elev-1 rounded-2xl p-5 xl:col-span-7" data-testid="funnel-chart">
+        {/*
+          The PERIOD-scoped heading lives here, on the section, and the chart
+          carries a complementary title ("Volume by stage") rather than
+          repeating it. That is deliberate: `<ChartFrame>` mirrors its `title`
+          into the sr-only data table's `<caption>`, so a title containing
+          "(7d)" would put that exact string on screen twice and make an
+          unqualified text query ambiguous.
+        */}
+        <h2 className="type-section">Application funnel ({period})</h2>
+        {funnel === null ? (
           <div className="mt-4 space-y-3" aria-busy="true">
             {[0, 1, 2, 3, 4].map((i) => (
               <div key={i} className="h-8 animate-pulse rounded-lg bg-white/5" />
             ))}
           </div>
         ) : (
-          <div className="mt-4 space-y-3">
-            {funnelStages.map(([label, value]) => (
-              <div key={label} className="flex items-center gap-3">
-                <span className="w-28 shrink-0 text-sm text-aether-muted">{label}</span>
-                <div className="h-8 flex-1 overflow-hidden rounded-lg bg-white/5">
-                  <div
-                    className="flex h-full items-center rounded-lg bg-gradient-to-r from-aether-coral/70 to-aether-violet/70 px-3"
-                    style={{ width: `${Math.max(4, (value / maxStage) * 100)}%` }}
-                  >
-                    <span className="mono text-xs font-semibold text-white">{value}</span>
-                  </div>
-                </div>
-              </div>
-            ))}
+          /*
+           * On the chart kit. The bars above used `Math.max(4, …)`, so a stage
+           * with 0 rows drew a 4%-wide COLOURED bar — a measured nothing that
+           * looked like a small something (Rule D-3 / law C-1, and the exact
+           * defect X-8 filed). `<Funnel>` draws a zero as a hairline tick with
+           * the numeral in `state-neutral`, and states its own window (C-3).
+           */
+          <div className="mt-4">
+            <FunnelChart
+              title="Volume by stage"
+              windowLabel={
+                period === "all"
+                  ? "all time — every stage counted since your first discovery run"
+                  : `the selected period (${period}) — stages are counted within it`
+              }
+              steps={funnelSteps(funnel)}
+              mode="share-of-previous"
+            />
           </div>
         )}
       </section>
 
-      <section className="glass rounded-2xl border border-white/10 p-5" data-testid="conversion-rates">
-        <h2 className="text-sm font-semibold uppercase tracking-wide text-aether-muted">
-          Stage conversion ({period})
-        </h2>
+      <section className="elev-1 rounded-2xl p-5 xl:col-span-5" data-testid="conversion-rates">
+        <h2 className="type-section">Stage conversion ({period})</h2>
         {conversion === null ? (
           <div className="mt-4 h-24 animate-pulse rounded-lg bg-white/5" aria-busy="true" />
         ) : (
           <>
-            <dl className="mt-4 grid grid-cols-2 gap-4 md:grid-cols-4">
+            <dl className="mt-4 grid grid-cols-2 gap-3">
               {(
                 [
                   ["Found → Applied", conversion.found_to_applied],
@@ -404,9 +475,11 @@ export default function AnalyticsPage() {
         )}
       </section>
 
+      </div>
+
       <div className="grid gap-6 lg:grid-cols-2">
-        <section className="glass rounded-2xl border border-white/10 p-5" data-testid="ats-distribution">
-          <h2 className="flex items-center gap-1.5 text-sm font-semibold uppercase tracking-wide text-aether-muted">
+        <section className="elev-1 rounded-2xl p-5" data-testid="ats-distribution">
+          <h2 className="flex items-center gap-1.5">
             <MetricTooltip
               label="ATS score distribution"
               value=""
@@ -415,42 +488,39 @@ export default function AnalyticsPage() {
             {/* This panel has no period support server-side (MV-analytics-004)
                 — say so honestly instead of silently ignoring the selector
                 above like it applies here too. */}
-            <span className="text-[10px] font-normal normal-case text-aether-muted-dim">
+            <span className="type-meta font-normal normal-case">
               (all time — not affected by the period selector)
             </span>
           </h2>
           {ats === null ? (
             <div className="mt-4 h-40 animate-pulse rounded-lg bg-white/5" aria-busy="true" />
           ) : (
-            <div className="mt-4 flex h-40 items-end gap-1.5">
-              {ats.buckets.map((bucket) => (
-                <div
-                  key={bucket.range}
-                  className="flex h-full flex-1 flex-col items-center justify-end gap-1"
-                >
-                  <div
-                    className="w-full rounded-t bg-aether-violet/60"
-                    style={{ height: `${Math.max(2, (bucket.count / maxBucket) * 100)}%` }}
-                    title={`${bucket.range}: ${bucket.count}`}
-                  />
-                  <span className="mono text-[9px] text-aether-muted-dim">
-                    {bucket.range.split("-")[0]}
-                  </span>
-                </div>
-              ))}
+            /*
+             * On the chart kit — three defects closed at once:
+             *  - `Math.max(2, …)` drew a 2px VIOLET bar for an empty bucket, so
+             *    "no résumés scored 0-19" looked like "a couple did" (C-1/X-8);
+             *  - the axis label was `range.split("-")[0]`, i.e. the band "0-19"
+             *    printed as the single value "0" (X-9);
+             *  - there were no gridlines and no y-axis at all, which is the
+             *    reference pack's rule-5 violation the audit filed by name.
+             */
+            <div className="mt-4">
+              <Histogram
+                title="ATS score distribution"
+                windowLabel={`all time — ${ats.total} scored ${ats.total === 1 ? "job" : "jobs"}, not affected by the period selector`}
+                buckets={atsBuckets(ats)}
+                itemNoun="jobs"
+              />
             </div>
           )}
-          {ats ? (
-            <p className="mt-2 text-xs text-aether-muted-dim">{ats.total} scored jobs</p>
-          ) : null}
         </section>
 
-        <section className="glass rounded-2xl border border-white/10 p-5" data-testid="agent-roi">
-          <h2 className="flex items-center gap-1.5 text-sm font-semibold uppercase tracking-wide text-aether-muted">
+        <section className="elev-1 rounded-2xl p-5" data-testid="agent-roi">
+          <h2 className="type-section flex items-center gap-1.5">
             Agent ROI
             {/* No period support server-side (MV-analytics-004) — honest
                 label instead of silently ignoring the selector above. */}
-            <span className="text-[10px] font-normal normal-case text-aether-muted-dim">
+            <span className="type-meta font-normal normal-case">
               (all time — not affected by the period selector)
             </span>
           </h2>
@@ -491,8 +561,94 @@ export default function AnalyticsPage() {
               </div>
             </dl>
           )}
+
+          {/*
+            §5.2 — cost per application / per interview, "computed only when
+            denominator > 0 else —".
+
+            There is a SECOND precondition the spec's one-liner does not state
+            and that this panel must not quietly ignore: `roi` is ALL-TIME
+            (no period support server-side) while `funnel` is period-scoped.
+            Dividing an all-time cost by a 7-day application count would
+            produce a confident number that describes nothing real. So the
+            ratio is computed only when the selector is on `all`, and otherwise
+            says which two windows failed to line up.
+          */}
+          {roi ? (
+            <dl className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2" data-testid="agent-roi-derived">
+              {(
+                [
+                  [
+                    "Cost per application",
+                    funnel?.applied ?? 0,
+                    "Total agent spend divided by applications submitted. Both figures are all-time.",
+                  ],
+                  [
+                    "Cost per interview",
+                    funnel?.interviewed ?? 0,
+                    "Total agent spend divided by applications that reached an interview. Both figures are all-time.",
+                  ],
+                ] as const
+              ).map(([label, denominator, tip]) => {
+                const comparable = period === "all" && funnel !== null;
+                const measurable = comparable && denominator > 0;
+                return (
+                  <div key={label} className="rounded-xl border border-white/10 p-4 text-center">
+                    <dd className="mono flex items-center justify-center text-2xl font-bold text-aether-green">
+                      {measurable ? (
+                        <MetricTooltip
+                          value={`$${(roi.total_cost_usd / denominator).toFixed(2)}`}
+                          tooltip={tip}
+                        />
+                      ) : (
+                        <span className="text-aether-muted-dim">—</span>
+                      )}
+                    </dd>
+                    <dt className="mt-1 text-xs text-aether-muted">{label}</dt>
+                    {!measurable ? (
+                      <p className="type-meta mt-1">
+                        {!comparable
+                          ? `Agent spend is all-time but the funnel is scoped to ${period} — select “all” to compare like with like.`
+                          : "No applications have reached this stage yet, so there is nothing to divide by."}
+                      </p>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </dl>
+          ) : null}
         </section>
       </div>
+
+      {/*
+        §5.2 NEW — the 10-dimension fit profile. Its data is
+        `AgentPolicy.metricSnapshot.dimensionScores`, which this page ALREADY
+        fetches via `GET /analytics/agent-policy`: no new endpoint, no new
+        request. `<Radar10>` is the chart the spec calls "the single most
+        dangerous in the product" — a dimension the scorer never evaluated gets
+        a hollow marker on the outer ring and a struck-through label, never a
+        vertex at the centre, because a centre vertex is a specific false claim
+        about the candidate rather than an absence of one.
+      */}
+      {policy ? (
+        <Section
+          testId="fit-profile"
+          footnote={
+            policy.metricSnapshot.dimensionSampleSize
+              ? `Scored across ${policy.metricSnapshot.dimensionSampleSize} evaluated ${
+                  policy.metricSnapshot.dimensionSampleSize === 1 ? "application" : "applications"
+                }.`
+              : "No application has been scored on these dimensions yet — every axis is shown as unmeasured rather than as a zero."
+          }
+        >
+          <Radar10
+            title="Fit profile"
+            windowLabel="all time — the dimensions the scorer has actually evaluated for you"
+            dimensions={fitDimensions(policy.metricSnapshot.dimensionScores)}
+            expectedDimensions={10}
+          />
+        </Section>
+      ) : null}
 
       <MarketPulse />
     </div>

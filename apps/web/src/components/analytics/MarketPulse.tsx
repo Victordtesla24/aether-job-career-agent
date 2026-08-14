@@ -195,12 +195,54 @@ export default function MarketPulse() {
   }
 
   if (data === null) {
+    /*
+     * X-10 (P1) — this branch WAS three bare `h-56` bordered boxes with no
+     * heading, no label and no text of any kind. Because
+     * `GET /analytics/market-pulse` takes 8–15s in production (measured:
+     * `uat/.../s-ui/b1/before/before-notes.json` — the skeleton is still
+     * mounted at 1s/2s/4s/8s and resolved by 15s, on BOTH pages that render
+     * this component), those three empty boxes are the state a user meets
+     * FIRST, for many seconds, at the bottom of the Dashboard and Analytics.
+     * That is what the audit screenshotted four times and filed as "3 empty
+     * ghost cards".
+     *
+     * An unlabelled card is an implicit claim that content exists there
+     * (doctrine D-θ; reference-pack rule 7). So the loading state now SAYS
+     * what it is doing, in words, at the geometry of the real panel — it can
+     * be mistaken neither for an empty card nor for content that has arrived.
+     */
     return (
-      <div className="grid gap-4 xl:grid-cols-3" aria-busy="true" data-testid="market-pulse-skeleton">
-        {[0, 1, 2].map((i) => (
-          <div key={i} className="glass h-56 animate-pulse rounded-2xl border border-white/10" />
-        ))}
-      </div>
+      <section
+        className="space-y-4"
+        aria-busy="true"
+        aria-label="Loading real-time market pulse"
+        data-testid="market-pulse-skeleton"
+      >
+        <div className="flex items-center gap-2.5">
+          <span className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-aether-violet/60" />
+          <h2 className="text-[15px] font-semibold text-aether-muted">Real-Time Market Pulse</h2>
+          <span className="type-mono-micro text-aether-muted-dim">loading market data…</span>
+        </div>
+        {/* Same geometry as the resolved panel, so nothing shifts when it
+            lands (the CLS lesson from the analytics summary strip). */}
+        <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="elev-1 rounded-2xl p-4">
+              <div className="h-2.5 w-20 animate-pulse rounded bg-white/10" />
+              <div className="mt-3 h-9 w-full animate-pulse rounded bg-white/5" />
+            </div>
+          ))}
+        </div>
+        <div className="grid gap-4 xl:grid-cols-3">
+          {["Jobs by source", "Top skills in demand", "Market vs you"].map((label) => (
+            <div key={label} className="elev-1 rounded-2xl p-5">
+              <p className="type-section">{label}</p>
+              <div className="mt-4 h-32 animate-pulse rounded-xl bg-white/5" />
+              <p className="type-meta mt-3">Loading…</p>
+            </div>
+          ))}
+        </div>
+      </section>
     );
   }
 

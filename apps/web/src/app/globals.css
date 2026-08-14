@@ -269,3 +269,91 @@ body {
 .breathe-warn {
   animation: breathe-warn 2.6s ease-in-out infinite;
 }
+
+/* ==========================================================================
+   S-UI-REBUILD B1 — ATMOSPHERE (the aesthetics bar).
+   ADDITIVE: every rule below is a NEW class.
+
+   The reference pack's binding note is rule 3: "one saturated brand gesture
+   per screen, everywhere else desaturated". Stripe gets one gradient sweep,
+   PostHog one orange focus border, Perplexity one teal banner. So this file
+   gives a page exactly two atmospheric affordances — a radial glow behind the
+   hero band, and gradient text on the page title — and nothing else is allowed
+   to be loud. Depth everywhere else comes from luminance, not colour.
+   ========================================================================== */
+
+/*
+ * The hero glow. A wide, very low-alpha coral radial bloom behind the first
+ * band, so the top of the page has DEPTH instead of being a flat #0A0A0F
+ * expanse. It sits behind content (`z-index:0` + `isolate` on the parent) and
+ * is `pointer-events:none`, so it can never intercept a click.
+ */
+.atmos-hero {
+  position: relative;
+  isolate: isolate;
+}
+.atmos-hero::before {
+  content: "";
+  position: absolute;
+  /* D-ι. These were `left/right: -12%`, to let the bloom bleed past the
+     content column. A pseudo-element is invisible to a `querySelectorAll("*")`
+     overflow scan, so it took a `document.scrollWidth` measurement to catch:
+     the overhang made /dashboard and /dashboard/analytics scroll 123px
+     sideways at a 1600px viewport. The radial gradients below already fade to
+     transparent well inside the box, so the bloom reads the same width-bounded
+     — and now the page cannot scroll sideways at any viewport. */
+  left: 0;
+  right: 0;
+  top: -180px;
+  height: 460px;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(58% 62% at 18% 58%, rgba(255, 107, 53, 0.17), transparent 72%),
+    radial-gradient(52% 62% at 82% 44%, rgba(139, 92, 246, 0.13), transparent 70%);
+  filter: blur(8px);
+}
+.atmos-hero > * {
+  position: relative;
+  z-index: 1;
+}
+
+/*
+ * THE one gradient moment per screen (reference rule 3). Coral → amber, on the
+ * page title only. `color: transparent` is paired with a real background clip;
+ * `@supports not` keeps the text visible if a browser lacks background-clip.
+ */
+.text-gradient-brand {
+  background-image: linear-gradient(96deg, #ff8a5c 0%, #ff6b35 42%, #fbbf24 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+@supports not ((background-clip: text) or (-webkit-background-clip: text)) {
+  .text-gradient-brand {
+    color: #ff8a5c;
+    -webkit-text-fill-color: #ff8a5c;
+  }
+}
+
+/*
+ * Section banding (reference rule 12: separate sections with a luminance shift,
+ * not a border). A few points of white lift, no hue — this is the "one ground,
+ * three elevations" ladder (D-α) seen at page scale rather than card scale.
+ */
+.band-recessed {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.014), rgba(255, 255, 255, 0.03));
+  border-top: 1px solid var(--hairline);
+  border-bottom: 1px solid var(--hairline);
+}
+
+/*
+ * A glow reserved for genuinely-live elements (§3.2: nothing moves unless
+ * something moved). Used on the ticker's dot and nowhere decorative.
+ */
+.glow-live {
+  box-shadow:
+    0 0 0 1px rgba(52, 211, 153, 0.35),
+    0 0 12px 0 rgba(52, 211, 153, 0.45);
+}
