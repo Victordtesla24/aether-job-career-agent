@@ -61,11 +61,13 @@ import {
 import { runScoutAgent } from "../../../lib/api/jobs";
 import {
   bySource,
+  buildLinkedinUploadNotice,
   buildRefreshPayload,
   careerStatusLabel,
   careerStatusStyle,
   deriveInputs,
   type CareerDataInputs,
+  type LinkedinExportUploadResult,
 } from "../../../components/settings/career-data";
 import {
   BASELINE_HELP_TEXT,
@@ -158,6 +160,14 @@ export default function SettingsClient({
   const [careerSyncing, setCareerSyncing] = useState(false);
   const [careerError, setCareerError] = useState<string | null>(null);
   const [careerNotice, setCareerNotice] = useState<string | null>(null);
+
+  // LinkedIn data-export upload (B7): compliant, upload-based ingestion of
+  // LinkedIn's official "Download your data" export — a second input path
+  // alongside the paste box above, never a scrape.
+  const [linkedinUploading, setLinkedinUploading] = useState(false);
+  const [linkedinUploadNotice, setLinkedinUploadNotice] = useState<string | null>(null);
+  const [linkedinUploadError, setLinkedinUploadError] = useState<string | null>(null);
+  const linkedinFileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Billing & Subscription (MV-settings-003 / MV-pricing-003): the real plan,
   // status and usage quota, rendered from GET /billing/subscription (not just
@@ -265,6 +275,40 @@ export default function SettingsClient({
       setCareerError(e instanceof Error ? e.message : "Career data refresh failed");
     } finally {
       setCareerSyncing(false);
+    }
+  };
+
+  const uploadLinkedinExport = async (file: File) => {
+    setLinkedinUploading(true);
+    setLinkedinUploadNotice(null);
+    setLinkedinUploadError(null);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch(`${apiBaseUrl()}/workspaces/career-data/linkedin-upload`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${await getToken()}` },
+        body: form,
+      });
+      if (!res.ok) {
+        const rawBody = await res.text().catch(() => "");
+        throw new Error(describeUploadError(res.status, rawBody));
+      }
+      const result = (await res.json()) as LinkedinExportUploadResult;
+      setLinkedinUploadNotice(buildLinkedinUploadNotice(result));
+      // The upload persisted the linkedin source server-side exactly like a
+      // paste would — reflect that in the panel immediately.
+      setCareer((prev) =>
+        prev
+          ? { ...prev, sources: prev.sources.map((s) => (s.source === "linkedin" ? result.source : s)) }
+          : prev,
+      );
+      setLinkedinDirty(false);
+      setCareerInputs((c) => ({ ...c, linkedinSummary: "" }));
+    } catch (e) {
+      setLinkedinUploadError(e instanceof Error ? e.message : "LinkedIn export upload failed");
+    } finally {
+      setLinkedinUploading(false);
     }
   };
 
@@ -921,6 +965,59 @@ export default function SettingsClient({
                         "LinkedIn has no public profile API — paste your summary to include it in tailoring."}
                     </p>
                     <SourceError source={bySource(career, "linkedin")} />
+
+                    {/* B7: LinkedIn's official "Download your data" export
+                        (a zip of CSVs) as a second, compliant input path —
+                        never a scrape. */}
+                    <input
+                      ref={linkedinFileInputRef}
+                      type="file"
+                      accept=".zip,.csv"
+                      className="hidden"
+                      data-testid="career-linkedin-upload-input"
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) void uploadLinkedinExport(f);
+                        e.target.value = "";
+                      }}
+                    />
+                    <button
+                      type="button"
+                      data-testid="career-linkedin-upload-btn"
+                      disabled={linkedinUploading}
+                      onClick={() => linkedinFileInputRef.current?.click()}
+                      className="mt-2 w-full rounded-lg border border-dashed border-white/15 py-2 text-xs text-aether-muted hover:border-white/30 hover:text-white disabled:opacity-50"
+                    >
+                      <i
+                        className={`fa-solid ${linkedinUploading ? "fa-spinner fa-spin" : "fa-upload"} mr-2`}
+                        aria-hidden="true"
+                      />
+                      {linkedinUploading
+                        ? "Reading export…"
+                        : "Or upload your LinkedIn data export (.zip)"}
+                    </button>
+                    <p className="mt-1 text-[10px] text-aether-muted-dim">
+                      From LinkedIn: Settings → Data privacy → “Get a copy of your data”. Upload
+                      the .zip, or just Positions.csv / Education.csv / Skills.csv / Profile.csv.
+                    </p>
+                    {linkedinUploadNotice ? (
+                      <p
+                        className="mt-2 text-[11px] text-aether-green"
+                        data-testid="career-linkedin-upload-notice"
+                        role="status"
+                      >
+                        {linkedinUploadNotice}
+                      </p>
+                    ) : null}
+                    {linkedinUploadError ? (
+                      <p
+                        className="mt-2 rounded-lg border border-red-500/30 bg-red-500/10 p-2 text-[11px] text-red-300"
+                        data-testid="career-linkedin-upload-error"
+                        role="alert"
+                      >
+                        {linkedinUploadError}
+                      </p>
+                    ) : null}
                   </div>
                 </div>
 

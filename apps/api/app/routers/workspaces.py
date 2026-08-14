@@ -9,10 +9,11 @@ from __future__ import annotations
 import logging
 import threading
 import time
+import zipfile
 from typing import Annotated, Any
 
 from email_validator import EmailNotValidError, validate_email
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, File, HTTPException, Query, UploadFile, status
 from pydantic import AfterValidator, BaseModel, Field
 
 from app.db import (
@@ -23,7 +24,13 @@ from app.db import (
 )
 from app.middleware.auth import CurrentUser
 from app.repositories.career_profile import CAREER_SOURCES, CareerProfileRepository
-from app.services.career_data import refresh_career_data
+from app.services.career_data import (
+    LINKEDIN_EXPORT_FILES,
+    MAX_LINKEDIN_EXPORT_BYTES,
+    ingest_linkedin_export,
+    parse_linkedin_export_zip,
+    refresh_career_data,
+)
 from app.services.offers import create_offer, delete_offer, fetch_offers_payload
 
 router = APIRouter()
@@ -1418,5 +1425,87 @@ def refresh_career_data_endpoint(
     )
     return {
         "sources": [_shape_source(s, results.get(s)) for s in CAREER_SOURCES],
+        "linkedinNote": _LINKEDIN_NOTE,
+    }
+
+
+#: Basename (lowercased) → canonical export filename, for a single loose .csv.
+_LINKEDIN_CSV_BASENAMES = {name.lower(): name for name in LINKEDIN_EXPORT_FILES}
+
+
+@router.post("/career-data/linkedin-upload")
+async def upload_linkedin_export(
+    current_user: CurrentUser, file: UploadFile = File(...)
+) -> dict[str, Any]:
+    """Ingest LinkedIn's official "Download your data" export (B7).
+
+    Accepts the export **.zip**, or one of its individual CSVs
+    (``Profile.csv``/``Positions.csv``/``Education.csv``/``Skills.csv``)
+    uploaded loose. This is a compliant, upload-only path: nothing here ever
+    fetches linkedin.com or any other network resource — the parsed CSVs are
+    normalized into the same text shape the candidate-paste box produces and
+    handed to the SAME ``ingest_linkedin`` that path uses
+    (``app.services.career_data.ingest_linkedin_export``), so storage,
+    corpus assembly and honest empty/error semantics are inherited, not
+    reimplemented.
+    """
+    # Bounded read: one byte past the cap proves it's oversized without ever
+    # buffering (or persisting) a huge upload whole.
+    data = await file.read(MAX_LINKEDIN_EXPORT_BYTES + 1)
+    if len(data) > MAX_LINKEDIN_EXPORT_BYTES:
+        raise HTTPException(
+            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            f"LinkedIn export is larger than the "
+            f"{MAX_LINKEDIN_EXPORT_BYTES // (1024 * 1024)}MB upload limit.",
+        )
+
+    filename = (file.filename or "").strip()
+    suffix = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    if suffix == "zip":
+        try:
+            csv_texts = parse_linkedin_export_zip(data)
+        except zipfile.BadZipFile:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                "Uploaded file is not a valid zip archive.",
+            ) from None
+        if not csv_texts:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                "Zip archive contained none of the expected LinkedIn export "
+                "files: " + ", ".join(LINKEDIN_EXPORT_FILES) + ".",
+            )
+    elif suffix == "csv":
+        basename = filename.rsplit("/", 1)[-1]
+        canonical = _LINKEDIN_CSV_BASENAMES.get(basename.lower())
+        if canonical is None:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                f"Unrecognized CSV file '{filename}'. Expected one of: "
+                + ", ".join(LINKEDIN_EXPORT_FILES) + ".",
+            )
+        csv_texts = {canonical: data.decode("utf-8", errors="replace")}
+    else:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "Unsupported file type — upload the .zip from LinkedIn's "
+            "'Download your data' export, or one of its CSV files: "
+            + ", ".join(LINKEDIN_EXPORT_FILES) + ".",
+        )
+
+    result = ingest_linkedin_export(csv_texts)
+    repo = CareerProfileRepository()
+    saved = repo.upsert(
+        current_user["id"],
+        "linkedin",
+        status=result["status"],
+        url=result["url"],
+        content=result["content"],
+        summary=result["summary"],
+        error=result["error"],
+    )
+    return {
+        "source": _shape_source("linkedin", saved),
+        "ingestedCounts": result["ingestedCounts"],
         "linkedinNote": _LINKEDIN_NOTE,
     }
