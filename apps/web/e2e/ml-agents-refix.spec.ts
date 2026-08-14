@@ -78,8 +78,16 @@ test.describe("ML-agents-002: saved per-agent model survives reload", () => {
   }) => {
     await signupAndLogin(page, "002");
 
-    await page.goto("/dashboard/agents");
+    // S-UI-1 navigation/selector map (assertions below are unchanged):
+    //   /dashboard/agents            → /dashboard/agents?tab=agents
+    //   picker rendered inline       → picker rendered in a portal popover,
+    //                                  opened from `agent-model-trigger-<key>`
+    // Both changes follow the S-UI §4.1 card-height fix: an expanding model
+    // list inside a grid cell was the root cause of the broken masonry, so the
+    // list now lives in a popover. What it DOES is identical.
+    await page.goto("/dashboard/agents?tab=agents");
     await expect(page.getByTestId("agent-configuration")).toBeVisible({ timeout: 20_000 });
+    await page.getByTestId("agent-model-trigger-resumeTailoring").click();
     const picker = page.getByTestId("agent-model-picker-resumeTailoring");
     await expect(picker).toBeVisible({ timeout: 20_000 });
     // Wait for the live OpenRouter catalog to actually finish loading (its
@@ -121,6 +129,7 @@ test.describe("ML-agents-002: saved per-agent model survives reload", () => {
 
     await page.reload();
     await expect(page.getByTestId("agent-configuration")).toBeVisible({ timeout: 20_000 });
+    await page.getByTestId("agent-model-trigger-resumeTailoring").click();
     const pickerAfter = page.getByTestId("agent-model-picker-resumeTailoring");
     await expect(
       pickerAfter.getByTestId("agent-model-search-resumeTailoring"),
@@ -143,9 +152,14 @@ test.describe("ML-agents-005: no horizontal overflow at 390px on the Agents scre
   test("agent model picker price badges do not overflow the 390px viewport", async ({ page }) => {
     await signupAndLogin(page, "005");
     await page.setViewportSize(VIEWPORT);
-    await page.goto("/dashboard/agents");
+    // S-UI-1 navigation map (assertion unchanged): the grid is now the
+    // `?tab=agents` panel, and the price-badge rows this finding is about live
+    // in the picker POPOVER, so it is opened before measuring — measuring with
+    // it closed would not exercise the rows at all.
+    await page.goto("/dashboard/agents?tab=agents");
 
     await expect(page.getByTestId("agent-configuration")).toBeVisible({ timeout: 20_000 });
+    await page.getByTestId("agent-model-trigger-resumeTailoring").click();
     // Wait for a real per-agent picker to finish loading the live catalog
     // (its search box present) so the price-badge rows this finding is
     // about have actually rendered before measuring — matches the

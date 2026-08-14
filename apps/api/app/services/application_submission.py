@@ -690,10 +690,21 @@ def submission_view(row: dict[str, Any]) -> dict[str, Any]:
       ``applications._with_submission`` does today) must not silently drop
       them the way the pre-refix ``_COLUMNS`` gap did for the whole read
       path (see ``applications.py`` ``_ensure_read_columns`` docstring).
+    * ``submissionTruthState`` / ``submissionTruthNote`` — U5d. The honest
+      reclassification of a row that CLAIMED a submission before the fix and
+      has no transmission evidence to show for it (346 such rows in
+      production). ``submissionTruthNote`` is the single user-facing sentence,
+      resolved from the state here so no surface invents its own wording.
     """
+    from app.services.submission_truth import submission_note_for
+
     transmitted_at = row.get("transmittedAt")
     transmitted = transmitted_at is not None
+    truth_state = row.get("submissionTruthState")
     return {
+        "submissionTruthState": truth_state,
+        "submissionTruthNote": submission_note_for(truth_state),
+        "submissionTruthAt": row.get("submissionTruthAt"),
         "transmitted": transmitted,
         "submissionState": STATE_TRANSMITTED if transmitted else STATE_NOT_TRANSMITTED,
         "transmittedAt": transmitted_at,

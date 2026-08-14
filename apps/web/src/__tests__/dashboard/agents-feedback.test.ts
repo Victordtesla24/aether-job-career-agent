@@ -158,6 +158,125 @@ describe("agentSuccessNotice", () => {
     expect(n.text).toContain("outreach finished successfully");
     expect(n.href).toBeUndefined();
   });
+
+  // F3 (agents-uplift/u5d re-review): the Submission Agent's honest terminal
+  // states (submission_agent.py's STATE_* / `_describe`) must reach the
+  // banner verbatim — a green "success" is reserved for `transmitted`, the
+  // ONLY state backed by real transmission evidence. Every other state is a
+  // neutral, honest banner carrying the backend's own message — never a
+  // fabricated claim that something was sent.
+  describe("submission", () => {
+    it("renders success, naming the proof, ONLY when the backend proves a real transmission", () => {
+      const n = agentSuccessNotice("submission", {
+        submissionState: "transmitted",
+        transmitted: true,
+        transmissionRef: "ref-123",
+        message: "Transmitted your application for Data Analyst at Acme (reference ref-123).",
+      });
+      expect(n.kind).toBe("success");
+      expect(n.text).toBe(
+        "Transmitted your application for Data Analyst at Acme (reference ref-123).",
+      );
+      expect(n.href).toBe("/dashboard/applications");
+    });
+
+    it("never renders success for recorded_not_transmitted — surfaces the honest NOT-transmitted message", () => {
+      const n = agentSuccessNotice("submission", {
+        submissionState: "recorded_not_transmitted",
+        transmitted: false,
+        message:
+          "Recorded Data Analyst at Acme in your tracker as applied — NOT transmitted. Apply on the employer's site — this posting publishes no application address Aether can send to.",
+      });
+      expect(n.kind).not.toBe("success");
+      expect(n.kind).toBe("info");
+      expect(n.text).toContain("NOT transmitted");
+    });
+
+    it("never renders success for awaiting_approval — points at Approvals, not a completed send", () => {
+      const n = agentSuccessNotice("submission", {
+        submissionState: "awaiting_approval",
+        transmitted: false,
+        message:
+          "Recorded Data Analyst at Acme in your tracker and queued it for sending to jobs@acme.com — NOT transmitted yet. Approve it in Approvals to send.",
+      });
+      expect(n.kind).not.toBe("success");
+      expect(n.href).toBe("/dashboard/approvals");
+      expect(n.text).toContain("NOT transmitted");
+    });
+
+    it("never renders success for manual_step_required", () => {
+      const n = agentSuccessNotice("submission", {
+        submissionState: "manual_step_required",
+        transmitted: false,
+        message:
+          "NOT transmitted — Data Analyst at Acme needs a manual step (captcha required). Finish this application on the employer's site.",
+      });
+      expect(n.kind).not.toBe("success");
+      expect(n.text).toContain("NOT transmitted");
+    });
+
+    it("never renders success for no_change — the exact state the production false positives were in", () => {
+      const n = agentSuccessNotice("submission", {
+        submissionState: "no_change",
+        transmitted: false,
+        message:
+          "No change — Data Analyst at Acme was already recorded in your tracker, and Aether has NOT transmitted it.",
+      });
+      expect(n.kind).not.toBe("success");
+      expect(n.text).toContain("NOT transmitted");
+    });
+
+    it("never renders success when nothing was ready to submit", () => {
+      const n = agentSuccessNotice("submission", {
+        submissionState: "none",
+        reason: "nothing_ready",
+        message:
+          "No application is ready to submit yet — tailor a resume and generate a cover letter for a job first (or submit a specific job_id), then run this agent again.",
+      });
+      expect(n.kind).not.toBe("success");
+      expect(n.text).toContain("No application is ready");
+    });
+
+    it("never fabricates success copy even if the backend message is somehow missing", () => {
+      const n = agentSuccessNotice("submission", { submissionState: "recorded_not_transmitted" });
+      expect(n.kind).not.toBe("success");
+      expect(n.text.toLowerCase()).toContain("nothing was transmitted");
+    });
+  });
+
+  // Same illusion, different backend (F3 review's audit instruction): the
+  // Email Agent's per-agent Run button dispatches `mode: "triage"` and, like
+  // submission, computes an honest `connected`/`degraded`/`message` the FE
+  // was discarding in favour of a blanket "emailAgent finished successfully."
+  // — including when Gmail was never connected and zero emails were triaged.
+  describe("emailAgent", () => {
+    it("never renders success for a degraded (not-connected, or sync-failed) triage", () => {
+      const n = agentSuccessNotice("emailAgent", {
+        mode: "triage",
+        connected: false,
+        degraded: true,
+        triaged: 0,
+        message: "Connect Gmail to triage your recruiter inbox.",
+      });
+      expect(n.kind).not.toBe("success");
+      expect(n.text).toBe("Connect Gmail to triage your recruiter inbox.");
+      expect(n.href).toBe("/dashboard/email");
+    });
+
+    it("renders a genuine success for a real, connected triage", () => {
+      const n = agentSuccessNotice("emailAgent", {
+        mode: "triage",
+        connected: true,
+        degraded: false,
+        triaged: 5,
+        categories: { recruiter: 3, all: 2 },
+        message: "Triaged 5 emails into 2 categories.",
+      });
+      expect(n.kind).toBe("success");
+      expect(n.text).toBe("Triaged 5 emails into 2 categories.");
+      expect(n.href).toBe("/dashboard/email");
+    });
+  });
 });
 
 describe("runErrorNotice", () => {

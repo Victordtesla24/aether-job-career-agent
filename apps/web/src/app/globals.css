@@ -8,6 +8,47 @@
  */
 :root {
   color-scheme: dark;
+
+  /* S-UI §2.1/§2.7 — the elevated token set. ADDITIVE: nothing below
+     re-points an existing class, so every page that has not migrated yet
+     renders byte-identically. */
+  --hairline: rgba(255, 255, 255, 0.07);
+  --hairline-strong: rgba(255, 255, 255, 0.13);
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --dur-fast: 120ms;
+  --dur: 180ms;
+  --dur-slow: 260ms;
+}
+
+/*
+ * S-UI §2.5 — the 3-step elevation ladder. `.glass` / `.glass-raised` are
+ * deliberately LEFT AS THEY ARE (they are used on eight pages this slice does
+ * not touch); pages migrate to `.elev-*` one slice at a time.
+ *
+ * Rule D-5: `backdrop-filter: blur()` is used ONLY on `.elev-3` (overlays).
+ * Blurring 22 agent cards simultaneously is the single largest scroll-jank
+ * source in the app, and on an opaque page ground it buys no visual change.
+ */
+.elev-1 {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.015));
+  border: 1px solid var(--hairline);
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.04);
+}
+
+.elev-2 {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.025));
+  border: 1px solid var(--hairline-strong);
+  box-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.05);
+}
+
+.elev-3 {
+  background: #16161f;
+  border: 1px solid var(--hairline-strong);
+  box-shadow: 0 16px 40px -12px rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
 }
 
 body {
@@ -52,6 +93,28 @@ body {
 
 .live-dot {
   animation: pulse-ring 2s infinite;
+}
+
+/*
+ * S-UI §2.7 / X-5 — reduced-motion. The app ships several INFINITE animations
+ * (`.live-dot` pulse-ring, the orchestration flow line's SVG <animate>,
+ * `animate-pulse` skeletons, and now the orchestration map's edge pulses) with
+ * no reduction path at all. This is the missing global block.
+ *
+ * Motion that carries MEANING (an edge only pulses when a run is genuinely
+ * in flight) is not deleted by this rule — the components that own such motion
+ * ALSO read `prefers-reduced-motion` in JS and fall back to a static rendering
+ * that states the same fact in words, so the truth survives the stillness.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /*

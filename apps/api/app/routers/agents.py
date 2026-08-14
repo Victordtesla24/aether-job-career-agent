@@ -233,23 +233,28 @@ AGENT_CATALOG: list[dict[str, Any]] = [
             "which claims were rejected, flagged or withheld, and which artifacts "
             "came back clean. Runs that never reached a verdict are excluded, never "
             "passed. Deterministic, no LLM cost."},
-    # ADR-AG-1 (GM2-AGENTS-001): the old tip promised "reliable form-filling
-    # and browser automation reasoning" for GPT-4o — no browser-automation or
-    # third-party form-filling integration exists in this product. The honest,
-    # REAL scope is the submission gate + write POST /jobs/{id}/apply already
-    # performs (app.routers.jobs.submit_application_for_job), now also
-    # runnable as an agent — never left as a permanently "planned" card with
-    # no backend (§4), and never a stub: it is the SAME write the Jobs board's
-    # Apply button makes, reused verbatim.
+    # ADR-AG-1 (GM2-AGENTS-001) + U5d. The tip has been wrong twice. It first
+    # promised "reliable form-filling and browser automation reasoning"; that
+    # was replaced with "Submits one of your OWN ready applications", which
+    # production proved is ALSO false — the card writes tracker bookkeeping
+    # and transmits nothing (0 of 606 applications has ever carried a
+    # transmittedAt; FORENSICS.md). It now says what the run really does, and
+    # names where transmission actually happens, so the word "submits" never
+    # appears over a run that sends nothing.
     {"key": "submission", "name": "Submission Agent", "icon": "fa-paper-plane",
      "accent": "green", "backend": "submission", "recommended": "deterministic",
-     "tip": "Submits one of your OWN ready applications — the exact gate and "
-            "write the Jobs board's Apply button already performs (a "
-            "job-tailored resume plus a non-empty Cover Letter Studio draft), "
-            "now runnable as an agent. No browser automation or third-party "
-            "form-filling exists; nothing is invented. With no job specified "
-            "it picks your most recently updated ready application and "
-            "reports which one. Deterministic, no LLM cost."},
+     "tip": "Records one of your OWN ready applications in your tracker — the "
+            "exact gate and write the Jobs board's Apply button already "
+            "performs (a job-tailored resume plus a non-empty Cover Letter "
+            "Studio draft), now runnable as an agent. It does NOT transmit "
+            "anything to the employer: when the posting publishes an "
+            "application address the run ends as a pending card in Approvals, "
+            "and transmission only happens when you approve it. Every run "
+            "reports its real state — transmitted, awaiting approval, manual "
+            "step required, or recorded-only — read back from the row, never "
+            "assumed. With no job specified it picks your most recently "
+            "updated ready application and reports which one. Deterministic, "
+            "no LLM cost."},
     {"key": "matchScoring", "name": "Match Scoring Agent", "icon": "fa-bullseye",
      "accent": "indigo", "backend": "fitScorer", "recommended": "deterministic",
      "tip": "Deterministic 10-dimension fit scoring + ATS keyword/semantic engine — "
@@ -1338,7 +1343,16 @@ def _execute_reserved_run(
         raise
     duration_ms = int((time.monotonic() - started) * 1000)
     output["duration_ms"] = duration_ms
-    output["approvalRequired"] = _run_is_approval_gated(agent_name, params)
+    # U5d: a run that ITSELF reports it ended awaiting an approval IS gated,
+    # whatever the agent-level table says. The Submission Agent is not in
+    # ``_APPROVAL_GATED`` (only SOME of its runs raise a W-SUB card — the ones
+    # whose posting publishes an application address), so the static answer
+    # was ``false`` on exactly the runs where a pending approval is the whole
+    # terminal state. Derived from the run's OWN output, never assumed, so it
+    # cannot report a gate for a run that did not create one.
+    output["approvalRequired"] = _run_is_approval_gated(agent_name, params) or (
+        output.get("submissionState") == "awaiting_approval"
+    )
     output["billingAudit"] = audit
     # An honest "no letter produced" degrade: the cover-letter agent hit an
     # LLMUnavailableError on its FIRST draft and returned a coverLetterUnavailable
