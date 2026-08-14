@@ -414,6 +414,31 @@ body {
 }
 
 /*
+ * Jobs two-pane detail viewport (B2 round 2).
+ *
+ * The two panes sit side by side from `xl` up and STACK below it, so one height
+ * cannot serve both: stacked, the list pane and the detail pane add up in the
+ * DOCUMENT, which is exactly what D-ε ("the page ends") measures. The page's
+ * own comment already stated the intent — "below xl the panes stack, so each is
+ * capped at a shorter height and the page still ends" — but both constants used
+ * the same `100dvh - 130px` formula at every width, so at 834 the stacked detail
+ * pane alone was 982px and the page ran to 2,582px.
+ *
+ * `dvh` (not `vh`) because on mobile Safari `vh` is the LARGEST viewport, which
+ * pushes the bottom of a pane under the browser toolbar. The `min()` caps stop
+ * a very tall window from producing an absurd scroll box. It is a MAX height, so
+ * a short job description still renders at its natural height.
+ */
+.job-detail-viewport {
+  max-height: min(calc(100dvh - 400px), 760px);
+}
+@media (min-width: 1280px) {
+  .job-detail-viewport {
+    max-height: min(calc(100dvh - 130px), 1180px);
+  }
+}
+
+/*
  * A glow reserved for genuinely-live elements (§3.2: nothing moves unless
  * something moved). Used on the ticker's dot and nowhere decorative.
  */

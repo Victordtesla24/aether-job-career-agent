@@ -95,7 +95,21 @@ export default function SegmentedControl<T extends string>({
       role="tablist"
       aria-label={ariaLabel}
       data-testid={testId}
-      className={`inline-flex max-w-full items-stretch gap-0.5 overflow-x-auto rounded-lg border-b border-hairline ${className}`}
+      /*
+        ROUND 2 — the strip WRAPS, it does not scroll sideways.
+
+        It used to be `overflow-x-auto` over `shrink-0 whitespace-nowrap` tabs,
+        which is the same shape as the connected-boards defect this round is
+        closing: measured at 390 the Jobs market strip needed 379px inside a
+        358px box, so "Saved 0" was sliced at the right edge with no fade, no
+        chevron and no hint that a third tab existed. A tab a sighted user
+        cannot see is a tab they will not press, however reachable it is by
+        arrow key. Wrapping costs one extra row at the narrowest width and
+        cannot clip at ANY width or item count — which matters because this one
+        component is now every tab strip in the product (Jobs markets,
+        Applications views, Analytics periods, Approvals filter, Agents tabs).
+      */
+      className={`inline-flex max-w-full flex-wrap items-stretch gap-0.5 rounded-lg border-b border-hairline ${className}`}
     >
       {items.map((item) => {
         const active = item.value === value;
