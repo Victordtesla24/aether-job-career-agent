@@ -291,8 +291,13 @@ def test_fidelity_report_degrades_and_names_the_loss_when_content_is_dropped():
     from app.services.resume_completeness import CompletenessVerification
     from app.services.resume_format import METHOD_REFLOW, describe_fidelity, verified_fidelity
 
+    # A genuine reflow base is a row with no retained original and no bundled
+    # match: under MODELS-LIVE R-FMT a stored PDF upload is now format-preserved
+    # (its own bytes are the source), so the reflow-template case is the
+    # no-original row here. The content-loss degradation this test pins is
+    # method-independent.
     base = describe_fidelity(
-        bundled_match=False, has_original=True, content_type="application/pdf",
+        bundled_match=False, has_original=False, content_type=None,
         is_tailored=True,
     )
     assert base.method == METHOD_REFLOW

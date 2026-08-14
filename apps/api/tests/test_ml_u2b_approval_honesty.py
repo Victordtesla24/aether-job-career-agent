@@ -96,9 +96,15 @@ def test_reasoning_never_claims_preservation_for_a_reflow_base() -> None:
     the old hardcoded string told the user "Original layout preserved"
     regardless. A reflow base must produce a WARNING and must never assert
     the résumé's layout is preserved.
+
+    The genuine reflow base is a row with NO retained original AND no
+    bundled-hash match (text ingested via ``POST /resumes``, or uploaded before
+    U2a kept files). Under MODELS-LIVE R-FMT a stored PDF/DOCX/text upload is now
+    format-PRESERVED, so it is no longer a reflow example — the honest reflow
+    case is the no-original row, which the download tells to re-upload.
     """
     fidelity = describe_fidelity(
-        bundled_match=False, has_original=True, content_type="application/pdf",
+        bundled_match=False, has_original=False, content_type=None,
         is_tailored=True,
     )
     assert fidelity.method == METHOD_REFLOW and fidelity.preserved is False

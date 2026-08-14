@@ -540,3 +540,58 @@ only landed + live-verified on top of it).
 **VERIFIED-CLOSED** (QA authority, this session): owner-directive compliance — system default is the
 Anthropic subscription, OpenRouter is per-agent-explicit-only, F7/F8 reconciled to per-user metering,
 ADR-ML-3 intact — proven live on production with a real billed run, not inferred.
+
+### RESUME-FORMAT-PRESERVE — QA LAND + LIVE VERIFY (independent QA session), 2026-08-14T21:3x-21:5xZ
+
+Independently re-verified and landed `feat/resume-format-preserve` (`f1edaf3`: fixes `_coverage` to
+score carried WORDS instead of intact-shingle-fraction, so a two-writer bullet's bold-lead-in/grey-body
+seam no longer sinks a fully-applied rewrite below the 0.85 applied bar). Did not trust the branch's own
+prior evidence — re-ran everything myself, fresh, on the merge commit.
+
+- **LAND**: merged `origin/main` into `feat/resume-format-preserve` (4→now 35 commits ahead at merge
+  time, 0 conflicts). Independent core-gate run (13 files covering `test_resume_format_preserve.py` +
+  full U2b + regression): 149/149 green (own run, not the branch's cached log). Pushed branch +
+  `HEAD:main` — CI caught a REAL red the branch's own gate notes had mischaracterized as "pre-existing
+  on baseline": `ruff I001` on `resumes.py:846`, actually introduced by this branch's own `cd2b866`.
+  Fixed (mechanical `ruff --fix`, 1 file, no behavior change), re-ran the 149-test gate green, pushed
+  again (picked up a concurrent session's `stopall-interim` commits on the way, 0 conflicts).
+- **CI**: API job (covers this diff) green both times. Web job red 3/3 attempts on
+  `sui1-agents-shell.test.tsx` — verified this is PRE-EXISTING and UNRELATED: this branch touches zero
+  `apps/web` files, the same test failed identically on a different session's unrelated API-only push,
+  and it passes 31/31 in an isolated local `vitest run` of that exact file on this exact commit. Not
+  fixed here (out of this slice's mandate) — flagged honestly, not swept under "CI green."
+- **DEPLOY**: auto-deploy timer picked up the push (`ef3a9e0`) at 21:45:27Z — 3/3 health 200/200/200 at
+  21:47:04Z. OOM `-500` re-armed on the 3 new PIDs. `api.log` since restart: 4 `psycopg2.OperationalError`
+  connection-pool warm-up reconnects in the first ~15s (same documented self-healing pattern as prior
+  restarts) — **zero** 5xx served to any client since.
+- **BINDING LIVE-ACCEPTANCE GATE (read-only, prod `aether` schema, own script, not the branch's)**:
+  rendered the real `cfe7a0f→c12187` pair through the ACTUAL shipped `_render_resume()` post-merge:
+  `method=pdf-in-place-splice`, `preserved=true`, 9/10 applied (1 honest residue), 3/3 pages, same
+  geometry, **max pixel-diff ratio outside the reworded-bullet masks = 0.0** (own independently-derived
+  masks from `_detect_blocks`, not reused from the branch's artifact). `ACCEPTANCE_PASS=true`.
+- **LIVE VERIFY (real owner tailoring run, no localhost, no mocks)**: `POST /agents/tailor/run` as the
+  owner against baseline `cfe7a0f` targeting a real board job (Amazon, Data Center IT Support Engineer)
+  → async job `c3f6c8e6…`, worker processed it real-time (221.69s, real Anthropic+OpenRouter calls, one
+  429 retry, one LLM-empty-content early-stop honestly disclosed in the run's own warning), produced
+  NEW tailored child `c28042285f9a761f9f2322e2e` ($0.048154 billed, quality floor honestly missed —
+  52.6/100 vs 88 target for this particular job — gap keywords refused as fabrication, not stuffed).
+  1. `X-Aether-Format-Method: pdf-in-place-splice` on the real `/download` response — confirmed.
+  2. Rasterized baseline vs the fresh child (3-3 pages, same geometry): pixel-diff outside the 3 real
+     applied-bullet masks = **0.0** — visually confirmed too (`diff.png` is solid black except the 3
+     reworded regions). PNGs at `uat/reports/evidence/market-perf/resume-format/refix/verify/`
+     (`baseline.png`, `tailored.png`, `diff.png`) for the orchestrator to eyeball.
+  3. **Legacy no-original row — honest disclosure, not a pass/fail**: queried prod for a resume whose
+     parent has no retained `originalFile` AND no bundled-asset hash match (the true "must re-upload"
+     case) — **zero such rows exist anywhere in production today** (checked system-wide, not just the
+     owner). The one owner-scoped candidate I found (`c7d3c9a7…`) has no `originalFile` but its parent's
+     `formatHash` DOES match a bundled seed asset, so it correctly renders `preserved:true` via the
+     bundled path — honest, just not the specific edge case. Mechanism itself is proven by
+     `test_legacy_no_original_row_is_told_to_reupload` (own gate run, GREEN). No real-world instance to
+     click-through today — disclosed, not fabricated.
+  4. Final health 3/3, `api.log` since deploy: 0 new 5xx.
+
+**VERIFIED-CLOSED** (QA authority, this session): the real `cfe7a0f→c12187` tailored child, AND a
+brand-new tailoring run fired live during this verification, both ship `pdf-in-place-splice` /
+`preserved:true` / the baseline's own two-column layout with ~0 pixel diff outside the reworded text —
+proven twice, independently, against production, not inferred from the branch's own claims. Evidence:
+`uat/reports/evidence/market-perf/resume-format/refix/qa-independent/` and `.../refix/verify/`.
