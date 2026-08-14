@@ -406,11 +406,13 @@ export function platformLabel(channel: string | null | undefined): string {
  *
  * Never claims automatic submission "with no further action" — the ARQ sweep
  * that would drive a non-email channel is OFF by code default
- * (`apps/api/app/workers/apply_sweep.py` `sweep_enabled()`) and
- * `AETHER_APPLY_SWEEP_ENABLED` is unset in this deployment's `.env` today, so
- * approving a non-email application does not, by itself, cause anything to
- * happen. Seek postings and unresolved channels are excluded from automation
- * even once the sweep runs (ADR-SEEK-V3 / `AUTOMATABLE_CHANNELS`).
+ * (`apps/api/app/workers/apply_sweep.py` `sweep_enabled()`), so approving a
+ * non-email application does not, by itself, cause anything to happen unless
+ * an operator turned that sweep on; `sweepEnabled` below carries the live
+ * answer rather than this comment asserting a deployment's `.env` state,
+ * which would rot the moment it changed. Seek postings and unresolved
+ * channels are excluded from automation even once the sweep runs
+ * (ADR-SEEK-V3 / `AUTOMATABLE_CHANNELS`).
  */
 export function notTransmittedReason(app: {
   autoSubmittable?: boolean | null;
@@ -426,6 +428,14 @@ export function notTransmittedReason(app: {
   sweepEnabled?: boolean;
 }): string {
   if (app.autoSubmittable) {
+    // TRUE as written, and behaviourally pinned: approving this application's
+    // request in Approvals fires POST /approvals/{id}/execute for it from all
+    // three decision surfaces (card, modal, bulk) — see
+    // `components/approvals/lib.ts` `sendsOnApprove`, asserted by
+    // `app/dashboard/approvals/__tests__/u5-email-submission-send-and-retry.test.tsx`
+    // — and the backend really transmits it (`_execute_application_submit`).
+    // Round-4 MUST-FIX 1: before that wiring the UI executed `email_send`
+    // approvals ONLY, so this sentence promised a send nothing performed.
     return "Approve it in Approvals to email it to the employer.";
   }
   if (app.applyChannel === "seek-manual") {
@@ -476,19 +486,29 @@ export function notTransmittedReason(app: {
  * MUST-FIX 3/5 (round-3 re-review): the previous copy told the user to "send
  * each email individually from each application's card" — there is NO send
  * affordance on an application's card; `executeApproval` is the only send in
- * the product, and it now fires for every bulk-approved `email_send` item
- * (C2 fixed `bulkDecide` to call it, matching a single-card approve exactly).
- * This describes THAT real behaviour instead of a UI surface that does not
- * exist, and reads the SAME live `sweepEnabled` signal
+ * the product, and it now fires for every bulk-approved item Aether can send
+ * by email (C2 fixed `bulkDecide` to call it, matching a single-card approve
+ * exactly). This describes THAT real behaviour instead of a UI surface that
+ * does not exist, and reads the SAME live `sweepEnabled` signal
  * {@link notTransmittedReason} does for the employer-form half, so the two
  * copies can never again assert opposite things about the same deployment.
+ *
+ * Round-4 MUST-FIX 1/2: "email" here is the resolved apply CHANNEL, not the
+ * approval type — an application whose posting publishes an application
+ * address is sent by this same click (`components/approvals/lib.ts`
+ * `sendsOnApprove`), which is what makes {@link notTransmittedReason}'s
+ * "Approve it in Approvals to email it to the employer" true. The retry named
+ * below is the real `Retry send` button the Approvals queue renders for an
+ * approved-but-unsent request (`needsSendRetry`), not an imagined surface.
  */
 export function automaticSubmissionDisclaimer(sweepEnabled: boolean): string {
   return (
-    "Approving an email_send request sends it immediately (each is sent " +
-    "individually, right after its own approval goes through — a failed " +
-    "send is reported honestly, not hidden). Automatic employer-form " +
-    "submission " +
+    "Approving a request Aether can send by email — an outreach email, or an " +
+    "application whose posting publishes an application address — sends it " +
+    "immediately (each is sent individually, right after its own approval " +
+    "goes through; a failed send is reported honestly and its request stays " +
+    "in this queue with a Retry send button, never hidden). Automatic " +
+    "employer-form submission " +
     (sweepEnabled
       ? "is enabled on this deployment and runs on Aether's own schedule " +
         "once approved."

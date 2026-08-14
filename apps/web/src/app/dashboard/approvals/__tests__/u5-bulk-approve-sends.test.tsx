@@ -3,12 +3,14 @@
  * U5 closing round — re-review MUST-FIX C2 (behavioral, not just copy):
  * `bulkDecide` used to loop `decideApproval` alone, so a bulk-approved
  * `email_send` request was left `approved` with `executedAt` never set and
- * NO send affordance anywhere in the product (there is no per-card send
- * button — `executeApproval` only ever fires from an approve DECISION,
- * single or bulk). That is exactly the "prepared only" violation W-SUB and
- * U5 exist to eliminate.
+ * NO send affordance anywhere in the product. That is exactly the "prepared
+ * only" violation W-SUB and U5 exist to eliminate. (Round 4 added the one
+ * per-card send there is: `Retry send`, rendered ONLY for an approved
+ * request whose send provably did not happen — see
+ * `u5-email-submission-send-and-retry.test.tsx`. An approve DECISION is
+ * still the only way a first send is ever fired.)
  *
- * Fix: bulk-approve fires `sendIfEmailApproval` for every approved
+ * Fix: bulk-approve fires `sendIfSendable` for every approved
  * `email_send` item, sequentially, with the SAME per-item error handling as
  * a single-card approve — a failed send must never be silently swallowed
  * inside the "N of M decisions failed" count, because the DECISION
@@ -91,7 +93,7 @@ describe("bulk-approve executes the send for every approved email_send item (C2)
     expect(executeApprovalMock).toHaveBeenCalledTimes(1);
   });
 
-  it("sends sequentially per item, exactly like sendIfEmailApproval on a single approve", async () => {
+  it("sends sequentially per item, exactly like sendIfSendable on a single approve", async () => {
     const first = approval({ id: "appr-1", type: "email_send" });
     const second = approval({ id: "appr-2", type: "email_send" });
     fetchApprovalsMock.mockResolvedValue([first, second]);

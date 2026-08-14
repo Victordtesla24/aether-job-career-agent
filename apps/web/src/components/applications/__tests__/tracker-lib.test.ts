@@ -512,6 +512,22 @@ describe("U5 automaticSubmissionDisclaimer (bulk-approve confirm)", () => {
     expect(automaticSubmissionDisclaimer(false)).toContain("not enabled on this deployment yet");
   });
 
+  // Round-4 MUST-FIX 1/2 re-verification: the disclaimer must describe the
+  // resolved apply CHANNEL (an application whose posting publishes an address
+  // is sent by this same click, not only an outreach `email_send`), and the
+  // retry it points at must be the real `Retry send` button the Approvals
+  // queue renders for an approved-but-unsent request (`needsSendRetry`).
+  it("covers an application sent by email, not only outreach emails", () => {
+    for (const text of [automaticSubmissionDisclaimer(false), automaticSubmissionDisclaimer(true)]) {
+      expect(text).toMatch(/application whose posting publishes an application address/i);
+    }
+  });
+
+  it("names the retry affordance that actually exists for a failed send", () => {
+    expect(automaticSubmissionDisclaimer(false)).toContain("Retry send");
+    expect(automaticSubmissionDisclaimer(true)).toContain("Retry send");
+  });
+
   it("says employer-form submission WILL run, when the sweep is ON — never the OFF wording", () => {
     const text = automaticSubmissionDisclaimer(true);
     expect(text).not.toContain("not enabled on this deployment yet");
