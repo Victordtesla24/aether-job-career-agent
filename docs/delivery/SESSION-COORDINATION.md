@@ -425,3 +425,41 @@ around the restart. CI green on both admin-full pushes (`31833027588` red on the
 complete and PASS — evidence at `uat/reports/evidence/phase6/admin-full-verify/`. Both re-review
 findings (flaky determinism test, honest `sessionsInvalidated`) and the §14.7 reset-flow adjudication
 are VERIFIED-CLOSED on production, not just in tests.
+
+### B3 LANDED — session 9c6a2ba6, 2026-08-14T20:0xZ
+
+Pushed `HEAD:main` @ `971ea04` (`54e9625..971ea04`). CI green (`31834817157`). Also re-anchored 2
+`workflow-linkage.ts` provenance citations (`agents.py:3401,3423`→`3441,3463`;
+`agents.py:1550,2069`→`1563,2082`) that admin-full's `agents.py` edit had already made stale on
+`origin/main` before this branch merged it in — confirmed independently by diffing `origin/main`
+directly (pre-merge), so not a B3 regression; same fix admin-full's own session applied in parallel
+at `02c1276` (byte-identical line numbers), which is why the second pre-land sync merged clean with
+no conflict. Full web vitest 205/205 files, 1684/1684 tests; `tsc`/`lint`/`next build` all green on
+the merged tree. `apps/api` diff vs `origin/main` remained EMPTY throughout (B3 is FE-only).
+
+**Deploy note for future landers (real gap, not hypothetical):** by the time this branch's HEAD:main
+push should have reached the `aether-autodeploy.timer`, admin-full's own coordination-doc commits
+(`4d916b4`, then a race-reconcile `5ac311f`) had already run `git pull` directly in the shared
+checkout `/home/ubuntu/github_repos/aether-job-career-agent` ahead of the timer's next tick — so
+`auto-deploy.sh`'s Step 1 (`LOCAL_HEAD == REMOTE_HEAD` ⇒ silent no-op) saw the checkout already
+synced and would have skipped the build+restart forever, even though the running `aether-web`/
+`aether-api`/`aether-worker` processes (last real restart 19:46:36Z, serving `54e9625`) had never
+actually picked up B3's code. Confirmed via `systemctl show aether-web -p ActiveEnterTimestamp`
+(19:46:36Z, predates `971ea04`) vs the shared checkout's git HEAD (`5ac311f`, postdates it). Ran the
+build+restart+3-health-check leg of the deploy recipe manually, under the same `/tmp/aether-deploy.lock`
+(lock was free), logged to `/var/log/aether/deploy.log` with a `[manual-deploy-9c6a2ba6]` tag so it's
+distinguishable from the timer's own `[auto-deploy]` lines: all 3 health checks healthy, `deploy
+successful: 5ac311f` at 19:59:46Z, all 3 services restarted 19:59:36Z. Verified live: `buildId`
+`LngNLqr1hIcl2YiZ4vI7j` served on `/dashboard/resume` matches the build this deploy produced.
+**Anyone landing next: a manual `git pull`/commit in the shared checkout for a coordination-doc entry
+can silently defeat the timer's diff-trigger — always check `ActiveEnterTimestamp` vs the checkout's
+`git log` before trusting "HEAD == origin/main" as proof of a real deploy.**
+
+- Files: `apps/web/src/app/dashboard/{resume,cover-letters,stories,[...slug]}/page.tsx`,
+  `components/resume/{AhaHero,ChangeList,diff-semantics}.{tsx,ts}` (+ tests), `components/cover-letters/*`
+  (7 panels), `components/stories/{story-card,story-sheet,story-aside}.tsx`,
+  `components/analytics/TailoringImpact.tsx`, `lib/navigation-suggest.ts` (+ test),
+  `components/agents/workflow-linkage.ts` (citation re-anchor only), this doc. No migration, no `apps/api`.
+- Not touching any other session's active claims.
+- Next: live verification on production (owner JWT) — Resume Studio aha moment, Cover Letter Studio,
+  Story Bank fix — evidence to `uat/reports/evidence/market-perf/s-ui/b3/land/`.
