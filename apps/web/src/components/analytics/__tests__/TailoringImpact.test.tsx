@@ -157,3 +157,74 @@ describe("TailoringImpact — honest before/after ATS + 10-dimension display", (
     expect(row!.querySelector('[data-testid="dimension-after"]')!.textContent).toBe("72");
   });
 });
+
+/**
+ * R-01 (round 3) — the HEADLINE was the last consumer still rendering a
+ * placeholder-contaminated ATS as a bold measurement while the row beneath it
+ * honestly showed "—". `ATSScore.overall` is 0.4*keyword + 0.4*semantic +
+ * 0.2*experience, i.e. 40% neutral placeholder whenever the semantic path is
+ * untrusted; the same value is emitted as the "Role Alignment" dimension,
+ * which already renders "—". The wire now WITHHOLDS a non-measured half
+ * (`ats: null`, `atsMeasured: false` — see
+ * `GET /resumes/{id}/tailoring-impact`), so the untrustworthy arm carries no
+ * number for this component to leak.
+ */
+describe("TailoringImpact — a non-measured ATS half is never a bold number", () => {
+  const before = dims([60, 55, 50, 62, 58, 70, 80, 45, 76, 61]);
+  const after = dims([72, 60, 55, 70, 61, 74, 82, 50, 78, 68]);
+
+  it("renders '—' for a withheld before-ATS and no fabricated delta", () => {
+    render(
+      <TailoringImpact
+        beforeAts={null}
+        afterAts={69}
+        beforeDimensions={before}
+        afterDimensions={after}
+      />,
+    );
+    expect(screen.getByTestId("ats-before").textContent).toBe("—");
+    expect(screen.getByTestId("ats-after").textContent).toBe("69");
+    expect(screen.getByTestId("ats-delta").textContent).toBe("n/a");
+  });
+
+  it("renders '—' for a withheld after-ATS and no fabricated delta", () => {
+    render(
+      <TailoringImpact
+        beforeAts={58}
+        afterAts={null}
+        beforeDimensions={before}
+        afterDimensions={after}
+      />,
+    );
+    expect(screen.getByTestId("ats-after").textContent).toBe("—");
+    expect(screen.getByTestId("ats-delta").textContent).toBe("n/a");
+  });
+
+  it("states WHY the number is absent rather than leaving a bare dash", () => {
+    render(
+      <TailoringImpact
+        beforeAts={null}
+        afterAts={null}
+        beforeDimensions={before}
+        afterDimensions={after}
+        atsUnmeasuredReason="The semantic scoring model was unavailable for this run."
+      />,
+    );
+    const caveat = screen.getByTestId("ats-unmeasured-caveat");
+    expect(caveat.textContent).toMatch(/semantic scoring model was unavailable/i);
+    expect(caveat.textContent?.toLowerCase()).toMatch(/not measured/);
+  });
+
+  it("shows no caveat when both halves are genuine measurements", () => {
+    render(
+      <TailoringImpact
+        beforeAts={58}
+        afterAts={69}
+        beforeDimensions={before}
+        afterDimensions={after}
+      />,
+    );
+    expect(screen.queryByTestId("ats-unmeasured-caveat")).toBeNull();
+    expect(screen.getByTestId("ats-delta").textContent).toBe("+11 ATS");
+  });
+});
