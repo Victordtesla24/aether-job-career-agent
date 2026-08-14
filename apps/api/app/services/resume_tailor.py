@@ -1806,6 +1806,95 @@ def jd_echoed_phrases(
     return sorted(" ".join(gram) for gram in lifted)
 
 
+#: A run of spaces this wide is a candidate column gutter rather than ordinary
+#: word spacing.
+_GUTTER_RE = re.compile(r"\s{3,}")
+#: An indent this deep is not paragraph indentation — it is a line that starts
+#: in the SECOND column of a two-column page.
+_MIN_COLUMN_INDENT = 12
+#: How many merged lines a page must show before its text is re-read as two
+#: columns. A single-column résumé can have one or two wide gaps (a
+#: right-aligned date); a real two-column layout merges dozens.
+_MIN_MERGED_LINES = 3
+
+
+def _column_offset(lines: list[str]) -> int | None:
+    """Character column where a second text column starts, if there is one."""
+    indents = [
+        len(line) - len(line.lstrip(" "))
+        for line in lines
+        if line.strip() and len(line) - len(line.lstrip(" ")) >= _MIN_COLUMN_INDENT
+    ]
+    return min(indents) if indents else None
+
+
+def _split_columns(line: str, offset: int) -> tuple[str, str] | None:
+    """``(left, right)`` for a line that merged both columns, else ``None``."""
+    for match in _GUTTER_RE.finditer(line):
+        if match.end() < offset:
+            continue
+        left, right = line[: match.start()].strip(), line[match.end():].strip()
+        if left and right:
+            return left, right
+    return None
+
+
+def deinterleave_columns(raw_text: str) -> str:
+    """Re-read a two-column page as the two columns the person actually wrote.
+
+    U2b CRITICAL round 2 (2026-08-14). PyMuPDF flattens a page line by line, so
+    a two-column résumé arrives with the sidebar welded onto the body::
+
+        VIKRAM                                     CAREER OBJECTIVE
+        DESHPANDE                            15+ year Senior Technical Leader …
+             EDUCATION                         Distribution UI capabilities) …
+
+    Every line walk below — and the document model in
+    :mod:`app.services.resume_document` — reads one logical line per physical
+    line, so on the live document the surname fell into body prose (the render
+    went out as "VIKRAM"), and the ``EDUCATION``/``SKILLS``/``CERTIFICATIONS``
+    banners were swallowed mid-bullet and then dropped entirely
+    (``uat/reports/evidence/agents-uplift/u2b/critical/REVIEWER-probe-*-OUTPUT-20260814.txt``).
+
+    Nothing is invented and nothing is discarded here: each line is cut at the
+    gutter that separates the columns, and the two columns are emitted in the
+    order a person reads them — the whole sidebar, then the whole body. The
+    result is idempotent (the output has no gutters left to find).
+
+    A page is only re-read this way when it really is two columns: at least
+    :data:`_MIN_MERGED_LINES` lines carry both columns, and BOTH columns state
+    at least one section banner of their own. A single-column résumé with
+    right-aligned dates fails that test and is returned untouched.
+    """
+    lines = raw_text.splitlines()
+    offset = _column_offset(lines)
+    if offset is None:
+        return raw_text
+    left: list[str] = []
+    right: list[str] = []
+    merged = 0
+    for line in lines:
+        if not line.strip():
+            continue
+        if len(line) - len(line.lstrip(" ")) >= offset:
+            right.append(line.strip())
+            continue
+        split = _split_columns(line, offset)
+        if split is None:
+            left.append(line.strip())
+            continue
+        merged += 1
+        left.append(split[0])
+        right.append(split[1])
+    if merged < _MIN_MERGED_LINES:
+        return raw_text
+    if not any(_is_section_banner(line) for line in left):
+        return raw_text
+    if not any(_is_section_banner(line) for line in right):
+        return raw_text
+    return "\n".join(left + right)
+
+
 def _is_bullet_marker(line: str) -> bool:
     return line.startswith(_BULLET_MARKERS)
 
@@ -1877,8 +1966,12 @@ def extract_bullets(raw_text: str) -> list[str]:
     Bullets are returned in document order. Works uniformly across both bundled
     resumes and every ingestion path (base bootstrap, ``POST /resumes``,
     ``POST /resumes/upload``).
+
+    The stream is first put back into reading order by
+    :func:`deinterleave_columns`, so a sidebar line never lands in the middle of
+    a body bullet (U2b round 2).
     """
-    lines = [ln.strip() for ln in raw_text.splitlines()]
+    lines = [ln.strip() for ln in deinterleave_columns(raw_text).splitlines()]
     header = _job_header_indices(lines)
     bullets: list[str] = []
     buf: list[str] | None = None
@@ -1931,7 +2024,7 @@ def strip_bullet_lines(raw_text: str) -> str:
     ``strip_bullet_lines(resume) + <bullet set>`` keeps the shared context
     identical, so the delta reflects the rewrite alone.
     """
-    lines = [ln.strip() for ln in raw_text.splitlines()]
+    lines = [ln.strip() for ln in deinterleave_columns(raw_text).splitlines()]
     header = _job_header_indices(lines)
     kept: list[str] = []
     in_bullet = False

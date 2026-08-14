@@ -29,6 +29,7 @@ exactly what this model reserves a slot for.
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -41,6 +42,7 @@ from app.services.resume_tailor import (
     _is_bullet_marker,
     _is_section_banner,
     _job_header_indices,
+    deinterleave_columns,
 )
 
 #: Section banners a résumé actually uses. Only these end the name block at the
@@ -64,6 +66,15 @@ _MAX_NAME_LINES = 3
 _NON_CONTACT_KEYS = ("name", "title", "headline", "role")
 
 _MARKER_CHARS = "•●▪- \t"
+
+_WORD_RE = re.compile(r"[0-9a-z]+")
+
+#: How much wording a rewritten bullet must still share with the bullet it
+#: replaces before it may take that slot. A tailoring rewrite keeps the same
+#: evidence — the same employer, numbers and nouns — so it stays well above
+#: this; an unrelated bullet does not, and is added to the document rather than
+#: written over someone else's job.
+_REWRITE_OVERLAP = 0.35
 
 
 @dataclass(frozen=True)
@@ -253,16 +264,23 @@ def _parse_sections(raw_lines: list[str], start: int) -> list[DocSection]:
 def _substitute_bullets(
     sections: list[DocSection], persisted: list[str]
 ) -> list[DocSection]:
-    """Put the PERSISTED bullet text into the slots the prose reserved.
+    """Put the PERSISTED bullet text into the slot it BELONGS to, by content.
 
     A tailored version stores its rewritten bullets in ``sections.bullets`` and
-    regenerates ``raw_text`` from them, so the two are one-for-one and the
-    document rebuilds exactly. When they are NOT one-for-one (a legacy record, a
-    résumé whose bullet list was rebuilt independently) nothing is substituted
-    and nothing is lost: the prose keeps its own bullets and any persisted
-    bullet that is not already in the document is appended under its own
-    heading. Losing a bullet is the failure this module exists to prevent, so
-    every ambiguous case resolves towards keeping more of the user's text.
+    regenerates ``raw_text`` from them, so the two normally line up exactly.
+    They are nevertheless matched by CONTENT, never by position: a positional
+    ``zip`` writes whatever the counts happen to allow, so one mis-parsed line
+    silently moves a bullet under another job's heading — a résumé that reads
+    as a lie about where the person did the work — and nothing downstream can
+    see it, because a completeness check only asks whether the text is present
+    somewhere (U2b review, 2026-08-14).
+
+    An unchanged bullet claims its own slot outright; a rewritten one claims
+    the slot whose wording it most closely rewrites. A persisted bullet that
+    matches no slot is appended rather than dropped, and a slot that matches no
+    persisted bullet keeps its own prose: losing a bullet is the failure this
+    module exists to prevent, so every ambiguous case resolves towards keeping
+    more of the user's text.
     """
     slots = [
         (s_index, i_index)
@@ -271,13 +289,11 @@ def _substitute_bullets(
         if item.kind == "bullet"
     ]
     rebuilt = [list(section.items) for section in sections]
-    if len(slots) == len(persisted):
-        for (s_index, i_index), text in zip(slots, persisted):
-            rebuilt[s_index][i_index] = DocItem("bullet", text)
-        extra: list[str] = []
-    else:
-        present = {_fold(item.text) for row in rebuilt for item in row}
-        extra = [text for text in persisted if _fold(text) not in present]
+    slot_text = [rebuilt[s_index][i_index].text for s_index, i_index in slots]
+    claimed, extra = _claim_slots(slot_text, persisted)
+    for index, text in claimed.items():
+        s_index, i_index = slots[index]
+        rebuilt[s_index][i_index] = DocItem("bullet", text)
     out = [
         DocSection(heading=section.heading, items=tuple(rebuilt[index]))
         for index, section in enumerate(sections)
@@ -294,6 +310,59 @@ def _substitute_bullets(
             )
         )
     return out
+
+
+def _claim_slots(
+    slot_text: list[str], persisted: list[str]
+) -> tuple[dict[int, str], list[str]]:
+    """``({slot index: persisted text}, unmatched persisted text)``.
+
+    Two passes, strongest evidence first: an identical bullet is the same
+    bullet, and a rewrite is the bullet it shares the most wording with. A
+    rewrite that shares almost nothing with any remaining slot is NOT forced
+    into one — it is returned unmatched, so it is added to the document instead
+    of overwriting a bullet it has nothing to do with.
+    """
+    by_fold: dict[str, list[int]] = {}
+    for index, text in enumerate(slot_text):
+        by_fold.setdefault(_fold(text), []).append(index)
+
+    claimed: dict[int, str] = {}
+    pending: list[str] = []
+    for text in persisted:
+        pool = by_fold.get(_fold(text))
+        if pool:
+            claimed[pool.pop(0)] = text
+        else:
+            pending.append(text)
+
+    free = [index for index in range(len(slot_text)) if index not in claimed]
+    unmatched: list[str] = []
+    for text in pending:
+        best, score = None, 0.0
+        for index in free:
+            overlap = _overlap(text, slot_text[index])
+            if overlap > score:
+                best, score = index, overlap
+        if best is None or score < _REWRITE_OVERLAP:
+            unmatched.append(text)
+            continue
+        claimed[best] = text
+        free.remove(best)
+    return claimed, unmatched
+
+
+def _overlap(left: str, right: str) -> float:
+    """Word overlap of two bullets (0.0–1.0), used to pair a rewrite with the
+    bullet it rewrote."""
+    left_words, right_words = _words(left), _words(right)
+    if not left_words or not right_words:
+        return 0.0
+    return len(left_words & right_words) / len(left_words | right_words)
+
+
+def _words(text: str) -> set[str]:
+    return set(_WORD_RE.findall(text.lower()))
 
 
 def _fold(text: str) -> str:
@@ -336,9 +405,14 @@ def parse_resume_document(resume: dict[str, Any]) -> ResumeDocument:
     contact = payload.get("contact") or {}
     if not isinstance(contact, dict):
         contact = {}
+    # Two-column pages arrive with the sidebar welded onto the body, one line
+    # per printed line; read them back as the two columns they are BEFORE the
+    # header/section walk, which assumes one logical line per line.
     raw_lines = [
         line.strip()
-        for line in str(payload.get("raw_text", "") or "").splitlines()
+        for line in deinterleave_columns(
+            str(payload.get("raw_text", "") or "")
+        ).splitlines()
         if line.strip()
     ]
     persisted = [

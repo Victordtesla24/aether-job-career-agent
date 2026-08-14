@@ -14,6 +14,7 @@ still unusable, and the report's silence about the other 32% read as assurance.
 So the artifact is now measured against the WHOLE persisted résumé
 (:mod:`app.services.resume_document`), not only against the edits:
 
+* the person's own name, in full,
 * every section heading the résumé states,
 * every bullet it holds — the tailored ones AND the untouched ones,
 * every contact detail, which is the employer's only way back to the user.
@@ -58,6 +59,11 @@ class ResumeContent:
     headings: tuple[str, ...] = ()
     bullets: tuple[str, ...] = ()
     contact: tuple[str, ...] = ()
+    #: The person's own name. Added in the U2b round-2 review: the live render
+    #: went out as "VIKRAM" with the surname parsed into body prose, and no
+    #: field of this contract could ever have flagged it, so a name regression
+    #: was structurally invisible to verification.
+    name: str = ""
 
     @property
     def is_empty(self) -> bool:
@@ -72,19 +78,25 @@ class CompletenessVerification:
     missing_headings: tuple[str, ...] = ()
     missing_bullets: tuple[str, ...] = ()
     missing_contact: tuple[str, ...] = ()
+    #: The persisted name, when the produced file does not carry all of it.
+    missing_name: str = ""
 
     @property
     def complete(self) -> bool:
         """Nothing the résumé persists is absent from the produced file."""
         return self.text_extracted and not (
-            self.missing_headings or self.missing_bullets or self.missing_contact
+            self.missing_headings
+            or self.missing_bullets
+            or self.missing_contact
+            or self.missing_name
         )
 
     @property
     def missing(self) -> tuple[str, ...]:
         """Every absent item, NAMED — never a bare count."""
         return (
-            tuple(f"section “{item}”" for item in self.missing_headings)
+            ((f"name “{self.missing_name}”",) if self.missing_name else ())
+            + tuple(f"section “{item}”" for item in self.missing_headings)
             + tuple(f"contact detail “{item}”" for item in self.missing_contact)
             + tuple(f"bullet “{_excerpt(item)}”" for item in self.missing_bullets)
         )
@@ -107,6 +119,7 @@ def build_resume_content(resume: dict[str, Any]) -> ResumeContent:
         headings=document.headings,
         bullets=document.bullets,
         contact=document.contact,
+        name=document.name,
     )
 
 
@@ -117,6 +130,19 @@ def _is_present(item: str, haystack: str) -> bool:
     if normalized in haystack:
         return True
     return _coverage(item, haystack) >= _PRESENT_COVERAGE
+
+
+def _name_is_present(name: str, haystack: str) -> bool:
+    """True when EVERY part of the person's name is somewhere in the artifact.
+
+    Checked word by word rather than as one string: a format-preserving
+    download keeps the source layout, where a two-column header prints the
+    given name and the surname on separate lines, so requiring them adjacent
+    would report a correct file as broken. A dropped surname — the live U2b
+    defect — still fails, because the word is simply not there.
+    """
+    parts = [_normalize(part) for part in name.split()]
+    return all(not part or part in haystack for part in parts)
 
 
 def verify_completeness(
@@ -135,6 +161,9 @@ def verify_completeness(
     haystack = _normalize(text)
     return CompletenessVerification(
         text_extracted=True,
+        missing_name=(
+            "" if _name_is_present(content.name, haystack) else content.name
+        ),
         missing_headings=tuple(
             item for item in content.headings if not _is_present(item, haystack)
         ),
