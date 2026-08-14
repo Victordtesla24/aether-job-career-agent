@@ -1018,7 +1018,22 @@ recipe this section already documents, invoked on a schedule.
      serves regardless of what this particular commit touched.
   9. Restarts all three services, then runs the same 3 health checks as
      §5 Phase 5 (items 3, 3b, 4: API health via nginx, the Next.js `/api`
-     rewrite check, and the web root).
+     rewrite check, and the web root) — each check **polls with a
+     retry+deadline** (every 3s, up to a 90s deadline per check) instead of
+     a single fixed-delay attempt. The first real deploy (canary `d4287c1`,
+     2026-08-13) proved a fixed `sleep 5` + one-shot `curl -sf` races real
+     service warmup: the API answered `200` in 2ms just 13s after restart,
+     but the one-shot check had already logged a false `FAILURE` 5s after
+     restart and left the systemd unit in `failed` state for a deploy that
+     actually succeeded — with the false alarm never self-clearing per the
+     no-retry-across-ticks contract below (see
+     `uat/reports/evidence/market-perf/u-cd/04-DEFECT-healthcheck-race-realdeploy.txt`).
+     The 90s-per-check deadline is deliberately generous: `aether-api` alone
+     can take up to ~90s to stop and restart under load, and warmup adds
+     more on top. Only a check that is still failing when its own deadline
+     is exhausted logs `FAILURE`; a successful check logs how long it took
+     (`healthy after Ns (attempt N)`) so operators can see how close to the
+     deadline a real deploy is running.
 - `deploy/aether-autodeploy.service` — `Type=oneshot` unit that runs the
   script once per trigger.
 - `deploy/aether-autodeploy.timer` — `OnCalendar=*:0/5` (every 5 minutes),
@@ -1040,9 +1055,12 @@ the `### Install` steps below. Until then, deploys still require the manual
 On **any** failure — a non-`main` checkout, a blocked pull (foreign WIP or
 diverged history), a failing `AETHER_LLM_MODE` check, a failed dependency
 install, a failed web build or `verify-web-build.sh` gate, a service that
-doesn't come back active, or a failed health check — the script logs one
-`FAILURE: ...` line to `/var/log/aether/deploy.log` and exits non-zero.
-**There is no automatic retry and no automatic rollback.**
+doesn't come back active, or a health check that is still failing once its
+own 90s deadline is exhausted (see step 9 above — within that 90s window a
+health check polls silently every 3s and is not itself a failure) — the
+script logs one `FAILURE: ...` line to `/var/log/aether/deploy.log` and
+exits non-zero. **There is no automatic retry of the deploy recipe across
+timer ticks, and no automatic rollback.**
 
 **Exception — benign lock contention is not a failure.** If
 `/tmp/aether-deploy.lock` is already held (a manual deploy or another

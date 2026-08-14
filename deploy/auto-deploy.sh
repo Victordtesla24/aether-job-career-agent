@@ -9,11 +9,15 @@
 # other deploy actor on this VM uses.
 #
 # Safety contract: NEVER stash/reset/clean/force anything. On any failure —
-# including a blocked pull or a failed health check — log loudly to
-# /var/log/aether/deploy.log and exit non-zero. No retry loop here: the next
-# timer tick is the only retry, and (see runbook §5.1) it only re-attempts
-# once origin/main advances again, since HEAD already moved past the
-# failure point on a mid-recipe failure. Operators must watch the log.
+# including a blocked pull or a health check that never comes healthy within
+# its deadline — log loudly to /var/log/aether/deploy.log and exit non-zero.
+# No retry loop ACROSS TICKS: the next timer tick is the only retry, and
+# (see runbook §5.1) it only re-attempts once origin/main advances again,
+# since HEAD already moved past the failure point on a mid-recipe failure.
+# Operators must watch the log. (The 3 health checks below DO poll with a
+# bounded retry+deadline WITHIN a single tick — see wait_healthy — because a
+# real service takes longer to warm up than any single fixed-delay guess;
+# that in-tick polling is not the "no retry" this paragraph refers to.)
 #
 # Benign lock contention (another deploy actor already holds the lock) is
 # NOT a failure — it is expected on a VM where manual/agent deploys share
@@ -46,6 +50,46 @@ KNOWN_FOREIGN_UNTRACKED=(
 
 log() { printf '%s [auto-deploy] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$1" >> "$LOG_FILE"; }
 fail() { log "FAILURE: $1"; exit 1; }
+
+# --- health-check retry/deadline poll ---------------------------------------
+# The first real deploy (canary d4287c1, 2026-08-13) proved a fixed `sleep 5`
+# followed by a single one-shot `curl -sf` races real service startup: the
+# API answered 200 in 2ms just 13s later, but the one-shot check had already
+# logged a false FAILURE 5s after restart, leaving the systemd unit in
+# 'failed' state after a deploy that actually succeeded (see
+# uat/reports/evidence/market-perf/u-cd/04-DEFECT-healthcheck-race-realdeploy.txt).
+# wait_healthy polls every HEALTH_POLL_INTERVAL seconds until the given
+# command succeeds (HTTP 200 for these curl checks) or HEALTH_POLL_DEADLINE
+# seconds have elapsed since the first attempt. It is generous on purpose:
+# aether-api alone can take up to ~90s to stop and restart under load, and
+# warmup adds more on top of that. Only deadline exhaustion is a FAILURE;
+# every attempt in between is silent, and success logs the attempt count and
+# elapsed time so operators can see how close to the deadline a real deploy
+# is running.
+HEALTH_POLL_INTERVAL=3
+HEALTH_POLL_DEADLINE=90
+
+wait_healthy() {
+    # $1 = human-readable label for log lines; "$@" (after shift) = the
+    # command to retry, e.g. `curl -sf ... url`.
+    local label="$1"
+    shift
+    local start_ts elapsed attempt=0
+    start_ts=$(date +%s)
+    while true; do
+        attempt=$((attempt + 1))
+        if "$@" >/dev/null 2>&1; then
+            elapsed=$(( $(date +%s) - start_ts ))
+            log "$label: healthy after ${elapsed}s (attempt $attempt)"
+            return 0
+        fi
+        elapsed=$(( $(date +%s) - start_ts ))
+        if [ "$elapsed" -ge "$HEALTH_POLL_DEADLINE" ]; then
+            fail "$label: still failing after ${elapsed}s / $attempt attempts (${HEALTH_POLL_DEADLINE}s deadline exceeded)"
+        fi
+        sleep "$HEALTH_POLL_INTERVAL"
+    done
+}
 
 cd "$REPO_DIR"
 
@@ -162,22 +206,25 @@ fi
 sudo systemctl stop aether-api.service aether-web.service aether-worker.service || fail "service stop failed"
 sleep 2
 sudo systemctl start aether-api.service aether-web.service aether-worker.service || fail "service start failed"
-sleep 5
 for svc in aether-api aether-web aether-worker; do
     systemctl is-active --quiet "$svc.service" || fail "$svc.service is not active after restart"
 done
 
 # --- Step 11: the 3 exact health checks (runbook §5 Phase 5, items 3/3b/4) -
+# Each check polls with a retry+deadline (see wait_healthy above) instead of
+# a single fixed-delay attempt — real service warmup time varies and a
+# one-shot check raced it on the first real deploy (see the defect writeup
+# referenced above wait_healthy's definition).
 # The two nginx-fronted checks must send X-Original-Host: nginx proxies the
 # real upstream Host from that header, not from the Host this curl sends
 # (see NGINX_ORIGINAL_HOST comment above) — omitting it makes Next.js see an
 # empty Host and return 400 on every real deploy (round-3 review blocker).
-curl -sf -H "Host: $NGINX_HOST" -H "X-Original-Host: $NGINX_ORIGINAL_HOST" http://localhost/api/health >/dev/null \
-    || fail "health check 1/3 failed: GET /api/health via nginx"
-curl -sf --max-time 10 http://127.0.0.1:3000/api/health >/dev/null \
-    || fail "health check 2/3 failed: GET 127.0.0.1:3000/api/health (next /api rewrite, §0.4)"
-curl -sf -H "Host: $NGINX_HOST" -H "X-Original-Host: $NGINX_ORIGINAL_HOST" http://localhost/ >/dev/null \
-    || fail "health check 3/3 failed: GET / via nginx"
+wait_healthy "health check 1/3 (GET /api/health via nginx)" \
+    curl -sf -H "Host: $NGINX_HOST" -H "X-Original-Host: $NGINX_ORIGINAL_HOST" http://localhost/api/health
+wait_healthy "health check 2/3 (GET 127.0.0.1:3000/api/health, next /api rewrite, §0.4)" \
+    curl -sf --max-time 10 http://127.0.0.1:3000/api/health
+wait_healthy "health check 3/3 (GET / via nginx)" \
+    curl -sf -H "Host: $NGINX_HOST" -H "X-Original-Host: $NGINX_ORIGINAL_HOST" http://localhost/
 
 log "deploy successful: $NEW_HEAD"
 exit 0
