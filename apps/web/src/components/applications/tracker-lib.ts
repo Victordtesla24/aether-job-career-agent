@@ -259,6 +259,12 @@ const MANUAL_STEP_LABELS: Readonly<Record<string, string>> = {
   no_automatable_channel: "No automatic submission path exists for this posting yet",
   submit_control_not_found: "Aether filled the form but could not find its submit button",
   no_confirmation: "Aether submitted the form but the site did not confirm it",
+  // ORCHESTRATOR RULING U5-F3: an ASSISTED channel is not a failure — the
+  // artifacts are done and only the click is the user's.
+  assisted_manual_submit: "Ready to submit — this platform needs your click",
+  // Stale-approval guard: the approval aged out, so the submission was NOT
+  // driven. One click re-confirms it.
+  approval_expired: "Approval expired — reconfirm to submit",
 };
 
 /** Human headline for a manual-step reason code. Unknown codes de-slugify
@@ -356,15 +362,40 @@ export function describeTransmission(app: TransmissionFacts): TransmissionSummar
 /** Every channel the site-apply automation is allowed to drive a browser
  *  against (mirrors `apps/api/app/services/apply_channel_resolver.py`
  *  `AUTOMATABLE_CHANNELS` — kept as a literal copy, not an import, because
- *  this is a `next/server`-free pure FE module and the two lists are pinned
- *  together by `tracker-lib.test.ts`). */
-const FE_AUTOMATABLE_CHANNELS: ReadonlySet<string> = new Set([
-  "ashby",
-  "greenhouse",
+ *  this is a `next/server`-free pure FE module). The copy is PINNED against
+ *  the backend set by `apps/api/tests/test_u5_invariant_sweep.py`
+ *  (`test_the_frontend_mirror_of_the_allowlist_matches_the_backend`), which
+ *  reads this file — so drift fails a test rather than silently changing what
+ *  the UI promises. */
+const FE_AUTOMATABLE_CHANNELS: ReadonlySet<string> = new Set(["ashby", "greenhouse"]);
+
+/** Channels whose destination Aether resolved exactly and deliberately does
+ *  NOT click through (ORCHESTRATOR RULING U5-F3): no dedicated form parser
+ *  exists for them, and auto-submitting a real application on a best-effort
+ *  schema is the worst failure this product can have. Aether still prepares
+ *  the tailored résumé + cover letter; the user submits them. Pinned against
+ *  the backend `ASSISTED_CHANNELS` by the same test. */
+const FE_ASSISTED_CHANNELS: ReadonlySet<string> = new Set([
   "lever",
   "smartrecruiters",
   "generic",
 ]);
+
+/** The PLATFORM's own name, for copy that addresses the user about where they
+ *  must click — distinct from {@link channelLabel}, which names the artifact
+ *  ("Lever application form"). Never invents a name for an unknown code. */
+const PLATFORM_LABELS: Readonly<Record<string, string>> = {
+  ashby: "Ashby",
+  greenhouse: "Greenhouse",
+  lever: "Lever",
+  smartrecruiters: "SmartRecruiters",
+  generic: "this employer's own form",
+};
+
+export function platformLabel(channel: string | null | undefined): string {
+  if (!channel) return "this employer's own form";
+  return PLATFORM_LABELS[channel] ?? channel;
+}
 
 /**
  * Single-sourced, honest reason an application has NOT been transmitted
@@ -392,6 +423,18 @@ export function notTransmittedReason(app: {
     return (
       "This is a Seek posting — Aether does not automate Seek applications " +
       "(policy). Apply on Seek yourself."
+    );
+  }
+  if (app.applyChannel && FE_ASSISTED_CHANNELS.has(app.applyChannel)) {
+    // ORCHESTRATOR RULING U5-F3: this posting's destination IS resolved, so
+    // saying "Aether has not resolved where to submit it" would be false, and
+    // saying "automatic submission … not enabled yet" would promise something
+    // that is never coming for this platform. State the true position: the
+    // work is done, the click is the user's.
+    return (
+      "Your tailored résumé and cover letter are ready to submit — " +
+      `${platformLabel(app.applyChannel)} needs your click. Open the posting ` +
+      "and submit them there."
     );
   }
   if (app.applyChannel && FE_AUTOMATABLE_CHANNELS.has(app.applyChannel)) {

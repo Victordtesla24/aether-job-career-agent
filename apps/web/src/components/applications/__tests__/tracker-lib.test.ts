@@ -553,3 +553,59 @@ describe("U5 describeTransmission", () => {
     expect(t.evidenceNote).toBeNull();
   });
 });
+
+// ---------------------------------------------------------------------------
+// ORCHESTRATOR RULING U5-F3 (2026-08-14, binding) — `lever` and
+// `smartrecruiters` (and `generic`) left the automation allowlist: they had no
+// dedicated form parser, so automating them meant a best-effort schema driving
+// a real submit click on a real employer's form. They are ASSISTED channels
+// now — Aether prepares the tailored résumé and cover letter and hands the
+// user the direct link. The FE copy has to say exactly that, because the FE
+// copy is what the user believes.
+// ---------------------------------------------------------------------------
+describe("U5-F3 assisted channels (lever / smartrecruiters / generic)", () => {
+  it("says the artifacts are ready and that the platform needs the user's click", () => {
+    for (const channel of ["lever", "smartrecruiters", "generic"]) {
+      const reason = notTransmittedReason({ autoSubmittable: false, applyChannel: channel });
+      expect(reason).toContain("ready to submit");
+      expect(reason).toContain("needs your click");
+      // The one thing it must never do is imply Aether will submit it later.
+      expect(reason).not.toContain("not enabled on this deployment yet");
+    }
+  });
+
+  it("names the platform instead of a vague 'the employer's site'", () => {
+    expect(notTransmittedReason({ autoSubmittable: false, applyChannel: "lever" })).toContain(
+      "Lever",
+    );
+    expect(
+      notTransmittedReason({ autoSubmittable: false, applyChannel: "smartrecruiters" }),
+    ).toContain("SmartRecruiters");
+  });
+
+  it("keeps the 'not enabled yet' wording ONLY for the two automatable channels", () => {
+    for (const channel of ["ashby", "greenhouse"]) {
+      expect(notTransmittedReason({ autoSubmittable: false, applyChannel: channel })).toContain(
+        "not enabled on this deployment yet",
+      );
+    }
+  });
+
+  it("still distinguishes an unresolved posting from an assisted one", () => {
+    expect(notTransmittedReason({ autoSubmittable: false, applyChannel: "unknown" })).toContain(
+      "has not resolved where to submit it",
+    );
+  });
+});
+
+describe("U5 closing round — new manual-step reasons are legible", () => {
+  it("labels the assisted-channel outcome as ready-for-your-click, not a failure", () => {
+    expect(manualStepLabel("assisted_manual_submit")).toBe(
+      "Ready to submit — this platform needs your click",
+    );
+  });
+
+  it("labels an expired approval as reconfirmable, not as a broken submission", () => {
+    expect(manualStepLabel("approval_expired")).toBe("Approval expired — reconfirm to submit");
+  });
+});

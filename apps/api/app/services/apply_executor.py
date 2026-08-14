@@ -438,7 +438,18 @@ def _parse_generic(soup: Any) -> list[dict[str, Any]]:
 
 
 def parse_form_schema(html: str, *, channel: str) -> list[dict[str, Any]]:
-    """The real field schema of an application page, per ATS dialect."""
+    """The real field schema of an application page, per ATS dialect.
+
+    The ``_parse_generic`` fallback below is NOT a submission path any more:
+    ORCHESTRATOR RULING U5-F3 (2026-08-14) removed every channel that lacked a
+    dedicated parser from
+    :data:`app.services.apply_channel_resolver.AUTOMATABLE_CHANNELS`, so the
+    sweep only ever calls this with ``ashby`` or ``greenhouse``. The fallback
+    stays because it is a legitimate schema READER (and the seam Track-2 slice
+    U5c builds the lever/smartrecruiters dialects against); it is
+    ``AUTOMATABLE_CHANNELS`` — pinned by ``tests/test_u5_invariant_sweep.py`` —
+    that decides what may be clicked, not this dispatch.
+    """
     soup = _soup(html)
     if channel == "ashby":
         return _parse_ashby(soup)

@@ -158,3 +158,54 @@ describe("U5 — a blocked application is shown as actionable, never as 'prepare
     expect(line.textContent).toContain("prepared only");
   });
 });
+
+/** Approved more than AETHER_APPROVAL_MAX_AGE_DAYS ago: the sweep refused to
+ *  act on a stale confirmation and asked for a fresh one (backend
+ *  apps/api/app/workers/apply_sweep.py `_expire_stale_approval`). */
+const EXPIRED_APPROVAL_APP = {
+  ...BASE_APP,
+  applyChannel: "ashby",
+  manualStepReason: "approval_expired",
+  manualStepDetail:
+    "You approved this application 31 days ago. Aether does not submit an " +
+    "approval older than 7 days without a fresh confirmation — reconfirm to submit it.",
+  manualStepAt: "2026-08-13T09:30:00Z",
+};
+
+describe("U5 closing round — an expired approval is reconfirmable in one click", () => {
+  it("shows the expired-approval headline and a reconfirm button", async () => {
+    mockBoard(EXPIRED_APPROVAL_APP);
+    render(<ApplicationsPage />);
+    fireEvent.click(await screen.findByText("Senior Product Owner"));
+
+    const block = await screen.findByTestId("application-manual-step-block");
+    expect(block.textContent).toContain("Approval expired — reconfirm to submit");
+    expect(await screen.findByTestId("manual-step-reconfirm-btn")).toBeTruthy();
+  });
+
+  it("the button calls the server-side re-approve path for THIS application", async () => {
+    mockBoard(EXPIRED_APPROVAL_APP);
+    render(<ApplicationsPage />);
+    fireEvent.click(await screen.findByText("Senior Product Owner"));
+    fireEvent.click(await screen.findByTestId("manual-step-reconfirm-btn"));
+
+    await vi.waitFor(() => {
+      expect(
+        apiRequest.mock.calls.some(
+          (call) =>
+            call[0] === "/applications/app-1/reconfirm-submission" &&
+            (call[1] as { method?: string } | undefined)?.method === "POST",
+        ),
+      ).toBe(true);
+    });
+  });
+
+  it("never offers the reconfirm button for an obstacle re-approving cannot fix", async () => {
+    mockBoard(CAPTCHA_APP);
+    render(<ApplicationsPage />);
+    fireEvent.click(await screen.findByText("Senior Product Owner"));
+
+    await screen.findByTestId("application-manual-step-block");
+    expect(screen.queryByTestId("manual-step-reconfirm-btn")).toBeNull();
+  });
+});

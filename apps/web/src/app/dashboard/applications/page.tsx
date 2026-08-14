@@ -31,6 +31,7 @@ import {
   fetchTrackerApplications,
   moveApplication,
   movePipelineJob,
+  reconfirmSubmission,
   type AgentConfig,
   type ClearPipelineResult,
   type SankeyData,
@@ -625,6 +626,25 @@ export default function ApplicationsPage() {
     }
   };
 
+  /** One-click re-approve for an approval the sweep refused as stale.
+   *
+   * Nothing is submitted here: the server creates a FRESH approval and clears
+   * the expired state, which is what makes the application eligible for the
+   * sweep again. The panel is reloaded from the server afterwards so the card
+   * shows the real new state rather than an optimistic guess. */
+  const reconfirm = async (app: TrackerApplication) => {
+    setSubmitting(true);
+    try {
+      await reconfirmSubmission(app.id);
+      setDetail(await fetchTrackerApplication(app.id));
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to re-confirm this application");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   // Clear Pipeline gate — mirrored from the bulk-apply confirmation gate
   // pattern on the Jobs page (MV-job-discovery-002 § lines 562-621).
   const openClearGate = (trigger: HTMLElement | null) => {
@@ -988,6 +1008,22 @@ export default function ApplicationsPage() {
                 </p>
               ) : null}
               <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                {/* U5 stale-approval guard: the ONLY obstacle a re-approval
+                    actually fixes is an aged-out approval. Offering this
+                    button for a CAPTCHA or a login wall would promise the
+                    user a fix that cannot work. */}
+                {detail.manualStepReason === "approval_expired" ? (
+                  <button
+                    type="button"
+                    data-testid="manual-step-reconfirm-btn"
+                    disabled={submitting}
+                    onClick={() => void reconfirm(detail)}
+                    className="rounded-lg bg-aether-violet px-2.5 py-1.5 text-xs font-semibold text-white transition hover:bg-aether-violet/80 disabled:opacity-50"
+                  >
+                    <i className="fa-solid fa-rotate-right mr-1.5 text-[10px]" aria-hidden="true" />
+                    Reconfirm this submission
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   data-testid="manual-step-download-resume-btn"

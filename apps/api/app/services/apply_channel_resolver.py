@@ -17,6 +17,10 @@ Two rules are absolute here:
   robots.txt names an ``anthropic-ai`` user-agent group and Disallows
   ``*/job/`` by name. A Seek URL therefore resolves to ``seek-manual``, which
   is deliberately NOT in :data:`AUTOMATABLE_CHANNELS`.
+* **A platform with no dedicated parser is never auto-submitted.**
+  ORCHESTRATOR RULING U5-F3 (2026-08-14): ``lever``/``smartrecruiters``/
+  ``generic`` resolve exactly as before, but they are ASSISTED, not automated —
+  see :data:`AUTOMATABLE_CHANNELS` and :data:`ASSISTED_CHANNELS`.
 * **An unresolved redirector is "unknown", never a guess.** Adzuna/CloudFront
   rate-limited this VM's egress IP with ``429 Retry-After: 3600`` during the
   scout's probe. A resolver that answered "probably Ashby" on a 429 would be
@@ -51,10 +55,58 @@ CHANNELS = frozenset(
 )
 
 #: Channels the apply-executor is allowed to drive a browser against.
+#:
+#: ORCHESTRATOR RULING U5-F3 (2026-08-14, binding, ``ORCHESTRATOR-RULING-U5-F3.md``):
+#: ``lever``, ``smartrecruiters`` and ``generic`` were REMOVED. Only ``ashby``
+#: and ``greenhouse`` have a dedicated dialect parser
+#: (``apply_executor._parse_ashby`` / ``_parse_greenhouse``) pinned against a
+#: captured real page; every other channel fell through to
+#: ``_parse_generic``'s best-effort schema — i.e. an untested parser deciding
+#: what to type into, and when to click submit on, a subscriber's REAL job
+#: application. That is the worst failure mode this product has, so those
+#: channels are ASSISTED instead (see :data:`ASSISTED_CHANNELS`). Dedicated
+#: parsers + tests land in Track-2 slice U5c, after which they re-enter here
+#: legitimately.
+#:
 #: ``seek-manual`` is excluded BY RULING (ADR-SEEK-V3), ``email`` belongs to
 #: the existing W-SUB Gmail path, and ``unknown`` means we honestly do not know
 #: where the application goes.
-AUTOMATABLE_CHANNELS = frozenset({"ashby", "greenhouse", "lever", "smartrecruiters", "generic"})
+#:
+#: The membership rule is enforced as an INVARIANT, not by convention:
+#: ``tests/test_u5_invariant_sweep.py`` fails if any member of this set is
+#: parsed by the generic fallback or lacks a real-page fixture + executor
+#: tests. Adding a platform here without a parser is a failing test.
+AUTOMATABLE_CHANNELS = frozenset({"ashby", "greenhouse"})
+
+#: Channels whose destination we resolved EXACTLY and deliberately do not click
+#: through: Aether prepares the tailored résumé + cover letter and hands the
+#: user the direct application URL ("ready to submit — this platform needs your
+#: click"). Honest and complete, rather than half-automated.
+ASSISTED_CHANNELS = frozenset({"lever", "smartrecruiters", "generic"})
+
+#: Channels that submit nothing here BY DEFINITION: ``email`` is the existing
+#: W-SUB Gmail path's, ``seek-manual`` is refused by ADR-SEEK-V3, and
+#: ``unknown`` means we could not resolve a destination at all. Split out so
+#: the three dispositions PARTITION :data:`CHANNELS` — a new channel added
+#: without a decision about how it is submitted fails the invariant sweep
+#: instead of silently inheriting the "we don't know where this goes" copy.
+TERMINAL_NON_SUBMITTING_CHANNELS = frozenset({"email", "seek-manual", "unknown"})
+
+#: The platform's own name, for copy addressed to the user about where they
+#: have to click. Never fabricates a name for an unrecognised code.
+_PLATFORM_LABELS: dict[str, str] = {
+    "ashby": "Ashby",
+    "greenhouse": "Greenhouse",
+    "lever": "Lever",
+    "smartrecruiters": "SmartRecruiters",
+    "generic": "this employer's own form",
+}
+
+
+def platform_label(channel: str) -> str:
+    """Human name of the platform behind ``channel`` (mirrors the FE's
+    ``tracker-lib.ts`` ``platformLabel``)."""
+    return _PLATFORM_LABELS.get(channel, "this employer's own form")
 
 #: Hosts that ARE the final application system (the scout's live first-hop
 #: resolution confirmed these shapes carry no redirector in front of them).

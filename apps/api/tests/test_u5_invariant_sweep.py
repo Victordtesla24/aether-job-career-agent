@@ -51,11 +51,19 @@ the executor internals already covered by ``test_u5b_apply_executor.py``):
 from __future__ import annotations
 
 import json
+import re
+from pathlib import Path
 
 import pytest
 
 from app.db import get_connection, new_id
 from app.repositories.approval import ApprovalRepository
+
+_TESTS_DIR = Path(__file__).resolve().parent
+_REPO_ROOT = _TESTS_DIR.parents[2]
+_APPLY_PAGE_FIXTURES = _TESTS_DIR / "fixtures" / "apply_pages"
+_EXECUTOR_TESTS = _TESTS_DIR / "test_u5b_apply_executor.py"
+_TRACKER_LIB = _REPO_ROOT / "apps" / "web" / "src" / "components" / "applications" / "tracker-lib.ts"
 
 
 @pytest.fixture()
@@ -66,7 +74,7 @@ def user_id(auth_headers) -> str:
     return decode_access_token(token)["userId"]
 
 
-def _make_job(conn, user_id: str) -> str:
+def _make_job(conn, user_id: str, *, source_url: str | None = None) -> str:
     job_id = new_id()
     with conn.cursor() as cur:
         cur.execute(
@@ -77,7 +85,10 @@ def _make_job(conn, user_id: str) -> str:
             (
                 job_id, user_id, "Senior Engineer", "Xero", "Sydney NSW", False,
                 "Build things.", json.dumps([]), "ashby",
-                f"https://jobs.ashbyhq.com/xero/{job_id}/application", 78.0,
+                source_url
+                if source_url is not None
+                else f"https://jobs.ashbyhq.com/xero/{job_id}/application",
+                78.0,
             ),
         )
     conn.commit()
@@ -110,9 +121,9 @@ def _make_application(conn, user_id: str, job_id: str, resume_id: str) -> str:
     return app_id
 
 
-def _seed_approved(conn, user_id: str) -> tuple[str, str]:
+def _seed_approved(conn, user_id: str, *, source_url: str | None = None) -> tuple[str, str]:
     """``(application_id, approval_id)`` for an approved, non-terminal app."""
-    job_id = _make_job(conn, user_id)
+    job_id = _make_job(conn, user_id, source_url=source_url)
     resume_id = _make_resume(conn, user_id, source_job_id=job_id)
     app_id = _make_application(conn, user_id, job_id, resume_id)
     approval = ApprovalRepository().create(
@@ -330,3 +341,249 @@ class TestNoPrepatedOnlyInvariant:
         assert summary["skipped"] == 1
         assert summary["manual_step"] == 0
         assert summary["transmitted"] == 0
+
+
+# ---------------------------------------------------------------------------
+# ORCHESTRATOR RULING U5-F3 (2026-08-14, binding) — the automation allowlist
+# may only contain platforms with a DEDICATED, TESTED parser.
+#
+# `ORCHESTRATOR-RULING-U5-F3.md`: "an untested generic parser auto-submitting a
+# subscriber's REAL job application is the worst failure mode this product can
+# have". `lever` and `smartrecruiters` were in `AUTOMATABLE_CHANNELS` with no
+# dialect parser behind them — `parse_form_schema` fell through to
+# `_parse_generic`, i.e. a best-effort schema drove a real submit click on a
+# real employer's form. `generic` is the same defect by construction.
+#
+# These tests pin the ruling as an INVARIANT rather than as a list: adding a
+# platform to `AUTOMATABLE_CHANNELS` without a dedicated parser + fixture-backed
+# executor tests fails here, whoever adds it and whenever.
+# ---------------------------------------------------------------------------
+
+#: Sentinel field name the stubbed generic fallback emits, so "this channel was
+#: parsed by the best-effort fallback" is observable instead of inferred.
+_GENERIC_FALLBACK_MARKER = "__aether_generic_fallback_probe__"
+
+#: A form every parser can chew on — the probe is about WHICH parser runs, not
+#: about what it extracts.
+_PROBE_HTML = (
+    '<form><label for="email">Email *</label>'
+    '<input id="email" name="email" type="email" required></form>'
+)
+
+
+def _channels_riding_the_generic_fallback(channels, monkeypatch) -> list[str]:
+    """Which of ``channels`` are parsed by ``_parse_generic``, behaviourally.
+
+    Stubs the fallback and asks ``parse_form_schema`` for each channel: if the
+    sentinel comes back, that channel has NO dedicated dialect parser and is
+    being auto-submitted on a best-effort schema.
+    """
+    from app.services import apply_executor
+
+    monkeypatch.setattr(
+        apply_executor,
+        "_parse_generic",
+        lambda soup: [
+            {
+                "name": _GENERIC_FALLBACK_MARKER,
+                "label": "",
+                "kind": "text",
+                "required": False,
+                "options": [],
+                "scope": None,
+            }
+        ],
+    )
+    riding: list[str] = []
+    for channel in sorted(channels):
+        fields = apply_executor.parse_form_schema(_PROBE_HTML, channel=channel)
+        if any(str(field.get("name")) == _GENERIC_FALLBACK_MARKER for field in fields):
+            riding.append(channel)
+    return riding
+
+
+def _channels_without_test_coverage(channels) -> list[str]:
+    """Which of ``channels`` lack a REAL captured page fixture + executor tests.
+
+    "Dedicated parser" is only half the bar the ruling sets; the other half is
+    that the parser is pinned against a page the platform actually serves.
+    """
+    executor_tests = _EXECUTOR_TESTS.read_text() if _EXECUTOR_TESTS.exists() else ""
+    uncovered: list[str] = []
+    for channel in sorted(channels):
+        fixtures = list(_APPLY_PAGE_FIXTURES.glob(f"*{channel}*real*.html"))
+        referenced = f'channel="{channel}"' in executor_tests
+        if not fixtures or not referenced:
+            uncovered.append(channel)
+    return uncovered
+
+
+class TestAutomatableChannelsAreParserBacked:
+    def test_every_automatable_channel_has_a_dedicated_parser(self, monkeypatch):
+        from app.services.apply_channel_resolver import AUTOMATABLE_CHANNELS
+
+        riding = _channels_riding_the_generic_fallback(AUTOMATABLE_CHANNELS, monkeypatch)
+        assert riding == [], (
+            f"{riding} are in AUTOMATABLE_CHANNELS but parse_form_schema falls "
+            "through to _parse_generic for them — a best-effort schema would "
+            "drive a REAL submit click on a REAL employer's form "
+            "(ORCHESTRATOR-RULING-U5-F3.md)"
+        )
+
+    def test_every_automatable_channel_has_a_real_page_fixture_and_executor_tests(self):
+        from app.services.apply_channel_resolver import AUTOMATABLE_CHANNELS
+
+        uncovered = _channels_without_test_coverage(AUTOMATABLE_CHANNELS)
+        assert uncovered == [], (
+            f"{uncovered} are automatable but have no captured real-page fixture "
+            "in tests/fixtures/apply_pages and/or no executor test exercising "
+            'channel="<name>" — the ruling requires dedicated parser AND tests'
+        )
+
+    def test_an_uncovered_platform_added_to_the_set_fails_the_invariant(self, monkeypatch):
+        """Negative control: the sweep above must actually be able to fail.
+
+        Without this, a green invariant proves nothing — it could be green
+        because it checks nothing.
+        """
+        from app.services.apply_channel_resolver import AUTOMATABLE_CHANNELS
+
+        candidate = AUTOMATABLE_CHANNELS | {"workday"}
+        assert _channels_riding_the_generic_fallback(candidate, monkeypatch) == ["workday"]
+        assert _channels_without_test_coverage(candidate) == ["workday"]
+
+    def test_lever_smartrecruiters_and_generic_are_assisted_not_automated(self):
+        """The ruling's own disposition, pinned literally.
+
+        Track-2 slice U5c builds dedicated lever/smartrecruiters parsers with
+        full TDD; until then these three are ASSISTED channels and this
+        assertion is what has to be deliberately changed to re-admit them.
+        """
+        from app.services.apply_channel_resolver import (
+            ASSISTED_CHANNELS,
+            AUTOMATABLE_CHANNELS,
+        )
+
+        for channel in ("lever", "smartrecruiters", "generic"):
+            assert channel not in AUTOMATABLE_CHANNELS
+            assert channel in ASSISTED_CHANNELS
+        assert AUTOMATABLE_CHANNELS == frozenset({"ashby", "greenhouse"})
+
+    def test_every_channel_is_classified_exactly_once(self):
+        """No channel may sit outside the three dispositions.
+
+        A new channel added to ``CHANNELS`` without a decision about how it is
+        submitted would otherwise land in the ``_no_channel_reason`` catch-all
+        and be described to the user as "could not determine where this posting
+        goes" — false, when we resolved it perfectly well.
+        """
+        from app.services.apply_channel_resolver import (
+            ASSISTED_CHANNELS,
+            AUTOMATABLE_CHANNELS,
+            CHANNELS,
+            TERMINAL_NON_SUBMITTING_CHANNELS,
+        )
+
+        assert not AUTOMATABLE_CHANNELS & ASSISTED_CHANNELS
+        assert not AUTOMATABLE_CHANNELS & TERMINAL_NON_SUBMITTING_CHANNELS
+        assert not ASSISTED_CHANNELS & TERMINAL_NON_SUBMITTING_CHANNELS
+        assert (
+            AUTOMATABLE_CHANNELS | ASSISTED_CHANNELS | TERMINAL_NON_SUBMITTING_CHANNELS
+        ) == CHANNELS
+
+    def test_the_frontend_mirror_of_the_allowlist_matches_the_backend(self):
+        """The REAL cross-stack pin (round-3 MUST-FIX 4).
+
+        ``tracker-lib.ts`` keeps a literal copy of these sets to decide what the
+        UI promises about a channel. A copy that drifts is a promise the backend
+        does not keep, so the copy is pinned HERE — where both sides are
+        readable — instead of being justified by a comment.
+        """
+        from app.services.apply_channel_resolver import (
+            ASSISTED_CHANNELS,
+            AUTOMATABLE_CHANNELS,
+        )
+
+        source = _TRACKER_LIB.read_text()
+
+        def literal_set(name: str) -> frozenset[str]:
+            match = re.search(rf"{name}[^=]*=\s*new Set\(\[(.*?)\]\)", source, re.S)
+            assert match is not None, f"{name} not found in {_TRACKER_LIB}"
+            return frozenset(re.findall(r'"([a-z0-9-]+)"', match.group(1)))
+
+        assert literal_set("FE_AUTOMATABLE_CHANNELS") == AUTOMATABLE_CHANNELS
+        assert literal_set("FE_ASSISTED_CHANNELS") == ASSISTED_CHANNELS
+
+
+class TestAssistedChannelsAreNeverAutoSubmitted:
+    def test_a_lever_posting_reaches_an_honest_assisted_state_without_a_browser(
+        self, db_session, user_id, monkeypatch
+    ):
+        """THE F3 defect, end to end: a Lever application must not be driven.
+
+        Runs the REAL ``_attempt_transmission`` (not the orchestration seam) so
+        the assertion covers the actual routing decision, and makes both browser
+        entry points explode if anything reaches them — "never auto-submit
+        through the generic best-effort path on a real employer site".
+        """
+        from app.services import apply_executor
+        from app.workers import apply_sweep
+
+        app_id, _approval_id = _seed_approved(
+            db_session, user_id, source_url="https://jobs.lever.co/xero/abc-123/apply"
+        )
+
+        def _exploding(*args, **kwargs):
+            raise AssertionError("an ASSISTED channel reached the apply browser")
+
+        monkeypatch.setattr(apply_executor, "fetch_apply_page", _exploding)
+        monkeypatch.setattr(apply_executor, "execute_site_application", _exploding)
+
+        summary = apply_sweep.sweep_pending_transmissions(user_id)
+        assert summary["processed"] == 1
+        assert summary["manual_step"] == 1
+        assert summary["transmitted"] == 0
+
+        with db_session.cursor() as cur:
+            cur.execute(
+                'SELECT "manualStepReason", "manualStepDetail", "transmittedAt", '
+                '"applyChannel" FROM "Application" WHERE "id" = %s',
+                (app_id,),
+            )
+            reason, detail, transmitted_at, channel = cur.fetchone()
+        assert channel == "lever"
+        assert transmitted_at is None
+        assert reason == "assisted_manual_submit"
+        # Honest, actionable, and specific: names the platform, says a click is
+        # needed, and carries the DIRECT url — never "we could not determine
+        # where this goes", which would be false for a resolved Lever posting.
+        assert "needs your click" in detail
+        assert "https://jobs.lever.co/xero/abc-123/apply" in detail
+        assert "could not determine" not in detail
+
+    def test_an_unresolved_posting_still_says_it_is_unresolved(
+        self, db_session, user_id, monkeypatch
+    ):
+        """The demotion must not blur the two honest states into one.
+
+        ``unknown`` means we do not know where the application goes; ASSISTED
+        means we know exactly and deliberately do not click for you.
+        """
+        from app.services import apply_executor
+        from app.workers import apply_sweep
+
+        app_id, _ = _seed_approved(db_session, user_id, source_url="")
+
+        def _exploding(*args, **kwargs):
+            raise AssertionError("an unresolved posting reached the apply browser")
+
+        monkeypatch.setattr(apply_executor, "fetch_apply_page", _exploding)
+        monkeypatch.setattr(apply_executor, "execute_site_application", _exploding)
+
+        apply_sweep.sweep_pending_transmissions(user_id)
+        with db_session.cursor() as cur:
+            cur.execute(
+                'SELECT "manualStepReason" FROM "Application" WHERE "id" = %s', (app_id,)
+            )
+            (reason,) = cur.fetchone()
+        assert reason == "no_automatable_channel"

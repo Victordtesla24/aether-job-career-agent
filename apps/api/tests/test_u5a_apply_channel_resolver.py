@@ -148,9 +148,13 @@ class TestDirectDomainClassification:
     def test_unrecognized_employer_domain_is_generic_not_unknown(self):
         """A direct employer-site posting with no recognized ATS fingerprint
         (e.g. a bespoke careers page, or a Google-Forms-style application)
-        is a best-effort automation candidate, not a dead end (U5 MANDATE
-        SHARPENED rule 2: 'generic form-fill best-effort ... incl.
-        Google-Forms-style pages')."""
+        classifies as ``generic`` — a RESOLVED destination, not a dead end.
+
+        What ``generic`` means changed by ORCHESTRATOR RULING U5-F3
+        (2026-08-14): it is an ASSISTED channel, never auto-submitted, because
+        no dedicated parser exists for a form nobody has ever seen. The
+        classification asserted here is unchanged; only the disposition is,
+        and that is pinned in ``test_u5_invariant_sweep.py``."""
         from app.services.apply_channel_resolver import resolve_apply_channel
 
         result = resolve_apply_channel(

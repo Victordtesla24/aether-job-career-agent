@@ -271,6 +271,118 @@ def get_application(application_id: str, current_user: CurrentUser) -> dict[str,
     return _with_submission(rows)[0]
 
 
+@router.post("/{application_id}/reconfirm-submission")
+def reconfirm_submission(application_id: str, current_user: CurrentUser) -> dict[str, Any]:
+    """One-click re-approval for a submission whose approval aged out (U5).
+
+    The sweep refuses to auto-execute an approval older than
+    ``AETHER_APPROVAL_MAX_AGE_DAYS`` (``apply_sweep._expire_stale_approval``)
+    and records ``manualStepReason = 'approval_expired'`` instead. This is the
+    honest way back: it creates a FRESH ``ApprovalRequest`` through the
+    EXISTING approval machinery (same repository, same approve() path, same
+    audit trail) and clears ONLY the expired state.
+
+    Deliberately narrow:
+
+    * it transmits NOTHING — it re-arms the gate, and the sweep (when the
+      operator has it enabled) does the work under all the usual guards;
+    * it refuses (409) for any other manual-step reason. A CAPTCHA or a login
+      wall is not solved by re-approving, and wiping that state would put the
+      row straight back into a loop that re-discovers the same obstacle;
+    * it never touches an application it does not own (404).
+    """
+    from app.repositories.admin import write_audit
+    from app.repositories.approval import ApprovalRepository
+
+    user_id = current_user["id"]
+    ensure_application_manual_step_columns()
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT "jobId", "manualStepReason" FROM "Application" '
+                'WHERE "id" = %s AND "userId" = %s',
+                (application_id, user_id),
+            )
+            row = cur.fetchone()
+            if row is None:
+                raise HTTPException(status.HTTP_404_NOT_FOUND, "Application not found")
+            job_id, manual_step_reason = row
+            if manual_step_reason != "approval_expired":
+                raise HTTPException(
+                    status.HTTP_409_CONFLICT,
+                    (
+                        "This application is not waiting on an expired approval, "
+                        "so there is nothing to re-confirm."
+                        if not manual_step_reason
+                        else (
+                            "This application is blocked by something a re-approval "
+                            f"cannot fix ({manual_step_reason}) — nothing was changed."
+                        )
+                    ),
+                )
+            cur.execute(
+                '''SELECT "payload" FROM "ApprovalRequest"
+                   WHERE "applicationId" = %s AND "userId" = %s
+                     AND "type" = 'application_submit'::"ApprovalType"
+                   ORDER BY "createdAt" DESC LIMIT 1''',
+                (application_id, user_id),
+            )
+            prior = cur.fetchone()
+    if prior is None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "This application has never been approved for submission, so there "
+            "is nothing to re-confirm.",
+        )
+    payload = prior[0] if isinstance(prior[0], dict) else {}
+    if not payload:
+        payload = {"kind": "site_apply", "job_id": job_id, "application_id": application_id}
+
+    repo = ApprovalRepository()
+    fresh = repo.create(user_id, "application_submit", payload, application_id=application_id)
+    approved = repo.approve(fresh["id"], user_id)
+    if approved is None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Could not re-confirm this application — please try again.",
+        )
+    # Only NOW is the expired state cleared, and only while it is still the
+    # expired state: if the approve above had failed, the row would keep its
+    # honest "reconfirm to submit" message instead of silently re-entering the
+    # queue with the same stale approval.
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                '''UPDATE "Application"
+                   SET "manualStepReason" = NULL, "manualStepDetail" = NULL,
+                       "manualStepAt" = NULL, "updatedAt" = NOW()
+                   WHERE "id" = %s AND "userId" = %s
+                     AND "manualStepReason" = 'approval_expired' ''',
+                (application_id, user_id),
+            )
+        conn.commit()
+    write_audit(
+        user_id,
+        "approval.reconfirm",
+        target_type="approval",
+        target_id=approved["id"],
+        detail={
+            "applicationId": application_id,
+            "reason": "approval_expired",
+            "previousApprovalReplaced": True,
+        },
+    )
+    return {
+        "reconfirmed": True,
+        "approvalId": approved["id"],
+        "applicationId": application_id,
+        "detail": (
+            "Approval refreshed. Nothing has been submitted yet — this "
+            "re-arms the submission gate with today's confirmation."
+        ),
+    }
+
+
 class SubmitRequest(BaseModel):
     """Payload for marking an application as submitted on the company site."""
 

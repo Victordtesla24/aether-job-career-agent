@@ -30,8 +30,22 @@ This module is the thing that drives them. Every pass:
   not ours to redo.
 
 Channel precedence is the mandate's: a posting that publishes an apply address
-goes through the EXISTING W-SUB Gmail path untouched; everything else goes to
-the site apply-executor; Seek never goes anywhere (ADR-SEEK-V3).
+goes through the EXISTING W-SUB Gmail path untouched; a channel with a
+dedicated, tested form parser goes to the site apply-executor; every other
+resolved platform is ASSISTED (prepared artifacts + the direct link + "this
+platform needs your click", ORCHESTRATOR RULING U5-F3); Seek never goes
+anywhere (ADR-SEEK-V3).
+
+Two bounds make this safe to point at the real 339-row backlog:
+
+* **Stale approvals are never executed.** An approval older than
+  ``AETHER_APPROVAL_MAX_AGE_DAYS`` (default 7) is not acted on; it is
+  surfaced for a one-click re-confirmation instead
+  (:func:`_expire_stale_approval` → ``POST /applications/{id}/reconfirm-submission``).
+  A weeks-old click is not consent to send an application today.
+* **Every pass is one bounded batch**, ``AETHER_APPLY_SWEEP_BATCH`` (default
+  10), taken OLDEST APPROVAL FIRST, and the summary/log states how many
+  applications remain queued — counted for real after the pass, not inferred.
 
 KNOWN BOUND, stated rather than hidden: a TRANSPORT failure (the browser could
 not open the page, the site timed out) is counted ``failed`` and the row stays
@@ -49,6 +63,7 @@ from __future__ import annotations
 import logging
 import os
 import time
+from datetime import datetime, timezone
 from typing import Any
 
 from app.db import (
@@ -84,17 +99,56 @@ def sweep_stretch_seconds() -> float:
     return max(60.0, seconds)
 
 
-def sweep_max_applications() -> int:
-    """Applications attempted per pass (default 5).
+def sweep_batch_size() -> int:
+    """Transmissions attempted per pass (``AETHER_APPLY_SWEEP_BATCH``, default 10).
 
     Small on purpose: each attempt drives a real browser on a 2-CPU VM and puts
     a real application in front of a real employer. Throughput is not the goal
-    — eventually reaching a terminal state for every approved row is.
+    — eventually reaching a terminal state for every approved row is, from the
+    OLDEST approval first, one bounded batch at a time.
+
+    ``AETHER_APPLY_SWEEP_MAX_APPLICATIONS`` (this module's original name for
+    the same bound) is still honoured when an operator has set it, as an
+    ADDITIONAL ceiling: a bound must never grow silently because it was
+    renamed.
     """
+    batch = _positive_int_env("AETHER_APPLY_SWEEP_BATCH", 10) or 10
+    legacy = _positive_int_env("AETHER_APPLY_SWEEP_MAX_APPLICATIONS", None)
+    return batch if legacy is None else min(batch, legacy)
+
+
+def approval_max_age_days() -> float:
+    """How old an approval may be and still be auto-executed (default 7 days).
+
+    "The user approved this" is a fact with a shelf life. Production carries
+    339 approved ``application_submit`` approvals that nothing has ever
+    executed (scout, 2026-08-13); the oldest of them predate the product's
+    current behaviour entirely. Turning the sweep on must NOT fire a weeks-old
+    confirmation at a real employer — the user may have applied themselves,
+    taken another job, or simply forgotten. An approval past this age is
+    surfaced for a fresh, one-click confirmation instead
+    (:func:`_expire_stale_approval`). ``AETHER_APPROVAL_MAX_AGE_DAYS`` tunes it
+    without a redeploy; a malformed value falls back to the default rather than
+    disabling the guard.
+    """
+    raw = (os.environ.get("AETHER_APPROVAL_MAX_AGE_DAYS") or "").strip()
+    if not raw:
+        return 7.0
     try:
-        return max(1, int(os.environ.get("AETHER_APPLY_SWEEP_MAX_APPLICATIONS", "5")))
+        value = float(raw)
+    except ValueError:
+        return 7.0
+    return value if value > 0 else 7.0
+
+
+def _positive_int_env(name: str, default: int | None) -> int | None:
+    raw = (os.environ.get(name) or "").strip()
+    if not raw:
+        return default
+    try:
+        return max(1, int(raw))
     except (TypeError, ValueError):
-        return 5
+        return default
 
 
 def sweep_user_cap() -> int:
@@ -123,37 +177,65 @@ def evidence_root() -> str:
 # ---------------------------------------------------------------------------
 
 
-def pending_transmissions(user_id: str, limit: int | None = None) -> list[dict[str, Any]]:
-    """Approved-but-non-terminal applications, newest approval per application.
+#: The queue, written ONCE: approved gate, no ``transmittedAt``, no
+#: ``manualStepReason``, newest approval per application. ``approvedAt`` is the
+#: DECISION time (``resolvedAt``, falling back to ``createdAt`` for rows that
+#: predate that column being stamped) — the clock the stale-approval guard
+#: reads and the key the backlog drains by.
+_PENDING_SELECT = '''
+    SELECT DISTINCT ON (a."id")
+           a."id" AS "applicationId",
+           ar."id" AS "approvalId",
+           COALESCE(ar."resolvedAt", ar."createdAt") AS "approvedAt"
+    FROM "Application" a
+    JOIN "ApprovalRequest" ar ON ar."applicationId" = a."id"
+    WHERE a."userId" = %s
+      AND ar."userId" = %s
+      AND ar."type" = 'application_submit'::"ApprovalType"
+      AND ar."status" = 'approved'::"ApprovalStatus"
+      AND a."transmittedAt" IS NULL
+      AND a."manualStepReason" IS NULL
+    ORDER BY a."id", ar."createdAt" DESC
+'''
 
-    This query IS the invariant's definition, written once: approved gate,
-    no ``transmittedAt``, no ``manualStepReason``.
+
+def pending_transmissions(user_id: str, limit: int | None = None) -> list[dict[str, Any]]:
+    """Approved-but-non-terminal applications, OLDEST APPROVAL FIRST.
+
+    Ordering is part of the contract, not an implementation detail: the
+    measured backlog is 339 rows deep, and a sweep that took an arbitrary slice
+    each pass could starve the oldest approvals indefinitely. ``limit`` is
+    applied in SQL so a bounded pass never materialises the whole backlog.
+    """
+    ensure_application_transmission_columns()
+    ensure_application_manual_step_columns()
+    sql = f'SELECT * FROM ({_PENDING_SELECT}) q ORDER BY q."approvedAt" ASC, q."applicationId"'
+    params: tuple[Any, ...] = (user_id, user_id)
+    if limit is not None:
+        sql += " LIMIT %s"
+        params = (*params, max(0, int(limit)))
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(sql, params)
+            return rows_to_dicts(cur)
+
+
+def count_pending_transmissions(user_id: str) -> int:
+    """How many approved applications are STILL queued, counted for real.
+
+    Re-counted after a pass rather than derived as ``total - processed``: an
+    attempt that fails in transport leaves its row queued, and a summary that
+    quietly subtracted it would under-report the backlog on every tick.
     """
     ensure_application_transmission_columns()
     ensure_application_manual_step_columns()
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                '''
-                SELECT DISTINCT ON (a."id")
-                       a."id" AS "applicationId",
-                       ar."id" AS "approvalId"
-                FROM "Application" a
-                JOIN "ApprovalRequest" ar ON ar."applicationId" = a."id"
-                WHERE a."userId" = %s
-                  AND ar."userId" = %s
-                  AND ar."type" = 'application_submit'::"ApprovalType"
-                  AND ar."status" = 'approved'::"ApprovalStatus"
-                  AND a."transmittedAt" IS NULL
-                  AND a."manualStepReason" IS NULL
-                ORDER BY a."id", ar."createdAt" DESC
-                ''',
-                (user_id, user_id),
+                f'SELECT COUNT(*) FROM ({_PENDING_SELECT}) q', (user_id, user_id)
             )
-            rows = rows_to_dicts(cur)
-    if limit is not None:
-        return rows[:limit]
-    return rows
+            row = cur.fetchone()
+    return int(row[0]) if row else 0
 
 
 def users_with_pending_transmissions(limit: int | None = None) -> list[str]:
@@ -356,20 +438,20 @@ def _attempt_transmission(user_id: str, application_id: str, approval_id: str) -
     }
     resolved = resolve_and_persist_apply_channel(user_id, application_id, job_row)
     channel = str(resolved["channel"])
+    apply_url = str(resolved.get("applyUrl") or application.get("sourceUrl") or "")
     if channel == "email":
         _transmit_by_email(user_id, application, approval_id)
         return
     if channel not in AUTOMATABLE_CHANNELS:
-        reason, message = _no_channel_reason(channel, application)
+        reason, message = _no_channel_reason(channel, application, apply_url)
         record_manual_step(user_id, application_id, reason, message)
         raise ManualStepRequired(reason, message)
-    apply_url = str(resolved.get("applyUrl") or "")
     if not apply_url:
         # Defensive: an automatable channel is only ever derived FROM a URL, so
         # this cannot normally happen — and if it ever did, the executor would
         # fall into its replay mode and record a submission that never left the
         # building. Refuse instead, honestly.
-        reason, message = _no_channel_reason("unknown", application)
+        reason, message = _no_channel_reason("unknown", application, "")
         record_manual_step(user_id, application_id, reason, message)
         raise ManualStepRequired(reason, message)
     answers = application.get("answers")
@@ -394,14 +476,40 @@ def _attempt_transmission(user_id: str, application_id: str, approval_id: str) -
     )
 
 
-def _no_channel_reason(channel: str, application: dict[str, Any]) -> tuple[str, str]:
+def _no_channel_reason(
+    channel: str, application: dict[str, Any], apply_url: str = ""
+) -> tuple[str, str]:
+    """``(reason_code, user-facing message)`` for a channel we do not drive.
+
+    Three DISTINCT honest states, never blurred into one: Seek is refused by
+    ruling; an ASSISTED platform is fully prepared and waiting for the user's
+    click; an unresolved posting is one whose destination we genuinely could
+    not determine. Telling a user "we could not determine where this goes"
+    about a Lever posting we resolved perfectly well would be a false claim.
+    """
+    from app.services.apply_channel_resolver import ASSISTED_CHANNELS, platform_label
+
+    destination = apply_url or str(application.get("sourceUrl") or "")
     if channel == "seek-manual":
         return (
             "seek_manual_only",
             (
                 "This role is posted on Seek, which prohibits automated access "
                 "(ADR-SEEK-V3). Aether will not scrape or submit there — open "
-                f"the posting and apply yourself: {application.get('sourceUrl') or ''}"
+                f"the posting and apply yourself: {destination}"
+            ).strip(),
+        )
+    if channel in ASSISTED_CHANNELS:
+        # ORCHESTRATOR RULING U5-F3: no dedicated parser exists for this
+        # platform, so Aether will not click submit on the user's behalf here.
+        # Everything else IS done — say exactly that, and hand over the link.
+        return (
+            "assisted_manual_submit",
+            (
+                "Your tailored résumé and cover letter are ready to submit — "
+                f"{platform_label(channel)} needs your click. Aether does not "
+                "auto-submit on this platform, so open the posting and send "
+                f"them there: {destination}"
             ).strip(),
         )
     return (
@@ -414,6 +522,67 @@ def _no_channel_reason(channel: str, application: dict[str, Any]) -> tuple[str, 
             f"{application.get('sourceUrl') or ''}"
         ).strip(),
     )
+
+
+def approval_age_days(approved_at: Any, now: datetime | None = None) -> float | None:
+    """Age of an approval decision in days, or ``None`` if it has no stamp.
+
+    Pure, so the guard's arithmetic is testable without a database, and
+    tz-defensive: a naive stamp out of Postgres is read as UTC rather than
+    crashing a sweep pass on a timezone comparison.
+    """
+    if not isinstance(approved_at, datetime):
+        return None
+    stamped = (
+        approved_at.replace(tzinfo=timezone.utc)
+        if approved_at.tzinfo is None
+        else approved_at
+    )
+    now = now or datetime.now(timezone.utc)
+    return (now - stamped).total_seconds() / 86400.0
+
+
+def _expire_stale_approval(
+    user_id: str, application_id: str, approved_at: Any
+) -> bool:
+    """``True`` (and the row is marked) if this approval is too old to execute.
+
+    An approval with NO decision stamp at all is left alone rather than
+    expired: we do not know when the user confirmed it, and inventing an age
+    would be the same class of fabrication as inventing a form answer. Such a
+    row keeps going through the normal path, where every other guard still
+    applies.
+    """
+    from app.services.apply_executor import record_manual_step
+
+    max_age = approval_max_age_days()
+    age = approval_age_days(approved_at)
+    if age is None or age <= max_age:
+        return False
+    # Rounded, not truncated: the stamp comes from the DATABASE clock and the
+    # age is computed against this PROCESS's clock, so a genuinely 9-day-old
+    # approval measures 8.99997 days whenever the two differ by a second — and
+    # telling the user "8 days ago" about a 9-day-old approval is a small lie
+    # this guard has no reason to tell.
+    whole_days = max(1, round(age))
+    record_manual_step(
+        user_id,
+        application_id,
+        "approval_expired",
+        (
+            f"You approved this application {whole_days} day"
+            f"{'' if whole_days == 1 else 's'} ago. Aether does not submit an "
+            f"approval older than {max_age:g} days without a fresh "
+            "confirmation — nothing was sent. Reconfirm to submit it, or leave "
+            "it if you have moved on."
+        ),
+    )
+    logger.info(
+        "apply sweep: application %s has a %.1f-day-old approval (max %.1f) — "
+        "nothing was submitted; it now asks the user to reconfirm",
+        application_id, age, max_age,
+    )
+    return True
 
 
 def _render_resume_pdf(user_id: str, application: dict[str, Any]) -> bytes:
@@ -449,13 +618,17 @@ def sweep_pending_transmissions(
     """
     from app.services.apply_executor import ApplyExecutorGuardError, ManualStepRequired
 
-    rows = pending_transmissions(user_id, limit=sweep_max_applications())
+    batch = sweep_batch_size()
+    rows = pending_transmissions(user_id, limit=batch)
     summary: dict[str, Any] = {
         "processed": 0,
         "transmitted": 0,
         "manual_step": 0,
+        "stale_approval": 0,
         "skipped": 0,
         "failed": 0,
+        "remaining": 0,
+        "batch": batch,
         "userId": user_id,
     }
     for row in rows:
@@ -470,6 +643,12 @@ def sweep_pending_transmissions(
         application_id = str(row["applicationId"])
         approval_id = str(row["approvalId"])
         summary["processed"] += 1
+        if _expire_stale_approval(user_id, application_id, row.get("approvedAt")):
+            # The user's confirmation is too old to act on. The row is NOT
+            # transmitted and NOT silently left prepared: it now carries an
+            # honest, actionable state with a one-click way back.
+            summary["stale_approval"] += 1
+            continue
         try:
             _attempt_transmission(user_id, application_id, approval_id)
         except ManualStepRequired as exc:
@@ -499,6 +678,15 @@ def sweep_pending_transmissions(
             )
             continue
         summary["transmitted"] += 1
+    summary["remaining"] = count_pending_transmissions(user_id)
+    logger.info(
+        "apply sweep for user %s: processed %d of a %d-application batch "
+        "(transmitted %d, manual step %d, expired approval %d, skipped %d, "
+        "failed %d) — %d application(s) still queued for the next pass",
+        user_id, summary["processed"], batch, summary["transmitted"],
+        summary["manual_step"], summary["stale_approval"], summary["skipped"],
+        summary["failed"], summary["remaining"],
+    )
     return summary
 
 
