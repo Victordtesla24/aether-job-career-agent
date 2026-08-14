@@ -160,6 +160,30 @@ def funnel_sankey(current_user: CurrentUser) -> dict[str, Any]:
     }
 
 
+@router.get("/apply-sweep-status")
+def apply_sweep_status(current_user: CurrentUser) -> dict[str, Any]:
+    """Live read of the operator's apply-sweep kill-switch (SHOULD-FIX 6,
+    round-3 re-review of U5).
+
+    The FE's "automatic […] submission is not enabled on this deployment
+    yet" copy (``tracker-lib.ts`` ``notTransmittedReason`` /
+    ``automaticSubmissionDisclaimer``) used to be hardcoded — true only by
+    accident and false the instant an operator sets
+    ``AETHER_APPLY_SWEEP_ENABLED`` (the mandate's own end state, per
+    ``apps/api/app/workers/apply_sweep.py``). This mirrors the precedent at
+    ``app.workers.board_sweep.sweep_enabled()``, read live inside
+    ``POST /agents/board-sweep/trigger`` — a real capability signal instead
+    of an assumption baked into the client.
+
+    Registered ahead of ``GET /{application_id}`` (same fixed-path-before-
+    catch-all ordering as ``/funnel/sankey`` above) so this literal path
+    segment is never swallowed as an application id.
+    """
+    from app.workers.apply_sweep import sweep_enabled
+
+    return {"sweepEnabled": sweep_enabled()}
+
+
 @router.get("")
 def list_applications(
     current_user: CurrentUser,

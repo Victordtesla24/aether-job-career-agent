@@ -31,7 +31,8 @@ import {
   purgeExpiredApprovals,
   type Approval,
 } from "../../../lib/api/approvals";
-import { AUTOMATIC_SUBMISSION_DISCLAIMER } from "../../../components/applications/tracker-lib";
+import { fetchApplySweepStatus } from "../../../lib/api/applications";
+import { automaticSubmissionDisclaimer } from "../../../components/applications/tracker-lib";
 
 type StatusFilter = "pending" | "approved" | "rejected" | "all";
 
@@ -77,6 +78,19 @@ export default function ApprovalsPage() {
   const [deepLinkError, setDeepLinkError] = useState<string | null>(null);
   const error = deepLinkError ?? listError;
   const [reviewing, setReviewing] = useState<Approval | null>(null);
+  // SHOULD-FIX 6 (round-3 re-review): live read of the operator's apply-sweep
+  // kill-switch, for the bulk-approve confirm copy (`automaticSubmissionDisclaimer`).
+  // Defaults false — the code default, and the honest choice while this fetch
+  // is still in flight — so a slow/failed status fetch can only ever
+  // under-promise, never claim automation that is not actually configured.
+  const [sweepEnabled, setSweepEnabled] = useState(false);
+  useEffect(() => {
+    fetchApplySweepStatus()
+      .then(setSweepEnabled)
+      .catch(() => {
+        /* best-effort: keep the honest false default on failure */
+      });
+  }, []);
   // Monotonic guard: a stale (slow) response must never overwrite a newer one.
   const fetchSeq = useRef(0);
 
@@ -245,19 +259,32 @@ export default function ApprovalsPage() {
   };
 
   /**
-   * QA-2026-08-13 H-02: bulk decision over every currently-listed pending
-   * request. The backend has no bulk endpoint, so this loops the existing
-   * POST /approvals/{id}/approve|reject sequentially (server remains the
-   * only authority on each transition). Deliberately does NOT auto-send
-   * email_send approvals — bulk approval only records the decision; sending
-   * still happens per-item so a mass action can never mass-email.
+   * QA-2026-08-13 H-02, behavior fixed 2026-08-14 (C2, round-3 re-review):
+   * bulk decision over every currently-listed pending request. The backend
+   * has no bulk endpoint, so this loops the existing POST
+   * /approvals/{id}/approve|reject sequentially (server remains the only
+   * authority on each transition).
    *
-   * U5: an `application_submit` approval behaves differently from
-   * `email_send` here and the confirm copy says so — approving it is enough;
-   * the backend sweep (apps/api/app/workers/apply_sweep.py) drives the actual
-   * transmission afterwards (email if the posting publishes one, otherwise a
-   * filled-out form on the employer's own site) with no further per-card
-   * click, unlike an `email_send` approval.
+   * `email_send` approvals ARE sent here — for every approved item this
+   * fires the SAME `sendIfEmailApproval` a single-card approve does, right
+   * after its own decision lands (sequential, per-item, honest partial
+   * failure). Before this fix, `bulkDecide` only ever called
+   * `decideApproval`, so a bulk-approved `email_send` request was left
+   * `approved` with nothing to ever send it — no per-card send button
+   * exists anywhere in the product, so that email was permanently
+   * "prepared only". A send failure never hides inside the
+   * decision-failure count below: the decision succeeded even when the
+   * send did not, and the two are reported separately.
+   *
+   * `application_submit` approvals are NOT driven further by this action —
+   * approving one only records the decision. Whether anything happens next
+   * depends entirely on the operator's `AETHER_APPLY_SWEEP_ENABLED` sweep
+   * (apps/api/app/workers/apply_sweep.py, `sweepEnabled` above reads its
+   * live state via GET /applications/apply-sweep-status): OFF by default,
+   * in which case the application stays honestly "ready to submit" until a
+   * human acts on it; ON, the sweep drives the transmission on its OWN
+   * schedule, not on this click. There is no "with no further per-card
+   * click" guarantee for this type — `automaticSubmissionDisclaimer` says so.
    */
   const bulkDecide = async (decision: "approve" | "reject") => {
     const targets = (approvals ?? []).filter((a) => a.status === "pending" && !isExpired(a));
@@ -267,24 +294,42 @@ export default function ApprovalsPage() {
       !window.confirm(
         `${verb} all ${targets.length} pending request${targets.length === 1 ? "" : "s"}? ` +
           (decision === "approve"
-            ? AUTOMATIC_SUBMISSION_DISCLAIMER
+            ? automaticSubmissionDisclaimer(sweepEnabled)
             : "Rejected requests can be re-created by the agents on their next run."),
       )
     ) {
       return;
     }
     setBusy(`bulk-${decision}`);
-    let failed = 0;
+    let decisionFailed = 0;
+    let sendFailed = 0;
     for (const approval of targets) {
+      let resolved: Approval;
       try {
-        await decideApproval(approval.id, decision);
+        resolved = await decideApproval(approval.id, decision);
       } catch {
-        failed += 1;
+        decisionFailed += 1;
+        continue;
       }
+      // C2: a bulk-approved email_send request must be sent exactly like a
+      // single-card approve — otherwise it is left "prepared only" with no
+      // send affordance anywhere else in the product. No-op for a reject
+      // decision or a non-email_send type (sendIfEmailApproval's own gate).
+      const sendError = await sendIfEmailApproval(resolved, decision);
+      if (sendError) sendFailed += 1;
     }
-    setListError(
-      failed > 0 ? `${failed} of ${targets.length} bulk ${decision} decisions failed — the rest were applied.` : null,
-    );
+    const parts: string[] = [];
+    if (decisionFailed > 0) {
+      parts.push(
+        `${decisionFailed} of ${targets.length} bulk ${decision} decisions failed — the rest were applied`,
+      );
+    }
+    if (sendFailed > 0) {
+      parts.push(
+        `${sendFailed} approved email${sendFailed === 1 ? "" : "s"} failed to send — retry from Approvals`,
+      );
+    }
+    setListError(parts.length > 0 ? `${parts.join("; ")}.` : null);
     // Reconcile from server truth — list, badges and counters together.
     await load();
     setBusy(null);

@@ -80,3 +80,23 @@ export async function submitApplication(
     }),
   );
 }
+
+const ApplySweepStatusSchema = z.object({ sweepEnabled: z.boolean() });
+
+/**
+ * Live read of the operator's `AETHER_APPLY_SWEEP_ENABLED` kill-switch
+ * (`app.workers.apply_sweep.sweep_enabled()`, `GET
+ * /applications/apply-sweep-status`) — SHOULD-FIX 6 (round-3 re-review): the
+ * "automatic […] submission is not enabled on this deployment yet" copy
+ * (tracker-lib.ts `notTransmittedReason` / `automaticSubmissionDisclaimer`)
+ * used to be hardcoded with zero coupling to the real env var, true only by
+ * accident and false the moment an operator turns the sweep on. Callers
+ * should treat a rejected promise as `false` (the honest, code default) —
+ * never fabricate the enabled state from a failed status check.
+ */
+export async function fetchApplySweepStatus(
+  options: RequestOptions = {},
+): Promise<boolean> {
+  const data = await apiRequest<unknown>("/applications/apply-sweep-status", options);
+  return ApplySweepStatusSchema.parse(data).sweepEnabled;
+}

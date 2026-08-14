@@ -415,6 +415,15 @@ export function platformLabel(channel: string | null | undefined): string {
 export function notTransmittedReason(app: {
   autoSubmittable?: boolean | null;
   applyChannel?: string | null;
+  /** SHOULD-FIX 6 (round-3 re-review): live read of the operator's
+   *  ``AETHER_APPLY_SWEEP_ENABLED`` kill-switch (``GET
+   *  /applications/apply-sweep-status``, backed by
+   *  ``app.workers.apply_sweep.sweep_enabled()``). Defaults to `false` —
+   *  the code default, and the honest choice while the caller's fetch of
+   *  the live signal is still in flight — so a slow/failed status fetch can
+   *  only ever under-promise, never claim automation that is not actually
+   *  configured. */
+  sweepEnabled?: boolean;
 }): string {
   if (app.autoSubmittable) {
     return "Approve it in Approvals to email it to the employer.";
@@ -429,8 +438,9 @@ export function notTransmittedReason(app: {
     // ORCHESTRATOR RULING U5-F3: this posting's destination IS resolved, so
     // saying "Aether has not resolved where to submit it" would be false, and
     // saying "automatic submission … not enabled yet" would promise something
-    // that is never coming for this platform. State the true position: the
-    // work is done, the click is the user's.
+    // that is never coming for this platform (regardless of the sweep
+    // kill-switch — assisted channels have no dedicated parser to drive).
+    // State the true position: the work is done, the click is the user's.
     return (
       "Your tailored résumé and cover letter are ready to submit — " +
       `${platformLabel(app.applyChannel)} needs your click. Open the posting ` +
@@ -438,6 +448,14 @@ export function notTransmittedReason(app: {
     );
   }
   if (app.applyChannel && FE_AUTOMATABLE_CHANNELS.has(app.applyChannel)) {
+    if (app.sweepEnabled) {
+      return (
+        "This posting publishes no application email address, but automatic " +
+        `submission through ${channelLabel(app.applyChannel)} is enabled on ` +
+        "this deployment — approve it in Approvals and Aether will submit it " +
+        "for you on its next sweep."
+      );
+    }
     return (
       "This posting publishes no application email address. Automatic " +
       `submission through ${channelLabel(app.applyChannel)} is not enabled ` +
@@ -450,14 +468,34 @@ export function notTransmittedReason(app: {
   );
 }
 
-/** Generic (non-per-application) version of {@link notTransmittedReason} for
- *  confirm dialogs that decide over a batch and have no single application's
- *  channel to hand (approvals bulk-approve). Kept as ONE string so it cannot
- *  say something the per-application copy above contradicts. */
-export const AUTOMATIC_SUBMISSION_DISCLAIMER =
-  "Approving does not send anything automatically: emails must be sent " +
-  "individually from each application's card, and automatic employer-form " +
-  "submission is not enabled on this deployment yet.";
+/**
+ * Generic (non-per-application) version of {@link notTransmittedReason} for
+ * confirm dialogs that decide over a batch and have no single application's
+ * channel to hand (approvals bulk-approve).
+ *
+ * MUST-FIX 3/5 (round-3 re-review): the previous copy told the user to "send
+ * each email individually from each application's card" — there is NO send
+ * affordance on an application's card; `executeApproval` is the only send in
+ * the product, and it now fires for every bulk-approved `email_send` item
+ * (C2 fixed `bulkDecide` to call it, matching a single-card approve exactly).
+ * This describes THAT real behaviour instead of a UI surface that does not
+ * exist, and reads the SAME live `sweepEnabled` signal
+ * {@link notTransmittedReason} does for the employer-form half, so the two
+ * copies can never again assert opposite things about the same deployment.
+ */
+export function automaticSubmissionDisclaimer(sweepEnabled: boolean): string {
+  return (
+    "Approving an email_send request sends it immediately (each is sent " +
+    "individually, right after its own approval goes through — a failed " +
+    "send is reported honestly, not hidden). Automatic employer-form " +
+    "submission " +
+    (sweepEnabled
+      ? "is enabled on this deployment and runs on Aether's own schedule " +
+        "once approved."
+      : "is not enabled on this deployment yet — apply on the employer's " +
+        "site yourself for those.")
+  );
+}
 
 function metaOf(app: TrackerApplication): TrackerMeta {
   return (app.answers ?? {}) as TrackerMeta;

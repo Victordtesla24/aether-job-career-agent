@@ -6,11 +6,11 @@ import type { TrackerApplication } from "../tracker-api";
 import {
   APP_STAGE,
   APP_STAGE_KEYS,
-  AUTOMATIC_SUBMISSION_DISCLAIMER,
   JOB_STAGE_KEYS,
   STAGE_DEFS,
   STAGE_TO_APP_STATUS,
   STAGE_TO_JOB_STATUS,
+  automaticSubmissionDisclaimer,
   buildStages,
   cardMatchesFilter,
   channelLabel,
@@ -441,11 +441,35 @@ describe("U5 notTransmittedReason", () => {
     expect(reason).not.toContain("automatically");
   });
 
-  it("states honestly that site-apply is not enabled, for a resolved automatable channel", () => {
-    const reason = notTransmittedReason({ autoSubmittable: false, applyChannel: "ashby" });
+  it("states honestly that site-apply is not enabled, for a resolved automatable channel, when the sweep is OFF", () => {
+    const reason = notTransmittedReason({
+      autoSubmittable: false,
+      applyChannel: "ashby",
+      sweepEnabled: false,
+    });
     expect(reason).toContain("publishes no application email address");
     expect(reason).toContain("not enabled on this deployment yet");
     expect(reason).not.toContain("with no further action");
+  });
+
+  it("defaults to the sweep-OFF wording when sweepEnabled is omitted (today's deployment reality)", () => {
+    const reason = notTransmittedReason({ autoSubmittable: false, applyChannel: "greenhouse" });
+    expect(reason).toContain("not enabled on this deployment yet");
+  });
+
+  // SHOULD-FIX 6 (round-3 re-review): the "not enabled on this deployment
+  // yet" claim used to be hardcoded with zero coupling to the real
+  // AETHER_APPLY_SWEEP_ENABLED kill-switch — true today, false the moment an
+  // operator turns the sweep on. Both renderings must be honest.
+  it("states honestly that automatic submission WILL run, for a resolved automatable channel, when the sweep is ON", () => {
+    const reason = notTransmittedReason({
+      autoSubmittable: false,
+      applyChannel: "greenhouse",
+      sweepEnabled: true,
+    });
+    expect(reason).toContain("publishes no application email address");
+    expect(reason).not.toContain("not enabled on this deployment yet");
+    expect(reason).toMatch(/enabled|will submit|automatically/i);
   });
 
   it("never claims a channel for an unresolved or absent applyChannel", () => {
@@ -458,15 +482,40 @@ describe("U5 notTransmittedReason", () => {
   });
 });
 
-describe("U5 AUTOMATIC_SUBMISSION_DISCLAIMER (bulk-approve confirm)", () => {
+// MUST-FIX 3/5 (round-3 re-review): the disclaimer used to instruct the user
+// to "send each email individually from its card" — there is NO send
+// affordance on an application's card, only `executeApproval`, which now
+// fires automatically for every bulk-approved email_send item (C2). The
+// disclaimer must describe THAT real behaviour, not a UI surface that does
+// not exist, and must not contradict `notTransmittedReason`'s per-application
+// copy (MUST-FIX 5). SHOULD-FIX 6: the employer-form half must read the live
+// sweep signal exactly like `notTransmittedReason` does.
+describe("U5 automaticSubmissionDisclaimer (bulk-approve confirm)", () => {
   it("never contradicts itself the way the pre-refix copy did", () => {
-    // The pre-refix bulk-approve confirm said, in the same sentence, that
-    // approved emails are "NOT sent automatically" AND that approved
-    // applications are "queued for automatic submission ... with no further
-    // action from you" — this asserts the replacement says one honest thing.
-    expect(AUTOMATIC_SUBMISSION_DISCLAIMER).toContain("does not send anything automatically");
-    expect(AUTOMATIC_SUBMISSION_DISCLAIMER).not.toContain("with no further action");
-    expect(AUTOMATIC_SUBMISSION_DISCLAIMER).not.toContain("queued for automatic submission");
+    const text = automaticSubmissionDisclaimer(false);
+    expect(text).not.toContain("with no further action");
+    expect(text).not.toContain("queued for automatic submission");
+  });
+
+  it("never tells the user to send from a card that has no send button", () => {
+    expect(automaticSubmissionDisclaimer(false)).not.toContain("from each application's card");
+    expect(automaticSubmissionDisclaimer(true)).not.toContain("from each application's card");
+  });
+
+  it("truthfully says approved emails ARE sent immediately (C2 fixed the behaviour to match)", () => {
+    const text = automaticSubmissionDisclaimer(false);
+    expect(text).toMatch(/email.*sen(d|t)/i);
+    expect(text).not.toContain("does not send anything automatically");
+  });
+
+  it("says employer-form submission is not enabled yet, when the sweep is OFF", () => {
+    expect(automaticSubmissionDisclaimer(false)).toContain("not enabled on this deployment yet");
+  });
+
+  it("says employer-form submission WILL run, when the sweep is ON — never the OFF wording", () => {
+    const text = automaticSubmissionDisclaimer(true);
+    expect(text).not.toContain("not enabled on this deployment yet");
+    expect(text).toMatch(/enabled|runs|will/i);
   });
 });
 
@@ -583,11 +632,23 @@ describe("U5-F3 assisted channels (lever / smartrecruiters / generic)", () => {
     ).toContain("SmartRecruiters");
   });
 
-  it("keeps the 'not enabled yet' wording ONLY for the two automatable channels", () => {
+  it("keeps the 'not enabled yet' wording ONLY for the two automatable channels, sweep OFF", () => {
     for (const channel of ["ashby", "greenhouse"]) {
-      expect(notTransmittedReason({ autoSubmittable: false, applyChannel: channel })).toContain(
-        "not enabled on this deployment yet",
-      );
+      expect(
+        notTransmittedReason({ autoSubmittable: false, applyChannel: channel, sweepEnabled: false }),
+      ).toContain("not enabled on this deployment yet");
+    }
+  });
+
+  it("assisted channels never mention deployment-enablement even when the sweep is ON — they are never automated", () => {
+    for (const channel of ["lever", "smartrecruiters", "generic"]) {
+      const reason = notTransmittedReason({
+        autoSubmittable: false,
+        applyChannel: channel,
+        sweepEnabled: true,
+      });
+      expect(reason).toContain("needs your click");
+      expect(reason).not.toContain("not enabled on this deployment yet");
     }
   });
 

@@ -14,7 +14,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { submitApplication } from "../../../lib/api/applications";
+import { fetchApplySweepStatus, submitApplication } from "../../../lib/api/applications";
 import { createApproval, fetchApprovals, type Approval } from "../../../lib/api/approvals";
 import { apiRequest } from "../../../lib/api/client";
 import type { Job } from "../../../lib/api/jobs";
@@ -264,6 +264,7 @@ function MoveMenu({
 function SubmissionBadge({
   app,
   historyContext = false,
+  sweepEnabled = false,
 }: {
   app?: TrackerApplication;
   /** HIGH-6: true inside the "Applied Jobs" history list, where a card
@@ -273,6 +274,10 @@ function SubmissionBadge({
    *  automatic submission — would nudge a second application to an employer
    *  already applied to, and would contradict the chip right next to it. */
   historyContext?: boolean;
+  /** SHOULD-FIX 6: live `AETHER_APPLY_SWEEP_ENABLED` read, threaded into
+   *  `notTransmittedReason` so its ashby/greenhouse copy stays true in BOTH
+   *  operator configurations instead of hardcoding the OFF default. */
+  sweepEnabled?: boolean;
 }) {
   if (!app) return null;
   if (app.transmitted) {
@@ -308,7 +313,7 @@ function SubmissionBadge({
         historyContext
           ? "Aether did not send this application — it was recorded as applied outside Aether's automatic submission."
           : "Aether did not send this application — it is recorded as prepared. " +
-            notTransmittedReason(app)
+            notTransmittedReason({ ...app, sweepEnabled })
       }
       className="mt-2 inline-flex items-center gap-1 rounded-md bg-aether-yellow/15 px-2 py-0.5 text-[10px] text-aether-yellow"
     >
@@ -325,6 +330,7 @@ function CardMeta({
   hasPendingApproval,
   onRequestApproval,
   requestingApproval,
+  sweepEnabled = false,
 }: {
   card: StageCard;
   stageKey: StageKey;
@@ -333,6 +339,8 @@ function CardMeta({
   /** P0-3: re-request handler (existing POST /approvals path). */
   onRequestApproval?: () => void;
   requestingApproval?: boolean;
+  /** SHOULD-FIX 6: forwarded to {@link SubmissionBadge}. */
+  sweepEnabled?: boolean;
 }) {
   const { meta } = card;
   switch (stageKey) {
@@ -411,7 +419,7 @@ function CardMeta({
       // two very different things actually happened.
       return (
         <>
-          <SubmissionBadge app={card.app} />
+          <SubmissionBadge app={card.app} sweepEnabled={sweepEnabled} />
           {meta.followUpSentAt ? (
             <div className="mt-2 flex items-center gap-1.5 text-[10px] text-aether-green">
               <i className="fa-solid fa-clock text-[9px]" aria-hidden="true" />
@@ -502,6 +510,12 @@ export default function ApplicationsPage() {
   const [sankey, setSankey] = useState<SankeyData | null>(null);
   const [sankeyError, setSankeyError] = useState<string | null>(null);
   const [agentConfig, setAgentConfig] = useState<AgentConfig | null>(null);
+  // SHOULD-FIX 6 (round-3 re-review): live read of the operator's apply-sweep
+  // kill-switch, threaded into notTransmittedReason so the "not enabled on
+  // this deployment yet" copy stays true in BOTH operator configurations.
+  // Defaults false — the honest choice while the fetch is in flight or has
+  // failed — so a slow/failed status check can only ever under-promise.
+  const [sweepEnabled, setSweepEnabled] = useState(false);
   // Phase 4: separate applied-jobs view — fetched lazily on first open.
   const [appliedApps, setAppliedApps] = useState<TrackerApplication[] | null>(null);
   const [appliedError, setAppliedError] = useState<string | null>(null);
@@ -540,6 +554,13 @@ export default function ApplicationsPage() {
       setAgentConfig(await fetchAgentConfig());
     } catch {
       // Keep the last known config.
+    }
+    // Apply-sweep capability signal (SHOULD-FIX 6) — best-effort; keeps the
+    // honest `false` default on failure rather than fabricating "enabled".
+    try {
+      setSweepEnabled(await fetchApplySweepStatus());
+    } catch {
+      // Keep the last known value.
     }
   }, []);
 
@@ -967,7 +988,7 @@ export default function ApplicationsPage() {
                   ? // The manual-step block below carries the full detail —
                     // this line just states the top-level fact plainly.
                     "Not sent by Aether — Aether tried and ran into an obstacle. See below."
-                  : `Not sent by Aether — prepared only. ${notTransmittedReason(detail)}`}
+                  : `Not sent by Aether — prepared only. ${notTransmittedReason({ ...detail, sweepEnabled })}`}
             </p>
           ) : null}
           {detail.transmitted && describeTransmission(detail).evidenceUrl ? (
@@ -1223,6 +1244,7 @@ export default function ApplicationsPage() {
                             <CardMeta
                               card={card}
                               stageKey={stage.key}
+                              sweepEnabled={sweepEnabled}
                               hasPendingApproval={
                                 card.app != null && pendingApprovalIds.has(card.app.id)
                               }
