@@ -1,1 +1,2 @@
 - Canary entry: auto-deploy live-verification by QA sub-agent, appended 2026-08-13T23:52:30Z UTC. This is a docs-only change proving the pull-based auto-deploy timer picks up origin/main automatically.
+Round-4 QA re-verification canary — retry-with-deadline health-check fix (febff80/baacce6), pushed 2026-08-14T00:15:42Z by the independent QA agent from an isolated scratch clone (never touched the production tree directly).
