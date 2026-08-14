@@ -171,3 +171,101 @@ body {
     overflow-x: clip;
   }
 }
+
+/* ==========================================================================
+   S-UI-REBUILD B0 — shell chrome, motion tokens and typography roles.
+   ADDITIVE: every rule below is a NEW class. Nothing above is re-pointed, so
+   pages that have not migrated render byte-identically.
+   ========================================================================== */
+
+/*
+ * §1.1 THE GLASS DECISION — chrome may blur, content never does.
+ *
+ * `.chrome-blur` is permitted on exactly four element classes: the command
+ * bar, the rail, the mobile nav sheet / tab bar, and `.elev-3` overlays. All
+ * of them are fixed/sticky and non-scrolling, so at most ~4 blurred layers
+ * are ever composited at once — the bounded set Rule D-5 asks for. Content
+ * surfaces stay opaque (`.elev-1` / `.elev-2`).
+ *
+ * `.glass` / `.glass-raised` above are deliberately LEFT IN PLACE: eight
+ * un-migrated pages still use them, and Binding Constraint 3 only permits a
+ * deletion once a references-proof shows zero users (that is B4's job).
+ *
+ * The rail itself does NOT use this class — reference-pack rule 2 (sidebars
+ * are colour-flat against the page, differentiated by rhythm and the active
+ * indicator, never by a bounding box or a separate surface).
+ */
+.chrome-blur {
+  background: rgba(10, 10, 15, 0.72);
+  background: color-mix(in srgb, #0a0a0f 72%, transparent);
+  backdrop-filter: blur(24px) saturate(140%);
+  -webkit-backdrop-filter: blur(24px) saturate(140%);
+}
+
+/* §2.2 — typography roles. Numerals are a typeface, not text (Rule D-γ):
+   every numeric role below carries `tabular-nums`. */
+.type-page {
+  font-size: 22px;
+  line-height: 1.2;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+.type-page-sub {
+  font-size: 13px;
+  line-height: 1.5;
+  color: #a0a0b8;
+}
+.type-section {
+  font-size: 10px;
+  line-height: 1.2;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: #8b8ba3;
+}
+.type-meta {
+  font-size: 11px;
+  line-height: 1.5;
+  color: #8b8ba3;
+}
+.type-mono-micro {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 11px;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * §1.4 — status-dot motion. RULE: a non-live state NEVER animates. Motion is
+ * reserved for "it is working", so only `ok` pulses and only `warn` breathes
+ * (a connection that is actively retrying). `offline`, `idle` and
+ * `connecting` get a static dot and say what is wrong in words.
+ * The global `prefers-reduced-motion` block above clamps both to one frame.
+ */
+@keyframes pulse-ok-ring {
+  0% {
+    box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 6px rgba(52, 211, 153, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(52, 211, 153, 0);
+  }
+}
+.pulse-ok {
+  animation: pulse-ok-ring 2s infinite;
+}
+
+@keyframes breathe-warn {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+.breathe-warn {
+  animation: breathe-warn 2.6s ease-in-out infinite;
+}

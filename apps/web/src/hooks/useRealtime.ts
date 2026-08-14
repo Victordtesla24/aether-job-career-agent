@@ -24,15 +24,22 @@
 import { useCallback, useEffect, useRef, useSyncExternalStore } from "react";
 
 import {
+  getRealtimeSnapshot,
   getRealtimeState,
+  subscribeToRealtimeSnapshot,
   subscribeToRealtimeState,
   subscribeToResources,
 } from "../lib/realtime/store";
-import type { RealtimeState } from "../lib/realtime/store";
+import type {
+  RealtimeResourceObservation,
+  RealtimeSnapshot,
+  RealtimeState,
+} from "../lib/realtime/store";
 import type { RealtimeResource, ResourceChange } from "../lib/realtime/transport-types";
 
 export type { RealtimeResource, ResourceChange } from "../lib/realtime/transport-types";
 export type { RealtimeState, RealtimeConnectionStatus } from "../lib/realtime/store";
+export type { RealtimeResourceObservation, RealtimeSnapshot } from "../lib/realtime/store";
 
 export interface UseRealtimeResourcesOptions {
   /**
@@ -97,4 +104,30 @@ export function useRealtimeStatus(): RealtimeState {
     [],
   );
   return useSyncExternalStore(subscribe, getRealtimeState, getRealtimeState);
+}
+
+/**
+ * The channel's read-only observation set (S-UI-REBUILD §1.4).
+ *
+ * A READER over the ONE existing connection: it registers a listener and
+ * opens nothing. On a page where no screen subscribes, the snapshot is empty
+ * and a consumer must render that emptiness honestly rather than invent a
+ * number. Every row is a server observation — see
+ * {@link RealtimeResourceObservation}.
+ */
+export function useRealtimeSnapshot(): RealtimeSnapshot {
+  const subscribe = useCallback(
+    (notify: () => void) => subscribeToRealtimeSnapshot(() => notify()),
+    [],
+  );
+  return useSyncExternalStore(subscribe, getRealtimeSnapshot, getRealtimeSnapshot);
+}
+
+/** One resource's observation, or `undefined` when the channel has never
+ * reported it. Never substitutes a zero. */
+export function useRealtimeResourceObservation(
+  resource: RealtimeResource,
+): RealtimeResourceObservation | undefined {
+  const snapshot = useRealtimeSnapshot();
+  return snapshot.resources.find((entry) => entry.resource === resource);
 }

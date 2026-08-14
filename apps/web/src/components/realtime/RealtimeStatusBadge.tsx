@@ -82,34 +82,47 @@ export function RealtimeStatusBadge({
   switch (effectiveStatus) {
     case "live":
       label = "Live";
-      tone = "text-emerald-300/90 border-emerald-400/30 bg-emerald-400/10";
+      tone = "text-state-ok border-state-ok/40 bg-state-ok/10";
       title = "Live updates connected — this screen refreshes itself when your agents change something.";
       break;
     case "connecting":
       label = "Connecting…";
-      tone = "text-aether-muted border-white/10 bg-white/5";
+      tone = "text-aether-muted border-hairline bg-surface-2";
       title = "Opening the live update stream. Until it connects, this screen shows what it loaded.";
       break;
     case "reconnecting":
       label = `Reconnecting — may be stale${suffix}`;
-      tone = "text-amber-300/90 border-amber-400/30 bg-amber-400/10";
+      tone = "text-state-warn border-state-warn/40 bg-state-warn/10";
       title = state.detail
         ? `Live updates dropped: ${state.detail} Retrying. What you see is ${asOf(state.connectedAt)} and may already be out of date.`
         : `Live updates dropped and are being retried. What you see is ${asOf(state.connectedAt)} and may already be out of date.`;
       break;
     case "offline":
       label = `Live updates offline — may be stale${suffix}`;
-      tone = "text-red-300/90 border-red-400/30 bg-red-400/10";
+      tone = "text-state-danger border-state-danger/40 bg-state-danger/10";
       title = state.detail
         ? `${state.detail} What you see is ${asOf(state.connectedAt)} and may already be out of date — reload to refresh.`
         : `Live updates are not connected. What you see is ${asOf(state.connectedAt)} and may already be out of date — reload to refresh.`;
       break;
     default:
       label = "Live updates idle";
-      tone = "text-aether-muted-dim border-white/10 bg-white/5";
+      tone = "text-aether-muted-dim border-hairline bg-surface-2";
       title = "No screen on this page subscribes to live updates.";
       break;
   }
+
+  /*
+   * S-UI-REBUILD §1.4 — MOTION LAW: a non-live state NEVER animates.
+   *
+   * `live` pulses and `reconnecting` breathes, because both describe
+   * something that is genuinely happening right now (frames arriving; a retry
+   * in flight). `connecting`, `offline` and `idle` are STATIC — animating
+   * them would dress a dead channel up as a working one, which is exactly the
+   * failure this badge exists to prevent. `data-motion` makes the rule
+   * assertable instead of a matter of taste.
+   */
+  const motion =
+    effectiveStatus === "live" ? "pulse" : effectiveStatus === "reconnecting" ? "breathe" : "static";
 
   return (
     <span
@@ -121,8 +134,14 @@ export function RealtimeStatusBadge({
     >
       <span
         aria-hidden="true"
+        data-testid="realtime-status-dot"
+        data-motion={motion}
         className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-          state.status === "live" ? "bg-emerald-400" : "bg-current opacity-70"
+          effectiveStatus === "live"
+            ? "bg-state-ok pulse-ok"
+            : effectiveStatus === "reconnecting"
+              ? "bg-current breathe-warn"
+              : "bg-current opacity-70"
         }`}
       />
       <span className="truncate">{label}</span>

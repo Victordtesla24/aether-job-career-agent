@@ -108,8 +108,53 @@ const IDLE_STATE: RealtimeState = {
   attempts: 0,
 };
 
+/**
+ * One resource row of {@link RealtimeSnapshot} — S-UI-REBUILD §1.4.
+ *
+ * Every field here is something the SERVER said, plus the client clock at
+ * which we heard it. There is no derived narrative and no back-fill: a
+ * resource the server has not mentioned on this connection simply is not in
+ * the list.
+ */
+export interface RealtimeResourceObservation {
+  resource: RealtimeResource;
+  /** Server-observed row count at {@link observedAt}. */
+  count: number;
+  /** Server-observed max row timestamp, or `null` when the server had none. */
+  watermark: string | null;
+  /**
+   * The count the server reported BEFORE the frame that produced this row.
+   * `null` when the only observation is the connect-time `hello`, where no
+   * delta is knowable — a UI must render nothing rather than "0 new".
+   */
+  previousCount: number | null;
+  previousWatermark: string | null;
+  /** Why this row last moved. `null` = it has not moved since connect. */
+  reason: ResourceChange["reason"] | null;
+  /** Client clock at which the frame carrying this row arrived. */
+  observedAt: number;
+}
+
+/**
+ * A READ-ONLY view of what the one existing connection has already told us
+ * (S-UI-REBUILD §1.4 / §3 law: *"a new reader, not a new connection, not a
+ * new fetch"*).
+ *
+ * {@link subscribeToRealtimeSnapshot} deliberately does NOT create a resource
+ * subscription, so mounting a status readout can never open the SSE stream on
+ * a page where no screen subscribes — the server's 3-per-user / 8-global
+ * budget is untouched by this reader (risk R-6).
+ */
+export interface RealtimeSnapshot {
+  /** Epoch ms of the `hello` that seeded this snapshot; `null` before one. */
+  seededAt: number | null;
+  /** Observed resources, in `REALTIME_RESOURCES` order. */
+  resources: RealtimeResourceObservation[];
+}
+
 type ResourceHandler = (change: ResourceChange) => void;
 type StateHandler = (state: RealtimeState) => void;
+type SnapshotHandler = (snapshot: RealtimeSnapshot) => void;
 
 interface Subscription {
   resources: ReadonlySet<RealtimeResource>;
@@ -120,10 +165,19 @@ const KNOWN_RESOURCES: ReadonlySet<string> = new Set(REALTIME_RESOURCES);
 
 // --- module singleton state -------------------------------------------------
 
+const EMPTY_SNAPSHOT: RealtimeSnapshot = { seededAt: null, resources: [] };
+
 let transportFactory: RealtimeTransport | null = null;
 let subscriptions = new Set<Subscription>();
 let stateHandlers = new Set<StateHandler>();
+let snapshotHandlers = new Set<SnapshotHandler>();
 let state: RealtimeState = IDLE_STATE;
+/** Per-resource observations, keyed by resource. Rebuilt into an immutable
+ * {@link RealtimeSnapshot} only when it actually changes, so
+ * `useSyncExternalStore` sees a stable reference between real updates. */
+let observations = new Map<RealtimeResource, RealtimeResourceObservation>();
+let snapshotSeededAt: number | null = null;
+let snapshotCache: RealtimeSnapshot = EMPTY_SNAPSHOT;
 
 let handle: RealtimeTransportHandle | null = null;
 /** Identifies the connection a callback belongs to, so a late callback from a
@@ -166,6 +220,62 @@ export function subscribeToRealtimeState(handler: StateHandler): () => void {
   };
 }
 
+/** Rebuild the immutable snapshot and tell its readers. */
+function publishSnapshot(): void {
+  snapshotCache = {
+    seededAt: snapshotSeededAt,
+    resources: REALTIME_RESOURCES.map((resource) => observations.get(resource)).filter(
+      (entry): entry is RealtimeResourceObservation => entry !== undefined,
+    ),
+  };
+  snapshotHandlers.forEach((handler) => {
+    try {
+      handler(snapshotCache);
+    } catch {
+      // A status readout throwing must not take the channel down with it.
+    }
+  });
+}
+
+/** The channel's current read-only observation set. Never opens a connection. */
+export function getRealtimeSnapshot(): RealtimeSnapshot {
+  return snapshotCache;
+}
+
+/**
+ * Observe {@link getRealtimeSnapshot}. This is a READER: it registers a
+ * listener and nothing else. It does not create a resource subscription, so a
+ * page whose screens subscribe to nothing still opens no stream when a status
+ * readout is mounted on it — the readout simply has nothing to show, which is
+ * the honest outcome.
+ */
+export function subscribeToRealtimeSnapshot(handler: SnapshotHandler): () => void {
+  snapshotHandlers.add(handler);
+  return () => {
+    snapshotHandlers.delete(handler);
+  };
+}
+
+/** Record one server-reported observation. `before` is the server's previous
+ * view of the same resource, or `null` when there is none to compare against. */
+function recordObservation(
+  resource: RealtimeResource,
+  now: ResourceWatermark,
+  before: ResourceWatermark | null,
+  reason: ResourceChange["reason"] | null,
+  observedAt: number,
+): void {
+  observations.set(resource, {
+    resource,
+    count: now.count,
+    watermark: now.watermark,
+    previousCount: before ? before.count : null,
+    previousWatermark: before ? before.watermark : null,
+    reason,
+    observedAt,
+  });
+}
+
 /**
  * Replace the transport. Used by tests to script a stream, and available to
  * the app if the wire ever changes. Passing `null` restores the real one.
@@ -180,8 +290,12 @@ export function __resetRealtimeStoreForTests(): void {
   closeConnection();
   subscriptions = new Set();
   stateHandlers = new Set();
+  snapshotHandlers = new Set();
   transportFactory = null;
   lastSnapshot = null;
+  observations = new Map();
+  snapshotSeededAt = null;
+  snapshotCache = EMPTY_SNAPSHOT;
   state = IDLE_STATE;
 }
 
@@ -333,11 +447,25 @@ function handleHello(data: unknown): void {
     lastMessageAt: now,
   });
   if (!snapshot) return;
-  if (lastSnapshot) {
+  const previous = lastSnapshot;
+  if (previous) {
     // Anything that moved while we were disconnected. Replayed as real changes
     // because both snapshots are server observations.
-    diffSnapshots(lastSnapshot, snapshot).forEach(deliver);
+    diffSnapshots(previous, snapshot).forEach(deliver);
   }
+  // Record the same two server observations for the read-only snapshot
+  // (§1.4). A resource whose count AND watermark are unchanged keeps the
+  // observation it already had — its history is still accurate, and
+  // overwriting it would erase a real delta the user has not seen yet.
+  for (const [key, entry] of Object.entries(snapshot)) {
+    if (!KNOWN_RESOURCES.has(key)) continue;
+    const resource = key as RealtimeResource;
+    const before = previous?.[key] ?? null;
+    if (before && before.count === entry.count && before.watermark === entry.watermark) continue;
+    recordObservation(resource, entry, before, before ? "reconnect_gap" : null, now);
+  }
+  snapshotSeededAt = now;
+  publishSnapshot();
   lastSnapshot = snapshot;
 }
 
@@ -367,6 +495,16 @@ function handleResourceChanged(data: unknown): void {
   if (lastSnapshot) {
     lastSnapshot = { ...lastSnapshot, [resource]: { count, watermark } };
   }
+  recordObservation(
+    change.resource,
+    { count, watermark },
+    change.previousCount === null
+      ? null
+      : { count: change.previousCount, watermark: change.previousWatermark },
+    change.reason,
+    Date.now(),
+  );
+  publishSnapshot();
   deliver(change);
 }
 
