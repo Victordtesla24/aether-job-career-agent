@@ -1589,6 +1589,130 @@ gh pr close <PR_NUMBER> --repo Victordtesla24/aether-job-career-agent
 
 ---
 
+## 10. Database Backups & Restore (O-2, S-FIX slice C)
+
+### 10.0 Honest posture
+
+Before this section existed, there was **no** confirmed backup or restore capability for the
+production database — see `docs/delivery/INCIDENT-PROD-DB-WIPE-2026-07-18.md` (a SEV-1 that wiped
+the entire production `aether` schema; the incident record explicitly notes "No platform PITR
+requested"). The guard added afterwards (conftest schema-pin + prod-DSN abort in
+`apps/api/tests/conftest.py` / `scripts/run-tests.sh`) only prevents the ONE trigger that caused
+that incident (a test suite truncating prod) — it gives zero protection against a bad migration, a
+future deploy-script bug, hardware failure, or a DB-provider-side incident.
+
+What exists now (as of 2026-08-14) is **scheduled logical backups**, not provider-side
+point-in-time recovery (PITR). This is a deliberate, honest tradeoff: PITR requires a toggle on the
+hosted-DB provider's side (hosteddb.reai.io) that this VM cannot enable from inside the guest, and
+was not confirmed enabled during this pass. `pg_dump` every 6 hours gives:
+
+* **RPO (Recovery Point Objective):** ~6 hours — worst case, up to 6 hours of writes since the
+  last successful dump could be lost in a full-loss scenario.
+* **RTO (Recovery Time Objective):** dominated by the size of the `aether` schema at restore time
+  (the drill below restored a ~9.6 MB compressed dump, ~31 tables, in well under a minute); scales
+  roughly linearly with data volume.
+* **What it does NOT cover:** anything between dumps (use `AETHER_ALLOW_PROD_TRUNCATE`-style
+  guards and code review to prevent destructive writes in the first place — backups are the last
+  line of defense, not the first).
+
+Confirming/enabling true provider-side PITR with hosteddb.reai.io remains a recommended follow-up
+that only the operator can action (requires provider-side access this VM does not have); this
+6-hourly logical-backup mechanism is what is actually achievable and installed today.
+
+### 10.1 What runs, and where
+
+| File | Purpose |
+|------|---------|
+| `deploy/aether-backup.sh` | Dumps `schema=aether` via `pg_dump`, gzips it, writes it to `/home/ubuntu/aether-backups/db/`, rotates to the newest 14 local copies, and mirrors the new dump to this VM's cloud storage bucket under `<storage.path>aether-db-backups/` (bucket/path resolved from IMDSv2 user-data at runtime — never hardcoded). |
+| `deploy/aether-backup.service` | Oneshot systemd unit that runs the script once. |
+| `deploy/aether-backup.timer` | Fires the service every 6 hours (`OnCalendar=*-*-* 00/6:00:00`, `Persistent=true` so a missed run — e.g. VM was down — fires on next boot). |
+
+Install (same in-repo + symlink pattern as `aether-autodeploy`, after this branch is merged to
+`main`):
+
+```bash
+sudo ln -sf /home/ubuntu/github_repos/aether-job-career-agent/deploy/aether-backup.service /etc/systemd/system/aether-backup.service
+sudo ln -sf /home/ubuntu/github_repos/aether-job-career-agent/deploy/aether-backup.timer /etc/systemd/system/aether-backup.timer
+sudo systemctl daemon-reload && sudo systemctl enable --now aether-backup.timer
+```
+
+Verify: `systemctl list-timers aether-backup.timer` and `journalctl -u aether-backup.service -n 30`
+(the script only ever prints file paths, sizes, and S3 destinations — never the DB credential).
+
+**Host prerequisite (already installed on this VM, 2026-08-14):** the production Postgres server is
+version 17.11, but Ubuntu 24.04's default `apt` package is `postgresql-client-16` — `pg_dump`
+refuses to run against a newer major-version server ("aborting because of server version
+mismatch"). Fixed by adding the official PGDG apt repo and installing the matching client:
+
+```bash
+sudo apt-get install -y postgresql-common
+sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+sudo apt-get install -y postgresql-client-17
+```
+
+This is client-only (no server package, no existing service touched); `update-alternatives` then
+points the bare `psql`/`pg_dump` on `PATH` at v17, matching the production server.
+
+### 10.2 Restore recipe (proven — see evidence below)
+
+**Never restore directly over the production `aether` schema.** Always restore into a scratch
+schema (or a separate database, if the connecting role has `CREATEDB` — this app's role does not:
+`rolcreatedb = false`, confirmed 2026-08-14) first, verify, then decide.
+
+```bash
+# 1. Pick the dump to restore (local copy, or `aws s3 cp` one down first).
+gunzip -c /home/ubuntu/aether-backups/db/aether-<TIMESTAMP>.sql.gz > /tmp/restore.sql
+
+# 2. Remap every aether-schema-qualified statement to a scratch schema name.
+#    pg_dump --schema=aether fully qualifies every object (CREATE TABLE
+#    aether."X", COPY aether."X", ALTER TABLE aether."X", ...) EXCEPT the
+#    single `CREATE SCHEMA aether;` statement, which has no trailing dot —
+#    remap that one explicitly too, or the restore will collide with the
+#    real prod schema and abort (safely, via `-v ON_ERROR_STOP=1`, before
+#    writing anything — this was hit and fixed during the 2026-08-14 drill).
+sed -e 's/aether\./aether_restore_test./g' \
+    -e 's/^CREATE SCHEMA aether;$/CREATE SCHEMA aether_restore_test;/' \
+    /tmp/restore.sql > /tmp/restore-remapped.sql
+
+# 3. Restore into the scratch schema, in the SAME database (never a
+#    different DATABASE_URL host unless you intend a genuine DR failover).
+DB_URL=$(grep -E '^DATABASE_URL=' .env | tail -1 | cut -d= -f2-)
+BASE_URL="${DB_URL%%\?*}"   # strip ?schema=... — psql doesn't understand it
+psql -v ON_ERROR_STOP=1 "$BASE_URL" -f /tmp/restore-remapped.sql
+
+# 4. Verify: table count + row counts of key tables should match the live
+#    aether schema (adjust table names/counts to whatever you are checking).
+psql "$BASE_URL" -t -c "SELECT count(*) FROM information_schema.tables WHERE table_schema='aether_restore_test';"
+psql "$BASE_URL" -t -c "SET search_path=aether_restore_test; SELECT count(*) FROM \"User\";"
+
+# 5. Clean up the scratch schema once verified.
+psql "$BASE_URL" -t -c "DROP SCHEMA aether_restore_test CASCADE;"
+```
+
+### 10.3 Restore drill — proof this actually works (2026-08-14)
+
+Ran the full recipe above against the live production database (schema-scoped scratch restore,
+never against the real `aether` schema):
+
+| Check | Live `aether` (prod) | Restored `aether_restore_test` |
+|-------|----------------------|---------------------------------|
+| Tables | 31 | 31 |
+| `"User"` rows | 4 | 4 |
+| `"Application"` rows | 571 | 571 |
+| `"Job"` rows | 8267 | 8267 |
+
+The scratch schema was dropped after verification; the real `aether` schema's counts were
+re-checked immediately afterward and were unchanged (4 / 571 / 8267), confirming the drill never
+wrote to production. A real backup produced by this run
+(`aether-20260814T013222Z.sql.gz`, 9.2 MB) exists both locally
+(`/home/ubuntu/aether-backups/db/`) and in cloud storage
+(`s3://<bucket>/<path>aether-db-backups/`) as of this writing — this is not a hypothetical
+capability, it is the first real, restorable backup this platform has ever had. Full evidence:
+`uat/reports/evidence/market-perf/s-fix/O-2-restore-drill-summary.txt` and
+`O-2-restore-drill-output.log`.
+
+---
+
 ## Quick Reference
 
 ### Service Control

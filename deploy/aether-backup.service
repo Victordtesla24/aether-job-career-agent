@@ -1,0 +1,20 @@
+# Aether production DB backup — runs deploy/aether-backup.sh once per trigger.
+# Triggered by aether-backup.timer (every 6 hours); this unit itself is
+# oneshot and not enabled standalone.
+#
+# Install: sudo ln -sf /home/ubuntu/github_repos/aether-job-career-agent/deploy/aether-backup.service /etc/systemd/system/aether-backup.service
+#          sudo ln -sf /home/ubuntu/github_repos/aether-job-career-agent/deploy/aether-backup.timer /etc/systemd/system/aether-backup.timer
+#          sudo systemctl daemon-reload && sudo systemctl enable --now aether-backup.timer
+# Logs:    `journalctl -u aether-backup.service` (the script prints file
+#          paths/sizes and S3 destinations only — never the DB credential).
+# Disable: systemctl disable --now aether-backup.timer
+[Unit]
+Description=Aether production DB backup (one dump-and-upload attempt)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+WorkingDirectory=/home/ubuntu/github_repos/aether-job-career-agent
+ExecStart=/home/ubuntu/github_repos/aether-job-career-agent/deploy/aether-backup.sh

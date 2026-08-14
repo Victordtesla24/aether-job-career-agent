@@ -3,6 +3,12 @@ import { Sidebar } from "@/components/sidebar";
 import { SubscriptionGate } from "@/components/subscription-gate";
 import { Topbar } from "@/components/topbar";
 import { MobileTabBar } from "@/components/mobile-tab-bar";
+import { getOperatorLegalConfig } from "@/lib/config/legal";
+
+// O-1 (S-FIX slice C): read AETHER_SUPPORT_EMAIL at request time (never
+// build-baked) so the sidebar's "Contact support" link reflects the live
+// process environment, matching /dashboard/settings and the legal pages.
+export const dynamic = "force-dynamic";
 
 /**
  * Shell layout shared by every /dashboard/* route: the persistent sidebar on
@@ -21,10 +27,11 @@ export default function DashboardLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const { supportEmail } = getOperatorLegalConfig();
   return (
     <AuthGuard>
       <div className="flex min-h-screen">
-        <Sidebar />
+        <Sidebar supportEmail={supportEmail} />
         <div className="flex-1 flex flex-col min-w-0">
           <Topbar />
           <main className="flex-1 px-4 py-5 pb-24 sm:px-6 lg:px-8 lg:py-7 lg:pb-7">
