@@ -31,6 +31,17 @@ from typing import Any
 from app.repositories.background_jobs import BackgroundJobRepository
 from app.repositories.billing import UsageQuotaRepository
 
+#: ``BackgroundJob.agentKey`` a whole Supervisor RunPlan runs under.
+#:
+#: Written as a literal rather than imported from ``routers.agents``: this module
+#: is imported by ``workers.settings`` at worker start-up, and importing the
+#: router at module scope would pull the whole API surface into the worker
+#: process (every other router reference in this file is deliberately inside a
+#: function for the same reason). A test asserts this literal equals
+#: ``routers.agents._ORCH_PLAN_AGENT_KEY``, so the two cannot drift into a state
+#: where the router enqueues a job nothing here routes.
+_ORCH_PLAN_AGENT_KEY = "orchestrationPlan"
+
 logger = logging.getLogger("aether.worker")
 
 
@@ -141,10 +152,41 @@ def _refund_for_job(repo: "BackgroundJobRepository", job: dict[str, Any]) -> Non
     (reviewer BLOCKING-1/3). Single-agent: the one enqueue reservation via the
     atomic claim CTE; pipeline: this job's own outstanding count (never a
     user-wide runsUsed delta)."""
-    if job.get("agentKey") == "pipeline":
+    if job.get("agentKey") in ("pipeline", _ORCH_PLAN_AGENT_KEY):
         repo.refund_pipeline_outstanding(job["id"])
     else:
         repo.refund_single_reservation(job["id"])
+
+
+def _run_plan_body(user_id: str, plan_id: str) -> dict[str, Any]:
+    """Execute one recorded RunPlan by REUSING the router's plan executor, which
+    in turn drives the SAME ``_dispatch`` chain every manual run uses."""
+    from app.routers.agents import execute_run_plan
+
+    return execute_run_plan(user_id, plan_id)
+
+
+def _fail_run_plan(plan_id: str, exc: BaseException) -> None:
+    """Record an honest terminal state on the plan row itself.
+
+    Without this a crashed plan job would leave its plan stuck in ``running``
+    forever — a screen that animates work nobody is doing is exactly the
+    graceful fiction the design principle forbids. Best-effort: a failure here
+    must not mask the original one.
+    """
+    if not plan_id:
+        return
+    try:
+        from app.repositories.run_plan import RunPlanRepository
+
+        RunPlanRepository().finish(
+            plan_id,
+            "failed",
+            summary={"reason": _honest_message(exc)},
+            halt_reason=_honest_message(exc),
+        )
+    except Exception:  # noqa: BLE001
+        logger.warning("could not mark run plan %s failed", plan_id, exc_info=True)
 
 
 async def run_agent_job(ctx: Any, job_id: str) -> None:
@@ -163,6 +205,33 @@ async def run_agent_job(ctx: Any, job_id: str) -> None:
     if job is None:
         return  # missing or already terminal — nothing to do
     user_id = job["userId"]
+
+    if job["agentKey"] == _ORCH_PLAN_AGENT_KEY:
+        # U-AGI P1-A: a whole Supervisor RunPlan. Its per-step reserves/refunds
+        # are scoped to THIS job exactly like the pipeline's (BLOCKING-3), so a
+        # mid-plan crash refunds only what this plan still had outstanding —
+        # never a user-wide delta. The plan's OWN row records every step's
+        # terminal state before this returns, so a job that dies after the last
+        # step still leaves an honest, readable plan record.
+        token = _pipeline_job_ctx.set(job_id)
+        plan_id = str((job.get("params") or {}).get("runPlanId") or "")
+        try:
+            result = await asyncio.to_thread(_run_plan_body, user_id, plan_id)
+        except _TransientError:
+            _pipeline_job_ctx.reset(token)
+            raise
+        except Exception as exc:  # noqa: BLE001 — terminal, honest, refunded
+            _pipeline_job_ctx.reset(token)
+            if repo.mark_failed(job_id, _honest_message(exc)):
+                repo.refund_pipeline_outstanding(job_id)
+            _fail_run_plan(plan_id, exc)
+            logger.error(
+                "run plan job %s failed: %s: %s", job_id, type(exc).__name__, exc
+            )
+            return
+        _pipeline_job_ctx.reset(token)
+        repo.mark_completed(job_id, result)
+        return
 
     if job["agentKey"] == "pipeline":
         # Scope per-step reserves/refunds to THIS job so a mid-pipeline crash
@@ -301,6 +370,13 @@ async def run_agent_job(ctx: Any, job_id: str) -> None:
             # MF-2: mirror the AgentRun row's substitution bookkeeping onto
             # the BackgroundJob result too, so the two stay byte-identical.
             honest_result["requestedModel"] = usage["requestedModel"]
+            # R-5: the visibility half of the same fact. Only set when the sync
+            # path actually recorded it, so an absent observation stays absent
+            # here too rather than becoming a fabricated null-as-answer.
+            if usage.get("servedModel") is not None:
+                honest_result["servedModel"] = usage["servedModel"]
+            if usage.get("fallbackReason"):
+                honest_result["fallbackReason"] = usage["fallbackReason"]
         honest_result["tokensIn"] = usage.get("tokensIn", 0)
         honest_result["tokensOut"] = usage.get("tokensOut", 0)
         honest_result["costUsd"] = degraded_cost

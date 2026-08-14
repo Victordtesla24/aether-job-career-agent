@@ -27,7 +27,8 @@ logger = logging.getLogger(__name__)
 #: 7420240711; interviews/networking 7420240713/714; google_credential 715;
 #: job_source_status/provider_credential/gmail_service 716; user_provider_credential
 #: 717; gmail_account 718; billing 719; admin 721; background_jobs 722;
-#: EmailThread aiScore (gmail_service) 723. Next genuinely-free id: 724.
+#: EmailThread aiScore (gmail_service) 723; run_plan 724.
+#: Next genuinely-free id: 725.
 #: (7420240720 was WRONG — it collides with db.py:ensure_admin_user_columns; fixed
 #: per reviewer BLOCKING-4.)
 _BACKGROUND_JOB_LOCK = 7420240722
@@ -54,12 +55,95 @@ _NON_TERMINAL = ("enqueued", "processing")
 #: ``tailor``/``coverLetter``/``pipeline`` are deliberately NOT here: those are
 #: per-job units of work and running several at once is legitimate.
 #:
-#: MUST stay in step with the partial-unique-index predicate in
-#: :func:`_ensure_table` — the index is the DB-level half of the same rule.
-_SINGLETON_AGENTS = ("scout",)
+#: U-AGI P1-A (F-R8-1) extends this from ``scout`` alone to the whole ``silo``
+#: execution class of the charter (``routers.agents._EXEC_CLASS_BY_BACKEND``),
+#: because that field is DECORATIVE without a database backstop: enabling
+#: ``AETHER_ASYNC_GENERATION`` does NOT create mutual exclusion — this tuple and
+#: :data:`_SINGLETON_INDEX_NAME` do. Each addition carries a cited hazard
+#: (``uat/reports/evidence/market-perf/u-agi/p1a/EXEC-CLASSES.md`` §2):
+#:
+#: * ``submission`` — the (userId, jobId) ACTIVE-application slot; a second
+#:   concurrent run can put a SECOND application in front of the same employer.
+#: * ``emailAgent`` — triage's ``EmailThread`` upsert is SELECT-then-INSERT
+#:   behind a NON-unique index, its classification write is last-writer-wins,
+#:   and one Gmail OAuth credential is serialized only WITHIN a process.
+#: * ``notification`` — two stacked check-then-act writes (approval dedupe and
+#:   the digest row) with no unique index behind either.
+#: * ``recruiterOutreach`` / ``reference`` — no race proven; siloed because
+#:   U-AGI §5.3 makes them T3 approval-gated real-world actors and the
+#:   conservative class is mandated for outbound side effects. The charter
+#:   records that distinction as ``siloBasis: tier-conservative`` so this set
+#:   never claims a race it cannot cite.
+#:
+#: This tuple is the AUTHORITY on who may take an exclusive slot
+#: (:meth:`BackgroundJobRepository.create_singleton` hard-refuses anything
+#: outside it); the partial unique index in :func:`_ensure_table` is the
+#: DB-level half that makes a claim atomic across processes. A test pins this
+#: tuple equal to the charter's ``silo`` set, so the two can never disagree.
+_SINGLETON_AGENTS = (
+    "scout",
+    "submission",
+    "emailAgent",
+    "notification",
+    "recruiterOutreach",
+    "reference",
+)
+
+#: Name of the partial unique index that enforces the exclusive slot.
+#:
+#: Versioned on purpose. ``CREATE UNIQUE INDEX IF NOT EXISTS`` will NOT re-write
+#: an index that already exists, so changing the rule under the OLD name would
+#: leave every deployment still enforcing the old one while the code claims
+#: otherwise — the exact "decorative field" failure F-R8-1 names. Bump this name
+#: whenever the rule changes.
+#:
+#: A version bump alone is not enough, and :func:`_ensure_table` does not rely on
+#: one: a database that ran an INTERMEDIATE build already holds this name with
+#: that build's definition, and no future bump can help it. The definition is
+#: therefore verified at ensure-time and replaced when it does not match.
+#:
+#: It is keyed on ``singletonKey`` — the CLAIM — not on ``agentKey``, and that
+#: distinction is load-bearing rather than cosmetic. An ``(userId, agentKey)``
+#: index over the extended silo set would have made a perfectly legitimate second
+#: ``emailAgent`` run a raw unique-violation 500: that backend has MODES, and its
+#: async route enqueues without claiming (``agents.py`` emailAgent branch), so a
+#: user asking for a draft reply while a triage job is in flight would have hit
+#: it. Routing that route through the claim instead would be worse — the caller
+#: would get back the id of a job doing something they did not ask for, which is
+#: silent substitution. Keying on the claim keeps the exclusive slot exactly as
+#: strong for everything that TAKES one, and changes nothing for anything that
+#: does not.
+_SINGLETON_INDEX_NAME = "BackgroundJob_active_singleton_v2_idx"
+
+#: Name of the ORIGINAL scout-only index (MON-020), which this one ADDS TO and
+#: does NOT replace.
+#:
+#: Calling it "superseded" and dropping it was a real weakening, caught by
+#: ``test_mon020_async_scout.py`` (``test_active_scout_singleton_is_enforced_by_
+#: a_partial_unique_index``): the two indexes enforce DIFFERENT rules and
+#: neither contains the other.
+#: ``_SCOUT_INDEX_NAME`` constrains every ACTIVE ``scout`` row however it was
+#: written — including an insert that never went through ``create_singleton`` —
+#: which is exactly the defence-in-depth MON-020 shipped. The claim-keyed index
+#: constrains only rows that OPTED IN by claiming, which is what lets a silo
+#: agent with modes still be enqueued honestly (see above). Drop the scout index
+#: and a future code path that enqueues discovery without claiming gets two
+#: concurrent passes with no database left to stop it. So it stays.
+#:
+#: It stays for ``scout`` ALONE, and that is not an oversight: ``scout`` is a
+#: whole-account pass, so a second active row is never legitimate. ``submission``
+#: and ``emailAgent`` are per-job / per-mode, where a second active row IS
+#: legitimate, and an ``agentKey``-keyed index over them would turn ordinary work
+#: into a 500.
+_SCOUT_INDEX_NAME = "BackgroundJob_active_singleton_idx"
+
+#: Agents constrained by :data:`_SCOUT_INDEX_NAME` on EVERY insert path. A
+#: superset of this is not free — see above — so it is exactly the shipped set.
+_ALWAYS_SINGLETON_AGENTS = ("scout",)
 
 _COLS = (
-    '"id","userId","agentKey","runId","params","status","arqJobId","result",'
+    '"id","userId","agentKey","singletonKey","runId","params","status",'
+    '"arqJobId","result",'
     '"error","attempts","quotaReserved","quotaReservedAt","quotaRefundedAt",'
     '"quotaReservedCount","quotaRefundedCount",'
     '"startedAt","finishedAt","createdAt","updatedAt"'
@@ -146,28 +230,87 @@ def _ensure_table() -> None:
             # lock in the SAME transaction as its INSERT) — but it must not take
             # the rest of this DDL down with it.
             #
-            # The predicate is BUILT from :data:`_SINGLETON_AGENTS` (code
-            # constants, never user input) so the Python guard and the index
-            # cannot claim different agents. NOTE for whoever extends that
-            # tuple: ``IF NOT EXISTS`` will not re-write an index that already
-            # exists, so a new agent needs a NEW index name (and a drop of the
-            # old one) — not just a longer tuple.
-            singleton_agents = ", ".join(f"'{a}'" for a in _SINGLETON_AGENTS)
-            cur.execute("SAVEPOINT bg_singleton_idx")
+            # The claim column: NULL for an ordinary enqueue, the agent key for
+            # a row that took the exclusive slot (see ``create_singleton``).
+            # Additive and nullable, so every pre-existing row keeps the honest
+            # value "this row never claimed a slot".
+            cur.execute(
+                'ALTER TABLE "BackgroundJob" '
+                'ADD COLUMN IF NOT EXISTS "singletonKey" text'
+            )
+            # (1) The ORIGINAL scout rule, unchanged and NOT superseded: every
+            # ACTIVE scout row, however it was written. This is the one that
+            # holds when a caller never went through ``create_singleton`` at all.
+            scout_agents = ", ".join(f"'{a}'" for a in _ALWAYS_SINGLETON_AGENTS)
+            cur.execute("SAVEPOINT bg_scout_idx")
             try:
                 cur.execute(
                     'CREATE UNIQUE INDEX IF NOT EXISTS '
-                    '"BackgroundJob_active_singleton_idx" ON "BackgroundJob" '
-                    f'("userId","agentKey") WHERE "agentKey" IN ({singleton_agents}) '
+                    f'"{_SCOUT_INDEX_NAME}" ON "BackgroundJob" '
+                    f'("userId","agentKey") WHERE "agentKey" IN ({scout_agents}) '
+                    "AND \"status\" IN ('enqueued','processing')"
+                )
+            except Exception:  # noqa: BLE001 — data-dependent; never fatal here
+                cur.execute("ROLLBACK TO SAVEPOINT bg_scout_idx")
+                logger.warning(
+                    "%s could not be created — duplicate active rows already "
+                    "exist for a (userId, agentKey) in %s.",
+                    _SCOUT_INDEX_NAME, _ALWAYS_SINGLETON_AGENTS, exc_info=True,
+                )
+            else:
+                cur.execute("RELEASE SAVEPOINT bg_scout_idx")
+            # (2) The CLAIM rule, which ADDS the other five silo agents. It is
+            # keyed on the claim, and :data:`_SINGLETON_AGENTS` is the
+            # Python-side authority for who may take one (``create_singleton``
+            # hard-refuses anything outside it).
+            cur.execute("SAVEPOINT bg_singleton_idx")
+            try:
+                # A versioned NAME is not by itself proof of the RULE. Any
+                # database that ran an earlier build of this index — every
+                # developer machine and the shared test schema did — still holds
+                # it under this name with the OLD key columns, and
+                # ``IF NOT EXISTS`` keeps it forever. That is not cosmetic: the
+                # superseded rule was keyed ``("userId","agentKey")``, so an
+                # ordinary unclaimed enqueue (a second ``emailAgent`` draft while
+                # a triage job is in flight) hits a raw unique-violation 500 on a
+                # deployment that believes it is enforcing the claim rule.
+                # Observed, not theorised: it failed two tests of this suite
+                # against a schema in exactly that state.
+                #
+                # So the DEFINITION is checked, and a mismatch is replaced inside
+                # this savepoint — if the CREATE below then fails on existing
+                # data, the DROP rolls back with it and the database keeps
+                # whatever protection it had.
+                cur.execute(
+                    "SELECT pg_get_indexdef(c.oid) FROM pg_class c "
+                    "JOIN pg_namespace n ON n.oid = c.relnamespace "
+                    "WHERE c.relname = %s "
+                    "AND n.nspname = ANY(current_schemas(false))",
+                    (_SINGLETON_INDEX_NAME,),
+                )
+                existing = cur.fetchone()
+                if existing and '"singletonKey"' not in (existing[0] or ""):
+                    logger.warning(
+                        "%s exists with a superseded definition (%s) — replacing "
+                        "it with the claim-keyed rule.",
+                        _SINGLETON_INDEX_NAME,
+                        existing[0],
+                    )
+                    cur.execute(f'DROP INDEX "{_SINGLETON_INDEX_NAME}"')
+                cur.execute(
+                    'CREATE UNIQUE INDEX IF NOT EXISTS '
+                    f'"{_SINGLETON_INDEX_NAME}" ON "BackgroundJob" '
+                    '("userId","singletonKey") WHERE "singletonKey" IS NOT NULL '
                     "AND \"status\" IN ('enqueued','processing')"
                 )
             except Exception:  # noqa: BLE001 — data-dependent; never fatal here
                 cur.execute("ROLLBACK TO SAVEPOINT bg_singleton_idx")
                 logger.warning(
-                    "BackgroundJob_active_singleton_idx could not be created — "
-                    "duplicate active rows already exist for a (userId, agentKey) "
-                    "in %s. The advisory-lock guard in create_singleton still "
-                    "holds; resolve the duplicates and restart to add the index.",
+                    "%s could not be created — duplicate active CLAIMED rows "
+                    "already exist for a (userId, singletonKey) in %s. The "
+                    "advisory-lock guard in create_singleton still holds; "
+                    "resolve the duplicates and restart to add the index.",
+                    _SINGLETON_INDEX_NAME,
                     _SINGLETON_AGENTS,
                     exc_info=True,
                 )
@@ -261,17 +404,18 @@ class BackgroundJobRepository:
         _ensure_table()
         insert_sql = (
             'INSERT INTO "BackgroundJob" '
-            '("id","userId","agentKey","runId","params","status","arqJobId",'
-            '"quotaReserved","quotaReservedAt") '
-            "SELECT %s,%s,%s,%s,%s::jsonb,'enqueued',%s,%s,"
+            '("id","userId","agentKey","singletonKey","runId","params","status",'
+            '"arqJobId","quotaReserved","quotaReservedAt") '
+            "SELECT %s,%s,%s,%s,%s,%s::jsonb,'enqueued',%s,%s,"
             "CASE WHEN %s THEN now() ELSE NULL END "
             'WHERE NOT EXISTS (SELECT 1 FROM "BackgroundJob" '
-            'WHERE "userId"=%s AND "agentKey"=%s AND "status" IN %s) '
+            'WHERE "userId"=%s AND "singletonKey"=%s AND "status" IN %s) '
             'RETURNING "id"'
         )
         select_sql = (
-            'SELECT "id" FROM "BackgroundJob" WHERE "userId"=%s AND "agentKey"=%s '
-            'AND "status" IN %s ORDER BY "createdAt" DESC LIMIT 1'
+            'SELECT "id" FROM "BackgroundJob" WHERE "userId"=%s '
+            'AND "singletonKey"=%s AND "status" IN %s '
+            'ORDER BY "createdAt" DESC LIMIT 1'
         )
         params_json = json.dumps(params) if params is not None else None
         with get_connection() as conn:
@@ -287,6 +431,7 @@ class BackgroundJobRepository:
                             new_id(),
                             user_id,
                             agent_key,
+                            agent_key,  # singletonKey — THIS row holds the slot
                             run_id,
                             params_json,
                             arq_job_id,
