@@ -91,4 +91,31 @@ describe("ResetPasswordPage", () => {
     await waitFor(() => expect(screen.getByTestId("reset-password-error")).toBeTruthy());
     expect(screen.getByTestId("reset-password-error").textContent).toMatch(/invalid or has expired/i);
   });
+
+  it("shows the config-managed refusal instead of a false success (§14.7)", async () => {
+    // The API refuses a reset for the env-managed admin identity, because the
+    // §14.7 rotation re-applies AETHER_ADMIN_PASSWORD_HASH on every restart and
+    // would silently revert it. The page must render that reason and must NOT
+    // show the "Your password has been reset" success state.
+    resetPasswordMock.mockRejectedValue(
+      new AuthApiError(
+        "This account's password is managed by server configuration " +
+          "(AETHER_ADMIN_PASSWORD_HASH) and is re-applied every time the API restarts.",
+        409,
+      ),
+    );
+    window.history.replaceState(null, "", "/reset-password?token=owner-token");
+    render(<ResetPasswordPage />);
+    await waitFor(() => expect(screen.getByLabelText(/^new password$/i)).toBeTruthy());
+
+    fireEvent.change(screen.getByLabelText(/^new password$/i), { target: { value: "NewPassw0rd1" } });
+    fireEvent.change(screen.getByLabelText(/confirm new password/i), { target: { value: "NewPassw0rd1" } });
+    fireEvent.click(screen.getByRole("button", { name: /reset password/i }));
+
+    await waitFor(() => expect(screen.getByTestId("reset-password-error")).toBeTruthy());
+    expect(screen.getByTestId("reset-password-error").textContent).toMatch(
+      /managed by server configuration/i,
+    );
+    expect(screen.queryByTestId("reset-password-success")).toBeFalsy();
+  });
 });

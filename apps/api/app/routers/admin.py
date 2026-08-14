@@ -18,6 +18,10 @@ All spend figures are USD (LLM providers bill USD; §14.8) — never AUD.
 """
 from __future__ import annotations
 
+import asyncio
+import logging
+import time
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
@@ -25,13 +29,19 @@ from fastapi.encoders import jsonable_encoder
 from pydantic import BaseModel, Field, StrictBool, ValidationError
 
 from app.db import ensure_password_reset_columns, get_connection
-from app.middleware.auth import AdminUser
+from app.middleware.auth import (
+    AdminUser,
+    session_invalidation_boundary,
+    stamp_invalidates_tokens_minted_before,
+)
 from app.repositories import admin as admin_repo
 from app.repositories.user import UserRepository, validate_password_policy
 from app.security import hash_password
 from app.services import entitlements
 
 router = APIRouter()
+
+logger = logging.getLogger(__name__)
 
 
 def _client_ip(request: Request) -> Optional[str]:
@@ -288,18 +298,44 @@ async def admin_set_password(
     The value is validated against the SAME policy self-service registration
     uses, hashed with the SAME hasher (``app.security.hash_password``), and
     written through ``UserRepository.set_password`` — which stamps
-    ``passwordChangedAt`` and therefore invalidates every session token minted
-    before this moment (O-4). The plaintext is never logged, never echoed back,
-    and never written to the audit row: the audit records that the event
+    ``passwordChangedAt`` (O-4). The plaintext is never logged, never echoed
+    back, and never written to the audit row: the audit records that the event
     happened, not what it was.
+
+    SESSION INVALIDATION IS EARNED, NOT ASSERTED. An admin reaches for this
+    route to cut off a compromised or abusive session NOW, so the response may
+    not simply claim it. A bare ``now()`` stamp does NOT invalidate a token
+    minted earlier in the same whole second — ``iat`` is truncated to seconds
+    and ``_IAT_GRACE_SECONDS`` forgives that much — and because the check
+    compares two fixed timestamps, such a token then survives for the REST of
+    its 24h TTL, not for one more second. So this route waits for
+    ``session_invalidation_boundary`` (at most ~1.25s, mostly absorbed by
+    bcrypt) before writing, then re-reads the stamp it actually wrote and
+    reports ``sessionsInvalidated`` from
+    ``stamp_invalidates_tokens_minted_before``. ``true`` therefore means "every
+    token minted before ``sessionsInvalidatedBefore`` is already rejected", and
+    a ``false`` (clock skew beyond the margin) is reported honestly rather than
+    papered over. The grace window itself is untouched: a login AFTER the change
+    is still never falsely 401'd.
+
+    An identity whose password §14.7 owns (``AETHER_ADMIN_PASSWORD_HASH``) is
+    REFUSED with 409 — ``apply_admin_rotation`` re-applies that hash on every
+    boot, so accepting the change here would report success for a write the
+    next restart silently reverts.
 
     ATOMIC WITH ITS AUDIT ROW: the hash write and the ``AdminAuditLog`` insert
     share one cursor in one transaction. Before this, a failure between them
     (pool exhaustion, a DB blip, a worker restart) left the target locked out of
     every existing session by a password change nothing recorded.
     """
+    received_at = time.time()
     body = await _parse_json_object(request)
     _require_user(user_id)
+    target = UserRepository().get_auth_context(user_id)
+    if admin_repo.password_is_env_managed(target.get("email") if target else None):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, admin_repo.ENV_MANAGED_PASSWORD_MESSAGE
+        )
     new_password = body.get("newPassword")
     if not isinstance(new_password, str) or not new_password:
         raise HTTPException(
@@ -313,21 +349,61 @@ async def admin_set_password(
     ensure_password_reset_columns()
     admin_repo._ensure_admin_schema()
     password_hash = hash_password(new_password)
+
+    # Clear the iat-truncation boundary BEFORE stamping, so the invalidation
+    # this route reports is real (see the docstring). Bounded by construction:
+    # the boundary is < 1.25s past the second the request arrived in, and the
+    # bcrypt hash above has already spent part of it. ``asyncio.sleep`` keeps
+    # the event loop free for other requests while it elapses.
+    delay = session_invalidation_boundary(received_at) - time.time()
+    if delay > 0:
+        await asyncio.sleep(delay)
+
     with get_connection() as conn:
         with conn.cursor() as cur:
             UserRepository().set_password(user_id, password_hash, cur=cur)
+            # Read back the stamp on the SAME cursor: what the response claims
+            # is derived from what was actually written, never assumed.
+            cur.execute(
+                'SELECT "passwordChangedAt" FROM "User" WHERE "id"=%s', (user_id,)
+            )
+            row = cur.fetchone()
+            sessions_invalidated = stamp_invalidates_tokens_minted_before(
+                row[0] if row else None, received_at
+            )
             admin_repo.write_audit(
                 admin["id"],
                 "set_user_password",
                 target_type="user",
                 target_id=user_id,
                 # NEVER the value — not the password, not the hash, not a prefix.
-                detail={"sessionsInvalidated": True},
+                detail={"sessionsInvalidated": sessions_invalidated},
                 ip=_client_ip(request),
                 cur=cur,
             )
         conn.commit()
-    return {"userId": user_id, "passwordChanged": True, "sessionsInvalidated": True}
+
+    if not sessions_invalidated:
+        # Honest, actionable, and value-free: the password DID change, but the
+        # lockout the admin came for is not provable, so say so instead of
+        # returning the optimistic default.
+        logger.warning(
+            "admin password change for userId=%s could not confirm session "
+            "invalidation — the passwordChangedAt stamp did not clear the iat "
+            "grace window, which points at clock skew between the API and the "
+            "database. Existing sessions for this user may still be live.",
+            user_id,
+        )
+    return {
+        "userId": user_id,
+        "passwordChanged": True,
+        "sessionsInvalidated": sessions_invalidated,
+        "sessionsInvalidatedBefore": (
+            datetime.fromtimestamp(received_at, tz=timezone.utc).isoformat()
+            if sessions_invalidated
+            else None
+        ),
+    }
 
 
 @router.post("/users/{user_id}/identity")

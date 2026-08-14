@@ -126,13 +126,16 @@ export default function AdminUserDetailPage() {
 
   /** Run one admin mutation with shared busy/notice/error handling. */
   const run = useCallback(
-    async (action: () => Promise<void>, successMessage: string) => {
+    // An action may RETURN its own notice when the honest wording depends on
+    // what the API reported back (e.g. whether sessions were really
+    // invalidated); ``successMessage`` is the fixed fallback.
+    async (action: () => Promise<string | void>, successMessage: string) => {
       setBusy(true);
       setError(null);
       setNotice(null);
       try {
-        await action();
-        setNotice(successMessage);
+        const outcome = await action();
+        setNotice(typeof outcome === "string" ? outcome : successMessage);
         await load();
       } catch (e) {
         setError(e instanceof Error ? e.message : "Action failed");
@@ -184,9 +187,15 @@ export default function AdminUserDetailPage() {
       return;
     }
     void run(async () => {
-      await setUserPassword(userId, newPassword);
+      const result = await setUserPassword(userId, newPassword);
       setNewPassword("");
-    }, "Password set. This user's existing sessions were invalidated.");
+      // Repeat what the API measured. It waits out the JWT iat grace window so
+      // this is normally true, but a false must never be dressed up as a
+      // lockout that did not happen.
+      return result.sessionsInvalidated
+        ? "Password set. This user's existing sessions were invalidated."
+        : "Password set — but session invalidation could not be confirmed (API/database clock skew). Existing sessions for this user may still be live.";
+    }, "Password set.");
   };
 
   const onSaveIdentity = () => {
@@ -458,8 +467,9 @@ export default function AdminUserDetailPage() {
         <Panel title="Credentials — password" testId="admin-password-panel">
           <p className="mb-2 text-xs text-aether-muted">
             Hashed server-side with the app&apos;s own hasher. The value is never stored in
-            the clear, never shown again and never written to the audit log — and every
-            existing session for this user is invalidated immediately.
+            the clear, never shown again and never written to the audit log. Every existing
+            session for this user is invalidated before this call returns — it waits out the
+            token-timestamp grace window (about a second) so that is true, not assumed.
           </p>
           <div className="flex flex-wrap items-center gap-2">
             <input

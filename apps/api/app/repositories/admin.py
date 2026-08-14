@@ -1040,6 +1040,59 @@ def health_overview() -> dict[str, Any]:
 # --------------------------------------------------------------------------- #
 
 
+#: Refusal text for an in-app password change on the identity §14.7 owns.
+#: Names the mechanism AND the real remedy; carries NO credential material (not
+#: the hash, not the address) so it is safe to return over HTTP and to log.
+ENV_MANAGED_PASSWORD_MESSAGE = (
+    "This account's password is managed by server configuration "
+    "(AETHER_ADMIN_PASSWORD_HASH) and is re-applied every time the API "
+    "restarts, so a password set here would be silently reverted at the next "
+    "restart. The change was refused instead of accepted-then-lost. To change "
+    "it for real, rotate AETHER_ADMIN_PASSWORD_HASH to a bcrypt hash of the "
+    "new password and restart the API."
+)
+
+
+def env_managed_admin_email() -> Optional[str]:
+    """The email address whose password §14.7 owns, or ``None``.
+
+    :func:`apply_admin_rotation` runs on EVERY app construction and, for
+    ``AETHER_ADMIN_EMAIL``, UPSERTs ``passwordHash`` from
+    ``AETHER_ADMIN_PASSWORD_HASH``. For that ONE identity the environment — not
+    the database — is the source of truth, so any in-app password change is
+    undone at the next restart. Both variables must be present: with no
+    configured hash there is nothing to re-apply and nothing to revert.
+
+    Deliberately NOT conditioned on ``_admin_credential_problem``. A refused
+    credential leaves ``passwordHash`` untouched TODAY (condition C2), but the
+    operator's fix is to rotate the variable — at which point the env value is
+    applied and an in-app change made in the meantime disappears. The
+    environment owns this password in both dispositions.
+
+    Reads ``os.environ`` on every call (never a module-level snapshot), so
+    unsetting the variables takes effect without a code change, and returns
+    only the ADDRESS — never the configured hash.
+    """
+    email = (os.environ.get("AETHER_ADMIN_EMAIL") or "").strip()
+    pw_hash = (os.environ.get("AETHER_ADMIN_PASSWORD_HASH") or "").strip()
+    if not email or not pw_hash:
+        return None
+    return email
+
+
+def password_is_env_managed(email: Optional[str]) -> bool:
+    """Is ``email`` the identity whose password §14.7 re-applies on every boot?
+
+    Compared case-insensitively, matching the rotation's own de-privilege step
+    (``lower("email")=lower(%s)``) and erring toward refusing a change that
+    would be reverted rather than accepting one silently.
+    """
+    managed = env_managed_admin_email()
+    if managed is None or not email:
+        return False
+    return email.strip().lower() == managed.lower()
+
+
 def apply_admin_rotation() -> dict[str, Any]:
     """Apply §14.7 admin-credential rotation. Idempotent; safe on every load.
 

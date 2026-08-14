@@ -16,8 +16,12 @@ non-secret fields. A password change logs the EVENT and NEVER any value.
 """
 from __future__ import annotations
 
+import math
+import time
 import uuid
+from datetime import datetime, timedelta, timezone
 
+import jwt
 import pytest
 
 from app.db import get_connection, new_id
@@ -27,7 +31,7 @@ from app.repositories.billing import (
     UsageQuotaRepository,
     ensure_user_billing,
 )
-from app.security import verify_password
+from app.security import create_access_token, verify_password
 from app.services import entitlements
 
 # --------------------------------------------------------------------------- #
@@ -305,11 +309,52 @@ def test_admin_refund_from_the_user_page_reuses_the_existing_refund_path(
 # --------------------------------------------------------------------------- #
 
 
+def _mint_worst_case_token(user_id: str, email: str) -> dict[str, str]:
+    """Mint a real access token in the WORST position for the ``iat`` grace window.
+
+    ``app.middleware.auth.get_current_user`` forgives a token whose whole-second
+    ``iat`` reads up to ``_IAT_GRACE_SECONDS`` (1.0) older than
+    ``passwordChangedAt`` — the slack that stops an immediate post-change
+    re-login from 401ing itself (PyJWT truncates ``iat`` to whole seconds;
+    ``passwordChangedAt`` is microsecond-precision ``now()``). A token minted
+    just AFTER a whole-second boundary therefore carries the LATEST ``iat`` that
+    can still precede a change landing in that same second — precisely the case
+    where a handler stamping a bare ``now()`` fails to invalidate it.
+
+    Minting here through ``create_access_token`` (the exact function /auth/login
+    uses) rather than through /auth/login keeps ~0.33s of bcrypt OUT of the
+    second we need to stay inside, so the position is DETERMINISTIC instead of a
+    coin flip — and the token itself is indistinguishable from a login's.
+    The ``iat`` assertion fails loudly rather than silently degrading into a
+    weaker (always-passing) assertion if the box is slow enough to slip a second.
+    """
+    now = time.time()
+    time.sleep(max(0.0, math.ceil(now) - now) + 0.02)
+    token = create_access_token(user_id, email)
+    iat = jwt.decode(token, options={"verify_signature": False})["iat"]
+    assert iat == math.floor(time.time()), (
+        "worst-case token did not land inside the current whole second — the "
+        "grace-window position this test depends on was not established"
+    )
+    return {"Authorization": f"Bearer {token}"}
+
+
 def test_admin_sets_a_password_hashes_it_and_invalidates_sessions(client):
+    """DETERMINISTIC against the ``_IAT_GRACE_SECONDS`` window (re-review #1).
+
+    The old version minted the victim's token at an arbitrary point in the
+    second the change landed in, so it passed or failed by luck. This one pins
+    the WORST case explicitly and asserts the guarantee the endpoint claims:
+    a token minted before the change is rejected the moment the call returns —
+    no sleep, no retry, no second chance.
+    """
     admin_headers, admin_id = _admin(client)
     user_headers, target_id, email = _target(client)
     assert client.get("/auth/me", headers=user_headers).status_code == 200
     old_hash = _password_hash(target_id)
+
+    worst_case_headers = _mint_worst_case_token(target_id, email)
+    assert client.get("/auth/me", headers=worst_case_headers).status_code == 200
 
     new_password = "R0tatedPassw0rd"
     r = client.post(
@@ -325,11 +370,90 @@ def test_admin_sets_a_password_hashes_it_and_invalidates_sessions(client):
     assert stored != new_password  # never stored in the clear
     assert verify_password(new_password, stored)
 
-    # O-4 session invalidation: the pre-change token no longer authenticates.
+    # O-4 session invalidation: EVERY token minted before the change is
+    # rejected — the ordinary login token minted seconds earlier AND the
+    # worst-case one minted at the top of the very second the change landed in.
     assert client.get("/auth/me", headers=user_headers).status_code == 401
-    # ... and the new password works.
+    assert client.get("/auth/me", headers=worst_case_headers).status_code == 401
+    # ... and the new password works, minting a token the same stamp must NOT
+    # falsely invalidate (the grace window's whole reason for existing).
     login = client.post("/auth/login", json={"email": email, "password": new_password})
     assert login.status_code == 200, login.text
+    fresh = {"Authorization": f"Bearer {login.json()['access_token']}"}
+    assert client.get("/auth/me", headers=fresh).status_code == 200
+
+
+def test_session_invalidation_boundary_math_is_the_property_it_claims():
+    """Pure-function pin for the arithmetic the endpoint's guarantee rests on.
+
+    Additive property test (the helpers are new in this fix, so its "before"
+    state is that they did not exist). It exists so a later "simplification"
+    of ``session_invalidation_boundary`` cannot quietly reopen the hole while
+    the slower integration specs still look green.
+    """
+    from app.middleware.auth import (
+        _IAT_GRACE_SECONDS,
+        session_invalidation_boundary,
+        stamp_invalidates_tokens_minted_before,
+    )
+
+    for received_at in (1_786_000_000.0, 1_786_000_000.999, 1_786_000_123.5):
+        boundary = session_invalidation_boundary(received_at)
+        # Strictly past the grace window measured from the WHOLE SECOND the
+        # request arrived in — that is what covers a truncated ``iat``.
+        assert boundary > math.floor(received_at) + _IAT_GRACE_SECONDS
+        # ... and never a wait longer than one second plus the skew margin.
+        assert boundary - received_at <= 1.0 + 0.25
+
+        stamp = datetime.fromtimestamp(boundary, tz=timezone.utc)
+        assert stamp_invalidates_tokens_minted_before(stamp, received_at) is True
+        # A bare now() stamp does NOT earn the claim: that is the whole defect.
+        assert (
+            stamp_invalidates_tokens_minted_before(
+                datetime.fromtimestamp(received_at, tz=timezone.utc), received_at
+            )
+            is False
+        )
+
+    # No row / no stamp is never reported as an invalidation.
+    assert stamp_invalidates_tokens_minted_before(None, time.time()) is False
+
+
+def test_admin_password_response_reports_what_it_actually_invalidated(client):
+    """``sessionsInvalidated`` is COMPUTED from the stamp that was written, not
+    asserted optimistically (re-review #1, item 2).
+
+    The endpoint may only claim invalidation it can prove: the returned
+    ``sessionsInvalidatedBefore`` instant is a real timestamp, every token
+    minted before it genuinely 401s, and the audit row carries the same
+    computed value rather than a hardcoded ``true``.
+    """
+    admin_headers, _ = _admin(client)
+    _, target_id, email = _target(client)
+    worst_case_headers = _mint_worst_case_token(target_id, email)
+
+    before = datetime.now(timezone.utc)
+    r = client.post(
+        f"/admin/users/{target_id}/password",
+        json={"newPassword": "An0therPassw0rd"},
+        headers=admin_headers,
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["passwordChanged"] is True
+    assert body["sessionsInvalidated"] is True
+
+    cutoff = datetime.fromisoformat(body["sessionsInvalidatedBefore"])
+    assert cutoff.tzinfo is not None, "the cutoff must be an unambiguous instant"
+    # It names when the request was handled — not a fabricated round number.
+    assert before - timedelta(seconds=5) <= cutoff <= datetime.now(timezone.utc)
+    # And the claim it makes is TRUE for a token minted before that instant.
+    assert client.get("/auth/me", headers=worst_case_headers).status_code == 401
+
+    entry = next(
+        a for a in _audit_rows(target_id) if a["action"] == "set_user_password"
+    )
+    assert entry["detail"].get("sessionsInvalidated") is True
 
 
 def test_admin_password_change_audits_the_event_but_never_the_value(client):

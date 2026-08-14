@@ -279,6 +279,27 @@ describe("credentials", () => {
     expect(screen.getByTestId("admin-user-notice").textContent).toMatch(/sessions were invalidated/i);
   });
 
+  it("never claims sessions were invalidated when the API says they were not", async () => {
+    // The API computes ``sessionsInvalidated`` from the stamp it actually
+    // wrote (it can come back false under server clock skew). The panel must
+    // repeat what the API reported, not the optimistic copy — an admin cutting
+    // off a compromised session has to know it may still be live.
+    await renderPage(detail());
+    setUserPasswordMock.mockResolvedValue({
+      userId: USER_ID,
+      passwordChanged: true,
+      sessionsInvalidated: false,
+      sessionsInvalidatedBefore: null,
+    });
+    fireEvent.change(screen.getByLabelText("New password"), { target: { value: "An0therPassw0rd" } });
+    fireEvent.click(screen.getByTestId("admin-set-password"));
+
+    await waitFor(() => expect(screen.getByTestId("admin-user-notice")).toBeTruthy());
+    const notice = screen.getByTestId("admin-user-notice").textContent ?? "";
+    expect(notice).toMatch(/could not be confirmed/i);
+    expect(notice).not.toMatch(/sessions were invalidated/i);
+  });
+
   it("sends only the identity fields that actually changed", async () => {
     await renderPage(detail());
     updateUserIdentityMock.mockResolvedValue({

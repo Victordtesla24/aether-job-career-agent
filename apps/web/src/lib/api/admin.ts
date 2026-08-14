@@ -182,13 +182,23 @@ export async function setEntitlementOverride(
  * Set a user's password on their behalf. The plaintext is sent once over the
  * authenticated HTTPS call, hashed server-side by the app's own hasher, and
  * never stored, echoed or audited by value — the audit records the EVENT.
- * Existing sessions for that user are invalidated by the change.
+ *
+ * ``sessionsInvalidated`` is what the API MEASURED after writing, not a
+ * constant: true means every token minted before ``sessionsInvalidatedBefore``
+ * is already rejected. Callers must render the false case honestly instead of
+ * assuming the lockout happened. A 409 means this identity's password is
+ * managed by server configuration (§14.7) and cannot be set from the app.
  */
 export async function setUserPassword(
   userId: string,
   newPassword: string,
   options: RequestOptions = {},
-): Promise<{ userId: string; passwordChanged: boolean; sessionsInvalidated: boolean }> {
+): Promise<{
+  userId: string;
+  passwordChanged: boolean;
+  sessionsInvalidated: boolean;
+  sessionsInvalidatedBefore?: string | null;
+}> {
   return apiRequest(`/admin/users/${encodeURIComponent(userId)}/password`, {
     ...options,
     method: "POST",
