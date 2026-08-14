@@ -31,6 +31,32 @@
  * what stops a sidebar reading as a bolted-on panel. Blur in this app is
  * reserved for the command bar, the mobile sheet/tab bar and `elev-3`
  * overlays (§1.1).
+ *
+ * VIEWPORT-PINNED (doctrine D-ε — "the chrome does not scroll away")
+ * -----------------------------------------------------------------
+ * `sticky top-0 h-screen` is load-bearing, not cosmetic. Without the explicit
+ * height the rail is a plain flex item: `align-items` stretches it to the
+ * whole row, whose height is the ROUTED PAGE's height (measured 2007.5px on a
+ * 1000px viewport), and the `mt-auto` footer group below then parks the
+ * plan/quota block, "Agents Active" and the §1.4 SystemStatus trigger at the
+ * bottom of THAT box — 908px below the fold — while every nav link scrolls
+ * off the top after an ordinary 900px wheel scroll (there is no `lg`
+ * hamburger fallback; the sheet trigger is `lg:hidden`). The rail's own
+ * content is only ~941px tall, so it was never too big for the screen; it was
+ * simply never given a box of its own.
+ *
+ * The explicit `h-screen` overrides flex stretch (a definite cross size beats
+ * `align-self: stretch`), which is what finally gives the pre-existing
+ * `overflow-y-auto` something to clip against: on viewports shorter than the
+ * rail's content the NAV scrolls inside the rail instead of taking the page
+ * with it. `overscroll-contain` stops that inner scroll from chaining out to
+ * the document once it bottoms out. `AppShell`'s `flex min-h-screen` wrapper
+ * is deliberately left alone — it is the sticky containing block and it keeps
+ * the ground full-height on short pages.
+ *
+ * Same shape as `MobileNavSheet`'s `fixed inset-y-0 left-0 … overflow-y-auto`,
+ * chosen as `sticky` here so the content column keeps its normal flow width
+ * and needs no compensating offset.
  */
 
 import Link from "next/link";
@@ -189,7 +215,9 @@ export function Rail({
       aria-label="Primary navigation rail"
       // Reference rule 2: colour-flat against the page — a hairline edge, no
       // surface of its own, no blur.
-      className="hidden shrink-0 flex-col overflow-y-auto overflow-x-hidden border-r border-hairline px-3 py-5 lg:flex"
+      // `sticky top-0 h-screen`: D-ε — the chrome stays on screen and the nav
+      // scrolls INSIDE the rail. See the module docstring for the measurement.
+      className="sticky top-0 hidden h-screen shrink-0 flex-col overflow-y-auto overflow-x-hidden overscroll-contain border-r border-hairline px-3 py-5 lg:flex"
       initial={false}
       animate={{ width: collapsed ? 64 : 248 }}
       transition={SPRING.smooth}
