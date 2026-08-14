@@ -56,7 +56,7 @@ from pathlib import Path
 
 import pytest
 
-from app.db import get_connection, new_id
+from app.db import new_id
 from app.repositories.approval import ApprovalRepository
 
 _TESTS_DIR = Path(__file__).resolve().parent
@@ -226,9 +226,9 @@ class TestSweepDrivesOnlyApprovedNonTerminalApplications:
 
 class TestManualStepCountsAsDrivenNotSkipped:
     def test_manual_step_required_is_counted_and_leaves_no_prepared_row(self, db_session, user_id, monkeypatch):
+        from app.db import ensure_application_manual_step_columns
         from app.services.apply_executor import ManualStepRequired
         from app.workers import apply_sweep
-        from app.db import ensure_application_manual_step_columns
 
         ensure_application_manual_step_columns()
         app_id, _approval_id = _seed_approved(db_session, user_id)
@@ -273,9 +273,12 @@ class TestNoPrepatedOnlyInvariant:
         + neither transmitted nor manual-stepped" must find ZERO rows --
         this is the exact 339-row production defect the scout measured live
         (all 339 approved gates sit with executedAt=NULL, never driven)."""
+        from app.db import (
+            ensure_application_manual_step_columns,
+            ensure_application_transmission_columns,
+        )
         from app.services.apply_executor import ManualStepRequired
         from app.workers import apply_sweep
-        from app.db import ensure_application_manual_step_columns, ensure_application_transmission_columns
 
         ensure_application_manual_step_columns()
         ensure_application_transmission_columns()
