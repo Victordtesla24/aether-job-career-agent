@@ -9,11 +9,14 @@ Key responsibilities:
 """
 from __future__ import annotations
 
+import functools
+import inspect
 import os
 import re
 import uuid
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -464,6 +467,61 @@ def test_user_id(client, auth_headers) -> str:
     when conftest switched to random UUID emails.
     """
     return client._test_user_id
+
+
+@pytest.fixture()
+def patch_agent_run(monkeypatch):
+    """Stand in for an agent's ``run`` with a double that CANNOT go stale.
+
+    WHY THIS EXISTS (2026-08-14). Five suites monkeypatched a hand-written
+    ``def _boom(self, user_id, job_id, resume_id=None)`` over
+    ``CoverLetterAgent.run`` / ``TailoringAgent.run``. U-AX later added a
+    ``policy_knobs`` keyword to those real methods AND to the single dispatch
+    seam that calls them (``routers/agents.py::_agent_callable``), so every one
+    of those doubles began raising ``TypeError: _boom() got an unexpected
+    keyword argument 'policy_knobs'`` — which the router reported as a 500
+    where the suites assert 503 / 422 / 200. The production mappings never
+    regressed; the DOUBLES were narrower than the method they replaced, and a
+    restated signature goes stale silently the next time the real one grows.
+
+    So the double is DERIVED from the real signature instead of restating it:
+
+    * it accepts exactly what the real ``run`` accepts, so a future parameter
+      can never again turn a healthy router into a red test;
+    * it still BINDS every call against that real signature, so a caller that
+      passes something the real method would reject fails loudly — that is a
+      genuine production defect and the ``TypeError`` names it;
+    * it records each call's bound arguments, so a test can assert the router
+      actually REACHED the agent and its 503/422/200 cannot have come from an
+      unrelated earlier failure.
+
+    ``outcome`` is a zero-argument callable: raise from it to simulate a
+    failure, or return the result object the real agent would have returned.
+    Returns the (initially empty) list of recorded calls::
+
+        calls = patch_agent_run(CoverLetterAgent, _boom)
+        ...
+        assert calls, "the router never reached CoverLetterAgent.run"
+    """
+
+    def _patch(agent_cls: type[Any], outcome: Callable[[], Any]) -> list[dict[str, Any]]:
+        real = agent_cls.run
+        signature = inspect.signature(real)
+        calls: list[dict[str, Any]] = []
+
+        @functools.wraps(real)
+        def _double(self, *args: Any, **kwargs: Any) -> Any:
+            bound = signature.bind(self, *args, **kwargs)
+            bound.apply_defaults()
+            recorded = dict(bound.arguments)
+            recorded.pop("self", None)
+            calls.append(recorded)
+            return outcome()
+
+        monkeypatch.setattr(agent_cls, "run", _double)
+        return calls
+
+    return _patch
 
 
 @pytest.fixture()

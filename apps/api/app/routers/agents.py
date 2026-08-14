@@ -1480,6 +1480,18 @@ def _execute_reserved_run(
         # its own atomic terminal transition. Set only for the scoped backends, so
         # no other agent's output shape changes.
         output["noLlmCall"] = True
+    # U2c RULES item 5: stamp the run's quality-gate trail (attempts, each
+    # attempt's own score + verdict, the honest terminal state) onto the
+    # AgentRun's additive columns, so the Supervisor's directive loop
+    # (ADR-AGI-2) can SELECT on it rather than scanning output blobs. This is
+    # the one seam both the sync HTTP path and the ARQ worker share, so neither
+    # can forget it. Best-effort and derived purely from ``output``: it never
+    # re-scores, never fails a run, and writes nothing for a run the gate never
+    # judged.
+    try:
+        runs.record_quality_instrumentation(run_id, output)
+    except Exception:  # noqa: BLE001 — instrumentation is additive
+        logger.warning("agent run %s: quality instrumentation not recorded", run_id)
     finished = runs.finish(run_id, "completed", output=output, cost_usd=cost)
     if cover_degraded or optional_llm_noop:
         # No letter produced — refund the reserved run (sync path). The async

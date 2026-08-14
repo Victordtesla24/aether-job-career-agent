@@ -6,6 +6,10 @@
  * access is centralized here and every field degrades to a sensible default.
  */
 import type { Approval } from "../../lib/api/approvals";
+import { type QualityGate, qualityGateFrom } from "../../lib/quality-gate";
+
+export { describeDimension } from "../../lib/quality-gate";
+export type { QualityDimension, QualityGate } from "../../lib/quality-gate";
 
 /** Server-side expiry window (see apps/api approval_service.EXPIRY_HOURS). */
 export const EXPIRY_HOURS = 48;
@@ -345,4 +349,22 @@ export function substantiveExcerpt(preview: string): string {
   while (start < lines.length && lines[start].trim() === "") start++;
   const excerpt = lines.slice(start).join("\n").trim();
   return excerpt || preview.trim();
+}
+
+// ---------------------------------------------------------------------------
+// U2c — the 80%-across-all-dimensions quality floor, as the modal sees it
+// ---------------------------------------------------------------------------
+
+/**
+ * The quality verdict an approval carries, or `null` when it carries none.
+ *
+ * `null` is the honest answer for every approval created before the gate
+ * existed: nothing judged them, so the modal must neither claim they failed
+ * nor claim they passed. The parsing/rendering rules live in
+ * `lib/quality-gate` because the Resume and Cover Letter Studios render the
+ * SAME verdict — three surfaces paraphrasing one computation is how a product
+ * ends up quoting three different numbers for one result.
+ */
+export function parseQualityGate(approval: Approval): QualityGate | null {
+  return qualityGateFrom((approval.payload as { qualityGate?: unknown }).qualityGate);
 }

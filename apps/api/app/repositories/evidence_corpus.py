@@ -43,6 +43,17 @@ _table_ready = False
 class EvidenceCorpusRepository:
     """Read/write access to the ``EvidenceCorpusItem`` store."""
 
+    def ensure_table(self) -> None:
+        """Public bootstrap for the lazy, idempotent DDL.
+
+        Every method here bootstraps itself, so callers normally never need
+        this. The exception is a caller using the ``*_with_cursor`` seams below
+        from inside its OWN transaction (the story de-dup sweep): the DDL takes
+        an advisory-locked connection of its own and must run BEFORE that
+        transaction opens, never nested inside it.
+        """
+        self._ensure_table()
+
     def _ensure_table(self) -> None:
         global _table_ready
         if _table_ready:
@@ -101,6 +112,29 @@ class EvidenceCorpusRepository:
         with nothing to cite is not evidence.
         """
         self._ensure_table()
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                written = self.upsert_many_with_cursor(cur, user_id, items)
+            conn.commit()
+        return written
+
+    def upsert_many_with_cursor(
+        self, cur: Any, user_id: str, items: Sequence[dict[str, Any]]
+    ) -> int:
+        """:meth:`upsert_many`'s body, executed on a CALLER-OWNED cursor.
+
+        Exists so a writer that already runs inside its own audited, all-or-
+        nothing transaction — the story de-dup sweep's archive/restore
+        (``services/story_dedup_migration.py``) — can reconcile this mirror
+        WITHOUT opening a second connection that would commit independently of
+        the story rows it mirrors. A rolled-back merge must leave the evidence
+        exactly as it was; a mirror write on its own connection would survive
+        the rollback and delete evidence for a merge that never happened.
+
+        The caller is responsible for :meth:`ensure_table` (the lazy DDL takes
+        its own advisory-locked connection and must not run inside their
+        transaction) and for the commit.
+        """
         rows = [
             (
                 user_id,
@@ -119,29 +153,26 @@ class EvidenceCorpusRepository:
         ]
         if not rows:
             return 0
-        with get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.executemany(
-                    '''
-                    INSERT INTO "EvidenceCorpusItem"
-                        ("userId", "itemId", "claim", "category", "source",
-                         "sourceUrl", "statedOrInferred", "confidence", "note",
-                         "asOf", "updatedAt")
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
-                    ON CONFLICT ("userId", "itemId") DO UPDATE SET
-                        "claim"            = EXCLUDED."claim",
-                        "category"         = EXCLUDED."category",
-                        "source"           = EXCLUDED."source",
-                        "sourceUrl"        = EXCLUDED."sourceUrl",
-                        "statedOrInferred" = EXCLUDED."statedOrInferred",
-                        "confidence"       = EXCLUDED."confidence",
-                        "note"             = EXCLUDED."note",
-                        "asOf"             = EXCLUDED."asOf",
-                        "updatedAt"        = NOW()
-                    ''',
-                    rows,
-                )
-            conn.commit()
+        cur.executemany(
+            '''
+            INSERT INTO "EvidenceCorpusItem"
+                ("userId", "itemId", "claim", "category", "source",
+                 "sourceUrl", "statedOrInferred", "confidence", "note",
+                 "asOf", "updatedAt")
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
+            ON CONFLICT ("userId", "itemId") DO UPDATE SET
+                "claim"            = EXCLUDED."claim",
+                "category"         = EXCLUDED."category",
+                "source"           = EXCLUDED."source",
+                "sourceUrl"        = EXCLUDED."sourceUrl",
+                "statedOrInferred" = EXCLUDED."statedOrInferred",
+                "confidence"       = EXCLUDED."confidence",
+                "note"             = EXCLUDED."note",
+                "asOf"             = EXCLUDED."asOf",
+                "updatedAt"        = NOW()
+            ''',
+            rows,
+        )
         return len(rows)
 
     def delete_items(self, user_id: str, item_ids: Iterable[str]) -> int:
@@ -159,14 +190,24 @@ class EvidenceCorpusRepository:
         self._ensure_table()
         with get_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute(
-                    'DELETE FROM "EvidenceCorpusItem" '
-                    'WHERE "userId" = %s AND "itemId" = ANY(%s)',
-                    (user_id, ids),
-                )
-                deleted = cur.rowcount or 0
+                deleted = self.delete_items_with_cursor(cur, user_id, ids)
             conn.commit()
         return deleted
+
+    def delete_items_with_cursor(
+        self, cur: Any, user_id: str, item_ids: Iterable[str]
+    ) -> int:
+        """:meth:`delete_items` on a CALLER-OWNED cursor — see
+        :meth:`upsert_many_with_cursor` for why this seam exists."""
+        ids = [i for i in item_ids if i]
+        if not ids:
+            return 0
+        cur.execute(
+            'DELETE FROM "EvidenceCorpusItem" '
+            'WHERE "userId" = %s AND "itemId" = ANY(%s)',
+            (user_id, ids),
+        )
+        return cur.rowcount or 0
 
     def delete_sources(self, user_id: str, sources: Iterable[str]) -> int:
         """Drop a user's items for the named sources (a refresh's first half).

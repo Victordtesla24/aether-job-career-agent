@@ -30,6 +30,7 @@ from conftest import FIXTURE_LLM_RESUME_TEXT, seed_own_resume
 from app.agents.cover_letter_agent import (
     CoverLetterAgent,
     FabricationError,
+    gate_pass_labels,
     split_paragraphs,
 )
 from app.repositories.job import JobRepository
@@ -242,9 +243,12 @@ class TestInjectionStillGuarded:
         assert "EFFUSIVE" not in letter
         assert "RMX-9" not in letter
         # W-TAILOR-CONVERGE item 4 (2026-08-02): a clean-but-sub-target letter
-        # now gets ONE budget-guarded quality-improvement pass, so a run makes
-        # up to 2 drafting calls where it previously made exactly 1. The
-        # SUBJECT of this test — that the injected instruction never survives
-        # into the shipped letter — is asserted above and is unchanged; only
-        # the call count moved, and it is bounded (never unbounded retries).
-        assert llm.calls <= 2, llm.calls
+        # gets budget-guarded quality-improvement passes, so a run makes more
+        # than one drafting call. U2c widened that from a single pass to the
+        # env-capped quality-gate budget (``gate_pass_labels()``), which is what
+        # this bound is now expressed in — a hardcoded number silently re-breaks
+        # this test every time that budget is retuned, and the property actually
+        # worth pinning is that the count is BOUNDED, never unbounded retries.
+        # The SUBJECT of this test — that the injected instruction never
+        # survives into the shipped letter — is asserted above and is unchanged.
+        assert llm.calls <= 1 + len(gate_pass_labels()), llm.calls

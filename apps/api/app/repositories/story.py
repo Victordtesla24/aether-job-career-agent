@@ -84,18 +84,17 @@ class StoryRepository:
         replaying it is free. Failures are NOT swallowed — a broken mirror
         surfaces rather than silently leaving stories uncitable.
 
-        KNOWN RESIDUAL, filed rather than silently patched: the CRUD paths here
-        (create / update / delete) are mirrored, but the bulk paraphrase de-dup
-        sweep archives a row directly in its own audited transaction
-        (``services/story_dedup_migration.py:273``) and un-archives it at
-        :578. Those two writes do not touch the mirror, so between an operator
-        sweep and the next save of that story its claim would remain in the
-        corpus while ``list_by_user`` (this module's docstring, GMV4-story-004)
-        no longer returns it. The sweep is operator-gated and plan-reviewed —
-        never a live user path — so this is a follow-up for the sweep's own
-        slice (add ``_unmirror_from_corpus`` on archive and
-        ``_mirror_to_corpus`` on restore, inside that transaction's
-        reconciliation), NOT a silent hole left unrecorded.
+        RESIDUAL CLOSED (U2c, U-STORY-1 ruling E2). This docstring previously
+        recorded that the bulk paraphrase de-dup sweep archived and un-archived
+        rows straight past this mirror, leaving an archived story's claim
+        citable while ``list_by_user`` no longer returned it — and a restored
+        story invisible to the guards. ``services/story_dedup_migration.py``
+        now reconciles the mirror INSIDE both of its own audited transactions
+        (retracting the archived row's item, refreshing the survivor's claim to
+        its merged content, and reversing both on restore), and reports the
+        counts on its result. The reconciliation deliberately lives there
+        rather than here: it has to share those transactions, or a rolled-back
+        merge would still have deleted the user's evidence.
         """
         item = story_corpus_item(row)
         if item is None or not item.get("id"):
