@@ -35,15 +35,47 @@ function readQualityPolicy(run: AgentRun): QualityPolicySnapshot | null {
   return qp && typeof qp === "object" ? (qp as QualityPolicySnapshot) : null;
 }
 
-export default function RunPolicyInputs({ run }: { run: AgentRun }) {
+/**
+ * PRESENTATION VARIANT (S-UI aesthetics slice — no fact changes).
+ *
+ * `variant="block"` (the default) is the original rendition, byte-for-byte.
+ *
+ * `variant="row"` is for a dense table cell: the SAME sentences, clamped to
+ * one line inside a native `<details>` disclosure. Nothing is deleted,
+ * reworded or hidden — the full text is always in the DOM (so `textContent`,
+ * screen readers, find-in-page and every existing assertion see it unchanged),
+ * always in the `title` attribute, and one click from being fully legible.
+ * This is the SUI1-P1 density fix: unclamped, this cell alone made every
+ * Recent-Runs row 359px tall (measured), against a 28–48px reference band.
+ */
+export type RunPolicyVariant = "block" | "row";
+
+export default function RunPolicyInputs({
+  run,
+  variant = "block",
+}: {
+  run: AgentRun;
+  variant?: RunPolicyVariant;
+}) {
   const qp = readQualityPolicy(run);
   const tier = typeof qp?.tier === "string" ? qp.tier : null;
 
   if (!qp || tier === null) {
+    const notRecorded =
+      "Policy inputs consumed: not recorded — this run predates rigor-policy instrumentation.";
+    if (variant === "row") {
+      return (
+        <details className="ag-disc text-[11px] text-aether-muted-dim" data-testid="run-policy-inputs">
+          <summary title={notRecorded}>
+            <i className="ag-disc-caret fa-solid fa-chevron-right" aria-hidden="true" />
+            <span className="ag-disc-line">{notRecorded}</span>
+          </summary>
+        </details>
+      );
+    }
     return (
       <p className="text-xs text-aether-muted-dim" data-testid="run-policy-inputs">
-        Policy inputs consumed: not recorded — this run predates rigor-policy
-        instrumentation.
+        {notRecorded}
       </p>
     );
   }
@@ -58,20 +90,42 @@ export default function RunPolicyInputs({ run }: { run: AgentRun }) {
   const conversionPct =
     conversionFraction !== null ? `${Math.round(conversionFraction * 1000) / 10}%` : null;
   const triggers = Array.isArray(qp.triggers) ? (qp.triggers as unknown[]) : [];
+  const triggerText =
+    triggers.length > 0
+      ? `Trigger: ${triggers.map((t) => String(t).replace(/[_:]+/g, " ")).join("; ")}`
+      : null;
+
+  const headline = (
+    <>
+      <span className="font-semibold text-aether-muted-dim">Policy inputs consumed:</span>{" "}
+      tier <span className="font-semibold">{tier}</span>
+      {sampleSize !== null ? ` · sample size ${sampleSize}` : ""}
+      {conversionPct !== null ? ` · conversion ${conversionPct}` : ""}
+    </>
+  );
+
+  if (variant === "row") {
+    const headlineText =
+      `Policy inputs consumed: tier ${tier}` +
+      (sampleSize !== null ? ` · sample size ${sampleSize}` : "") +
+      (conversionPct !== null ? ` · conversion ${conversionPct}` : "");
+    return (
+      <details className="ag-disc text-[11px] text-aether-muted" data-testid="run-policy-inputs">
+        <summary title={triggerText ? `${headlineText}\n${triggerText}` : headlineText}>
+          <i className="ag-disc-caret fa-solid fa-chevron-right" aria-hidden="true" />
+          <span className="ag-disc-line">{headline}</span>
+        </summary>
+        {triggerText ? (
+          <p className="ag-disc-more text-aether-muted-dim">{triggerText}</p>
+        ) : null}
+      </details>
+    );
+  }
 
   return (
     <div className="text-xs text-aether-muted" data-testid="run-policy-inputs">
-      <p>
-        <span className="font-semibold text-aether-muted-dim">Policy inputs consumed:</span>{" "}
-        tier <span className="font-semibold">{tier}</span>
-        {sampleSize !== null ? ` · sample size ${sampleSize}` : ""}
-        {conversionPct !== null ? ` · conversion ${conversionPct}` : ""}
-      </p>
-      {triggers.length > 0 ? (
-        <p className="mt-0.5 text-aether-muted-dim">
-          Trigger: {triggers.map((t) => String(t).replace(/[_:]+/g, " ")).join("; ")}
-        </p>
-      ) : null}
+      <p>{headline}</p>
+      {triggerText ? <p className="mt-0.5 text-aether-muted-dim">{triggerText}</p> : null}
     </div>
   );
 }

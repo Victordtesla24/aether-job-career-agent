@@ -38,7 +38,12 @@ const COLOR = {
   active: new THREE.Color("#FF6B35"),
   idle: new THREE.Color("#8B8BA3"),
   planned: new THREE.Color("#5A5A6E"),
-  live: new THREE.Color("#34D399"),
+  // S-UI aesthetics slice: a live node's aura is CORAL, matching the map's own
+  // legend ("live run — the only thing that moves" beside a coral dot), the
+  // DOM node's live dot and its CSS bloom. It was green, so the GPU layer and
+  // the DOM layer disagreed on the colour of the single most important state
+  // on the page. Presentation only — nothing decides WHICH nodes are live here.
+  live: new THREE.Color("#FF6B35"),
 } as const;
 
 export interface GlEdge {
@@ -201,7 +206,11 @@ export default function OrchestrationMapGL({
         transparent: true,
         depthWrite: false,
         blending: THREE.AdditiveBlending,
-        opacity: node.live ? 0.3 : 0.09,
+        // The idle aura is dialled back (0.09 → 0.05): twenty-two additive
+        // grey sprites were washing the whole map to a flat mid-grey and
+        // flattening exactly the contrast the live node needs to stand out.
+        // The live aura gains what the idle ones gave up.
+        opacity: node.live ? 0.36 : 0.05,
       });
       disposables.push(material);
       const sprite = new THREE.Sprite(material);

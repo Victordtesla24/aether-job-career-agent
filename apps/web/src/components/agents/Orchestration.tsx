@@ -33,6 +33,13 @@ const NODES: Array<{ label: string; agent: string; blurb: string }> = [
   { label: "Email", agent: "emailAgent", blurb: "Triages inbox · drafts grounded replies · imports job alerts" },
 ];
 
+/**
+ * `live` is a PRESENTATION flag only — it is set on exactly the one condition
+ * that already painted the node coral (`isInFlight && isLiveRun`), and it is
+ * the sole thing that earns a node the outer bloom in `agents-console.css`.
+ * A stalled run is deliberately NOT live: it stays inert and amber, because
+ * motion on a dead row is the exact lie CRITICAL-2 was filed about.
+ */
 function nodeStatus(agent: string, agents: AgentSummary[], runs: AgentRun[], now: number) {
   // `runs` arrives newest-first (GET /agents/runs orders by createdAt DESC), so
   // the node reflects this agent's CURRENT run, not any older one.
@@ -43,15 +50,19 @@ function nodeStatus(agent: string, agents: AgentSummary[], runs: AgentRun[], now
     // worker behind it, and showing it as live is how a week of total
     // inactivity got hidden behind a coral badge.
     return isLiveRun(newest, now)
-      ? { label: "running", cls: "text-aether-coral border-aether-coral/40" }
-      : { label: stalledLabel(newest, now), cls: "text-aether-amber border-aether-amber/40" };
+      ? { label: "running", cls: "text-aether-coral border-aether-coral/40", live: true }
+      : {
+          label: stalledLabel(newest, now),
+          cls: "text-aether-amber border-aether-amber/40",
+          live: false,
+        };
   }
   const summary = agents.find((a) => a.name === agent);
   if (summary?.status && summary.status !== "idle")
-    return { label: summary.status, cls: "text-aether-green border-aether-green/40" };
+    return { label: summary.status, cls: "text-aether-green border-aether-green/40", live: false };
   const lastFailed = runs.find((r) => r.agentName === agent)?.status === "failed";
-  if (lastFailed) return { label: "error", cls: "text-red-300 border-red-500/40" };
-  return { label: "idle", cls: "text-aether-muted-dim border-white/15" };
+  if (lastFailed) return { label: "error", cls: "text-red-300 border-red-500/40", live: false };
+  return { label: "idle", cls: "text-aether-muted-dim border-white/15", live: false };
 }
 
 /**
@@ -170,9 +181,9 @@ export default function Orchestration({
     <section className="space-y-4" data-testid="agent-orchestration">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
-          <span className="h-2 w-2 rounded-full bg-aether-green live-dot" />
-          <h2 className="text-[15px] font-semibold">Agent Orchestration</h2>
-          <span className="mono text-[11px] text-aether-muted-dim">
+          <span className="h-1.5 w-1.5 rounded-full bg-aether-green live-dot" />
+          <h2 className="text-[15px] font-semibold tracking-[-0.015em]">Agent Orchestration</h2>
+          <span className="mono text-[11px] tabular-nums text-aether-muted-dim">
             {/* ADV-agent-monitor-001: there is no real uptime signal backing
                 a percentage here (checked apps/api/app/routers/agents.py —
                 no uptime/health-history endpoint exists), so the fabricated
@@ -221,9 +232,9 @@ export default function Orchestration({
       </div>
 
       {/* Workflow graph */}
-      <div className="elev-1 relative overflow-hidden rounded-2xl p-5" data-testid="node-graph">
-        <h3 className="mb-1 text-[13px] font-semibold uppercase tracking-[0.08em] text-aether-muted-dim">
-          Live Run Monitor
+      <div className="ag-panel relative overflow-hidden p-5" data-testid="node-graph">
+        <h3 className="ag-eyebrow mb-1.5">
+          <span>Live Run Monitor</span>
         </h3>
         {/* Named apart from the workflow MAP above it: that one is the DEFINED
             22-agent topology from GET /agents/orchestration-map; this one is
@@ -232,21 +243,21 @@ export default function Orchestration({
           The implemented agents and the state of each one&apos;s current run.
         </p>
         <div className="relative">
-          {/* Animated flow line behind the nodes */}
-          <svg className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden="true">
-            <line
-              x1="4%"
-              y1="50%"
-              x2="96%"
-              y2="50%"
-              stroke="#FF6B35"
-              strokeOpacity="0.25"
-              strokeWidth="2"
-              strokeDasharray="6 6"
-            >
-              <animate attributeName="stroke-dashoffset" from="24" to="0" dur="1.6s" repeatCount="indefinite" />
-            </line>
-          </svg>
+          {/*
+            The connective rail behind the nodes.
+
+            It used to be a coral dashed line running an infinite
+            `stroke-dashoffset` animation — decorative movement that encoded
+            nothing (reference-pack rule 9: an agent surface should visualise a
+            real process, never imply one). It is now a still hairline that
+            fades out at both ends: the same "these are one sequence" reading,
+            with no claim of flow attached to it. The ONLY thing that moves in
+            this widget is a node with a genuinely in-flight run.
+          */}
+          <span
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-4 top-1/2 hidden h-px -translate-y-1/2 bg-gradient-to-r from-transparent via-white/[0.09] to-transparent xl:block"
+          />
           <div className="relative grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
             {NODES.map((node) => {
               const status = nodeStatus(node.agent, agents, runs, now);
@@ -254,15 +265,20 @@ export default function Orchestration({
                 <article
                   key={node.label}
                   data-testid={`workflow-node-${node.label.toLowerCase()}`}
-                  className="elev-1 rounded-xl p-3.5 transition-[border-color,background-color] duration-[var(--dur)] hover:border-hairline-strong hover:bg-surface-2"
+                  // The bloom is claimed here and only here — `live` is true on
+                  // exactly the in-flight, non-stalled condition above.
+                  data-motion={status.live ? "pulse" : "none"}
+                  className="ag-node p-3.5"
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <h4 className="text-xs font-semibold">{node.label}</h4>
-                    <span className={`rounded-full border px-1.5 py-0.5 text-[9px] font-medium ${status.cls}`}>
+                    <h4 className="truncate text-[12px] font-semibold tracking-[-0.01em]">{node.label}</h4>
+                    <span
+                      className={`shrink-0 rounded-full border px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-[0.07em] ${status.cls}`}
+                    >
                       {status.label}
                     </span>
                   </div>
-                  <p className="mt-1.5 text-[10px] leading-snug text-aether-muted-dim">{node.blurb}</p>
+                  <p className="mt-2 text-[10px] leading-[1.45] text-aether-muted-dim">{node.blurb}</p>
                 </article>
               );
             })}
@@ -272,42 +288,46 @@ export default function Orchestration({
 
       <div className="grid gap-4 xl:grid-cols-3">
         {/* Task queue */}
-        <div className="elev-1 min-w-0 rounded-2xl p-5" data-testid="task-queue">
-          <h3 className="mb-3 text-[13px] font-semibold uppercase tracking-[0.08em] text-aether-muted-dim">Task Queue</h3>
+        <div className="ag-panel min-w-0 p-5" data-testid="task-queue">
+          <h3 className="ag-eyebrow mb-4">
+            <span>Task Queue</span>
+          </h3>
           {tasks.length === 0 ? (
             <p className="py-4 text-center text-xs text-aether-muted-dim">Queue is empty — trigger a run above.</p>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-3.5">
               {tasks.map((t) => (
                 <div key={t.key}>
-                  <div className="mb-1 flex justify-between text-[11px]">
-                    <span className={t.stalled ? "text-aether-amber" : "capitalize text-aether-muted"}>
+                  <div className="mb-1.5 flex items-baseline justify-between gap-3 text-[11px]">
+                    <span
+                      className={`min-w-0 truncate ${t.stalled ? "text-aether-amber" : "capitalize text-aether-muted"}`}
+                    >
                       {t.label}
                     </span>
                     {/* No fabricated percentage for in-progress work — only a
                         real, completed-run 100% is ever shown as a number. A
                         stalled run gets neither: "…" would imply it is still
                         thinking. */}
-                    <span className="mono">
+                    <span className="mono shrink-0 tabular-nums text-aether-muted-dim">
                       {t.progress !== null ? `${t.progress}%` : t.stalled ? "—" : "…"}
                     </span>
                   </div>
-                  <div className="h-1.5 rounded-full bg-white/10">
+                  <div className="ag-meter">
                     {t.progress !== null ? (
                       <div
-                        className={`h-1.5 rounded-full ${
+                        className={
                           t.degraded ? "bg-white/25" : t.active ? "bg-aether-coral" : "bg-aether-green"
-                        }`}
+                        }
                         style={{ width: `${t.progress}%` }}
                       />
                     ) : t.stalled ? (
                       // CRITICAL-2: inert and unanimated. No role="progressbar"
                       // either — nothing is progressing.
-                      <div className="h-1.5 w-full rounded-full bg-aether-amber/25" />
+                      <div className="w-full bg-aether-amber/25" />
                     ) : (
                       <div
                         role="progressbar"
-                        className="h-1.5 w-full animate-pulse rounded-full bg-aether-coral/40"
+                        className="w-full animate-pulse bg-aether-coral/40"
                         aria-label="in progress, no measured completion percentage available"
                       />
                     )}
@@ -325,7 +345,7 @@ export default function Orchestration({
         </div>
 
         {/* Performance */}
-        <div className="elev-1 min-w-0 rounded-2xl p-5" data-testid="performance-metrics">
+        <div className="ag-panel min-w-0 p-5" data-testid="performance-metrics">
           {/*
             MV-agent-monitor-003: this card's success rate is computed
             client-side from the `runs` prop, which the Agents page fetches
@@ -336,24 +356,35 @@ export default function Orchestration({
             this card's own window explicitly, matching the disclosure
             pattern already used by the Agent Stats card ("last N tasks").
           */}
-          <h3 className="mb-3 flex flex-wrap items-baseline gap-x-1.5 text-[13px] font-semibold uppercase tracking-[0.08em] text-aether-muted-dim">
-            Performance
-            <span className="normal-case text-[11px] font-normal tracking-normal text-aether-muted-dim">
-              · last {runs.length.toLocaleString()} run{runs.length === 1 ? "" : "s"}
+          <h3 className="ag-eyebrow mb-4">
+            <span className="flex flex-wrap items-baseline gap-x-1.5">
+              Performance
+              <span className="text-[10px] font-normal normal-case tracking-[0.02em] text-aether-muted-dim">
+                · last {runs.length.toLocaleString()} run{runs.length === 1 ? "" : "s"}
+              </span>
             </span>
           </h3>
-          <div className="grid grid-cols-3 gap-2 text-center">
-            <div>
-              <div className="font-mono text-[22px] font-bold tabular-nums">{runs.length.toLocaleString()}</div>
-              <div className="text-[11px] text-aether-muted-dim">tasks run</div>
+          {/* Rule 4: a big tabular figure with its unit demoted to a small
+              suffix and a small grey caption beneath — the Mercury/Amplitude
+              numeral hierarchy, not three equal-weight numbers in a row. */}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="ag-stat">
+              <span className="ag-stat-figure">{runs.length.toLocaleString()}</span>
+              <span className="ag-stat-label">tasks run</span>
             </div>
-            <div>
-              <div className="font-mono text-[22px] font-bold tabular-nums">{avgSecs}s</div>
-              <div className="text-[11px] text-aether-muted-dim">avg duration</div>
+            <div className="ag-stat">
+              <span className="ag-stat-figure">
+                {avgSecs}
+                <span className="ag-stat-unit">s</span>
+              </span>
+              <span className="ag-stat-label">avg duration</span>
             </div>
-            <div>
-              <div className="font-mono text-[22px] font-bold tabular-nums text-aether-green">{successRate}%</div>
-              <div className="text-[11px] text-aether-muted-dim">success rate</div>
+            <div className="ag-stat">
+              <span className="ag-stat-figure text-aether-green">
+                {successRate}
+                <span className="ag-stat-unit text-aether-green/70">%</span>
+              </span>
+              <span className="ag-stat-label">success rate</span>
             </div>
           </div>
           {degraded > 0 ? (
@@ -369,18 +400,25 @@ export default function Orchestration({
         </div>
 
         {/* Error log */}
-        <div className="elev-1 min-w-0 rounded-2xl p-5" data-testid="error-log">
-          <h3 className="mb-3 text-[13px] font-semibold uppercase tracking-[0.08em] text-aether-muted-dim">Error Log</h3>
+        <div className="ag-panel min-w-0 p-5" data-testid="error-log">
+          <h3 className="ag-eyebrow mb-3">
+            <span>Error Log</span>
+          </h3>
           {runs.length === 0 ? (
             <p className="py-4 text-center text-xs text-aether-muted-dim">No log entries yet.</p>
           ) : (
-            <div className="mono space-y-1.5 text-[11px]">
+            // Raycast's metadata-list register: a fixed level column, a fixed
+            // time column, then the message — aligned by grid, separated by a
+            // whisper of a hairline rather than by boxes.
+            <div className="mono text-[11px]">
               {runs.slice(0, 6).map((run) => {
                 const level = logLevel(run, now);
                 return (
-                  <p key={run.id} className="flex items-start gap-2">
-                    <span className={`w-8 shrink-0 font-bold ${level.cls}`}>{level.tag}</span>
-                    <span className="shrink-0 text-aether-muted-dim">
+                  <p key={run.id} className="ag-log-row">
+                    <span className={`shrink-0 text-[9.5px] font-bold tracking-[0.08em] ${level.cls}`}>
+                      {level.tag}
+                    </span>
+                    <span className="shrink-0 whitespace-nowrap tabular-nums text-aether-muted-dim">
                       {/* parseServerTime, not `new Date`: the API's naive UTC
                           stamps carry no timezone designator, so a bare parse
                           prints them in the viewer's own offset — ten hours
