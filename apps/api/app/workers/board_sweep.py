@@ -866,6 +866,35 @@ def _stop_on_spend_cap(
     _record_spend_cap_stop(user_id, quota)
 
 
+def _record_paused_skip_run(
+    user_id: str, agent_key: str, job_id: str, message: str,
+) -> None:
+    """Persist an honest, zero-cost AgentRun row for a job the interim
+    ``_dispatch`` pause guard refused before any side effect.
+
+    That guard (the plain-string ``"agent_paused: ..."`` shape — see its
+    docstring in ``app/routers/agents.py``) is deliberately a NO-ROW
+    refusal: no ``AgentRun``, no quota reserve, nothing to refund, so a
+    direct API caller who clicks a paused agent's button is never charged
+    for the click. The board sweep's own per-job audit trail is a different
+    contract — every attempted job leaves a trace in "Recent runs" — so it
+    compensates by writing this row itself, exactly the idiom
+    ``_record_spend_cap_stop`` above already uses for the analogous
+    pre-row refusal on the spend-cap path. Costs $0 (no LLM call was made).
+    """
+    from app.repositories.agent_run import AgentRunRepository
+
+    runs = AgentRunRepository()
+    run = runs.start(user_id, agent_key, {"job_id": job_id, "systemRun": True})
+    runs.finish(
+        run["id"],
+        "failed",
+        output={"skipped": True, "reason": "agent_paused"},
+        error=message,
+        cost_usd=0.0,
+    )
+
+
 def _run_agent(user_id: str, agent_key: str, params: dict[str, Any]) -> dict[str, Any]:
     """One reserved, budgeted agent run — the exact machinery manual runs use.
 
@@ -988,6 +1017,11 @@ def sweep_user_stretch(
             break
         job_id = target["job_id"]
         attempted.add(job_id)
+        # Which agent this job's attempt is currently on — read only by the
+        # ``except HTTPException`` block below (string-shape paused-refusal
+        # branch) to know which agent name to attribute an honest audit row
+        # to when the guard that refused it left none.
+        attempting_agent = "tailor" if target["mode"] == "full" else "coverLetter"
         try:
             if target["mode"] == "full":
                 try:
@@ -998,6 +1032,7 @@ def sweep_user_stretch(
                     # refunded. The cover letter still proceeds from the base
                     # résumé (same degrade the manual pipeline uses).
                     pass
+            attempting_agent = "coverLetter"
             cover_out = _run_agent(user_id, "coverLetter", {"job_id": job_id})
             if _cover_result_degraded(cover_out):
                 # ML-W-19: the cover agent completed with an honest "no letter
@@ -1030,7 +1065,20 @@ def sweep_user_stretch(
                 detail_409: dict[str, Any] = (
                     exc.detail if isinstance(exc.detail, dict) else {}
                 )
-                if detail_409.get("code") == "agent_paused":
+                # Two refusal shapes both mean "this agent is paused": the
+                # dict shape from ``_execute_reserved_run`` (ML-STOPALL-001,
+                # ``code == "agent_paused"``) and the plain-string shape from
+                # ``_dispatch``'s interim pre-side-effect guard (the one the
+                # board sweep actually hits — see
+                # tests/test_stopall_interim_guard.py::TestDispatchRefusal),
+                # which starts with ``"agent_paused: "``. Recognize both so
+                # neither guard's refusal is misclassified as a sweep
+                # failure.
+                is_paused_refusal = detail_409.get("code") == "agent_paused" or (
+                    isinstance(exc.detail, str)
+                    and exc.detail.startswith("agent_paused")
+                )
+                if is_paused_refusal:
                     # ML-STOPALL-001: the user paused this agent (its own
                     # AgentConfig.enabled=false) — an HONEST SKIP of this one
                     # job, not a sweep failure and not an abort. Mirrors the
@@ -1044,6 +1092,20 @@ def sweep_user_stretch(
                         "board-sweep %s job %s: skipped — %s paused by user",
                         user_id, job_id, detail_409.get("agentKey", "agent"),
                     )
+                    if isinstance(exc.detail, str):
+                        # The string-shape guard (``_dispatch``'s own
+                        # pre-side-effect check) is deliberately a NO-ROW
+                        # refusal — see its docstring — so unlike the
+                        # dict-shape ``_execute_reserved_run`` refusal (which
+                        # already finishes its own AgentRun row before
+                        # raising), nothing has recorded this attempt yet.
+                        # The sweep's per-job audit trail still needs one —
+                        # same idiom as ``_record_spend_cap_stop`` uses for
+                        # the spend-cap stop, which compensates for the same
+                        # kind of pre-row refusal.
+                        _record_paused_skip_run(
+                            user_id, attempting_agent, job_id, exc.detail,
+                        )
                     continue
             if exc.status_code == 429:
                 detail: dict[str, Any] = exc.detail if isinstance(exc.detail, dict) else {}

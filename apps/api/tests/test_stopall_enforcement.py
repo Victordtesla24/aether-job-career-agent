@@ -278,30 +278,22 @@ class TestAbsentConfigDefaultsEnabled:
 
 
 class TestBoardSweepHonestSkip:
-    """(d) the board-sweep autopilot treats the refusal as a per-job SKIP."""
+    """(d) the board-sweep autopilot treats the refusal as a per-job SKIP.
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason=(
-            "DISCOVERED REGRESSION (2026-08-14, out of this fix's file scope — "
-            "requires editing app/workers/board_sweep.py, not agents.py or this "
-            "test file): board_sweep.py:1033 classifies a paused-agent refusal "
-            "as an honest skip only when `exc.detail` is a DICT carrying "
-            "`code == \"agent_paused\"`. Since main's interim Stop-All guard "
-            "merge, `_dispatch`'s own pre-side-effect refusal (the one the "
-            "board sweep actually hits — see TestDirectDispatchRefusal above) "
-            "raises a PLAIN STRING starting with \"agent_paused\" instead — a "
-            "shape deliberately pinned by "
-            "tests/test_stopall_interim_guard.py::TestDispatchRefusal, which "
-            "this fix must not break. board_sweep.py's `isinstance(exc.detail, "
-            "dict)` check is therefore never true for this path, so the skip "
-            "silently falls through to `summary[\"failures\"] += 1` with a "
-            "WARNING log instead of `skipped_paused` + an INFO log. Needs a "
-            "follow-up fix in board_sweep.py to also recognize the string "
-            "shape (or a shared refusal-shape helper) — filed for escalation, "
-            "not fixed here."
-        ),
-    )
+    Was pinned RED via ``@pytest.mark.xfail(strict=True)`` (2026-08-14):
+    board_sweep.py:1033 classified a paused-agent refusal as an honest skip
+    only when ``exc.detail`` was a DICT carrying ``code == "agent_paused"``.
+    Since main's interim Stop-All guard merge, ``_dispatch``'s own
+    pre-side-effect refusal (the one the board sweep actually hits — see
+    ``tests/test_stopall_interim_guard.py::TestDispatchRefusal``) raises a
+    PLAIN STRING starting with ``"agent_paused"`` instead, so the
+    ``isinstance(exc.detail, dict)`` check was never true for this path and
+    the skip silently fell through to ``summary["failures"] += 1`` with a
+    WARNING log instead of ``skipped_paused`` + an INFO log. Fixed by having
+    board_sweep.py also recognize the string shape; xfail marker removed now
+    that the test is green again.
+    """
+
     def test_sweep_skips_paused_agent_job_honestly_and_completes(
         self, db_session, client, auth_headers, test_user_id, caplog,
     ):
