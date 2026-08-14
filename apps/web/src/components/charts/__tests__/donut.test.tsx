@@ -168,6 +168,47 @@ describe("C-1 / C-2", () => {
   });
 });
 
+describe("C-1 — a wide dynamic range cannot invert a real 'Other' arc and a genuine absence", () => {
+  /**
+   * The reviewer's exact repro (REVIEW-02-chart-kit-reverify.md Part 2, and
+   * CLOSE-01-completion-round-manifest.txt's filed-not-fixed observation):
+   * one real, measured source at 30 / 10030 ≈ 0.3% share falls below the 2%
+   * grouping default and alone becomes "Other". Pre-fix, `length ≈ 0.79`
+   * against `GAP = 1.5` computed `visible = 0` — the ring's own
+   * `stroke-dasharray` read `"0 263.89…"`, zero visible pixels for a real,
+   * disclosed, nonzero value, indistinguishable from a genuine `value === 0`
+   * segment (which by design draws no arc at all — see "C-1 / C-2" above).
+   */
+  const WIDE_RANGE = [
+    { label: "Adzuna", value: 10000 },
+    { label: "Workable", value: 30 },
+  ];
+
+  it("never renders the 'Other' arc's stroke-dasharray with a 0 visible-length first value", () => {
+    const root = renderChart(
+      <Donut title="Source mix" windowLabel="10,030 jobs found" segments={WIDE_RANGE} />,
+    );
+    const other = root.querySelector('[data-arc][data-segment-name="Other"]');
+    expect(other).not.toBeNull();
+    const [visible] = (other?.getAttribute("stroke-dasharray") ?? "")
+      .split(" ")
+      .map(Number);
+    expect(visible).toBeGreaterThan(0);
+  });
+
+  it("floors the 'Other' arc for legibility without rescaling — Adzuna's arc still dwarfs it", () => {
+    const root = renderChart(
+      <Donut title="Source mix" windowLabel="10,030 jobs found" segments={WIDE_RANGE} />,
+    );
+    const other = root.querySelector('[data-arc][data-segment-name="Other"]');
+    const adzuna = root.querySelector('[data-arc][data-segment-name="Adzuna"]');
+    const visibleOf = (el: Element | null) =>
+      Number((el?.getAttribute("stroke-dasharray") ?? "0").split(" ")[0]);
+
+    expect(visibleOf(adzuna)).toBeGreaterThan(visibleOf(other) * 20);
+  });
+});
+
 describe("empty state", () => {
   it("draws a designed empty state when nothing has been found yet", () => {
     const root = renderChart(

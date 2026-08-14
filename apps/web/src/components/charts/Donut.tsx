@@ -10,7 +10,15 @@
  * table, because grouping is a layout decision and must never become a
  * disclosure decision.
  *
- * C-1: a source with zero jobs gets no arc, and its 0 is state-neutral.
+ * C-1: a source with zero jobs gets no arc, and its 0 is state-neutral. The
+ *      inverse holds too: `arcs` only ever holds segments whose value is > 0
+ *      (see `positives`/`small`/`large` below — a genuine `value === 0` is
+ *      filtered out before this point and never reaches the ring), so every
+ *      arc this component draws, including a grouped "Other" whose total is
+ *      a fraction of a percent, must render with strictly nonzero visible
+ *      length — see `MIN_ARC_LENGTH`. A real, disclosed, nonzero value must
+ *      never collapse to the same "nothing on the ring" rendering as a
+ *      genuine zero.
  * C-2: a source that was never measured gets "—", never a 0, and never an arc;
  *      percentages are taken against the MEASURED total only.
  */
@@ -50,6 +58,21 @@ const STROKE_WIDTH = 14;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 /** 1px visual gap between adjacent arcs, expressed in path length. */
 const GAP = 1.5;
+/**
+ * The shortest a REAL arc may ever render, after `GAP` is subtracted —
+ * analogous to `geometry.ts`'s `MIN_VALUE_LENGTH` for the bar-shaped charts,
+ * but local to `<Donut>` because the arc encoding (angle/path-length, with
+ * its own inter-segment `GAP`) has no shared unit with `barLength()`'s
+ * extent-based lengths. Every arc reaching the render loop below represents
+ * a real, disclosed, nonzero value — a genuine zero is filtered out long
+ * before `arcs` is built — so `visible` must never legitimately be 0 there.
+ * Without this floor, a "Other" group whose combined share is small enough
+ * (e.g. ~0.3%) computes a raw length below `GAP` and `Math.max(0, length -
+ * GAP)` collapses to exactly 0: the ring renders zero visible pixels for
+ * that arc, identical to a genuine absence. Set to `GAP + 0.5` so the floor
+ * stays strictly above the gap it follows regardless of how `GAP` is tuned.
+ */
+const MIN_ARC_LENGTH = GAP + 0.5;
 
 interface RenderedArc {
   label: string;
@@ -217,7 +240,11 @@ export function Donut({
             />
             {arcs.map((arc) => {
               const length = total > 0 ? (arc.value / total) * CIRCUMFERENCE : 0;
-              const visible = Math.max(0, length - GAP);
+              // Floor applies only when there IS a real length to floor — a
+              // `length` of exactly 0 only happens when `total` is 0 (the
+              // whole ring is moot), never for a real arc.value > 0, so the
+              // floor can never manufacture visibility for something absent.
+              const visible = length > 0 ? Math.max(MIN_ARC_LENGTH, length - GAP) : 0;
               const dashOffset = -offset;
               offset += length;
               return (
