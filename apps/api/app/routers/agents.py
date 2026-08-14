@@ -4351,6 +4351,21 @@ def orchestration_plan_record(plan_id: str, current_user: CurrentUser) -> dict[s
     return plan
 
 
+def _plan_stale_thresholds() -> tuple[int, int]:
+    """(planned_secs, running_secs) after which a live plan is RELEASED.
+
+    Deliberately not a new pair of numbers: a plan is carried by exactly one
+    ``BackgroundJob`` on the same queue, under the same worker, so "will anything
+    ever claim this?" and "has the worker died mid-run?" are the identical two
+    questions :func:`_job_stale_thresholds` already answers — and its second
+    window is derived from the worker's own per-job execution ceiling. Inventing
+    a separate constant here is how the two drift until the release starts
+    failing plans a worker is still legitimately executing, which would both
+    fabricate a failure and let the same 19 dispatches run a second time.
+    """
+    return _job_stale_thresholds()
+
+
 @router.post("/orchestration/run-everything")
 def run_everything(current_user: CurrentUser, response: Response) -> dict[str, Any]:
     """Run every runnable agent once, as ONE server-recorded plan.
@@ -4369,6 +4384,14 @@ def run_everything(current_user: CurrentUser, response: Response) -> dict[str, A
     ONE queue job carries the whole plan rather than 19 competing ones: 19 jobs
     would defeat the ordering, the spacing and the SSE admission cap in a single
     move (R-3).
+
+    And ONE live plan per user (R-1). The silo class already refuses a second
+    plan's ``scout``/``submission``/… step at the database, but the 13 non-silo
+    backends take no claim — so two rapid clicks or two tabs used to produce two
+    plans and up to 26 duplicate METERED dispatches from one user action. That
+    is the same "one unit of work asked for twice" the silo class exists for,
+    at plan granularity, so it gets the same answer: an honest 409 that names
+    the plan already running rather than a second bill.
     """
     user_id = current_user["id"]
     refusal = _plan_refusal_reason()
@@ -4387,13 +4410,37 @@ def run_everything(current_user: CurrentUser, response: Response) -> dict[str, A
 
     plan = _build_supervisor_plan()
     plans = RunPlanRepository()
-    plan_id = plans.create(
+    planned_stale, running_stale = _plan_stale_thresholds()
+    plan_id, admitted = plans.create_admitted(
         user_id,
         steps=[_plan_step_payload(s) for s in plan.steps],
         concurrency=plan.concurrency,
         spacing_seconds=plan.spacing_seconds,
+        planned_stale_seconds=planned_stale,
+        running_stale_seconds=running_stale,
         initiator="user",
     )
+    if not admitted:
+        # Refused BEFORE the queue job, so the second click costs nothing and
+        # leaves nothing: no plan row, no BackgroundJob, no dispatch. The id of
+        # the LIVE plan goes back so the caller can open the run it already has
+        # instead of being told only "no" — the plan is already narratable at
+        # GET /agents/orchestration/plans/{id}.
+        live = plans.get_for_user(plan_id, user_id) or {}
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail={
+                "error": "plan_already_running",
+                "message": (
+                    "A run plan is already in flight for this account — running "
+                    "every agent a second time would repeat the same work and "
+                    "bill for it twice. Open the plan that is running, or wait "
+                    "for it to finish."
+                ),
+                "planId": plan_id,
+                "planStatus": live.get("status"),
+            },
+        )
     repo = BackgroundJobRepository()
     job_id = repo.create(
         user_id,
