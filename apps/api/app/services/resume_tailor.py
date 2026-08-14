@@ -1750,6 +1750,19 @@ def _content_stems(text: str) -> list[str]:
     ]
 
 
+def content_stems(text: str) -> list[str]:
+    """Public alias of :func:`_content_stems` for other services (U2b).
+
+    The evidence-corpus ranker must normalise text EXACTLY the way the
+    tailoring guards and the ATS keyword sets do (same folding, same stopword
+    list, same stemmer), otherwise "provisioning" in a job description and
+    "provision" in a corpus claim look unrelated and the corpus evidence that
+    could actually move the score never reaches the model. Exposed as a named
+    function rather than letting callers reach for the private one.
+    """
+    return _content_stems(text)
+
+
 def _ngram_set(stems: list[str], n: int) -> set[tuple[str, ...]]:
     return {tuple(stems[i : i + n]) for i in range(len(stems) - n + 1)}
 

@@ -8,6 +8,8 @@ from datetime import datetime, timezone
 from typing import Any
 
 from app.db import ensure_approval_columns, get_connection, new_id, rows_to_dicts
+from app.repositories.application_status_event import record_status_event_best_effort
+from app.services.submission_snapshot import record_submission_snapshot
 
 logger = logging.getLogger(__name__)
 
@@ -434,10 +436,27 @@ class ApprovalRepository:
                 )
                 rows = rows_to_dicts(cur)
                 approval = rows[0] if rows else None
+                transition: dict[str, Any] | None = None
                 if approval is not None:
-                    self._sync_application(cur, approval, user_id)
+                    transition = self._sync_application(cur, approval, user_id)
                     self._sync_resume(cur, approval, user_id)
             conn.commit()
+        if transition is not None:
+            # U-AX: recorded only after the decision transaction committed, so
+            # the history can never contain a transition that was rolled back.
+            record_status_event_best_effort(
+                str(transition["applicationId"]),
+                str(transition["fromStatus"]),
+                str(transition["toStatus"]),
+                "approval.decide",
+            )
+            if transition["toStatus"] == "submitted" and transition["jobId"]:
+                record_submission_snapshot(
+                    user_id,
+                    str(transition["applicationId"]),
+                    str(transition["jobId"]),
+                    str(transition["resumeId"]) if transition["resumeId"] else None,
+                )
         return approval
 
     @staticmethod
@@ -485,7 +504,7 @@ class ApprovalRepository:
     @staticmethod
     def _sync_application(
         cur: Any, approval: dict[str, Any], user_id: str
-    ) -> None:
+    ) -> dict[str, Any] | None:
         """Propagate an application_submit decision to the linked Application.
 
         Runs on the caller's cursor so it commits with the approval update.
@@ -493,12 +512,16 @@ class ApprovalRepository:
         (ADR D-0016). Only ``draft`` applications are touched so a decision can
         never regress an application that already advanced (e.g. to
         ``interview``).
+
+        Returns the transition that ACTUALLY happened (or ``None`` when the
+        compare-and-set matched no draft), so the caller can record the U-AX
+        status event once the transaction has committed.
         """
         if approval.get("type") != "application_submit":
-            return
+            return None
         application_id = approval.get("applicationId")
         if not application_id:
-            return
+            return None
         new_status = "submitted" if approval["status"] == "approved" else "rejected"
         cur.execute(
             '''
@@ -506,9 +529,26 @@ class ApprovalRepository:
             SET "status" = %s::"ApplicationStatus", "updatedAt" = NOW()
             WHERE "id" = %s AND "userId" = %s
               AND "status" = 'draft'::"ApplicationStatus"
+            RETURNING "jobId", "resumeId"
             ''',
             (new_status, application_id, user_id),
         )
+        moved = cur.fetchone()
+        if moved is None:
+            # The guard above matched no draft — the application had already
+            # advanced, so nothing transitioned and nothing is recorded.
+            return None
+        # U-AX instrumentation is DEFERRED to the caller, to run after this
+        # cursor's transaction commits: the status-event/snapshot writes open
+        # their OWN connections, so recording them inline would publish a
+        # transition that a rollback of this transaction could still undo.
+        return {
+            "applicationId": application_id,
+            "fromStatus": "draft",
+            "toStatus": new_status,
+            "jobId": moved[0],
+            "resumeId": moved[1],
+        }
 
     def delete_by_id(self, approval_id: str, user_id: str) -> dict[str, Any] | None:
         """Hard-delete one approval, owner-scoped (FEAT-B1).

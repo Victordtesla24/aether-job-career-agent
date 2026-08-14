@@ -278,6 +278,49 @@ def ensure_admin_user_columns() -> None:
     _admin_user_columns_ready = True
 
 
+#: Guard so the additive password-reset support column on ``User`` is only
+#: ensured once per worker process (see ``ensure_password_reset_columns``).
+_password_reset_columns_ready = False
+
+
+def ensure_password_reset_columns() -> None:
+    """Idempotently add the additive ``User."passwordChangedAt"`` column.
+
+    O-4 (self-service password reset). Stamped by
+    ``UserRepository.set_password`` on every successful
+    ``POST /auth/reset-password``. ``app.middleware.auth.get_current_user``
+    compares it against the JWT's ``iat`` claim so a reset invalidates every
+    access token minted before it — the only "invalidate sessions" mechanism
+    available without a server-side session store, since tokens are otherwise
+    verified purely by signature + expiry. Lazy DDL (ADR-TR-1); NULL for every
+    pre-existing user reads as "never reset" and is skipped by that comparison,
+    so no existing session is affected until its owner actually resets. A
+    transaction-scoped advisory lock serializes concurrent first-hit callers;
+    ``TRUNCATE`` never drops columns, so this survives the test-suite teardown.
+    """
+    global _password_reset_columns_ready
+    if _password_reset_columns_ready:
+        return
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT count(*) FROM information_schema.columns"
+                " WHERE table_name = 'User'"
+                " AND table_schema = ANY(current_schemas(false))"
+                " AND column_name = 'passwordChangedAt'"
+            )
+            row = cur.fetchone()
+            if row and row[0] == 1:
+                _password_reset_columns_ready = True
+                return
+            cur.execute("SELECT pg_advisory_xact_lock(%s)", (7420260805,))
+            cur.execute(
+                'ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "passwordChangedAt" timestamptz'
+            )
+        conn.commit()
+    _password_reset_columns_ready = True
+
+
 #: Guard so the additive ``Resume`` approval + original-upload columns are only
 #: ensured once per worker process (see ``ensure_resume_columns``).
 _resume_columns_ready = False
@@ -1161,3 +1204,77 @@ def ensure_cover_letter_quality_columns() -> None:
             )
         conn.commit()
     _cover_letter_quality_columns_ready = True
+
+
+#: Guard so the additive submission-snapshot columns are only ensured once per
+#: worker process (see ``ensure_application_submission_snapshot_columns``).
+_application_submission_snapshot_columns_ready = False
+
+
+def ensure_application_submission_snapshot_columns() -> None:
+    """Idempotently add the additive ``Application`` submit-time snapshot columns
+    (U-AX instrumentation item 1, absorbing the original U4 plan).
+
+    ``Application.status = 'submitted'`` records THAT an application was sent.
+    Nothing recorded what was sent, or how good it was at that instant — so a
+    résumé scored 71 at tailor time and hand-edited down to 55 before
+    submission was indistinguishable from one submitted at 71, and no cohort
+    analysis of "did higher-rigor applications convert better?" was possible
+    even in principle. These columns freeze the facts AT THE MOMENT OF SUBMIT:
+
+    * ``atsScoreAtSubmission`` (double precision) — the job's real ATS score as
+      it stood when the application left.
+    * ``tailoredResumeVersionId`` (text) — WHICH résumé version was actually
+      submitted (``Resume.id``), not merely the current tailored one.
+    * ``dimensionScoresAtSubmission`` (jsonb) — the 10 fit-radar dimensions
+      measured by the SAME deterministic engine the Job Discovery panel renders
+      (``routers/jobs.py::_build_insights``), so the >80% floor can be checked
+      against what was really submitted.
+    * ``policyTierAtSubmission`` (text) — the rigor tier the agents were
+      operating at, which is what makes "applications under each policy tier"
+      a measurable cohort rather than a claim.
+
+    NULL is the CORRECT, honest value for every pre-existing row: none of these
+    were measured at those submissions, so NO backfill UPDATE is performed.
+    Reconstructing them today would score a historical submission against
+    today's résumé and today's engine — a fabricated number wearing a
+    historical timestamp.
+
+    Additive only — no DROP, no ALTER TYPE, no DEFAULT rewrite. A
+    transaction-scoped advisory lock serialises concurrent first-hit callers so
+    the DDL cannot race; ``TRUNCATE`` never drops columns, so the process-wide
+    latch survives test teardown. Lazy DDL per ADR-TR-1.
+
+    MUST be called by EVERY path that reads or writes these columns, before the
+    statement that names them.
+    """
+    global _application_submission_snapshot_columns_ready
+    if _application_submission_snapshot_columns_ready:
+        return
+    columns = (
+        ("atsScoreAtSubmission", "double precision"),
+        ("tailoredResumeVersionId", "text"),
+        ("dimensionScoresAtSubmission", "jsonb"),
+        ("policyTierAtSubmission", "text"),
+    )
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT count(*) FROM information_schema.columns"
+                " WHERE table_name = 'Application'"
+                " AND table_schema = ANY(current_schemas(false))"
+                " AND column_name = ANY(%s)",
+                ([name for name, _type in columns],),
+            )
+            row = cur.fetchone()
+            if row and row[0] == len(columns):
+                _application_submission_snapshot_columns_ready = True
+                return
+            cur.execute("SELECT pg_advisory_xact_lock(%s)", (7420260805,))
+            for column, coltype in columns:
+                cur.execute(
+                    f'ALTER TABLE "Application" '
+                    f'ADD COLUMN IF NOT EXISTS "{column}" {coltype}'
+                )
+        conn.commit()
+    _application_submission_snapshot_columns_ready = True

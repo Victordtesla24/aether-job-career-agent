@@ -20,6 +20,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
+  ApiError,
   apiBaseUrl,
   apiRequest,
   describeApiError,
@@ -67,6 +68,12 @@ interface Insights {
   /** Unambiguous, client-branchable twin of semanticPath — true iff
    *  `semantic` (and everything blended from it below) is a placeholder. */
   semanticDegraded?: boolean;
+  /** R-04: false when the ATS ENGINE produced no score at all for this
+   *  (résumé, posting) pair — `scored` can still be true there, because the
+   *  router falls back to copying `Job.fitScore` into every subscore. A copied
+   *  fit score is not a measured keyword match, so nothing résumé-derived on
+   *  this payload may be presented as one. */
+  atsMeasured?: boolean;
   experience: number;
   skillsMatched: number;
   skillsTotal: number;
@@ -702,6 +709,9 @@ export default function JobsPage() {
   // not measured (fails closed, matching the same rule applied server-side).
   const insightsSemanticTrusted =
     selectedInsights?.semanticPath === "local" || selectedInsights?.semanticPath === "hf_api";
+  // FAIL CLOSED, same rule as every other provenance read on this screen: only
+  // an explicit `true` counts as measured.
+  const insightsAtsMeasured = selectedInsights?.atsMeasured === true;
   const step = selected ? applyStep[selected.id] ?? "idle" : "idle";
 
   /**
@@ -738,7 +748,17 @@ export default function JobsPage() {
       setSyncResult(discoverySummary(out));
     } catch (e) {
       setSyncPhase(null);
-      setError(describeApiError(e, "Discovery run failed"));
+      // A structured backend refusal (the Sync cooldown 429 from
+      // /agents/scout/run, S-FIX-A/S-7) already says exactly what happened and
+      // when to retry. Show THAT sentence rather than the transport-level
+      // "POST /agents/scout/run failed (429): {…}" wrapper, which buries the
+      // honest message inside raw JSON. Anything else keeps the shared
+      // describeApiError rendering.
+      const detailMessage =
+        e instanceof ApiError && typeof e.detail?.message === "string"
+          ? e.detail.message
+          : null;
+      setError(detailMessage ?? describeApiError(e, "Discovery run failed"));
     } finally {
       setRunning(false);
     }
@@ -1245,7 +1265,13 @@ export default function JobsPage() {
                   <span
                     data-testid="source-status-error"
                     title={s.errorText}
-                    className="max-w-[220px] truncate text-red-300/90"
+                    // A quota pause is a neutral, self-healing state (S-FIX-A/S-2)
+                    // — it carries an explanation but must not read as a failure,
+                    // so the alarm colour follows the badge, not the presence of
+                    // text.
+                    className={`max-w-[220px] truncate ${
+                      s.badge === "error" ? "text-red-300/90" : "text-aether-muted-dim"
+                    }`}
                   >
                     — {s.errorText}
                   </span>
@@ -1740,13 +1766,17 @@ export default function JobsPage() {
                     <div className="rounded-lg bg-white/5 p-3">
                       <p className="mb-1 text-[11px] text-aether-muted-dim">Skills matched</p>
                       <p className="mono text-sm font-semibold text-aether-green" data-testid="skills-matched">
-                        {selectedInsights ? `${selectedInsights.skillsMatched} / ${selectedInsights.skillsTotal}` : "—"}
+                        {selectedInsights && insightsAtsMeasured
+                          ? `${selectedInsights.skillsMatched} / ${selectedInsights.skillsTotal}`
+                          : "—"}
                       </p>
                     </div>
                     <div className="rounded-lg bg-white/5 p-3">
                       <p className="mb-1 text-[11px] text-aether-muted-dim">Skill gap</p>
                       <p className="text-sm font-semibold text-aether-yellow" data-testid="skill-gap">
-                        {selectedInsights ? selectedInsights.skillGap ?? "None" : "—"}
+                        {selectedInsights && insightsAtsMeasured
+                          ? selectedInsights.skillGap ?? "None"
+                          : "—"}
                       </p>
                     </div>
                   </div>
@@ -1803,7 +1833,17 @@ export default function JobsPage() {
                   ) : (
                     <div className="h-40 animate-pulse rounded-xl bg-white/5" aria-busy="true" />
                   )}
-                  {selectedInsights && !insightsSemanticTrusted ? (
+                  {selectedInsights && !insightsAtsMeasured ? (
+                    /* R-04: the engine itself failed, so keyword match and
+                       experience fit were never computed either — a narrower
+                       "semantic only" caveat would understate what is missing. */
+                    <p className="mt-3 text-xs text-aether-muted-dim" data-testid="insights-ats-unmeasured-note">
+                      The scoring engine could not analyse this posting against your
+                      résumé, so every résumé-derived dimension above reads as “—”.
+                      The salary, location and source-stability signals are computed
+                      from the posting itself and are unaffected.
+                    </p>
+                  ) : selectedInsights && !insightsSemanticTrusted ? (
                     <p className="mt-3 text-xs text-aether-muted-dim" data-testid="insights-semantic-degraded-note">
                       Semantic similarity could not be measured for this analysis — a
                       neutral placeholder stood in instead, so Industry Match, Culture

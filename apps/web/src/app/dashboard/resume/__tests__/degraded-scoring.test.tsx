@@ -145,6 +145,32 @@ describe("Resume Studio — ATS grid degraded-scoring UI (GMV4-ats-001/002)", ()
     expect(value?.textContent).toBe("—");
     expect(within(panel).getByTestId("semantic-degraded-note")).toBeTruthy();
   });
+
+  /**
+   * R-01 (round 3). The per-component row above already refused to print a
+   * placeholder, but the HEADLINE `overall` — 0.4*keyword + 0.4*semantic +
+   * 0.2*experience, i.e. 40% that same placeholder — was still rendered as a
+   * bold, colour-coded number with only a "treat as directional" footnote
+   * underneath. A caveat that leaves the number in place is not a caveat a
+   * reader acts on.
+   */
+  it("withholds the OVERALL score too when the semantic half was not measured", async () => {
+    const panel = await openAtsPanel(
+      atsFixture({ semantic_path: "degraded", semantic_similarity: 50, overall: 61.4 }),
+    );
+
+    const overall = within(panel).getByTestId("ats-overall");
+    expect(overall.textContent).toBe("—");
+    expect(overall.textContent).not.toMatch(/61/);
+  });
+
+  it("still prints the overall score when semantic scoring was genuine", async () => {
+    const panel = await openAtsPanel(
+      atsFixture({ semantic_path: "local", semantic_similarity: 77, overall: 61.4 }),
+    );
+
+    expect(within(panel).getByTestId("ats-overall").textContent).toBe("61.4");
+  });
 });
 
 describe("Resume Studio — ATS Conversion Impact panel degraded-scoring UI", () => {
