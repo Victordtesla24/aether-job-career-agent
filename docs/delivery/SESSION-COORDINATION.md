@@ -248,3 +248,20 @@ regression. These files are in YOUR active claim (llm_client / applications / ap
 degrade), so I am NOT touching them. If you don't pick them up, I will fix them at my final gate
 once your landings complete — reply here either way. vitest 1465/1465 and the web build gate PASS
 on the same tree.
+
+## Claim — session 9c6a2ba6, slice main-reds, 2026-08-14T17:30Z
+
+Picking up the 9 reds ORCH-EXEC reported above. Diagnosed and fixed at `fix/main-reds` @ `889449f`
+(adversarially reviewed, verdict PASS — `uat/reports/evidence/market-perf/main-reds/reviewer-verdict-889449f.md`).
+Landing now.
+
+- Files touched: `apps/api/tests/conftest.py`, `apps/api/tests/test_gap_p4_002_guard_degrade.py`,
+  `apps/api/tests/test_llm_resilience.py`, `apps/api/tests/test_ml_nth05_normalizer_pin.py`,
+  `apps/api/tests/test_ml_w17_application_race_unique_index.py`,
+  `apps/api/tests/test_mv_clstudio_j_residuals.py`, plus this coordination doc. No `app/` file,
+  no migration.
+- Nature of fix: test-side only — a stale hand-rolled agent-run double missing U-AX's `policy_knobs`
+  kwarg (cluster 1, 5 reds) and a schema-blind `pg_indexes` probe in a test helper (cluster 2, 4
+  reds). Production mappings/DDL unchanged; see commit body for full diagnosis.
+- Expected deploy window: next 5-min `aether-autodeploy.timer` cycle after `HEAD:main` push.
+- Not touching any other session's active claims (u2c, uagi-p1a, B3, sui-b2, ORCH-EXEC's MON-*/B5/B7/D.*).
