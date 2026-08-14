@@ -71,24 +71,180 @@ def ensure_heartbeat_column() -> None:
     _heartbeat_column_ready = True
 
 
+_link_columns_ready = False
+_policy_columns_ready = False
+
+
+def ensure_agent_run_link_columns() -> None:
+    """Additive, idempotent DDL for ``AgentRun.applicationId`` / ``AgentRun.jobId``
+    (U-AX instrumentation item 1).
+
+    An ``AgentRun`` row recorded WHICH agent ran and what it cost, but had no FK
+    to the job or application it acted on — so "how did this agent's runs affect
+    this application's outcome?" was unanswerable, and the per-agent
+    orchestration view had nothing to correlate on. Both columns are plain
+    nullable ``text`` (not enforced FKs): runs legitimately exist with no job
+    (``scout``, ``storyExtractor``) and a deleted job must never make a
+    historical audit row un-insertable or vanish.
+
+    NULL on every pre-existing row is the honest value — those runs' targets
+    were never recorded, so no backfill UPDATE is performed. Lazy DDL per
+    ADR-TR-1, same pattern as :func:`ensure_heartbeat_column`.
+    """
+    global _link_columns_ready
+    if _link_columns_ready:
+        return
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'ALTER TABLE "AgentRun" ADD COLUMN IF NOT EXISTS "applicationId" text'
+            )
+            cur.execute('ALTER TABLE "AgentRun" ADD COLUMN IF NOT EXISTS "jobId" text')
+            cur.execute(
+                'CREATE INDEX IF NOT EXISTS "AgentRun_jobId_idx" '
+                'ON "AgentRun" ("jobId")'
+            )
+        conn.commit()
+    _link_columns_ready = True
+
+
+def ensure_agent_run_policy_columns() -> None:
+    """Additive, idempotent DDL for ``AgentRun.policyTier`` / ``metricSnapshot``
+    (U-AX build spec item 2b — per-run policy visibility).
+
+    ``policyTier`` (text) is the rigor tier this run executed at, and
+    ``metricSnapshot`` (jsonb) is the EXACT metric snapshot the policy consumed
+    to pick it. Storing the snapshot — not just the tier — is what makes the
+    run card's "policy inputs consumed" honest and reconstructable months
+    later, when the underlying metrics have moved on.
+
+    NULL on every pre-existing row is correct: those runs predate the policy
+    loop and were not governed by a tier. No backfill UPDATE is performed;
+    stamping them with today's tier would claim a decision that never happened.
+    """
+    global _policy_columns_ready
+    if _policy_columns_ready:
+        return
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'ALTER TABLE "AgentRun" ADD COLUMN IF NOT EXISTS "policyTier" text'
+            )
+            cur.execute(
+                'ALTER TABLE "AgentRun" '
+                'ADD COLUMN IF NOT EXISTS "metricSnapshot" jsonb'
+            )
+        conn.commit()
+    _policy_columns_ready = True
+
+
+def run_link_fields(input_: dict[str, Any] | None) -> tuple[str | None, str | None]:
+    """``(job_id, application_id)`` for a run, read off its own params.
+
+    The params dict IS the run's declared target — every job-scoped agent is
+    dispatched with ``job_id`` (``routers/agents.py::_require_job_id``) and the
+    submission agent with ``application_id``. Deriving the columns here rather
+    than at each of the two ``start()`` call sites means a new dispatch path
+    cannot forget to populate them. Both spellings are accepted because the
+    async worker round-trips params through JSON where either may appear.
+    """
+    params = input_ or {}
+    job_id = params.get("job_id") or params.get("jobId")
+    application_id = params.get("application_id") or params.get("applicationId")
+    return (
+        str(job_id) if job_id else None,
+        str(application_id) if application_id else None,
+    )
+
+
+def run_policy_fields(
+    input_: dict[str, Any] | None,
+) -> tuple[str | None, dict[str, Any] | None]:
+    """``(policy_tier, metric_snapshot)`` for a run, read off its own params.
+
+    ``params["qualityPolicy"]`` is merged in by the single enforcement seam in
+    ``routers/agents.py`` (``_with_quality_policy``) upstream of BOTH the sync
+    and async dispatch paths, so whatever governed the run is exactly what is
+    persisted here — never a second, independently recomputed verdict that
+    could disagree with the one the agent actually obeyed.
+    """
+    policy = (input_ or {}).get("qualityPolicy")
+    if not isinstance(policy, dict):
+        return None, None
+    tier = policy.get("tier")
+    snapshot = {
+        "tier": tier,
+        "triggers": policy.get("triggers"),
+        "knobs": policy.get("knobs"),
+        "metrics": policy.get("metrics"),
+        "thresholds": policy.get("thresholds"),
+    }
+    return (str(tier) if tier else None), snapshot
+
+
 class AgentRunRepository:
     def start(
         self, user_id: str, agent_name: str, input_: dict[str, Any] | None = None
     ) -> dict[str, Any]:
+        """Open a ``running`` audit row.
+
+        U-AX: the row additionally carries the run's target (``jobId`` /
+        ``applicationId``) and the rigor policy that governed it
+        (``policyTier`` / ``metricSnapshot``), both derived from ``input_`` —
+        see :func:`run_link_fields` / :func:`run_policy_fields`. All four are
+        nullable, so a run with no job and no resolved policy stores NULLs
+        rather than placeholders.
+        """
+        ensure_agent_run_link_columns()
+        ensure_agent_run_policy_columns()
+        job_id, application_id = run_link_fields(input_)
+        policy_tier, metric_snapshot = run_policy_fields(input_)
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     f'''
                     INSERT INTO "AgentRun"
-                        ("id", "userId", "agentName", "status", "input", "startedAt")
-                    VALUES (%s, %s, %s, 'running'::"AgentRunStatus", %s, NOW())
+                        ("id", "userId", "agentName", "status", "input", "startedAt",
+                         "jobId", "applicationId", "policyTier", "metricSnapshot")
+                    VALUES (%s, %s, %s, 'running'::"AgentRunStatus", %s, NOW(),
+                            %s, %s, %s, %s)
                     RETURNING {_COLUMNS}
                     ''',
-                    (new_id(), user_id, agent_name, json.dumps(input_ or {})),
+                    (
+                        new_id(), user_id, agent_name, json.dumps(input_ or {}),
+                        job_id, application_id, policy_tier,
+                        json.dumps(metric_snapshot) if metric_snapshot else None,
+                    ),
                 )
                 rows = rows_to_dicts(cur)
             conn.commit()
         return rows[0]
+
+    def last_policy_run_by_agent(self, user_id: str) -> dict[str, dict[str, Any]]:
+        """Latest run per agent name INCLUDING its policy/link columns.
+
+        Separate from :meth:`last_run_by_agent` (whose ``_COLUMNS`` projection
+        is a contract for existing dashboard readers) so the U-AX policy and
+        orchestration surfaces can read the new columns without widening — and
+        therefore risking — that shared projection.
+        """
+        ensure_agent_run_link_columns()
+        ensure_agent_run_policy_columns()
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    '''
+                    SELECT DISTINCT ON ("agentName")
+                        "id", "agentName", "status", "output", "error", "costUsd",
+                        "startedAt", "completedAt", "createdAt",
+                        "jobId", "applicationId", "policyTier", "metricSnapshot"
+                    FROM "AgentRun" WHERE "userId" = %s
+                    ORDER BY "agentName", "createdAt" DESC
+                    ''',
+                    (user_id,),
+                )
+                rows = rows_to_dicts(cur)
+        return {row["agentName"]: row for row in rows}
 
     def finish(
         self,

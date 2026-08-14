@@ -262,6 +262,96 @@ def conversion(current_user: CurrentUser, period: str = "all") -> dict[str, Any]
 
 
 # --------------------------------------------------------------------------
+# Agent Performance Policy (U-AX build spec item 2) — the LIVE self-improvement
+# loop, made legible: which tier the agents are running at, WHICH measured
+# metric forced it, what they do differently, and what each agent's last run
+# actually consumed.
+# --------------------------------------------------------------------------
+
+
+def _policy_run_view(run: dict[str, Any] | None) -> dict[str, Any] | None:
+    """One agent's last run as the policy panel needs it, or ``None``.
+
+    ``None`` means the agent has genuinely never run for this user — the
+    honest answer. It is deliberately NOT an empty object with zeroed fields,
+    which would render as "ran, scored nothing".
+    """
+    if run is None:
+        return None
+    return {
+        "runId": run.get("id"),
+        "status": run.get("status"),
+        "startedAt": run.get("startedAt"),
+        "completedAt": run.get("completedAt"),
+        "costUsd": float(run["costUsd"]) if run.get("costUsd") is not None else None,
+        "jobId": run.get("jobId"),
+        "applicationId": run.get("applicationId"),
+        # The tier this run OBEYED and the exact snapshot it consumed —
+        # NULL for every run recorded before the policy loop existed, never
+        # back-stamped with today's verdict.
+        "policyTier": run.get("policyTier"),
+        "policyInputs": run.get("metricSnapshot"),
+    }
+
+
+@router.get("/agent-policy")
+def agent_policy(current_user: CurrentUser) -> dict[str, Any]:
+    """The current rigor tier, why it is what it is, and per-agent visibility.
+
+    Everything here is derived from the SAME
+    ``services.quality_policy.resolve_policy_for_user`` that governs live agent
+    runs — the panel cannot show one tier while the agents obey another,
+    because there is only one computation.
+
+    ``perAgent`` covers every REAL (backend-having) catalog agent, reporting
+    ``lastRun: null`` for agents that have never run rather than omitting them:
+    "this agent has never run" is information a subscriber is entitled to, and
+    silently dropping the row would read as though the agent did not exist.
+    """
+    from app.repositories.agent_run import AgentRunRepository
+    from app.routers.agents import AGENT_CATALOG
+    from app.services.quality_policy import resolve_policy_for_user
+
+    user_id = current_user["id"]
+    policy = resolve_policy_for_user(user_id)
+    metrics = policy.get("metrics") or {}
+    last_runs = AgentRunRepository().last_policy_run_by_agent(user_id)
+
+    per_agent = [
+        {
+            "agentKey": entry["key"],
+            "name": entry["name"],
+            "backend": entry["backend"],
+            "lastRun": _policy_run_view(last_runs.get(entry["backend"])),
+        }
+        for entry in AGENT_CATALOG
+        if entry.get("backend")
+    ]
+
+    return {
+        "tier": policy["tier"],
+        "triggers": policy["triggers"],
+        "behaviour": policy.get("behaviour"),
+        "knobs": policy.get("knobs"),
+        "thresholds": policy.get("thresholds"),
+        "metricSnapshot": {
+            "sampleSize": metrics.get("sampleSize", 0),
+            # Percentage for display; the policy itself compares fractions.
+            "conversionRate": round(float(metrics.get("conversionRate") or 0.0) * 100, 2),
+            "interviewCount": metrics.get("interviewCount", 0),
+            "dimensionScores": metrics.get("dimensionScores") or {},
+            "dimensionSampleSize": metrics.get("dimensionSampleSize", 0),
+            "dimensionsEvaluated": policy.get("dimensionsEvaluated", 0),
+            # False when the underlying reads failed — the panel must say so
+            # rather than render zeros as measurements.
+            "available": bool(metrics.get("available", False)),
+            "unavailableReason": metrics.get("reason"),
+        },
+        "perAgent": per_agent,
+    }
+
+
+# --------------------------------------------------------------------------
 # Real-Time Market Pulse (real DB-derived market intelligence)
 # --------------------------------------------------------------------------
 

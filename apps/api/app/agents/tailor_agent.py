@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import os
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -29,7 +30,11 @@ from app.services.resume_tailor import (
     render_tailored_raw_text,
     strip_bullet_lines,
 )
-from app.services.tailoring_loop import TailoringLoop
+from app.services.tailoring_loop import (
+    DEFAULT_MAX_ITERATIONS,
+    DEFAULT_TARGET_SCORE,
+    TailoringLoop,
+)
 
 #: Floor for the ATS-score denominator so a legitimate baseline of exactly
 #: 0.0 never raises ZeroDivisionError (GAP-E2).
@@ -418,7 +423,24 @@ class TailoringAgent:
         )
         return healed or base
 
-    def run(self, user_id: str, job_id: str, resume_id: str | None = None) -> TailorRunResult:
+    def run(
+        self,
+        user_id: str,
+        job_id: str,
+        resume_id: str | None = None,
+        *,
+        policy_knobs: "Mapping[str, Any] | None" = None,
+    ) -> TailorRunResult:
+        """Tailor ``resume_id`` (or the base résumé) against ``job_id``.
+
+        ``policy_knobs`` (U-AX) carries the deterministic rigor tier's
+        ``maxIterations`` / ``targetScore`` resolved by
+        ``services.quality_policy`` and injected at the single dispatch seam
+        (``routers/agents.py::_with_quality_policy``). ``None``/``{}`` keeps
+        ``TailoringLoop``'s shipped defaults exactly — this parameter can only
+        ever RAISE rigor, never lower it, because every tier's knobs are
+        >= those defaults by construction (see ``quality_policy._KNOBS_BY_TIER``).
+        """
         job = self._jobs.get_by_id(job_id, user_id)
         if job is None:
             raise LookupError(f"Job {job_id} not found for user")
@@ -457,7 +479,23 @@ class TailoringAgent:
         # score gap and the clean gap keywords. The anti-fabrication guard
         # inside ``self._service`` runs unmodified on every iteration; closing
         # a keyword gap never means inventing experience the candidate lacks.
-        loop = TailoringLoop(service=self._service, ats_engine=self._ats_engine)
+        knobs = dict(policy_knobs or {})
+        loop = TailoringLoop(
+            service=self._service,
+            ats_engine=self._ats_engine,
+            # Clamped to the shipped defaults as a FLOOR: even a malformed or
+            # downgraded knob cannot make the product try less than it does
+            # today (quality_policy rule 3, enforced here too so the invariant
+            # holds regardless of who calls this agent).
+            max_iterations=max(
+                int(knobs.get("maxIterations") or DEFAULT_MAX_ITERATIONS),
+                DEFAULT_MAX_ITERATIONS,
+            ),
+            target_score=max(
+                float(knobs.get("targetScore") or DEFAULT_TARGET_SCORE),
+                DEFAULT_TARGET_SCORE,
+            ),
+        )
         loop_result = loop.run(
             resume_text, jd, originals=parent_bullets, evidence_extra=evidence_extra
         )

@@ -24,9 +24,11 @@ from app.agents.cover_letter_agent import (
 )
 from app.db import get_connection, new_id, rows_to_dicts
 from app.middleware.auth import CurrentUser
+from app.repositories.application_status_event import record_status_event_best_effort
 from app.repositories.job import VALID_STATUSES, JobRepository
 from app.services.discovery.active_feed import active_feed, annotate_listing_age
 from app.services.fit_evidence import job_evidence_text
+from app.services.submission_snapshot import record_submission_snapshot
 
 router = APIRouter()
 
@@ -687,7 +689,17 @@ def submit_application_for_job(user_id: str, job_id: str) -> dict[str, Any]:
                     ''',
                     (application_id, user_id, job_id, resume_id, "submitted", user_id, job_id),
                 )
+                inserted = cur.rowcount > 0
             conn.commit()
+        if inserted:
+            # U-AX: a NEW submitted row copied from the user's draft. The
+            # transition genuinely started at 'draft' (the SELECT above only
+            # matches a draft), so that is what is recorded — observed, not
+            # assumed.
+            record_status_event_best_effort(
+                application_id, "draft", "submitted", "jobs.apply"
+            )
+            record_submission_snapshot(user_id, application_id, job_id, resume_id)
     elif existing_application is not None and existing_application[1] == "draft":
         assert resume_id is not None
         # RT-009: a pipeline/autopilot cover-letter step leaves a DRAFT
@@ -707,7 +719,16 @@ def submit_application_for_job(user_id: str, job_id: str) -> dict[str, Any]:
                     ''',
                     (resume_id, application_id, user_id),
                 )
+                promoted = cur.rowcount > 0
             conn.commit()
+        if promoted:
+            # U-AX: the reused draft really moved. Guarded on rowcount so a
+            # racing second caller (whose UPDATE matched nothing) does not
+            # record a transition that never happened.
+            record_status_event_best_effort(
+                application_id, "draft", "submitted", "jobs.apply"
+            )
+            record_submission_snapshot(user_id, application_id, job_id, resume_id)
 
     updated = job if job.get("status") == "applied" else repository.update_status(job_id, "applied")
     assert updated is not None
