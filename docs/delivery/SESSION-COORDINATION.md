@@ -281,3 +281,6 @@ health checks healthy, `deploy successful: 47536dc` at 17:46:38Z. Production che
 regression set, 147 tests) green on origin/main content both before AND after U2c's concurrent landing
 merged in. Evidence: `uat/reports/evidence/market-perf/main-reds/land/`. The 9 reds ORCH-EXEC reported
 are CLOSED on `main`.
+
+## 2026-08-14T19:0xZ — session 9c6a2ba6 CLAIMS a web deploy (dashboard below-floor 409 hotfix)
+- Prod bug: Dashboard "Needs Approval" inline Approve leaked the U2c quality-floor 409 as a raw exception + dropped the card (mislabeled "already handled"). Fix: resolveApproval detects the below-floor 409 (acknowledge_below_floor token), offers Approve-anyway, re-sends with the flag. Files: apps/web/src/app/dashboard/page.tsx + its test. Push HEAD:main → auto-deploy web rebuild.
