@@ -10,7 +10,7 @@ import type { Approval } from "../../lib/api/approvals";
 /** Server-side expiry window (see apps/api approval_service.EXPIRY_HOURS). */
 export const EXPIRY_HOURS = 48;
 
-interface ReasoningItem {
+export interface ReasoningItem {
   kind: "check" | "warning";
   text: string;
 }
@@ -121,8 +121,54 @@ export function canRemove(approval: Approval, now: number = Date.now()): boolean
 
 /** The artifact family a payload describes, discriminated by ``kind`` for the
  *  approvals that share the ``application_submit`` type (MV-resume-studio-001). */
-function payloadKind(approval: Approval): string | undefined {
+export function payloadKind(approval: Approval): string | undefined {
   return (approval.payload as { kind?: string }).kind;
+}
+
+/** The résumé's own real fidelity, as read fresh from the API (either
+ *  ``GET /resumes/{id}/fidelity``'s verified report or ``GET /resumes``'s
+ *  mechanism-level one) — never the frozen text an approval's payload was
+ *  written with at creation time. */
+export interface LiveFidelity {
+  preserved: boolean | null;
+  note: string;
+}
+
+/**
+ * Supersede the frozen "Original layout" reasoning line the tailoring agent
+ * wrote at approval-creation time with the résumé's LIVE fidelity
+ * (ML-U2B-approval-honesty ruling 2). A tailoring approval's reasoning is
+ * written once, from a mechanism-level snapshot that cannot see what a
+ * later real render/download of the same version proves — a stale or
+ * optimistic frozen line must never outlive what the résumé's real,
+ * currently-known fidelity says, without rewriting the stored approval
+ * record itself (that record stays an honest audit trail — see ruling 3:
+ * historical resolved approvals are never rewritten).
+ *
+ * Scoped to PENDING ``resume_tailor`` approvals only: a resolved/rejected
+ * approval is historical record and keeps its frozen text verbatim, and
+ * every other approval kind has no layout-preservation line to supersede.
+ * ``live === null`` (fetch not yet resolved, or it failed) is a no-op — the
+ * frozen line is shown as written rather than hidden, since "we don't know
+ * yet" is not a reason to blank the agent's own reasoning.
+ */
+export function withLiveFidelity(
+  approval: Approval,
+  reasoning: ReasoningItem[],
+  live: LiveFidelity | null,
+): ReasoningItem[] {
+  if (live === null) return reasoning;
+  if (approval.status !== "pending" || payloadKind(approval) !== "resume_tailor") {
+    return reasoning;
+  }
+  const idx = reasoning.findIndex((item) => /original layout/i.test(item.text));
+  if (idx === -1) return reasoning;
+  const next = [...reasoning];
+  next[idx] = {
+    kind: live.preserved === true ? "check" : "warning",
+    text: `Original layout: ${live.note}`,
+  };
+  return next;
 }
 
 /**

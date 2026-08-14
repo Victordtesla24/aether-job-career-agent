@@ -12,8 +12,17 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 
 import type { Approval } from "../../lib/api/approvals";
+import { fetchResumeFidelity } from "../../lib/api/resumes";
 import type { DecisionContext } from "./api";
-import { isExpired, metaLine, parseApprovalPayload, previewLabel } from "./lib";
+import {
+  type LiveFidelity,
+  isExpired,
+  metaLine,
+  parseApprovalPayload,
+  payloadKind,
+  previewLabel,
+  withLiveFidelity,
+} from "./lib";
 
 interface ApprovalModalProps {
   approval: Approval;
@@ -40,6 +49,37 @@ export function ApprovalModal({ approval, onClose, onDecide }: ApprovalModalProp
   );
   const [busy, setBusy] = useState<"approve" | "reject" | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // ML-U2B-approval-honesty ruling 2: a PENDING resume_tailor approval's
+  // "Original layout" reasoning line is superseded by the résumé's LIVE,
+  // verified fidelity — never the frozen mechanism-level snapshot the
+  // approval was written with (see lib.ts withLiveFidelity). Resolved
+  // approvals and every other kind never fetch — nothing to supersede.
+  const [liveFidelity, setLiveFidelity] = useState<LiveFidelity | null>(null);
+  useEffect(() => {
+    setLiveFidelity(null);
+    const resumeId = (approval.payload as { resume_id?: unknown }).resume_id;
+    if (
+      approval.status !== "pending" ||
+      payloadKind(approval) !== "resume_tailor" ||
+      typeof resumeId !== "string"
+    ) {
+      return;
+    }
+    let cancelled = false;
+    fetchResumeFidelity(resumeId)
+      .then((fidelity) => {
+        if (!cancelled) setLiveFidelity({ preserved: fidelity.formatPreserved, note: fidelity.note });
+      })
+      .catch(() => {
+        // Honest degrade: the modal keeps showing the frozen reasoning line
+        // rather than blocking on a fidelity-endpoint failure.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [approval]);
+  const reasoning = withLiveFidelity(approval, details.reasoning, liveFidelity);
 
   // Focus management: remember the trigger, move focus in, restore on close.
   useEffect(() => {
@@ -204,13 +244,13 @@ export function ApprovalModal({ approval, onClose, onDecide }: ApprovalModalProp
           ) : null}
 
           {/* AI reasoning */}
-          {details.reasoning.length > 0 ? (
+          {reasoning.length > 0 ? (
             <div>
               <p className="mb-2 text-[11px] font-medium uppercase tracking-wide text-aether-muted-dim">
                 AI reasoning
               </p>
               <ul data-testid="modal-reasoning" className="flex flex-col gap-1.5 text-xs text-aether-muted">
-                {details.reasoning.map((item, index) => (
+                {reasoning.map((item, index) => (
                   <li key={index} className="flex gap-2">
                     <i
                       className={`mt-0.5 text-[10px] ${
