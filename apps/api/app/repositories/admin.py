@@ -28,6 +28,7 @@ from psycopg2.errors import UniqueViolation
 
 from app.db import (
     ensure_admin_user_columns,
+    ensure_user_lifecycle_columns,
     ensure_user_profile_columns,
     get_connection,
     new_id,
@@ -366,6 +367,9 @@ def _ensure_admin_schema() -> None:
     # from the other lazy-DDL family — ensure it so rotation never references a
     # missing column on the older test schema.
     ensure_user_profile_columns()
+    # ADMIN-2.0: ``deletedAt`` (soft delete) + ``mustChangePassword`` (admin-created
+    # accounts) are read by the user list/detail projections below.
+    ensure_user_lifecycle_columns()
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute("SELECT pg_advisory_xact_lock(%s)", (_ADMIN_LOCK,))
@@ -592,6 +596,7 @@ def list_users(
 
     sql = f'''
         SELECT u."id", u."email", u."name", u."username", u."isAdmin", u."suspended",
+               u."deletedAt", u."mustChangePassword",
                u."createdAt", u."lastLoginAt",
                COALESCE(s."planId", 'free') AS plan, s."status" AS "subStatus",
                COALESCE(sp.spend, 0) AS spend, COALESCE(sp.runs, 0) AS runs
@@ -619,6 +624,12 @@ def _user_row(r: dict[str, Any]) -> dict[str, Any]:
         "username": r.get("username"),
         "isAdmin": bool(r.get("isAdmin")),
         "suspended": bool(r.get("suspended")),
+        # ADMIN-2.0: soft-delete state is admin-only truth — a deleted account is
+        # still listed (its work and audit trail survive), visibly flagged.
+        "deletedAt": (
+            r["deletedAt"].isoformat() if r.get("deletedAt") else None
+        ),
+        "mustChangePassword": bool(r.get("mustChangePassword")),
         "plan": r.get("plan"),
         "subStatus": r.get("subStatus"),
         "signupAt": r["createdAt"].isoformat() if r.get("createdAt") else None,
@@ -636,7 +647,8 @@ def get_user_detail(user_id: str) -> Optional[dict[str, Any]]:
         with conn.cursor() as cur:
             cur.execute(
                 'SELECT u."id", u."email", u."name", u."username", u."isAdmin",'
-                ' u."suspended", u."createdAt", u."lastLoginAt",'
+                ' u."suspended", u."deletedAt", u."mustChangePassword",'
+                ' u."createdAt", u."lastLoginAt",'
                 ' COALESCE(s."planId", \'free\') AS plan, s."status" AS "subStatus",'
                 ' COALESCE(sp.spend,0) AS spend, COALESCE(sp.runs,0) AS runs'
                 ' FROM "User" u'
@@ -906,6 +918,152 @@ def ensure_user_billing_backfill() -> None:
     """Guarantee every existing user has a Subscription/UsageQuota row so the
     admin list shows a plan for everyone (idempotent, additive)."""
     _ensure_billing_tables()  # runs the GATE-34 WHERE-NOT-EXISTS backfill
+
+
+# --------------------------------------------------------------------------- #
+# ADMIN-2.0 — account lifecycle (create / soft-delete / restore) + the
+# PROTECTED-ACCOUNT guard that no admin surface may bypass.
+# --------------------------------------------------------------------------- #
+
+
+#: Refusal text for a destructive action aimed at a privileged account. Names
+#: WHICH protection applies so the refusal is actionable, and carries no
+#: credential material.
+PROTECTED_ADMIN_MESSAGE = (
+    "This account holds admin privileges. Aether refuses to delete or suspend "
+    "an administrator: revoke the privilege first (a deliberate, separate act), "
+    "then repeat this action."
+)
+PROTECTED_OWNER_MESSAGE = (
+    "This is the owner identity that server configuration owns "
+    "(AETHER_ADMIN_EMAIL). Deleting or suspending it would lock the operator out "
+    "of the platform, and §14.7 rotation re-creates it on the next restart "
+    "anyway. The action was refused instead of accepted-then-reverted."
+)
+
+
+class DuplicateUserError(Exception):
+    """Raised when an admin-created account collides with an existing email."""
+
+
+def account_guard_context(user_id: str, cur: Any = None) -> Optional[dict[str, Any]]:
+    """The fields every destructive admin action must consult before acting.
+
+    Read on the CALLER'S cursor when one is supplied, so the guard decision and
+    the mutation it gates cannot straddle a concurrent privilege change.
+    """
+
+    def _run(c: Any) -> Optional[dict[str, Any]]:
+        c.execute(
+            'SELECT "id","email","name","isAdmin","suspended","deletedAt"'
+            ' FROM "User" WHERE "id"=%s',
+            (user_id,),
+        )
+        rows = rows_to_dicts(c)
+        return rows[0] if rows else None
+
+    if cur is not None:
+        return _run(cur)
+    _ensure_admin_schema()
+    with get_connection() as conn:
+        with conn.cursor() as c:
+            return _run(c)
+
+
+def protected_account_reason(target: dict[str, Any]) -> Optional[str]:
+    """Why this account may NOT be deleted or suspended, or ``None``.
+
+    SERVER-SIDE by design: hiding the button is a UI convenience, not a
+    protection. Both rules are absolute — an admin account and the §14.7 owner
+    identity are the two ways an operator can lock themselves (and every other
+    operator) out of the platform.
+    """
+    if bool(target.get("isAdmin")):
+        return PROTECTED_ADMIN_MESSAGE
+    if password_is_env_managed(target.get("email")):
+        return PROTECTED_OWNER_MESSAGE
+    return None
+
+
+def create_user(
+    cur: Any,
+    *,
+    email: str,
+    name: Optional[str],
+    password_hash: str,
+    must_change_password: bool = True,
+) -> dict[str, Any]:
+    """Insert an admin-created ``User`` row on the CALLER'S cursor.
+
+    Deliberately NOT ``UserRepository.create``: that helper commits its own
+    transaction, which would leave a durable account creation the audit row
+    could still fail to record. Writing here, on the caller's cursor, keeps the
+    account and its ``AdminAuditLog`` row atomic — the same discipline every
+    other ADMIN-FULL mutation follows.
+
+    ``isAdmin`` is NEVER settable through this path: an admin-created account is
+    an ordinary account. Privilege is granted by a separate, deliberate act.
+    ``ON CONFLICT DO NOTHING`` + a raise keeps the duplicate-email case an honest
+    409 rather than a silently-ignored write.
+    """
+    cur.execute(
+        '''
+        INSERT INTO "User" ("id","email","name","passwordHash","mustChangePassword",
+                            "passwordChangedAt","updatedAt")
+        VALUES (%s,%s,%s,%s,%s,now(),now())
+        ON CONFLICT ("email") DO NOTHING
+        RETURNING "id","email","name","createdAt","mustChangePassword"
+        ''',
+        (new_id(), email, name, password_hash, bool(must_change_password)),
+    )
+    rows = rows_to_dicts(cur)
+    if not rows:
+        raise DuplicateUserError(email)
+    return rows[0]
+
+
+def soft_delete_user(cur: Any, user_id: str) -> dict[str, Any]:
+    """Stamp ``deletedAt`` and suspend, on the caller's cursor.
+
+    SUSPENSION IS THE TEETH. ``deletedAt`` alone is a label; the auth dependency
+    already 403s a ``suspended`` user on every authenticated route, so setting
+    both makes "deleted" mean the account genuinely cannot be used — without
+    inventing a second enforcement path that could drift from the first.
+
+    Reversible by :func:`restore_user`, and every child row (jobs, resumes,
+    applications, runs, audit history) is left exactly where it is.
+    """
+    cur.execute(
+        'UPDATE "User" SET "deletedAt"=now(),"suspended"=true,"updatedAt"=now()'
+        ' WHERE "id"=%s AND "deletedAt" IS NULL'
+        ' RETURNING "deletedAt","suspended"',
+        (user_id,),
+    )
+    rows = rows_to_dicts(cur)
+    if not rows:
+        raise LookupError("user is already deleted")
+    return rows[0]
+
+
+def restore_user(cur: Any, user_id: str) -> dict[str, Any]:
+    """Clear ``deletedAt`` on the caller's cursor.
+
+    Deliberately does NOT lift the suspension the delete applied. Restoring an
+    account and handing it back its access are two different decisions, and
+    silently un-suspending would also erase a suspension that predated the
+    delete. The caller reports the surviving ``suspended`` flag so the admin can
+    see exactly what is still in force.
+    """
+    cur.execute(
+        'UPDATE "User" SET "deletedAt"=NULL,"updatedAt"=now()'
+        ' WHERE "id"=%s AND "deletedAt" IS NOT NULL'
+        ' RETURNING "suspended"',
+        (user_id,),
+    )
+    rows = rows_to_dicts(cur)
+    if not rows:
+        raise LookupError("user is not deleted")
+    return rows[0]
 
 
 # --------------------------------------------------------------------------- #

@@ -7,6 +7,7 @@ from typing import Any
 from app.db import (
     ensure_admin_user_columns,
     ensure_password_reset_columns,
+    ensure_user_lifecycle_columns,
     ensure_user_profile_columns,
     get_connection,
     new_id,
@@ -112,7 +113,14 @@ class UserRepository:
                 rows = rows_to_dicts(cur)
         return rows[0] if rows else None
 
-    def set_password(self, user_id: str, password_hash: str, cur: Any = None) -> None:
+    def set_password(
+        self,
+        user_id: str,
+        password_hash: str,
+        cur: Any = None,
+        *,
+        must_change: bool = False,
+    ) -> None:
         """Set a new password hash and stamp ``passwordChangedAt`` (O-4).
 
         Used by ``POST /auth/reset-password``. Stamping the timestamp is the
@@ -126,20 +134,29 @@ class UserRepository:
         ``AdminAuditLog`` row that records it — otherwise a failure between the
         two leaves a durable, unaudited password change (and a target whose
         sessions were silently invalidated). The caller must have run
-        ``ensure_password_reset_columns()`` before opening that transaction.
+        ``ensure_password_reset_columns()`` AND
+        ``ensure_user_lifecycle_columns()`` before opening that transaction.
+
+        ``must_change`` (ADMIN-2.0) writes ``User.mustChangePassword``. It
+        defaults to ``False`` so setting a password CLEARS a pending
+        "temporary credential" flag — which is what makes the flag truthful:
+        an admin-created account carries ``mustChangePassword=true`` until its
+        owner actually chooses a password, and not one request longer. Only
+        ``POST /admin/users`` passes ``True``.
         """
 
         def _run(c: Any) -> None:
             c.execute(
                 'UPDATE "User" SET "passwordHash"=%s, "passwordChangedAt"=now(),'
-                ' "updatedAt"=now() WHERE "id"=%s',
-                (password_hash, user_id),
+                ' "mustChangePassword"=%s, "updatedAt"=now() WHERE "id"=%s',
+                (password_hash, bool(must_change), user_id),
             )
 
         if cur is not None:
             _run(cur)
             return
         ensure_password_reset_columns()
+        ensure_user_lifecycle_columns()
         with get_connection() as conn:
             with conn.cursor() as c:
                 _run(c)
