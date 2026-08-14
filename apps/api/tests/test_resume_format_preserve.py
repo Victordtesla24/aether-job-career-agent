@@ -36,10 +36,12 @@ from io import BytesIO
 # structurally cannot apply", shared with the U2b truth-round tests.
 from test_u2b_fidelity_verification import (  # noqa: E402
     _bundled_pdf,
+    _left_rail_line,
     _pdf_text,
     _right_column_bullet,
     _seed_bundled_baseline,
     _tailor_child,
+    _user_id,
 )
 
 
@@ -459,9 +461,14 @@ def test_flagship_docx_child_downloads_docx_native_with_styles_byte_identical(
     from app.services.format_diff import compare_docx_structure
 
     me = client.get("/auth/me", headers=auth_headers).json()
+    # Capture the EXACT uploaded bytes: python-docx stamps wall-clock time into
+    # each ZIP part header, so a second independent build drifts by a couple of
+    # seconds during a long run — byte-identity must be checked against what was
+    # actually uploaded, not a fresh rebuild.
+    uploaded_docx = _make_styled_docx(_DOCX_PARAGRAPHS)
     upload = client.post(
         "/resumes/upload",
-        files={"file": ("jordan_resume.docx", _make_styled_docx(_DOCX_PARAGRAPHS), _DOCX_CONTENT_TYPE)},
+        files={"file": ("jordan_resume.docx", uploaded_docx, _DOCX_CONTENT_TYPE)},
         data={"extract_stories": "false"},
         headers=auth_headers,
     )
@@ -502,7 +509,7 @@ def test_flagship_docx_child_downloads_docx_native_with_styles_byte_identical(
     assert child_dl.headers["X-Aether-Format-Method"] == "docx-native"
 
     # The base download is the user's own stored .docx, verbatim.
-    assert base_dl.content == _make_styled_docx(_DOCX_PARAGRAPHS)
+    assert base_dl.content == uploaded_docx
 
     # The child is that same package with ONLY the reworded run's <w:t> changed:
     # styles / numbering / theme / fonts byte-identical, structure untouched.
@@ -515,3 +522,454 @@ def test_flagship_docx_child_downloads_docx_native_with_styles_byte_identical(
     text = "\n".join(p.text for p in Document(BytesIO(child_dl.content)).paragraphs)
     assert _DOCX_TAILORED_BULLET in text
     assert _DOCX_ORIGINAL_BULLET not in text
+
+
+# ---------------------------------------------------------------------------
+# (6) THE PDF FLAGSHIP — a genuine, NON-bundled PDF upload (the majority
+#     real-world case, the exact format of the live cfe7a0f→c12187 incident)
+#     is spliced in place from its STORED bytes, never dropped to branded.
+#     Before this fix `render_tailored_pdf` only accepted a bundled Path, so the
+#     retained DB bytes of a real PDF upload never reached the splice at all
+#     (ML-RFMT PDF splice gap).
+# ---------------------------------------------------------------------------
+
+
+def _nonbundled_pdf_copy() -> bytes:
+    """A genuine, non-bundled PDF that keeps the bundled résumé's OWN geometry.
+
+    Re-serialising the bundled asset with a metadata edit changes every byte —
+    so its SHA-256 no longer matches any bundled asset and
+    ``resolve_original_pdf`` returns ``None`` (it is treated exactly like a real
+    user upload, spliced from stored bytes) — while the two-column layout, coral
+    bullets and right-column body geometry the splice engine keys on are carried
+    through unchanged. This is the closest a deterministic fixture can get to the
+    live incident: a user's own PDF, not on disk anywhere, that MUST be spliced
+    from its retained bytes rather than dropped to the branded template.
+    """
+    import fitz
+
+    doc = fitz.open(_bundled_pdf())
+    try:
+        doc.set_metadata({"title": "user upload copy", "author": "candidate"})
+        return doc.tobytes(garbage=3, deflate=True)
+    finally:
+        doc.close()
+
+
+def _boxes_from_pdf_bytes(
+    data: bytes, before_text: str
+) -> dict[int, list[tuple[float, float, float, float]]]:
+    import fitz
+
+    from app.services.resume_pdf import _RIGHT_MARGIN, _detect_blocks, _normalize
+
+    key = _normalize(before_text)
+    boxes: dict[int, list[tuple[float, float, float, float]]] = {}
+    doc = fitz.open(stream=data, filetype="pdf")
+    try:
+        for page_index in range(len(doc)):
+            for block in _detect_blocks(doc[page_index]):
+                if _normalize(block["full_text"]).startswith(key[:40]) or key.startswith(
+                    _normalize(block["full_text"])[:40]
+                ):
+                    boxes.setdefault(page_index, []).append((
+                        block["x0"] - 4.0,
+                        block["top"] - 4.0,
+                        _RIGHT_MARGIN + 4.0,
+                        block["bottom"] + 8.0,
+                    ))
+    finally:
+        doc.close()
+    return boxes
+
+
+def _seed_stored_pdf_baseline(client, auth_headers) -> tuple[dict, str, str, bytes]:
+    """A baseline backed by STORED (non-bundled) PDF bytes, plus its two bullets.
+
+    Mirrors ``_seed_bundled_baseline`` but the row carries its own
+    ``originalFile`` bytes and a NON-bundled ``formatHash`` — so the download
+    resolves the format through the stored bytes, the path finding ML-RFMT says
+    was never wired. The bullets are the bundled résumé's own positional bullets
+    (identical text survives the re-serialisation), so the splice can place the
+    right-column one exactly as it does for the bundled path.
+    """
+    from app.repositories.resume import ResumeRepository
+
+    copy = _nonbundled_pdf_copy()
+    left = _left_rail_line()
+    right = _right_column_bullet()
+    user_id = _user_id(client, auth_headers)
+    repo = ResumeRepository()
+    baseline = repo.create(
+        user_id,
+        {
+            "raw_text": f"{left}\n{right}",
+            "bullets": [
+                {"text": left, "evidenceRef": "bullet-0"},
+                {"text": right, "evidenceRef": "bullet-1"},
+            ],
+            "contact": {},
+        },
+        hashlib.sha256(copy).hexdigest(),
+        label="Uploaded — candidate_resume.pdf",
+        version=repo.next_version(user_id),
+        original_file=copy,
+        original_filename="candidate_resume.pdf",
+        original_content_type="application/pdf",
+    )
+    return baseline, left, right, copy
+
+
+def test_flagship_stored_pdf_upload_tailored_child_is_spliced_not_branded(
+    client, auth_headers,
+):
+    """The finding, reversed: a tailored child of a genuine NON-bundled PDF
+    upload downloads as the SAME two-column PDF — spliced from the retained
+    bytes — not the branded single-column template.
+
+    A right-column bullet is reworded (the splice CAN place it) and a left-rail
+    line is reworded (it CANNOT). The download is the preserved two-column
+    splice with the left-rail rewrite disclosed as residue, exactly like the
+    bundled path — proving the stored-bytes splice route is now wired.
+    """
+    from app.services.format_diff import compare_pdf_layout, compare_pdf_text_spans
+    from app.services.resume_pdf import resolve_original_pdf
+
+    baseline, left, right, copy = _seed_stored_pdf_baseline(client, auth_headers)
+    # Precondition: this really is a non-bundled résumé (the splice must come
+    # from the stored bytes, never a bundled Path).
+    assert resolve_original_pdf(baseline["formatHash"]) is None, (
+        "fixture sanity: the uploaded PDF must NOT match any bundled asset"
+    )
+
+    child = _tailor_child(
+        client,
+        auth_headers,
+        baseline,
+        {"bullet-0": _left_after(left), "bullet-1": _right_after(right)},
+    )
+
+    fidelity = client.get(f"/resumes/{child['id']}/fidelity", headers=auth_headers).json()
+    assert fidelity["method"] == "pdf-in-place-splice", fidelity
+    assert fidelity["verification"] == "post-render-text-extraction", fidelity
+    assert fidelity["changesRequested"] == 2, fidelity
+    assert fidelity["changesApplied"] == 1, fidelity
+    assert fidelity["changesDropped"] == 1, fidelity
+    assert fidelity["formatPreserved"] is True, (
+        "the uploaded PDF's own two-column layout IS preserved — the "
+        f"unplaceable left-rail rewrite is residue, not a drop to branded: {fidelity}"
+    )
+    assert fidelity["confidence"] == "partial", fidelity
+    assert "aether template" not in fidelity["note"].lower(), fidelity
+
+    base_dl = client.get(f"/resumes/{baseline['id']}/download", headers=auth_headers)
+    child_dl = client.get(f"/resumes/{child['id']}/download", headers=auth_headers)
+    assert base_dl.status_code == 200 and child_dl.status_code == 200
+    # The base download is the user's own uploaded PDF, byte-identical.
+    assert base_dl.content == copy, "a base PDF upload download must be byte-identical"
+    assert base_dl.headers["X-Aether-Format-Method"] == "original-bytes"
+    assert child_dl.headers["X-Aether-Format-Method"] == "pdf-in-place-splice"
+    assert child_dl.headers["X-Aether-Changes-Applied"] == "1"
+    assert child_dl.headers["X-Aether-Changes-Dropped"] == "1"
+
+    boxes = _boxes_from_pdf_bytes(copy, right)
+    assert boxes, "fixture sanity: the reworded work bullet must be locatable"
+    layout = compare_pdf_layout(base_dl.content, child_dl.content, change_boxes=boxes)
+    assert layout.same_page_count, layout
+    assert layout.same_geometry, layout
+    assert layout.preserved is True, (
+        "the tailored child must be the uploaded two-column PDF with ONLY the "
+        f"reworded work bullet changed: {layout!r}"
+    )
+    spans = compare_pdf_text_spans(base_dl.content, child_dl.content, change_boxes=boxes)
+    assert spans.identical, spans
+
+    text = " ".join(_pdf_text(child_dl.content).split())
+    assert left in text, "the unplaceable left-rail rewrite keeps the baseline wording"
+    assert _right_after(right).partition(":")[2].strip()[:50] in text, text[:400]
+
+
+def test_arbitrary_pdf_upload_tailored_child_keeps_layout_never_branded(
+    client, auth_headers,
+):
+    """A genuinely arbitrary PDF upload (no bullets the splice geometry can
+    place) still keeps the user's OWN layout — it is NOT re-rendered into the
+    branded single-column template over an unplaceable rewrite.
+
+    This is the minimum the mandate requires (binding scope item 3): when a
+    region cannot be spliced, keep the layout and disclose the residue, never
+    drop to branded. The download is the user's own PDF (same page count and
+    media box), reported ``pdf-in-place-splice`` / preserved, with the rewrite
+    listed as not applied.
+    """
+    from io import BytesIO
+
+    from reportlab.pdfgen import canvas
+
+    from app.repositories.resume import ResumeRepository
+    from app.services.format_diff import compare_pdf_layout
+    from app.services.resume_pdf import resolve_original_pdf
+
+    buf = BytesIO()
+    c = canvas.Canvas(buf, pagesize=(612, 792))
+    y = 720
+    lines = [
+        "MORGAN ELLIS",
+        "Principal Reliability Engineer — Hobart, TAS, Australia",
+        "EXPERIENCE",
+        "Ran the global on-call programme across four regional teams.",
+        "Reduced mean time to recovery from ninety minutes to twelve.",
+    ]
+    for line in lines:
+        c.drawString(72, y, line)
+        y -= 20
+    c.showPage()
+    c.save()
+    pdf_bytes = buf.getvalue()
+
+    upload = client.post(
+        "/resumes/upload",
+        files={"file": ("morgan_resume.pdf", pdf_bytes, "application/pdf")},
+        data={"extract_stories": "false"},
+        headers=auth_headers,
+    )
+    assert upload.status_code == 201, upload.text
+    baseline = upload.json()
+    assert resolve_original_pdf(baseline["formatHash"]) is None
+
+    me = client.get("/auth/me", headers=auth_headers).json()
+    repo = ResumeRepository()
+    original_bullet = "Ran the global on-call programme across four regional teams."
+    tailored_bullet = "Directed the 24x7 on-call programme spanning four regional SRE teams."
+    child_sections = dict(baseline["sections"])
+    child_sections["bullets"] = [
+        {
+            "text": tailored_bullet if b["text"].strip() == original_bullet else b["text"],
+            "evidenceRef": b.get("evidenceRef"),
+        }
+        for b in baseline["sections"]["bullets"]
+    ]
+    child = repo.create(
+        me["id"],
+        child_sections,
+        baseline["formatHash"],
+        label="Tailored — Reliability Lead @ Canva",
+        version=repo.next_version(me["id"]),
+        parent_id=baseline["id"],
+    )
+
+    fidelity = client.get(f"/resumes/{child['id']}/fidelity", headers=auth_headers).json()
+    assert fidelity["method"] == "pdf-in-place-splice", fidelity
+    assert fidelity["method"] != "reflow-template", fidelity
+    assert fidelity["method"] != "branded-optin", fidelity
+    assert fidelity["formatPreserved"] is True, (
+        "an unplaceable rewrite must keep the user's own PDF layout, never drop "
+        f"to the branded template: {fidelity}"
+    )
+
+    child_dl = client.get(f"/resumes/{child['id']}/download", headers=auth_headers)
+    assert child_dl.headers["X-Aether-Format-Method"] == "pdf-in-place-splice"
+    # The download is the user's own single-page PDF, not the multi-page branded
+    # re-render: same page count and media box as what they uploaded.
+    layout = compare_pdf_layout(pdf_bytes, child_dl.content)
+    assert layout.same_page_count, layout
+    assert layout.same_geometry, layout
+
+
+# ---------------------------------------------------------------------------
+# (7) The branded template is an EXPLICIT opt-in, never a silent fallback for a
+#     retained-original row (binding scope item 5).
+# ---------------------------------------------------------------------------
+
+
+def test_branded_render_is_explicit_optin_only(client, auth_headers):
+    from app.services.format_diff import compare_pdf_layout
+
+    baseline, left, right = _seed_bundled_baseline(client, auth_headers)
+    child = _tailor_child(
+        client, auth_headers, baseline, {"bullet-1": _right_after(right)}
+    )
+
+    # Default download: the user's own preserved layout.
+    default = client.get(f"/resumes/{child['id']}/download", headers=auth_headers)
+    assert default.headers["X-Aether-Format-Method"] == "pdf-in-place-splice"
+
+    # EXPLICIT opt-in: the branded template, honestly labelled — never preserved.
+    branded = client.get(
+        f"/resumes/{child['id']}/download?branded=true", headers=auth_headers
+    )
+    assert branded.status_code == 200
+    assert branded.headers["X-Aether-Format-Method"] == "branded-optin"
+
+    fid = client.get(
+        f"/resumes/{child['id']}/fidelity?branded=true", headers=auth_headers
+    ).json()
+    assert fid["method"] == "branded-optin", fid
+    assert fid["formatPreserved"] is False, fid
+    note = fid["note"].lower()
+    assert "at your request" in note or "template" in note, note
+
+    # The branded opt-in really IS a different (single-column) render, not the
+    # preserved two-column layout — proving the opt-in changed the artifact.
+    relayout = compare_pdf_layout(default.content, branded.content)
+    assert relayout.preserved is False, (
+        "the branded opt-in must be a genuinely different layout from the "
+        f"preserved default download: {relayout!r}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# (8) Backfill audit — COUNTS the legacy rows that cannot be format-preserved
+#     (binding scope item 6). Read-only classification, no writes.
+# ---------------------------------------------------------------------------
+
+
+def test_backfill_audit_counts_affected_rows():
+    import importlib.util
+    from pathlib import Path
+
+    script = (
+        Path(__file__).resolve().parents[1] / "scripts" / "audit_resume_format_backfill.py"
+    )
+    spec = importlib.util.spec_from_file_location("_rfmt_backfill_audit", script)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    bundled_hash = "b" * 64
+    bundled = {bundled_hash}
+    rows = [
+        {"id": "r1", "parentId": None, "formatHash": "u" * 64, "hasOriginal": True},
+        {"id": "r2", "parentId": None, "formatHash": bundled_hash, "hasOriginal": False},
+        {"id": "r3", "parentId": None, "formatHash": "z" * 64, "hasOriginal": False},
+        {"id": "r4", "parentId": "r3", "formatHash": "z" * 64, "hasOriginal": False},
+        {"id": "r5", "parentId": "r1", "formatHash": "u" * 64, "hasOriginal": False},
+    ]
+    classified = module.classify(rows, bundled)
+    summary = module.summarise(classified)
+
+    by_id = {c["id"]: c for c in classified}
+    assert by_id["r1"]["reason"] == "retained-original" and by_id["r1"]["preservable"]
+    assert by_id["r2"]["reason"] == "bundled-hash-match" and by_id["r2"]["preservable"]
+    assert by_id["r3"]["reason"] == "needs-reupload" and not by_id["r3"]["preservable"]
+    assert by_id["r4"]["reason"] == "needs-reupload" and not by_id["r4"]["preservable"]
+    assert by_id["r5"]["reason"] == "via-parent-original" and by_id["r5"]["preservable"]
+
+    assert summary["examined"] == 5
+    assert summary["preservable"] == 3
+    assert summary["affected_needs_reupload"] == 2
+    assert summary["affected_needs_reupload_base"] == 1
+    assert summary["affected_needs_reupload_tailored"] == 1
+    assert summary["wrote_anything"] is False
+
+
+# ---------------------------------------------------------------------------
+# (9) DOCX §4 — headers/footers/media must be byte-identical too (the harness
+#     hole ML-RFMT flagged: same-named header/footer/media parts whose CONTENT
+#     changed were invisible to the missing/added-part checks).
+# ---------------------------------------------------------------------------
+
+
+def _styled_docx_with_header_footer_media() -> bytes:
+    from io import BytesIO
+
+    from docx import Document
+    from PIL import Image
+
+    img = BytesIO()
+    Image.new("RGB", (16, 16), (200, 40, 40)).save(img, format="PNG")
+
+    doc = Document()
+    p = doc.add_paragraph()
+    p.add_run("JORDAN AKINYEMI").bold = True
+    doc.sections[0].header.paragraphs[0].add_run("CONFIDENTIAL — candidate copy")
+    doc.sections[0].footer.paragraphs[0].add_run("References available on request")
+    doc.add_paragraph("EXPERIENCE", style="Heading 1")
+    for text in (
+        "Operated a Kubernetes fleet serving 12 million requests per day.",
+        "Cut deploy lead time by 47 percent through pipeline automation.",
+    ):
+        doc.add_paragraph(text, style="List Bullet")
+    doc.add_picture(BytesIO(img.getvalue()))
+    buf = BytesIO()
+    doc.save(buf)
+    return buf.getvalue()
+
+
+def test_harness_docx_true_rewrite_keeps_header_footer_media_byte_identical():
+    """An in-place body rewrite leaves header/footer/media byte-identical."""
+    from app.services.format_diff import _docx_parts, compare_docx_structure
+    from app.services.resume_docx import render_tailored_docx
+
+    original = _styled_docx_with_header_footer_media()
+    tailored = render_tailored_docx(
+        original,
+        [(
+            "Cut deploy lead time by 47 percent through pipeline automation.",
+            "Cut deploy lead time by 47 percent through Docker-based pipeline automation.",
+        )],
+    )
+    assert tailored != original, "a genuine rewrite must change the bytes"
+
+    diff = compare_docx_structure(original, tailored)
+    assert diff.styles_preserved is True, diff
+    assert diff.changed_style_parts == (), diff
+    # The header/footer/media parts really are present and really are identical.
+    parts_a, parts_b = _docx_parts(original), _docx_parts(tailored)
+    for part in ("word/header1.xml", "word/footer1.xml", "word/media/image1.png"):
+        assert part in parts_a, f"fixture must contain {part}"
+        assert parts_a[part] == parts_b[part], f"{part} must be byte-identical"
+
+
+def test_harness_docx_flags_a_changed_header_footer_and_media():
+    """A change to a same-named header/footer/media part is caught (was a hole).
+
+    These parts are present in both packages, so a content edit is invisible to
+    the missing/added-part checks; the harness must byte-compare them.
+    """
+    import zipfile
+    from io import BytesIO
+
+    from app.services.format_diff import compare_docx_structure
+
+    original = _styled_docx_with_header_footer_media()
+
+    def _mutate(part_substr: str, needle: bytes, replacement: bytes) -> bytes:
+        src = zipfile.ZipFile(BytesIO(original))
+        out = BytesIO()
+        with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as dst:
+            for item in src.namelist():
+                data = src.read(item)
+                if part_substr in item:
+                    data = data.replace(needle, replacement)
+                dst.writestr(item, data)
+        return out.getvalue()
+
+    changed_header = _mutate("word/header1.xml", b"CONFIDENTIAL", b"PUBLIC COPY")
+    assert changed_header != original
+    diff = compare_docx_structure(original, changed_header)
+    assert diff.styles_preserved is False, (
+        "a header content change must be caught, not folded into permitted text "
+        f"deltas: {diff!r}"
+    )
+    assert "word/header1.xml" in diff.changed_style_parts, diff
+
+    changed_footer = _mutate("word/footer1.xml", b"References", b"Referees")
+    footer_diff = compare_docx_structure(original, changed_footer)
+    assert footer_diff.styles_preserved is False, footer_diff
+    assert "word/footer1.xml" in footer_diff.changed_style_parts, footer_diff
+
+    # A media (image) byte change is caught by the word/media/ prefix guard.
+    changed_media = _mutate("word/media/image1.png", b"IDAT", b"IDAT")  # no-op guard below
+    # Force a real 1-byte change in the image part deterministically.
+    src = zipfile.ZipFile(BytesIO(original))
+    out = BytesIO()
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as dst:
+        for item in src.namelist():
+            data = bytearray(src.read(item))
+            if item == "word/media/image1.png":
+                data[-1] ^= 0x01
+            dst.writestr(item, bytes(data))
+    changed_media = out.getvalue()
+    media_diff = compare_docx_structure(original, changed_media)
+    assert media_diff.styles_preserved is False, media_diff
+    assert "word/media/image1.png" in media_diff.changed_style_parts, media_diff

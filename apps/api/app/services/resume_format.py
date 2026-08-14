@@ -43,12 +43,20 @@ from app.services.resume_docx import DOCX_CONTENT_TYPE
 
 #: Content types whose text is trivially preservable end to end (R-F4).
 _TEXT_CONTENT_TYPES = ("text/plain", "text/markdown")
+#: The stored upload MIME for a PDF, matched case-insensitively.
+_PDF_CONTENT_TYPE = "application/pdf"
 
 METHOD_ORIGINAL_BYTES = "original-bytes"
 METHOD_PDF_SPLICE = "pdf-in-place-splice"
 METHOD_DOCX_NATIVE = "docx-native"
 METHOD_TEXT_NATIVE = "text-native"
 METHOD_REFLOW = "reflow-template"
+#: A branded re-render the user EXPLICITLY asked for (``?branded=true``), never
+#: a silent fallback: an honest "re-style my résumé in the Aether template"
+#: action, distinct from ``reflow-template`` (the safety fallback for an
+#: unreadable / content-lost render) so an operator can tell a chosen restyle
+#: from a forced one (MODELS-LIVE R-FMT binding scope item 5).
+METHOD_BRANDED_OPTIN = "branded-optin"
 METHOD_UNKNOWN = "unknown"
 
 
@@ -125,6 +133,10 @@ def is_text_content_type(content_type: str | None) -> bool:
     return any(lowered.startswith(prefix) for prefix in _TEXT_CONTENT_TYPES)
 
 
+def is_pdf_content_type(content_type: str | None) -> bool:
+    return str(content_type or "").lower().startswith(_PDF_CONTENT_TYPE)
+
+
 def describe_fidelity(
     *,
     bundled_match: bool,
@@ -169,6 +181,34 @@ def describe_fidelity(
             method=METHOD_ORIGINAL_BYTES,
             confidence="high",
             note="Downloads return your original document's own bytes, unmodified.",
+            preserved=True,
+        )
+    if has_original and is_pdf_content_type(content_type):
+        # A genuine user PDF upload (its ``formatHash`` is a digest of the user's
+        # OWN bytes, so ``resolve_original_pdf`` returns ``None`` and the download
+        # splices the stored ``originalFile`` bytes directly). MODELS-LIVE R-FMT
+        # binding scope item 5: this is preserved, NOT re-flowed — a base returns
+        # its exact bytes; a tailored child is edited in place. Before this slice
+        # the router never routed the stored PDF bytes into the splice at all, so
+        # every real PDF upload dropped to the branded template (finding ML-RFMT
+        # PDF splice gap).
+        if is_tailored:
+            return FormatFidelity(
+                method=METHOD_PDF_SPLICE,
+                confidence="high",
+                note=(
+                    "Your original PDF is edited in place — reworded bullets are "
+                    "redrawn on the page and every other element is the source "
+                    "document's own. A rewrite the layout cannot place keeps its "
+                    "original wording and is listed as not applied, so your PDF's "
+                    "layout is preserved rather than dropped to a re-render."
+                ),
+                preserved=True,
+            )
+        return FormatFidelity(
+            method=METHOD_ORIGINAL_BYTES,
+            confidence="high",
+            note="Downloads return your original PDF's own bytes, unmodified.",
             preserved=True,
         )
     if has_original and is_docx_content_type(content_type):
@@ -292,6 +332,31 @@ def native_fallback_fidelity(
         note=(
             f"{reason} from this version's own tailored text, rather than a "
             f"partially tailored copy of your own document.{pointer}"
+        ),
+        preserved=False,
+    )
+
+
+def branded_optin_fidelity() -> FormatFidelity:
+    """The honest report for a branded render the user EXPLICITLY requested.
+
+    MODELS-LIVE R-FMT binding scope item 5: the branded template is a user
+    choice ("re-style my résumé in the Aether template", ``?branded=true``), not
+    a silent fallback. It is a genuine re-format — a fresh single-column design,
+    not the uploaded document's own layout — so it is reported ``preserved:
+    False`` and points the user back at the format-preserving download, never
+    dressed up as preservation it did not do. Completeness is still verified by
+    :func:`verified_fidelity` (this is the LAST render, so a loss here is
+    reported, not routed around).
+    """
+    return FormatFidelity(
+        method=METHOD_BRANDED_OPTIN,
+        confidence="high",
+        note=(
+            "Re-rendered in the Aether template at your request. This is a fresh "
+            "single-column design, not your uploaded document's own layout — "
+            "download without the branded option (or use “Download original”) to "
+            "keep your résumé's own format."
         ),
         preserved=False,
     )

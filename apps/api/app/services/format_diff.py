@@ -297,9 +297,14 @@ def compare_pdf_text_spans(
 # --- DOCX structural diff ----------------------------------------------------
 
 #: Parts whose bytes MUST be identical between a baseline .docx and its tailored
-#: child: any difference here is a style/numbering/theme/font change, which the
-#: mandate forbids. ``document.xml`` is excluded — it is the ONLY part allowed to
-#: differ, and only inside ``<w:t>`` text nodes (checked separately below).
+#: child: any difference here is a style/numbering/theme/font/header/footer/media
+#: change, which the mandate forbids a tailoring rewrite to make (SYNTHESIS §4:
+#: "assert headers/footers, word/media/* and the section grid are unchanged").
+#: ``word/document.xml`` is the ONLY part allowed to differ, and only inside its
+#: ``<w:t>`` text nodes (checked separately below). Headers and footers CAN carry
+#: their own ``<w:t>`` text, but a résumé-tailoring edit rewrites work bullets in
+#: the body only, so any change to a header/footer part is structural drift the
+#: harness must catch — it is not folded into the permitted-text-delta path.
 _DOCX_STYLE_PARTS = (
     "word/styles.xml",
     "word/numbering.xml",
@@ -307,7 +312,23 @@ _DOCX_STYLE_PARTS = (
     "word/settings.xml",
     "word/webSettings.xml",
 )
-_DOCX_STYLE_PREFIXES = ("word/theme/", "word/fonts/")
+_DOCX_STYLE_PREFIXES = ("word/theme/", "word/fonts/", "word/media/")
+
+
+def _is_header_or_footer_part(name: str) -> bool:
+    """True for ``word/header*.xml`` / ``word/footer*.xml`` (any index).
+
+    These same-named parts are present in both packages, so a content change is
+    invisible to the missing/added-part checks — it is caught here by byte
+    comparison, closing the gap where a header/footer/media edit slipped through
+    (ML-RFMT format_diff header/footer/media hole).
+    """
+    tail = name.rsplit("/", 1)[-1]
+    return (
+        name.startswith("word/")
+        and name.endswith(".xml")
+        and (tail.startswith("header") or tail.startswith("footer"))
+    )
 
 _WT_RE = re.compile(rb"(<w:t\b[^>]*>).*?(</w:t>)", re.DOTALL)
 _WT_EMPTY_RE = re.compile(rb"<w:t\b[^>]*/>")
@@ -359,7 +380,11 @@ def compare_docx_structure(baseline: bytes, tailored: bytes) -> DocxStructureDif
     base_names, tail_names = set(base), set(tail)
 
     def is_style_part(name: str) -> bool:
-        return name in _DOCX_STYLE_PARTS or name.startswith(_DOCX_STYLE_PREFIXES)
+        return (
+            name in _DOCX_STYLE_PARTS
+            or name.startswith(_DOCX_STYLE_PREFIXES)
+            or _is_header_or_footer_part(name)
+        )
 
     changed_style = tuple(
         sorted(

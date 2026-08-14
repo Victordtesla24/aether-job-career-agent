@@ -279,8 +279,9 @@ def _test_user_id(client, auth_headers) -> str:
 
 
 # ---------------------------------------------------------------------------
-# (5) Honest degradation: a real (non-bundled) PDF baseline must carry an
-#     EXPLICIT fidelity report, never a silent re-format (R-F2/R-F4).
+# (5) A real (non-bundled) PDF baseline is FORMAT-PRESERVED — its own bytes are
+#     stored, so its download returns them verbatim (MODELS-LIVE R-FMT binding
+#     scope item 5, which reverses the old "PDF upload re-flows to branded").
 # ---------------------------------------------------------------------------
 
 
@@ -298,18 +299,19 @@ def _make_pdf_bytes(lines: list[str]) -> bytes:
     return buf.getvalue()
 
 
-def test_reflowed_pdf_baseline_carries_an_explicit_honest_fidelity_report(
+def test_uploaded_pdf_baseline_is_format_preserved_via_original_bytes(
     client, auth_headers,
 ):
-    """A real user-uploaded PDF (not one of the two bundled seed PDFs) is
-    re-flowed on download today, and ``formatPreserved`` already says
-    ``False`` (MON-011) — but R-F2/R-F4 require an EXPLICIT report of *why*
-    and *what will actually happen*, not just a bare boolean. ``GET
-    /resumes`` must stamp a ``formatFidelity`` object with a low/non-high
-    confidence and an honest note naming the re-flow — never silence.
+    """A real user-uploaded PDF (not one of the two bundled seed PDFs) is now
+    FORMAT-PRESERVED, reversing the old MON-011 "re-flow to branded" behaviour.
 
-    Expected RED today: ``_with_format_preserved`` stamps only the boolean
-    ``formatPreserved``; there is no ``formatFidelity`` key at all.
+    MODELS-LIVE R-FMT binding scope item 5: the branded template is never the
+    silent fallback for a retained-original row. A base PDF upload stores its own
+    ``originalFile`` bytes, so its download returns them byte-identical — that IS
+    preservation, and ``GET /resumes`` must say so (``formatPreserved: true``,
+    method ``original-bytes``, high confidence), never claim a re-flow it no
+    longer does. It must still carry an explicit ``formatFidelity`` object (never
+    a bare boolean) and must never claim preservation it did not do.
     """
     pdf_bytes = _make_pdf_bytes([
         "RILEY NAKAMURA",
@@ -330,24 +332,23 @@ def test_reflowed_pdf_baseline_carries_an_explicit_honest_fidelity_report(
     listing = client.get("/resumes", headers=auth_headers).json()
     stamped = next(r for r in listing if r["id"] == resume_id)
 
-    assert stamped["formatPreserved"] is False  # MON-011 baseline behaviour, still true
-
+    assert stamped["formatPreserved"] is True, (
+        "a base PDF upload has its own stored bytes, so its download is "
+        f"byte-identical — that is preserved, got {stamped['formatPreserved']!r}"
+    )
     assert "formatFidelity" in stamped, (
-        "R-F2/R-F4: a re-flowed résumé must carry an EXPLICIT fidelity "
-        "report object, not just a bare boolean"
+        "R-F2/R-F4: every résumé must carry an EXPLICIT fidelity report object, "
+        "not just a bare boolean"
     )
     fidelity = stamped["formatFidelity"]
-    assert fidelity["confidence"] in ("low", "medium"), (
-        f"a re-flowed (non-native) render is not high-confidence fidelity, "
-        f"got {fidelity!r}"
-    )
-    note = str(fidelity.get("note", "")).lower()
-    assert "template" in note or "re-flow" in note or "reflow" in note, (
-        f"the note must honestly name what actually happens to this upload "
-        f"type, got {fidelity!r}"
-    )
-    # Never a silent/fabricated preservation claim.
-    assert "byte-for-byte" not in note and "pixel-perfect" not in note
+    assert fidelity["method"] == "original-bytes", fidelity
+    assert fidelity["confidence"] == "high", fidelity
+
+    # The download really is the user's own bytes, verbatim.
+    dl = client.get(f"/resumes/{resume_id}/download", headers=auth_headers)
+    assert dl.status_code == 200, dl.text
+    assert dl.content == pdf_bytes, "a base PDF download must be byte-identical"
+    assert dl.headers["X-Aether-Format-Method"] == "original-bytes"
 
 
 # ---------------------------------------------------------------------------

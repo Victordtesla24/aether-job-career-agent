@@ -145,7 +145,7 @@ def test_verified_fidelity_cannot_report_preserved_true_over_a_dropped_change():
         (True, False, None),  # pdf-in-place-splice
         (False, True, "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
         (False, True, "text/plain; charset=utf-8"),
-        (False, True, "application/pdf"),  # reflow-template (already False)
+        (False, True, "application/pdf"),  # pdf-in-place-splice, forced False by the drop
     ],
 )
 def test_no_method_pairs_preserved_true_with_a_verified_dropped_change(
