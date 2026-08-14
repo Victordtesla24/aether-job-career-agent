@@ -20,6 +20,16 @@
  *   - Edges are STAGE-to-STAGE, because stage order is the only relationship
  *     `GET /agents/orchestration-map` actually defines. Drawing agent-to-agent
  *     arrows would be a fabricated topology.
+ *
+ * THAT LAST LAW IS UNCHANGED, AND U-STORY-3a DOES NOT BEND IT. The cross-map
+ * wiring the "Show connections" overlay draws is agent-to-agent, and it is
+ * therefore NOT derived from this payload — it could not honestly be. It comes
+ * from `workflow-linkage.ts`: a checked-in table where every edge carries the
+ * hop-by-hop `file:line` provenance it was read out of the API with, filtered
+ * at runtime by `drawableLinkages` so an edge that loses its provenance stops
+ * being drawn. Those edges are STRUCTURAL (how the system is wired) and are
+ * rendered as such — dotted, labelled, never coral, never animated. Nothing in
+ * this module may ever start inferring them from `stages`.
  */
 import {
   ageMs,
