@@ -20,6 +20,7 @@ from app.repositories.resume import ResumeRepository
 from app.repositories.story import StoryRepository
 from app.services.ats_engine import ATSEngine
 from app.services.career_data import build_career_corpus
+from app.services.evidence_corpus import build_corpus_evidence
 from app.services.resume_grounding import MissingResumeError
 from app.services.resume_parser import parse_resume_pdf
 from app.services.resume_pdf import extract_pdf_bullets
@@ -450,7 +451,18 @@ class TailoringAgent:
         # signal usually absent from the polished résumé text — the source of
         # truthful JD keywords the tailor can surface for a genuine ATS lift.
         story_evidence = build_story_evidence(user_id, self._stories)
-        evidence_extra = "\n\n".join(p for p in (career_corpus, story_evidence) if p)
+        # U2b/U2c-0: the provenance-tagged evidence corpus (baseline résumé +
+        # portfolio + public repos, each claim carrying its source, epistemic
+        # status and confidence). Ranked against THIS job description and
+        # bounded to a character budget, so it widens the anti-fabrication
+        # evidence base without flooding the model's token/latency budget. The
+        # guards are untouched: a claim the corpus does not support is still
+        # rejected and reverted. Empty string for a user with no corpus, which
+        # keeps behaviour identical to before for those accounts.
+        corpus_evidence = build_corpus_evidence(user_id, jd)
+        evidence_extra = "\n\n".join(
+            p for p in (career_corpus, story_evidence, corpus_evidence) if p
+        )
         # §5.3 item 1: score-aware iterative tailoring — tailor, score via the
         # SAME ATSEngine ``/resumes/{id}/ats`` uses, and — while below the 85
         # target and iterations remain — retry with a directive naming the
