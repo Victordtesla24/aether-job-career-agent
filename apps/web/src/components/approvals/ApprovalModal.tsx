@@ -11,6 +11,8 @@
  */
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 
+import { button } from "../ui/recipes";
+
 import type { Approval } from "../../lib/api/approvals";
 import { fetchResumeFidelity } from "../../lib/api/resumes";
 import type { DecisionContext } from "./api";
@@ -18,9 +20,11 @@ import {
   FIDELITY_CHECKING,
   FIDELITY_FETCH_FAILED,
   type LiveFidelity,
+  describeDimension,
   isExpired,
   metaLine,
   parseApprovalPayload,
+  parseQualityGate,
   payloadKind,
   previewLabel,
   withLiveFidelity,
@@ -68,6 +72,13 @@ export function ApprovalModal({ approval, onClose, onDecide }: ApprovalModalProp
   );
   const [busy, setBusy] = useState<"approve" | "reject" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // U2c: the artifact's own 80%-across-all-dimensions verdict, read off the
+  // payload the agent stamped it on. `null` = never gated (every approval
+  // predating the gate) — the modal then says nothing and blocks nothing,
+  // because claiming a verdict that was never computed is its own lie.
+  const qualityGate = parseQualityGate(approval);
+  const belowFloor = qualityGate !== null && !qualityGate.passed;
+  const [acknowledgedBelowFloor, setAcknowledgedBelowFloor] = useState(false);
 
   // ML-U2B-approval-honesty ruling 2: a PENDING resume_tailor approval's
   // "Original layout" reasoning line is superseded by the résumé's LIVE,
@@ -174,6 +185,11 @@ export function ApprovalModal({ approval, onClose, onDecide }: ApprovalModalProp
     setError(null);
     try {
       const context: DecisionContext = { trustAgent };
+      if (decision === "approve" && belowFloor) {
+        // Only ever sent with an APPROVE: rejecting a below-floor artifact is
+        // the safe direction and is never gated.
+        context.acknowledgeBelowFloor = acknowledgedBelowFloor;
+      }
       if (decision === "approve" && editing && editedPreview !== (details.preview ?? "")) {
         context.editedPreview = editedPreview;
       }
@@ -187,11 +203,14 @@ export function ApprovalModal({ approval, onClose, onDecide }: ApprovalModalProp
   };
 
   const approveLabel = editing ? "Approve with edits" : "Approve";
+  // A below-floor artifact is never WITHHELD — it is readable, editable and
+  // approvable. What it may not be is approved by accident.
+  const approveBlocked = belowFloor && !acknowledgedBelowFloor;
 
   return (
     <div
       data-testid="approval-modal-backdrop"
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 sm:items-center sm:p-6"
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm sm:items-center sm:p-6"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
@@ -203,17 +222,17 @@ export function ApprovalModal({ approval, onClose, onDecide }: ApprovalModalProp
         aria-labelledby={titleId}
         tabIndex={-1}
         data-testid="approval-modal"
-        className="glass-raised flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-3xl border border-white/10 shadow-2xl shadow-black/60 outline-none sm:max-h-[85vh] sm:w-[560px] sm:rounded-3xl"
+        className="elev-3 flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-3xl outline-none sm:max-h-[85dvh] sm:w-[560px] sm:rounded-3xl"
       >
         {/* Header */}
-        <div className="border-b border-white/10 px-5 pb-5 pt-6 sm:px-7 sm:pt-7">
+        <div className="border-b border-hairline px-5 pb-5 pt-6 sm:px-7 sm:pt-7">
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-center gap-3">
               <div
-                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-aether-yellow/25 bg-aether-yellow/15"
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-state-warn/25 bg-state-warn/15"
                 aria-hidden="true"
               >
-                <i className="fa-solid fa-shield-halved text-aether-yellow" />
+                <i className="fa-solid fa-shield-halved text-state-warn" />
               </div>
               <div>
                 <h2 id={titleId} className="text-lg font-bold leading-tight">
@@ -229,7 +248,7 @@ export function ApprovalModal({ approval, onClose, onDecide }: ApprovalModalProp
               data-testid="modal-close-btn"
               aria-label="Close approval dialog"
               onClick={onClose}
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-aether-muted-dim transition hover:bg-white/10 hover:text-white sm:h-8 sm:w-8"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-aether-muted-dim transition-colors duration-[--dur-fast] hover:bg-surface-3 hover:text-aether-text sm:h-8 sm:w-8"
             >
               <i className="fa-solid fa-xmark" aria-hidden="true" />
             </button>
@@ -237,11 +256,11 @@ export function ApprovalModal({ approval, onClose, onDecide }: ApprovalModalProp
         </div>
 
         {/* Body */}
-        <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-5 py-5 sm:px-7">
+        <div className="flex flex-1 flex-col gap-4 overflow-y-auto overscroll-contain px-5 py-5 sm:px-7">
           {/* Action summary */}
           <div className="flex items-center gap-3">
             <div
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/10 text-xs font-bold"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/[0.07] text-xs font-bold"
               aria-hidden="true"
             >
               {details.initials}
@@ -256,7 +275,7 @@ export function ApprovalModal({ approval, onClose, onDecide }: ApprovalModalProp
             </div>
             {details.confidence !== null ? (
               <div className="text-right" data-testid="modal-confidence">
-                <div className="font-mono text-sm font-bold text-aether-green">
+                <div className="mono text-sm font-bold text-state-ok">
                   {details.confidence}%
                 </div>
                 <p className="text-[10px] text-aether-muted-dim">confidence</p>
@@ -266,7 +285,7 @@ export function ApprovalModal({ approval, onClose, onDecide }: ApprovalModalProp
 
           {/* Why approval is needed */}
           {details.why ? (
-            <div className="glass relative overflow-hidden rounded-xl border border-aether-indigo/25 p-4">
+            <div className="elev-1 relative overflow-hidden rounded-xl border-state-info/25 p-4">
               <div
                 className="absolute -right-8 -top-8 h-24 w-24 rounded-full bg-aether-indigo/10 blur-2xl"
                 aria-hidden="true"
@@ -318,7 +337,7 @@ export function ApprovalModal({ approval, onClose, onDecide }: ApprovalModalProp
 
           {/* Generated preview — read or edit */}
           {details.preview !== null || editing ? (
-            <div className="glass rounded-xl border border-white/10 p-4">
+            <div className="elev-1 rounded-xl p-4">
               <div className="mb-2 flex items-center justify-between">
                 <span className="text-[11px] font-medium uppercase tracking-wide text-aether-muted-dim">
                   {previewLabel(approval)}
@@ -334,7 +353,7 @@ export function ApprovalModal({ approval, onClose, onDecide }: ApprovalModalProp
                   value={editedPreview}
                   onChange={(event) => setEditedPreview(event.target.value)}
                   rows={6}
-                  className="w-full resize-y rounded-lg border border-white/10 bg-white/5 p-3 text-xs leading-relaxed text-aether-text outline-none focus:border-aether-indigo/50"
+                  className="w-full resize-y rounded-lg border border-hairline bg-surface-2/60 p-3 text-xs leading-relaxed text-aether-text outline-none transition-colors duration-[--dur-fast] focus:border-state-info/50 focus-visible:ring-2 focus-visible:ring-aether-coral/70"
                 />
               ) : (
                 <p
@@ -344,6 +363,40 @@ export function ApprovalModal({ approval, onClose, onDecide }: ApprovalModalProp
                   {details.preview}
                 </p>
               )}
+            </div>
+          ) : null}
+
+          {/* U2c — below the quality floor: the failing dimensions, verbatim */}
+          {belowFloor && qualityGate ? (
+            <div
+              data-testid="modal-quality-floor"
+              className="rounded-xl border border-amber-400/40 bg-amber-400/10 p-3 text-xs text-amber-100"
+            >
+              <p className="font-semibold">
+                Below Aether&apos;s {qualityGate.floor.toFixed(0)}% quality floor
+              </p>
+              <ul className="mt-2 space-y-1">
+                {qualityGate.failing.map((dimension) => (
+                  <li key={dimension.key}>{describeDimension(dimension)}</li>
+                ))}
+              </ul>
+              <p className="mt-2 text-amber-200/80">
+                This is the real, measured result — nothing was inflated, and no claim
+                your evidence does not support was added to reach the floor. You can
+                still read, edit and approve it.
+              </p>
+              {pending ? (
+                <label className="mt-3 flex min-h-[44px] cursor-pointer items-center gap-2.5 font-medium text-amber-50">
+                  <input
+                    type="checkbox"
+                    data-testid="below-floor-ack-checkbox"
+                    checked={acknowledgedBelowFloor}
+                    onChange={(event) => setAcknowledgedBelowFloor(event.target.checked)}
+                    className="h-4 w-4 rounded accent-amber-400"
+                  />
+                  {qualityGate.acknowledgementLabel}
+                </label>
+              ) : null}
             </div>
           ) : null}
 
@@ -364,7 +417,7 @@ export function ApprovalModal({ approval, onClose, onDecide }: ApprovalModalProp
           {expired ? (
             <p
               data-testid="modal-expired-note"
-              className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-300"
+              className="rounded-xl border border-state-danger/30 bg-state-danger/10 p-3 text-xs text-state-danger"
             >
               This request is older than 48h and has expired — re-run the agent to get a
               fresh one. Actions are disabled.
@@ -372,7 +425,7 @@ export function ApprovalModal({ approval, onClose, onDecide }: ApprovalModalProp
           ) : null}
 
           {approval.status !== "pending" ? (
-            <p className="rounded-xl border border-white/10 bg-white/5 p-3 text-xs text-aether-muted">
+            <p className="rounded-xl border border-hairline bg-white/[0.04] p-3 text-xs text-aether-muted">
               This request was already {approval.status}
               {approval.resolvedAt
                 ? ` on ${new Date(approval.resolvedAt).toLocaleString("en-AU")}`
@@ -385,7 +438,7 @@ export function ApprovalModal({ approval, onClose, onDecide }: ApprovalModalProp
             <p
               role="alert"
               data-testid="modal-error"
-              className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-300"
+              className="rounded-xl border border-state-danger/30 bg-state-danger/10 p-3 text-xs text-state-danger"
             >
               {error}
             </p>
@@ -393,13 +446,13 @@ export function ApprovalModal({ approval, onClose, onDecide }: ApprovalModalProp
         </div>
 
         {/* Footer — desktop order per approval-modal.html */}
-        <div className="hidden items-center gap-3 border-t border-white/10 px-7 py-5 sm:flex">
+        <div className="hidden items-center gap-3 border-t border-hairline px-7 py-5 sm:flex">
           <button
             type="button"
             data-testid="modal-reject-btn"
             onClick={() => void decide("reject")}
             disabled={!pending || busy !== null}
-            className="rounded-xl px-5 py-2.5 text-sm font-medium text-aether-muted transition hover:bg-white/5 hover:text-white disabled:opacity-40"
+            className={button({ tone: "danger", size: "md", class: "rounded-xl px-5 py-2.5" })}
           >
             {busy === "reject" ? "Rejecting…" : "Reject"}
           </button>
@@ -408,7 +461,7 @@ export function ApprovalModal({ approval, onClose, onDecide }: ApprovalModalProp
             data-testid="modal-edit-btn"
             onClick={() => setEditing((value) => !value)}
             disabled={!pending || busy !== null || details.preview === null}
-            className="ml-auto rounded-xl border border-white/10 bg-white/5 px-5 py-2.5 text-sm font-medium transition hover:bg-white/10 disabled:opacity-40"
+            className={button({ tone: "neutral", size: "md", class: "ml-auto rounded-xl px-5 py-2.5" })}
           >
             {editing ? "Discard edits" : "Edit & Approve"}
           </button>
@@ -416,8 +469,8 @@ export function ApprovalModal({ approval, onClose, onDecide }: ApprovalModalProp
             type="button"
             data-testid="modal-approve-btn"
             onClick={() => void decide("approve")}
-            disabled={!pending || busy !== null}
-            className="rounded-xl bg-aether-coral px-6 py-2.5 text-sm font-semibold text-white shadow-lg shadow-aether-coral/25 transition hover:bg-[#ff7d4d] disabled:opacity-40"
+            disabled={!pending || busy !== null || approveBlocked}
+            className={button({ tone: "ok", size: "md", class: "rounded-xl px-6 py-2.5" })}
           >
             <i className="fa-solid fa-check mr-2 text-xs" aria-hidden="true" />
             {busy === "approve" ? "Approving…" : approveLabel}
@@ -425,13 +478,13 @@ export function ApprovalModal({ approval, onClose, onDecide }: ApprovalModalProp
         </div>
 
         {/* Footer — mobile stack per mobile-approval.html */}
-        <div className="flex flex-col gap-3 border-t border-white/10 px-5 py-4 sm:hidden">
+        <div className="flex flex-col gap-3 border-t border-hairline px-5 py-4 sm:hidden">
           <button
             type="button"
             data-testid="modal-approve-btn-mobile"
             onClick={() => void decide("approve")}
-            disabled={!pending || busy !== null}
-            className="w-full rounded-2xl bg-aether-coral py-3.5 text-sm font-semibold text-white shadow-lg shadow-aether-coral/25 transition hover:bg-[#ff7d4d] disabled:opacity-40"
+            disabled={!pending || busy !== null || approveBlocked}
+            className={button({ tone: "ok", size: "md", class: "w-full rounded-2xl py-3.5" })}
           >
             <i className="fa-solid fa-check mr-2 text-xs" aria-hidden="true" />
             {busy === "approve" ? "Approving…" : editing ? "Approve with edits" : "Approve & Submit"}
@@ -442,7 +495,7 @@ export function ApprovalModal({ approval, onClose, onDecide }: ApprovalModalProp
               data-testid="modal-edit-btn-mobile"
               onClick={() => setEditing((value) => !value)}
               disabled={!pending || busy !== null || details.preview === null}
-              className="min-h-[44px] flex-1 rounded-2xl border border-white/10 bg-white/5 py-3 text-sm font-medium transition hover:bg-white/10 disabled:opacity-40"
+              className={button({ tone: "neutral", size: "md", class: "min-h-[44px] flex-1 rounded-2xl py-3" })}
             >
               {editing ? "Discard edits" : "Edit"}
             </button>
@@ -451,7 +504,7 @@ export function ApprovalModal({ approval, onClose, onDecide }: ApprovalModalProp
               data-testid="modal-reject-btn-mobile"
               onClick={() => void decide("reject")}
               disabled={!pending || busy !== null}
-              className="min-h-[44px] flex-1 rounded-2xl border border-white/10 bg-white/5 py-3 text-sm font-medium text-aether-muted transition hover:bg-white/10 disabled:opacity-40"
+              className={button({ tone: "danger", size: "md", class: "min-h-[44px] flex-1 rounded-2xl py-3" })}
             >
               {busy === "reject" ? "Rejecting…" : "Reject"}
             </button>

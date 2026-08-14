@@ -118,8 +118,22 @@ class TestApprovalGateway:
         app_id = body["cover_letter_id"]  # letter is stored on the Application row
         before = client.get(f"/applications/{app_id}", headers=auth_headers).json()
         assert before["status"] == "draft"
-        resp = client.post(f"/approvals/{body['approval_id']}/approve", headers=auth_headers)
-        assert resp.status_code == 200
+        # U2c: the replay-fixture letter lands BELOW the 80%-across-all-dimensions
+        # quality floor, and approving a below-floor artifact is now a deliberate
+        # act — the endpoint refuses (409) without an explicit acknowledgement
+        # rather than letting it ship on a reflex. The SUBJECT of this test is
+        # that a completed approval updates the tracker, so it acknowledges and
+        # proceeds; the refusal itself is pinned in test_u2c_gate_enforcement.py.
+        refused = client.post(
+            f"/approvals/{body['approval_id']}/approve", headers=auth_headers
+        )
+        assert refused.status_code == 409, refused.text
+        resp = client.post(
+            f"/approvals/{body['approval_id']}/approve",
+            json={"acknowledge_below_floor": True},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200, resp.text
         after = client.get(f"/applications/{app_id}", headers=auth_headers).json()
         assert after["status"] == "submitted"
 

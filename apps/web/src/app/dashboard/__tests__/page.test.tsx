@@ -243,6 +243,35 @@ describe("Dashboard agent feed — MV-dashboard-009 stale Approve button", () =>
     expect(toast.textContent).not.toMatch(/POST|GET|\/approvals\/|500/i);
     expect(toast.textContent).toMatch(/couldn.?t approve/i);
   });
+
+  it("U2c: a below-floor 409 offers Approve-anyway and re-sends with acknowledge, never leaking the raw error", async () => {
+    fetchAgentRunsMock.mockResolvedValue([coverLetterRun()]);
+    fetchApprovalsMock.mockResolvedValue([approval()]);
+    // First approve (no ack) is refused by the quality-floor gate; the second
+    // (with ack) succeeds — exactly the live prod flow the dashboard used to
+    // leak as a raw 409.
+    decideApprovalMock
+      .mockRejectedValueOnce(
+        new ApiError(
+          'POST /approvals/appr-1/approve failed (409): {"detail":"Below quality floor: 3 dimensions did not clear the 80% floor. re-send this decision with acknowledge_below_floor=true"}',
+          409,
+        ),
+      )
+      .mockResolvedValueOnce(approval());
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    render(<DashboardPage />);
+    const approveBtn = await screen.findByRole("button", { name: /^approve$/i });
+    fireEvent.click(approveBtn);
+
+    await waitFor(() => expect(decideApprovalMock).toHaveBeenCalledTimes(2));
+    // the retry carried the acknowledgement; the first attempt did not
+    expect(decideApprovalMock.mock.calls[1][2]).toEqual({ acknowledgeBelowFloor: true });
+    // the human was shown the real reason, not the raw HTTP envelope
+    expect(confirmSpy.mock.calls[0][0]).toMatch(/below the quality floor|Below quality floor/i);
+    expect(confirmSpy.mock.calls[0][0]).not.toMatch(/POST|\/approvals\/|409/);
+    confirmSpy.mockRestore();
+  });
 });
 
 describe("Needs Approval widget — long job_title containment leak (MV-approval-modal-003)", () => {

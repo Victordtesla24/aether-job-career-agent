@@ -538,3 +538,62 @@
   height: 100%;
   border-radius: 999px;
 }
+
+/* ── 12. U-STORY-3a — CROSS-WORKFLOW WIRING ────────────────────────────────
+   The mandate: "story extraction and resume tailoring / cover letter agents
+   are on separate workflows on the UI — users must be able to KNOW THE
+   LINKAGES VISUALLY". Everything below is that, and only that.
+
+   THE RULE THIS SECTION OBEYS. A linkage is STRUCTURAL: it says how the system
+   is wired, not that anything is happening right now. So none of it animates,
+   none of it is coral, and none of it competes with the one signal this
+   console reserves for a live run (rule 3/9: one accent, one meaning). */
+
+/* A port chip on the node's lower edge. Quiet at rest — a hairline and muted
+   text, the same weight as the last-run line above it — and never revealed on
+   hover only: a keyboard user must be able to find the wiring too. */
+.ag-port {
+  background-color: rgba(255, 255, 255, 0.018);
+}
+
+.ag-port:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+/*
+ * The neighbourhood highlight, while "Show connections" is on and a node is
+ * selected. Attenuation carries the meaning (rule 8: the quietest thing that
+ * works), so the focused node and its counterparts are simply left alone while
+ * everything else steps back. Nothing is hidden — a dimmed node keeps every
+ * word it had, stays clickable and stays in the tab order.
+ */
+.ag-node-shell[data-linkage="dimmed"] {
+  opacity: 0.34;
+  transition: opacity var(--dur) var(--ease);
+}
+
+.ag-node-shell[data-linkage="neighbour"] .ag-node {
+  border-color: rgba(255, 255, 255, 0.26);
+}
+
+.ag-node-shell[data-linkage="focus"] .ag-node {
+  border-color: rgba(255, 255, 255, 0.42);
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.09),
+    0 0 0 1px rgba(255, 255, 255, 0.16);
+}
+
+/*
+ * The two-second ring on a node a port jumped to. WAYFINDING, not state: it is
+ * white, it fades on its own, and it deliberately does not touch the node's
+ * `data-motion`, which stays "none". A viewer who asked for reduced motion
+ * still gets the ring — it just arrives without the fade (the global
+ * prefers-reduced-motion block collapses the transition), because the ring is
+ * the information and the fade is only manners.
+ */
+.ag-node[data-flash="true"] {
+  border-color: rgba(255, 255, 255, 0.55);
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.1),
+    0 0 0 2px rgba(255, 255, 255, 0.22);
+}

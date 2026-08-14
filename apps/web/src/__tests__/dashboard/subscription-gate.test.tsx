@@ -196,6 +196,32 @@ describe("SubscriptionGate", () => {
     expect(screen.queryByText(ACTIONABLE)).toBeNull();
   });
 
+  it("gates /dashboard/answer-bank for a free user — a real section, not a catch-all path (U5d-3)", async () => {
+    // The Answer Bank (ADR-SUB-AUTON-1 Pillar 1) is a real, paid dashboard
+    // section with its own page.tsx. If it is missing from
+    // KNOWN_DASHBOARD_SECTIONS the gate mistakes it for an unmapped
+    // `[...slug]` path and exempts it — handing a free user a paid feature.
+    // Every new `app/dashboard/<x>/page.tsx` has to be added to that list, and
+    // this test is what makes forgetting it fail loudly.
+    usePathnameMock.mockReturnValue("/dashboard/answer-bank");
+    fetchEntitlementMock.mockResolvedValue({
+      active_paid: false,
+      plan: { id: "free", status: "active" },
+      requiresSubscription: true,
+    });
+
+    render(
+      <SubscriptionGate>
+        <div>{ACTIONABLE}</div>
+      </SubscriptionGate>,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByTestId("subscription-paywall")).toBeTruthy(),
+    );
+    expect(screen.queryByText(ACTIONABLE)).toBeNull();
+  });
+
   it("paywall's 'manage your account' is a real link to /dashboard/settings (MV-mobile-dashboard-002)", async () => {
     fetchEntitlementMock.mockResolvedValue({
       active_paid: false,

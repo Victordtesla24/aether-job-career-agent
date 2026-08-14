@@ -201,11 +201,19 @@ export function EmptyPlot({
         className="mb-1 h-px w-16"
         style={{ backgroundColor: HAIRLINE }}
       />
-      <p className="text-[13px] leading-[1.5]" style={{ color: STATE.neutral }}>
+      <p
+        data-prose="empty"
+        className="text-[13px] leading-[1.5]"
+        style={{ color: STATE.neutral }}
+      >
         {message}
       </p>
       {hint ? (
-        <p className="text-[11px] text-aether-muted-dim" style={{ color: STATE.neutral }}>
+        <p
+          data-prose="empty"
+          className="text-[11px] text-aether-muted-dim"
+          style={{ color: STATE.neutral }}
+        >
           {hint}
         </p>
       ) : null}

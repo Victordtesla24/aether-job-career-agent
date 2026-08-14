@@ -1803,3 +1803,65 @@ def ensure_application_submission_snapshot_columns() -> None:
                 )
         conn.commit()
     _application_submission_snapshot_columns_ready = True
+
+
+#: Guard so the additive ``Application.manualStepQuestions`` column is only
+#: ensured once per worker process (see
+#: ``ensure_application_manual_step_question_column``).
+_application_manual_step_question_column_ready = False
+
+
+def ensure_application_manual_step_question_column() -> None:
+    """Idempotently add the additive ``Application.manualStepQuestions`` column
+    (U5d-3, ADR-SUB-AUTON-1 Pillar 4a).
+
+    U5b already persists a manual step's REASON and a human-readable DETAIL
+    string. That string is enough to TELL the user what blocked the
+    application; it is not enough to let them ANSWER it inside Aether, which is
+    the whole of Pillar 4a: *"UNKNOWN QUESTION → rendered NATIVELY in the card
+    (question text + typed input extracted from the form)"*. Rendering an input
+    needs the question's STRUCTURE — its field name, the employer's verbatim
+    label, the control kind (text / textarea / select / radio), its options and
+    its sensitivity class — and re-deriving that by splitting the detail string
+    on "; " would be guesswork about the employer's own form.
+
+    ``manualStepQuestions`` (jsonb, NULL) is that structure, exactly as the
+    apply-executor parsed it off the real page. NULL is the CORRECT, honest
+    value for every pre-existing row and for every manual step that is not a
+    question at all (a CAPTCHA, a login wall, an unresolvable channel) — those
+    have no question to render, so nothing is invented for them and NO backfill
+    UPDATE is performed. A row blocked by a question BEFORE this column existed
+    keeps its detail string and renders the pre-U5d-3 control, which is the
+    truthful degradation: we did not capture its structure, so we do not
+    pretend to have it.
+
+    Additive only — no DROP, no ALTER TYPE, no DEFAULT rewrite. A
+    transaction-scoped advisory lock serialises concurrent first-hit callers so
+    the DDL cannot race; ``TRUNCATE`` never drops columns, so the process-wide
+    latch survives test teardown. Lazy DDL per ADR-TR-1.
+
+    MUST be called by EVERY path that reads or writes this column, before the
+    statement that names it.
+    """
+    global _application_manual_step_question_column_ready
+    if _application_manual_step_question_column_ready:
+        return
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT count(*) FROM information_schema.columns"
+                " WHERE table_name = 'Application'"
+                " AND table_schema = ANY(current_schemas(false))"
+                " AND column_name = 'manualStepQuestions'"
+            )
+            row = cur.fetchone()
+            if row and row[0] == 1:
+                _application_manual_step_question_column_ready = True
+                return
+            cur.execute("SELECT pg_advisory_xact_lock(%s)", (7420260808,))
+            cur.execute(
+                'ALTER TABLE "Application" '
+                'ADD COLUMN IF NOT EXISTS "manualStepQuestions" jsonb'
+            )
+        conn.commit()
+    _application_manual_step_question_column_ready = True

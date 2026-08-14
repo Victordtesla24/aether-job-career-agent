@@ -377,19 +377,25 @@ class TestGracefulDegradation:
 
 class TestRouter503Mapping:
     def test_tailor_returns_503_not_500_when_llm_unavailable(
-        self, client, auth_headers, monkeypatch
+        self, client, auth_headers, patch_agent_run
     ):
         job = _seed_job(client, auth_headers)
         from app.agents import tailor_agent as tailor_module
 
-        def _boom(self, user_id, job_id, resume_id=None):
+        def _boom():
             raise LLMUnavailableError("LLM backend unavailable: simulated outage")
 
-        monkeypatch.setattr(tailor_module.TailoringAgent, "run", _boom)
+        # Signature-derived double (conftest ``patch_agent_run``): a restated
+        # signature here went stale the moment the real ``run`` grew a keyword,
+        # turning the router's healthy 503 mapping into a spurious 500.
+        tailor_calls = patch_agent_run(tailor_module.TailoringAgent, _boom)
         resp = client.post(
             "/agents/tailor/run", json={"job_id": job["id"]}, headers=auth_headers
         )
         assert resp.status_code == 503, resp.text
+        # The 503 is the LLM-unavailable mapping, not an earlier refusal: the
+        # router really did reach the agent this test made unavailable.
+        assert tailor_calls, "the router never reached TailoringAgent.run"
         # MV-cover-letter-studio-005: the 503 detail is now an honest, secret-free
         # user message (no 'LLM backend' / 'hard budget' / prompt-name internals).
         from app.services.llm_client import LLM_UNAVAILABLE_USER_MESSAGE
@@ -399,18 +405,20 @@ class TestRouter503Mapping:
         assert "backend" not in detail.lower()
         assert "simulated outage" not in detail.lower()
 
-    def test_failed_run_is_audited(self, client, auth_headers, monkeypatch):
+    def test_failed_run_is_audited(self, client, auth_headers, patch_agent_run):
         job = _seed_job(client, auth_headers)
         from app.agents import cover_letter_agent as cl_module
 
-        def _boom(self, user_id, job_id, resume_id=None):
+        def _boom():
             raise LLMUnavailableError("LLM backend unavailable: simulated outage")
 
-        monkeypatch.setattr(cl_module.CoverLetterAgent, "run", _boom)
+        # Signature-derived double — see the sibling test above.
+        cover_calls = patch_agent_run(cl_module.CoverLetterAgent, _boom)
         resp = client.post(
             "/agents/cover-letter/run", json={"job_id": job["id"]}, headers=auth_headers
         )
         assert resp.status_code == 503
+        assert cover_calls, "the router never reached CoverLetterAgent.run"
         runs = client.get("/agents/runs", headers=auth_headers).json()
         failed = [r for r in runs if r["agentName"] == "coverLetter"]
         assert failed and failed[0]["status"] == "failed"

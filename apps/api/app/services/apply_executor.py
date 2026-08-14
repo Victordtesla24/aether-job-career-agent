@@ -538,7 +538,11 @@ def _answer_for(field: dict[str, Any], profile: dict[str, Any]) -> Any:
 
 
 def build_form_fill_plan(
-    html: str, *, channel: str, profile: dict[str, Any]
+    html: str,
+    *,
+    channel: str,
+    profile: dict[str, Any],
+    answer_bank: Callable[[dict[str, Any]], Any] | None = None,
 ) -> dict[str, Any]:
     """The exact set of values that will be typed into the employer's form.
 
@@ -549,6 +553,21 @@ def build_form_fill_plan(
     ``unanswerable_required`` is part of the returned shape for callers that
     want to introspect a successful plan; on a successful return it is empty by
     construction, because an unanswerable required field raises instead.
+
+    ``answer_bank`` (U5d-3, ADR-SUB-AUTON-1 Pillar 1) is an optional
+    ``field -> AnswerBankMatch | None`` callable — see
+    :func:`app.services.answer_bank.build_resolver`. It is consulted ONLY for
+    questions the user's own profile could not answer, and only ever returns an
+    answer the USER wrote: the bank stores verbatim answers and the matcher
+    refuses anything below its confidence threshold, anything stale, anything
+    out of scope and every sensitive/legal class. Omitting it reproduces the
+    pre-U5d-3 behaviour exactly, which is what makes this additive.
+
+    Every bank answer that lands in the plan also lands in
+    ``answerBankAudit`` — ``{answerBankItemId, matchConfidence, matchMethod,
+    questionAsSeen, bankedQuestion, fieldName, perApplication}`` — because ADR
+    honesty floor 3 requires every auto-answer to be auditable, and an answer
+    typed into an employer's form with no record of WHY would not be.
     """
     blocking = detect_blocking_state(html)
     if blocking == "captcha":
@@ -569,17 +588,50 @@ def build_form_fill_plan(
                 "your behalf — sign in and apply there."
             ),
         )
+    from app.services.answer_bank import classify_sensitivity, question_text_for_field
+
     schema = parse_form_schema(html, channel=channel)
     plan_fields: list[dict[str, Any]] = []
     unanswerable: list[dict[str, Any]] = []
+    audit: list[dict[str, Any]] = []
     for field in schema:
         answer = _answer_for(field, profile)
+        match = None
+        if answer is None and answer_bank is not None:
+            # The bank is a FALLBACK, never an override: a value the user's own
+            # profile already supplies (their email, their phone) is theirs by
+            # a shorter route, and a banked row must never talk over it.
+            match = answer_bank(field)
+            if match is not None:
+                answer = match.answer
         entry = dict(field)
         entry["value"] = answer
         plan_fields.append(entry)
+        if match is not None:
+            audit.append(
+                {
+                    "answerBankItemId": match.item_id,
+                    "matchConfidence": match.confidence,
+                    "matchMethod": match.method,
+                    "questionAsSeen": match.question_as_seen,
+                    "bankedQuestion": match.banked_question,
+                    "fieldName": str(field["name"]),
+                    "perApplication": match.per_application,
+                }
+            )
         if answer is None and field.get("required"):
+            asked = question_text_for_field(field)
             unanswerable.append(
-                {"name": field["name"], "label": field.get("label") or field["name"]}
+                {
+                    "name": field["name"],
+                    "label": field.get("label") or field["name"],
+                    # U5d-3 Pillar 4a: the STRUCTURE the card needs to render a
+                    # real input for this question instead of a link away.
+                    "kind": field.get("kind") or "text",
+                    "required": True,
+                    "options": list(field.get("options") or []),
+                    "sensitivity": classify_sensitivity(asked),
+                }
             )
     if unanswerable:
         questions = "; ".join(item["label"] or item["name"] for item in unanswerable)
@@ -593,7 +645,98 @@ def build_form_fill_plan(
             question=questions,
             fields=unanswerable,
         )
-    return {"fields": plan_fields, "unanswerable_required": unanswerable}
+    return {
+        "fields": plan_fields,
+        "unanswerable_required": unanswerable,
+        "answerBankAudit": audit,
+    }
+
+
+# ---------------------------------------------------------------------------
+# The Answer Bank seam (U5d-3, ADR-SUB-AUTON-1 Pillar 1).
+# ---------------------------------------------------------------------------
+
+
+def build_answer_bank_resolver(
+    user_id: str, profile: dict[str, Any], *, company: str | None = None
+) -> Callable[[dict[str, Any]], Any]:
+    """The bank + this application's own answers, as a resolver for the plan.
+
+    Kept OUT of :func:`build_form_fill_plan` on purpose: the plan builder stays
+    pure and offline (it is the module's most heavily tested function), and the
+    single database read the bank needs happens here, once per execution.
+
+    A bank that cannot be read is not an error and is never a reason to invent
+    an answer: the failure is logged and an EMPTY resolver is returned, so the
+    attempt falls back to the pre-U5d-3 behaviour — profile answers only, and
+    an honest manual step for anything else.
+    """
+    from app.services.answer_bank import build_resolver
+
+    screening = profile.get("screeningAnswers")
+    try:
+        from app.repositories.answer_bank import AnswerBankRepository
+
+        items = AnswerBankRepository().list_for_user(user_id)
+    except Exception as exc:  # noqa: BLE001 — a bank outage must not fabricate
+        logger.warning(
+            "answer bank unreadable for user %s (%s) — falling back to "
+            "profile-only answers",
+            user_id,
+            type(exc).__name__,
+        )
+        items = []
+    return build_resolver(items, screening_answers=screening, company=company)
+
+
+def record_answer_bank_usage(
+    user_id: str,
+    application_id: str,
+    plan: dict[str, Any],
+    *,
+    job_id: str | None = None,
+) -> int:
+    """Write one ``AnswerBankUsage`` row per auto-answer in ``plan``.
+
+    Returns how many were recorded. Entries for answers the user typed for THIS
+    application are skipped: they have no bank item behind them, so there is no
+    item to attribute a use to — recording one would invent a provenance.
+
+    Best-effort by design. An audit-write failure must never abort a submission
+    the user approved, so it is logged loudly and the attempt continues; the
+    alternative (refusing to submit because the audit table hiccuped) would be
+    a worse outcome for the user and no more honest.
+    """
+    audit = plan.get("answerBankAudit") or []
+    if not audit:
+        return 0
+    try:
+        from app.repositories.answer_bank import AnswerBankRepository
+
+        repo = AnswerBankRepository()
+        recorded = 0
+        for entry in audit:
+            item_id = str(entry.get("answerBankItemId") or "")
+            if not item_id or entry.get("perApplication"):
+                continue
+            repo.record_usage(
+                user_id,
+                item_id,
+                application_id=application_id,
+                job_id=job_id,
+                question_as_seen=str(entry.get("questionAsSeen") or ""),
+                confidence=float(entry.get("matchConfidence") or 0.0),
+                method=str(entry.get("matchMethod") or ""),
+            )
+            recorded += 1
+        return recorded
+    except Exception as exc:  # noqa: BLE001 — an audit outage is not a refusal
+        logger.warning(
+            "answer-bank usage audit failed for application %s (%s)",
+            application_id,
+            type(exc).__name__,
+        )
+        return 0
 
 
 # ---------------------------------------------------------------------------
@@ -602,15 +745,32 @@ def build_form_fill_plan(
 
 
 def record_manual_step(
-    user_id: str, application_id: str, reason: str, detail: str | None
+    user_id: str,
+    application_id: str,
+    reason: str,
+    detail: str | None,
+    *,
+    questions: list[dict[str, Any]] | None = None,
 ) -> None:
     """Persist the honest, actionable outcome on the ``Application`` row.
 
     Never touches ``transmittedAt``: a manual step means nothing was sent, and
     the two states must stay mutually exclusive so the board can never show a
     blocked application as submitted.
+
+    ``questions`` (U5d-3 Pillar 4a) is the STRUCTURE of the unanswered
+    questions, exactly as parsed off the employer's page, so the card can
+    render a real input for each instead of sending the user to the site. It
+    is written as ``NULL`` for every manual step that is not a question — a
+    CAPTCHA has nothing to type — and the previous value is always overwritten
+    (including to NULL), so a later CAPTCHA can never leave an earlier
+    attempt's questions on the row for the card to render stale.
     """
+    from app.db import ensure_application_manual_step_question_column
+
     ensure_application_manual_step_columns()
+    ensure_application_manual_step_question_column()
+    payload = json.dumps(questions) if questions else None
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -618,11 +778,12 @@ def record_manual_step(
                 UPDATE "Application"
                 SET "manualStepReason" = %s,
                     "manualStepDetail" = %s,
+                    "manualStepQuestions" = %s::jsonb,
                     "manualStepAt" = NOW(),
                     "updatedAt" = NOW()
                 WHERE "id" = %s AND "userId" = %s
                 ''',
-                (reason, detail, application_id, user_id),
+                (reason, detail, payload, application_id, user_id),
             )
         conn.commit()
 
@@ -650,11 +811,15 @@ def _record_site_transmission(
     state is left alone, because a pre-fix row that later gains a real
     transmission still has an unverifiable history behind it.
     """
-    from app.db import ensure_application_submission_truth_columns
+    from app.db import (
+        ensure_application_manual_step_question_column,
+        ensure_application_submission_truth_columns,
+    )
     from app.services.submission_truth import STATE_RECORDED_NOT_TRANSMITTED
 
     ensure_application_transmission_columns()
     ensure_application_manual_step_columns()
+    ensure_application_manual_step_question_column()
     ensure_application_submission_truth_columns()
     with get_connection() as conn:
         with conn.cursor() as cur:
@@ -667,6 +832,7 @@ def _record_site_transmission(
                     "transmissionRef" = %s,
                     "manualStepReason" = NULL,
                     "manualStepDetail" = NULL,
+                    "manualStepQuestions" = NULL,
                     "manualStepAt" = NULL,
                     "submissionTruthState" = CASE
                         WHEN "submissionTruthState" = %s THEN NULL
@@ -1144,6 +1310,9 @@ def execute_site_application(
     evidence_dir: str,
     apply_url: str | None = None,
     submitter: Callable[..., dict[str, Any]] | None = None,
+    answer_bank: Callable[[dict[str, Any]], Any] | None = None,
+    company: str | None = None,
+    job_id: str | None = None,
 ) -> dict[str, Any]:
     """Apply on the employer's site behind an APPROVED approval — or refuse.
 
@@ -1154,12 +1323,21 @@ def execute_site_application(
     2. **Claim.** ``claim_execution`` — the EXISTING single-shot guard, reused
        so a second attempt can never produce a second real submission.
     3. **Plan.** A CAPTCHA, a login wall or an unanswerable required question
-       raises :class:`ManualStepRequired`; the reason and the employer's
-       verbatim question are persisted on the row and the claim is RELEASED,
-       so answering the question makes the application retryable.
+       raises :class:`ManualStepRequired`; the reason, the employer's verbatim
+       question and (U5d-3) the question's STRUCTURE are persisted on the row
+       and the claim is RELEASED, so answering the question in the card makes
+       the application retryable.
     4. **Submit + record.** Only a submitter that reports a real submission
        stamps ``transmittedAt``/``transmissionChannel``/``transmissionRef``
        (the evidence screenshot) and completes the approval.
+
+    U5d-3: the Answer Bank is consulted while the plan is built, and every
+    answer it supplies is recorded in ``AnswerBankUsage`` BEFORE the browser
+    runs. Recording at that point is the honest one: what the audit claims is
+    "this banked answer was put into this application's form", which becomes
+    true the moment the plan carries it — whether the site then confirms, times
+    out or shows a CAPTCHA. Waiting for a confirmed transmission would silently
+    lose the audit for exactly the attempts most worth auditing.
     """
     from app.repositories.approval import ApprovalRepository
 
@@ -1191,12 +1369,26 @@ def execute_site_application(
             "This application was already submitted — nothing was submitted again.",
             http_status=409,
         )
+    resolver = answer_bank
+    if resolver is None:
+        resolver = build_answer_bank_resolver(user_id, profile, company=company)
     try:
-        plan = build_form_fill_plan(page_html, channel=channel, profile=profile)
+        plan = build_form_fill_plan(
+            page_html, channel=channel, profile=profile, answer_bank=resolver
+        )
     except ManualStepRequired as exc:
-        record_manual_step(user_id, application_id, exc.reason, exc.question or exc.message)
+        record_manual_step(
+            user_id,
+            application_id,
+            exc.reason,
+            exc.question or exc.message,
+            questions=exc.fields or None,
+        )
         repo.release_execution(approval_id, user_id)
         raise
+    record_answer_bank_usage(
+        user_id, application_id, plan, job_id=job_id
+    )
     submit = submitter or playwright_form_submitter
     try:
         outcome = submit(
@@ -1210,7 +1402,13 @@ def execute_site_application(
             evidence_dir=evidence_dir,
         )
     except ManualStepRequired as exc:
-        record_manual_step(user_id, application_id, exc.reason, exc.question or exc.message)
+        record_manual_step(
+            user_id,
+            application_id,
+            exc.reason,
+            exc.question or exc.message,
+            questions=exc.fields or None,
+        )
         repo.release_execution(approval_id, user_id)
         raise
     except Exception:

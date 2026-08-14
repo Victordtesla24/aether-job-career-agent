@@ -132,7 +132,7 @@ class TestGuardRejectionIsAnHonestCompletedDegrade:
         )
 
     def test_rejection_still_propagates_so_callers_keep_their_shape(
-        self, client, auth_headers, test_user_id, monkeypatch,
+        self, client, auth_headers, test_user_id, patch_agent_run,
     ):
         """The handler records + refunds, then RE-RAISES.
 
@@ -143,10 +143,13 @@ class TestGuardRejectionIsAnHonestCompletedDegrade:
         ensure_user_billing(test_user_id)
         from app.agents import cover_letter_agent as cl_module
 
-        def _boom(self, user_id, job_id, resume_id=None):
+        def _boom():
             raise FabricationError(["Fabricated Pty Ltd"])
 
-        monkeypatch.setattr(cl_module.CoverLetterAgent, "run", _boom)
+        # Signature-derived double (conftest ``patch_agent_run``): it accepts
+        # whatever the REAL ``CoverLetterAgent.run`` accepts, so the router's
+        # own dispatch kwargs can never masquerade as a guard-mapping failure.
+        cover_calls = patch_agent_run(cl_module.CoverLetterAgent, _boom)
         run = client.post(
             "/agents/scout/run",
             json={"query": "python engineer", "location": "Sydney"},
@@ -162,6 +165,9 @@ class TestGuardRejectionIsAnHonestCompletedDegrade:
         )
         assert resp.status_code == 422, resp.text
         assert "Fabricated Pty Ltd" in resp.json()["detail"]
+        # The 422 came from the guard rejection this test injected — not from
+        # an unrelated earlier refusal that never reached the agent at all.
+        assert cover_calls, "the router never reached CoverLetterAgent.run"
         # ...and the audit row is the honest COMPLETED degrade, not "failed".
         assert _latest_cover_run(test_user_id)["status"] == "completed"
 

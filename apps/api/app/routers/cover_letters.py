@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import io
 import re
+from collections.abc import Callable
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -27,14 +28,20 @@ from app.agents.cover_letter_agent import (
     REDACTION_PLACEHOLDER,
     STORED_PLACEHOLDER_SIGNER_DETAIL,
     _looks_like_placeholder_name,
+    accept_gate_candidate,
     build_approval_extras,
     build_body,
+    build_letter_quality,
     compose_letter,
     current_position,
     enforce_first_person,
     extract_injection_payloads,
+    gate_improvement_instruction,
+    gate_pass_affordable,
+    gate_pass_labels,
     injected_provenance_tokens,
     letter_date,
+    needs_gate_pass,
     sanitize_untrusted_text,
     stored_letter_has_placeholder_signer,
     strip_injection_compliance,
@@ -50,16 +57,20 @@ from app.repositories.job import JobRepository
 from app.repositories.story import StoryRepository
 from app.repositories.user import UserRepository
 from app.services.career_data import build_career_corpus
+from app.services.cover_letter_evidence import build_guard_corpora
+from app.services.cover_letter_quality import CoverLetterQuality, score_cover_letter
 from app.services.evidence_corpus import build_corpus_evidence
 from app.services.fabrication_guard import FabricationGuard
 from app.services.llm_client import (
     LLMClient,
+    LLMFixtureMissingError,
     LLMUnavailableError,
     get_cover_budget_seconds,
     get_model,
     llm_failure_user_message,
     shared_budget,
 )
+from app.services.quality_gate import evaluate_cover_letter
 from app.services.resume_grounding import (
     resolve_user_resume_contact,
     resolve_user_resume_text,
@@ -659,6 +670,125 @@ class RefineRequest(BaseModel):
     formality: int | None = Field(None, ge=0, le=100)
 
 
+def _close_the_quality_gate(
+    *,
+    draft: "Callable[[str, str], tuple[str, str, list[str], list[str]]]",
+    base_prompt: str,
+    letter: str,
+    body: str,
+    job: dict[str, Any],
+    jd_body: str,
+    claim_evidence: str,
+) -> tuple[str, str, dict[str, Any]]:
+    """Run the U2c quality gate over a REFINED letter (U2c RULES item 2).
+
+    A refined letter is a customer-facing artifact in its own right: it is
+    composed here, stored as its own row and sent to its own approval. Until
+    this function existed it was never SCORED, which made "Request Changes" a
+    way around the gate — generate a below-floor letter that needs an explicit
+    acknowledgement to approve, refine it, and the replacement arrives carrying
+    no verdict at all and approves silently. The letter the employer reads is
+    the refined one, so the gate has to judge it too.
+
+    Every decision here is the generation path's, imported rather than
+    re-implemented (``needs_gate_pass``, ``gate_improvement_instruction``,
+    ``accept_gate_candidate``, ``gate_pass_labels``, ``gate_pass_affordable``,
+    ``build_letter_quality``) — the same rule ML-W26 states for the guard
+    corpora: these two paths must never fork.
+
+    Bounded and guarded, in that order:
+
+    * at most ``gate_pass_labels()`` extra generations, the SAME env-capped
+      budget the résumé gate and the generation path spend;
+    * the budget is re-checked before EVERY pass, so a window that drains
+      mid-gate stops the loop instead of starving it;
+    * ``draft`` returns the guards' verdicts on each candidate, and
+      ``accept_gate_candidate`` treats cleanliness as a PRECONDITION rather
+      than a tiebreak — a draft that scored higher by claiming something the
+      candidate's evidence does not prove is discarded, and the weaker but
+      truthful letter stands. A score is never bought with a fabrication.
+
+    Returns the letter to ship, its body, and the quality record to persist —
+    which carries the honest verdict even (especially) when it is a failing one.
+    """
+
+    def _score(text: str) -> CoverLetterQuality:
+        return score_cover_letter(
+            text,
+            jd_body,
+            claim_evidence,
+            job_title=job["title"],
+            company=job["company"],
+        )
+
+    best_letter, best_body = letter, body
+    best_quality = _score(best_body)
+    # ``passes[0]`` is the refined draft as it arrived — ``build_letter_quality``
+    # reads it as ``initialScore``, so the stored before/after describes what
+    # this refine run actually did rather than an invented baseline.
+    passes: list[dict[str, Any]] = [
+        {
+            "iteration": 1,
+            "stage": "refine",
+            "accepted": True,
+            "guardClean": True,
+            "qualityGate": evaluate_cover_letter(best_quality).as_dict(),
+            **best_quality.as_dict(),
+        }
+    ]
+    gate_attempts_used = 0
+    for gate_label in gate_pass_labels():
+        if not needs_gate_pass(best_quality):
+            break
+        if not gate_pass_affordable():
+            break
+        improve_prompt = (
+            f"{base_prompt}\n\n"
+            + gate_improvement_instruction(
+                evaluate_cover_letter(best_quality), best_quality
+            )
+        )
+        try:
+            cand_letter, cand_body, cand_flagged, cand_claims = draft(
+                improve_prompt, gate_label
+            )
+        except (LLMUnavailableError, LLMFixtureMissingError):
+            # An improvement pass is strictly optional — a failure here must
+            # never cost the user the clean letter they already have, and must
+            # never be reported as a better score. A second attempt would fail
+            # identically, so stop.
+            break
+        gate_attempts_used += 1
+        cand_quality = _score(cand_body)
+        clean = not (cand_flagged or cand_claims)
+        accepted = accept_gate_candidate(
+            candidate=cand_quality,
+            incumbent_overall=best_quality.overall,
+            guard_clean=clean,
+        )
+        passes.append(
+            {
+                "iteration": len(passes) + 1,
+                "stage": gate_label,
+                "accepted": accepted,
+                "guardClean": clean,
+                "qualityGate": evaluate_cover_letter(cand_quality).as_dict(),
+                **cand_quality.as_dict(),
+            }
+        )
+        if accepted:
+            best_letter, best_body, best_quality = cand_letter, cand_body, cand_quality
+    return (
+        best_letter,
+        best_body,
+        build_letter_quality(
+            final_quality=best_quality,
+            passes=passes,
+            gate_attempts_used=gate_attempts_used,
+        ),
+    )
+
+
 def _refine_cover_letter_body(
     letter_id: str, body: RefineRequest, current_user: dict[str, Any]
 ) -> dict[str, Any]:
@@ -750,39 +880,35 @@ def _refine_cover_letter_body(
     # claim citable in the tailored résumé is citable in the REVISION of that
     # application's letter too. Empty for a user with no ingested corpus.
     corpus_evidence = build_corpus_evidence(user_id, story_jd)
-    # U-STORY-1 step 2 (U-STORY-DISCOVERY.md §2.2): the FabricationGuard corpus
-    # carries the Story Bank here too — the main generation path's §2.2
-    # asymmetry existed verbatim on this path, and the two must never fork. The
-    # letter date, signer and current position are system/profile ground truth,
-    # so they join it as before. Strict widening with candidate-own evidence:
-    # an entity nothing supports is still flagged.
+    # U-STORY-1 ruling E3 (RESOLVED here): both guard corpora are assembled by
+    # the ONE shared function the generation path calls
+    # (``services.cover_letter_evidence.build_guard_corpora``). The residual
+    # this code previously recorded — ``career_corpus`` present in the
+    # generation path's FabricationGuard corpus and ABSENT from this one — is
+    # closed by construction: there is now a single assembly, so the two paths
+    # cannot fork again without changing both at once.
     #
-    # Deliberately NOT widened here: ``career_corpus`` is in the generation
-    # path's FabricationGuard corpus (cover_letter_agent.py:1548) and still is
-    # not in this one. That is a SECOND, pre-existing asymmetry of the same
-    # class, outside the U-STORY-1 brief — reported for an orchestrator ruling
-    # rather than silently changed under a story-evidence commit.
-    corpus = " ".join(
-        [
-            resume_text,
-            job["title"],
-            job["company"],
-            sanitized_description,
-            letter_date(),
-            signer,
-            position,
-        ]
-        + ([story_evidence] if story_evidence else [])
-        + ([corpus_evidence] if corpus_evidence else [])
+    # The symptom it caused was one-directional and bad: a system name,
+    # employer or metric that only the candidate's ingested career evidence
+    # (GitHub / portfolio / LinkedIn, ADR D-0031) proves passed GENERATION, was
+    # approved by the human, and was then flagged as an unsupported ENTITY the
+    # moment they asked the Studio to REFINE that same letter. This is a strict
+    # widening with candidate-own evidence the neighbouring claim guard already
+    # trusted; an entity NOTHING supports is still flagged, unchanged.
+    corpora = build_guard_corpora(
+        resume_text=resume_text,
+        job_title=job["title"],
+        company=job["company"],
+        sanitized_description=sanitized_description,
+        letter_date=letter_date(),
+        signer=signer,
+        position=position,
+        career_corpus=career_corpus,
+        story_evidence=story_evidence,
+        corpus_evidence=corpus_evidence,
     )
-    claim_evidence = " ".join(
-        p
-        for p in (
-            resume_text, career_corpus, story_evidence, corpus_evidence,
-            signer, position, job["company"],
-        )
-        if p
-    )
+    corpus = corpora.fabrication_corpus
+    claim_evidence = corpora.claim_evidence
     jd_risk = job["title"]
     # ML-W23: the job DESCRIPTION is the second, phrase-level risk channel —
     # sanitized like the FabricationGuard corpus above, so a redacted
@@ -811,7 +937,9 @@ def _refine_cover_letter_body(
 
     llm = LLMClient()
 
-    def _draft(prompt: str, fixture_key: str) -> tuple[str, list[str], list[str]]:
+    def _draft(
+        prompt: str, fixture_key: str
+    ) -> tuple[str, str, list[str], list[str]]:
         raw = llm.complete_json(
             "cover_letter_refine",
             _REFINE_SYSTEM_PROMPT,
@@ -844,7 +972,11 @@ def _refine_cover_letter_body(
         # Compose the revision as a full §10.2 business letter (date, addressee,
         # Re:, salutation, role/company hook, revised body, sign-off) — never the
         # banned generic opener the studio previously hardcoded (D-0021, GAP-P4-049).
-        full = compose_letter(build_body(text, job, position), job, signer)
+        # U2c: the composed BODY is returned alongside the full letter — it is
+        # what ``score_cover_letter`` measures (the same input the generation
+        # agent's ``_draft`` hands it), so the two paths score like for like.
+        composed_body = build_body(text, job, position)
+        full = compose_letter(composed_body, job, signer)
         # ML-W26: the §9 claim guard, wired the SAME way the main generation
         # path calls it (CoverLetterAgent._draft) — first-person-normalised
         # model-authored text against the candidate's OWN evidence, with the
@@ -852,15 +984,20 @@ def _refine_cover_letter_body(
         # channel). Never fork this call's semantics from the agent's.
         model_text = enforce_first_person(text, signer)
         claim_flags = unsupported_claim_tokens(model_text, claim_evidence, jd_risk, jd_body)
-        return full, guard.check(full, corpus), claim_flags
+        return full, composed_body, guard.check(full, corpus), claim_flags
 
+    #: U2c: the refined letter's own measured verdict, or ``None`` if the run
+    #: never produced a clean draft to judge (it 422s below in that case).
+    letter_quality: dict[str, Any] | None = None
     try:
         # GAP-P6-COV-002: the cover-letter refine path is generation-only (no
         # entailment step), so give its drafting (default + one retry) the
         # dedicated cover-budget window rather than the tailoring-tuned global
         # budget that chronically 503'd it. One window covers both drafts.
         with shared_budget(get_cover_budget_seconds(), not_below_active=True):
-            revised, flagged, claim_flags = _draft(base_prompt, "default")
+            revised, revised_body, flagged, claim_flags = _draft(
+                base_prompt, "default"
+            )
             if flagged or claim_flags:
                 feedback: list[str] = []
                 if flagged:
@@ -888,7 +1025,24 @@ def _refine_cover_letter_body(
                         "about the candidate's own past."
                     )
                 retry_prompt = f"{base_prompt}\n\nIMPORTANT: " + " ALSO: ".join(feedback)
-                revised, flagged, claim_flags = _draft(retry_prompt, "retry")
+                revised, revised_body, flagged, claim_flags = _draft(
+                    retry_prompt, "retry"
+                )
+            # U2c RULES item 2: the gate runs only on a letter the guards have
+            # already passed — an unclean draft is rejected outright below, and
+            # spending a paid improvement pass on one that is about to be
+            # thrown away is waste. Inside this budget window so the whole
+            # refine run stays bounded by ONE cover-budget allowance.
+            if not (flagged or claim_flags):
+                revised, revised_body, letter_quality = _close_the_quality_gate(
+                    draft=_draft,
+                    base_prompt=base_prompt,
+                    letter=revised,
+                    body=revised_body,
+                    job=job,
+                    jd_body=jd_body,
+                    claim_evidence=claim_evidence,
+                )
     except LLMUnavailableError as exc:
         # MV-cover-letter-studio-005: surface an honest, secret-free message —
         # the raw exception's internals ('hard budget', prompt name) never reach
@@ -915,7 +1069,14 @@ def _refine_cover_letter_body(
         )
 
     stored = CoverLetterRepository().create(
-        user_id, letter["jobId"], letter["resumeId"], revised
+        user_id,
+        letter["jobId"],
+        letter["resumeId"],
+        revised,
+        # U2c: the refined letter carries its OWN measured quality record, the
+        # same shape the generation path persists, so the Studio panel shows
+        # one computation for either origin.
+        quality=letter_quality,
     )
     approval = ApprovalRepository().create(
         user_id,
@@ -928,6 +1089,10 @@ def _refine_cover_letter_body(
             "company": job["company"],
             "refined_from": letter["id"],
             "instructions": body.instructions.strip(),
+            # U2c: the verdict the approve endpoint reads. Without it a refined
+            # below-floor letter reached the reviewer with nothing to
+            # acknowledge, so "Request Changes" was a way around the gate.
+            "qualityGate": (letter_quality or {}).get("qualityGate"),
             # Review-modal fields so the refined letter renders in the approval
             # modal exactly like a freshly generated one (MV-approval-modal-001).
             **build_approval_extras(revised, job, corpus),
