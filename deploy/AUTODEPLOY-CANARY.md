@@ -1,0 +1,1 @@
+- Canary entry: auto-deploy live-verification by QA sub-agent, appended 2026-08-13T23:52:30Z UTC. This is a docs-only change proving the pull-based auto-deploy timer picks up origin/main automatically.
