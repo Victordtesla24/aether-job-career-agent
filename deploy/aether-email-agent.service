@@ -1,0 +1,31 @@
+# Aether scheduled email agent (B5) — runs scripts/email_agent_cron.sh once
+# per trigger: triage + job_alerts + apply_labels ONLY (never `send` — a real
+# outbound email always stays behind human approval; see the script's header
+# comment). Triggered by aether-email-agent.timer (every 2 hours); this unit
+# itself is oneshot and not enabled standalone.
+#
+# Install: sudo ln -sf /home/ubuntu/github_repos/aether-job-career-agent/deploy/aether-email-agent.service /etc/systemd/system/aether-email-agent.service
+#          sudo ln -sf /home/ubuntu/github_repos/aether-job-career-agent/deploy/aether-email-agent.timer /etc/systemd/system/aether-email-agent.timer
+#          sudo systemctl daemon-reload && sudo systemctl enable --now aether-email-agent.timer
+# Logs:    `journalctl -u aether-email-agent.service` (no dedicated log-file
+#          drop-in yet, unlike aether-discovery's /var/log/aether/discovery.log
+#          — add one the same way if/when this needs long-term file retention).
+# Disable: systemctl disable --now aether-email-agent.timer
+[Unit]
+Description=Aether scheduled email agent (one triage + job_alerts + apply_labels attempt)
+After=network-online.target aether-api.service
+Wants=network-online.target aether-api.service
+# /home/ubuntu mounts late at boot (nofail) — never start before the repo
+# checkout (and this unit's own ExecStart script) exists.
+RequiresMountsFor=/home/ubuntu
+
+[Service]
+Type=oneshot
+User=ubuntu
+WorkingDirectory=/home/ubuntu/github_repos/aether-job-career-agent
+ExecStart=/home/ubuntu/github_repos/aether-job-career-agent/scripts/email_agent_cron.sh
+# Conservative ceiling: triage is a real LLM call (documented 26.7s-61.0s
+# sync latency in routers/agents.py's run_email_agent docstring) and
+# job_alerts scans every connected mailbox; 600s leaves ample headroom above
+# both without letting a stuck run block the NEXT 2-hourly trigger.
+TimeoutStartSec=600

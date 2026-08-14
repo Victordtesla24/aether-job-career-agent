@@ -454,6 +454,22 @@ All services share the single working directory:
 - **Type:** oneshot (runs once then exits)
 - **Note:** Sends `X-Aether-System-Run: <AETHER_SYSTEM_RUN_SECRET>` header to bypass paywall on scout/fitScorer calls
 
+### Email Agent Service (aether-email-agent.service / aether-email-agent.timer) — B5
+- **Unit File:** `deploy/aether-email-agent.service` (project-tracked; symlinked into `/etc/systemd/system/`, same pattern as `aether-backup.service`/`aether-autodeploy.service`)
+- **Timer File:** `deploy/aether-email-agent.timer`
+- **Working Directory:** `/home/ubuntu/github_repos/aether-job-career-agent`
+- **ExecStart:** `/home/ubuntu/github_repos/aether-job-career-agent/scripts/email_agent_cron.sh`
+- **Schedule:** Every 2 hours, jittered up to 5 minutes (`OnCalendar=*-*-* 00/2:00:00`, `RandomizedDelaySec=300`, `Persistent=true`)
+- **Type:** oneshot (runs once then exits); `TimeoutStartSec=600`
+- **Modes invoked:** `triage`, `job_alerts`, `apply_labels` only — **never** `send` (a real outbound email always stays behind a human `email_send` approval; the script's header comment states this explicitly). `apply_labels` additionally requires a real Gmail message target (`AETHER_CRON_LABEL_MESSAGE_ID`), so it is called only when one is configured — otherwise the script logs an honest skip rather than fabricating a target.
+- **Note:** Unlike discovery, the Email Agent is **not** in `_SYSTEM_RUN_EXEMPT_AGENTS` (`routers/agents.py`), so this script authenticates as one account (same `AETHER_CRON_EMAIL`/`AETHER_CRON_PASSWORD` credentials discovery's legacy path uses) rather than sending the system-run sweep header.
+- **Activation (deploy window, not yet enabled):**
+  ```bash
+  sudo ln -sf /home/ubuntu/github_repos/aether-job-career-agent/deploy/aether-email-agent.service /etc/systemd/system/aether-email-agent.service
+  sudo ln -sf /home/ubuntu/github_repos/aether-job-career-agent/deploy/aether-email-agent.timer /etc/systemd/system/aether-email-agent.timer
+  sudo systemctl daemon-reload && sudo systemctl enable --now aether-email-agent.timer
+  ```
+
 ---
 
 ## 3. Safe Service Restart Commands

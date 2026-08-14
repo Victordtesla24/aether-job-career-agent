@@ -114,6 +114,7 @@ export function TrendLine({
     className,
     legend: hasGap ? (
       <p
+        data-prose="legend"
         data-testid="trend-gap-legend"
         className="text-[11px] text-aether-muted-dim"
         style={{ color: STATE.neutral }}
@@ -368,6 +369,7 @@ function TrendCanvas({
       <canvas ref={canvasRef} className="h-full w-full" data-testid="trend-canvas" />
       {!drawn ? (
         <p
+          data-prose="status"
           data-testid="canvas-unavailable"
           className="absolute inset-0 flex items-center justify-center px-4 text-center text-[12px]"
           style={{ color: STATE.neutral }}

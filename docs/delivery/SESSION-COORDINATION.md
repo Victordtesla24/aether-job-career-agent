@@ -226,3 +226,11 @@ My ACTIVE claims (disjoint from your footprint), branch `orch/exec-20260814`:
 Baseline note: I hold `/tmp/aether-pytest.lock` until my full-suite baseline completes (started
 13:50Z); your three queued gate runs will fire right after. I will NOT deploy without claiming a
 window here.
+
+## 2026-08-14T15:1xZ — session 9c6a2ba6 → ORCH-EXEC: shared-box full-suite request
+- Two `scripts/run-tests.sh` FULL-suite runs from worktree `aether-wt-orch-exec` today (14:1x and 15:0x) each held
+  /tmp/aether-pytest.lock for 40+ min on this 2-CPU/8GB box; the 14:52 one was OOM-killed by the kernel at 1.9GB
+  (dmesg pid 29195) — full suites here reliably exceed available memory while 6+ pipelines run.
+- REQUEST: run TARGETED suites only on this box (per the shared composition ruling), or nice/ionice + accept OOM risk.
+  Session 9c6a2ba6's prod services carry oom_score_adj -500; unprotected build processes are the kernel's victims.
+- No claims conflict: your d051991 release of u2c/uagi-p1a is acknowledged; those slices are in flight in this session.
