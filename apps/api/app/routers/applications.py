@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field
 from app.db import (
     ensure_application_apply_channel_column,
     ensure_application_manual_step_columns,
+    ensure_application_manual_step_question_column,
     ensure_application_submission_truth_columns,
     ensure_application_transmission_columns,
     ensure_application_unique_active_index,
@@ -59,7 +60,8 @@ _COLUMNS = (
     'a."transmittedAt", a."transmittedTo", a."transmissionChannel", '
     'a."transmissionRef", j."applyEmail", j."applyEmailSource", '
     'a."applyChannel", a."manualStepReason", a."manualStepDetail", '
-    'a."manualStepAt", a."submissionTruthState", a."submissionTruthAt", '
+    'a."manualStepAt", a."manualStepQuestions", '
+    'a."submissionTruthState", a."submissionTruthAt", '
     # U5d-2: does a JOB-TAILORED résumé exist for this application's job? The
     # per-card submit control must promise exactly what the write path will
     # accept (``jobs._resume_for_apply``), so it reads the same fact rather
@@ -84,6 +86,7 @@ def _ensure_read_columns() -> None:
     ensure_application_apply_channel_column()
     ensure_application_submission_truth_columns()
     ensure_application_manual_step_columns()
+    ensure_application_manual_step_question_column()
 
 
 def _with_submission(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -310,6 +313,181 @@ def get_application(application_id: str, current_user: CurrentUser) -> dict[str,
     if not rows:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Application not found")
     return _with_submission(rows)[0]
+
+
+class ScreeningAnswer(BaseModel):
+    """One answer the user typed into the card for one employer question."""
+
+    question: str = Field(..., max_length=2000)
+    answer: str = Field(..., max_length=8000)
+
+
+class AnswerQuestionRequest(BaseModel):
+    """Payload for the native in-card answer (U5d-3 Pillar 4a)."""
+
+    answers: list[ScreeningAnswer] = Field(..., min_length=1, max_length=25)
+    #: Bank this answer for THIS employer only rather than every application.
+    scope: str = Field(default="global", max_length=32)
+
+
+@router.post("/{application_id}/answer-question")
+def answer_question(
+    application_id: str, body: AnswerQuestionRequest, current_user: CurrentUser
+) -> dict[str, Any]:
+    """U5d-3 Pillar 4a — the user answers the employer's question INSIDE Aether.
+
+    ADR-SUB-AUTON-1: *"UNKNOWN QUESTION → rendered NATIVELY in the card; user
+    answers inside Aether; agent injects it, resumes, and BANKS the answer. No
+    site visit."* This endpoint is the "banks the answer" half and the
+    "injects it" half; the "resumes" half is honestly reported as NOT DONE,
+    because it requires the paused-session persistence designed for U5d-4
+    (``uat/reports/evidence/agents-uplift/u5d3/SESSION-TTL-DESIGN.md``). The
+    response says so in ``resumed: false`` rather than implying the application
+    went out.
+
+    What it does, in order:
+
+    1. **Banks** each answer with provenance ``user_answered`` and this
+       application as the provenance detail, so the Answer Bank page can show
+       exactly where each answer came from. The answer is stored VERBATIM —
+       nothing rewrites, expands or "improves" what the user typed.
+    2. **Records it against THIS application** (``Application.answers
+       .screeningAnswers``), which is the layer the apply-executor consults
+       first and the ONLY way a sensitive/legal question ever gets answered:
+       the user answering their own form for this employer is not the agent
+       reusing an old answer, so that layer is not class-gated (see
+       ``answer_bank.build_resolver``).
+    3. **Re-checks the blocker.** The manual step clears only when EVERY
+       captured question now has an answer. A partially answered blocker stays
+       standing and the response names what is still missing.
+
+    It transmits nothing. Submitting is still the separate, explicit act it was
+    before — this endpoint only removes the reason the card could not offer it.
+    """
+    from app.repositories.answer_bank import AnswerBankRepository
+    from app.services.answer_bank import (
+        SCOPE_COMPANY,
+        build_resolver,
+        coerce_scope,
+        question_text_for_field,
+    )
+
+    user_id = current_user["id"]
+    row = get_application(application_id, current_user)
+
+    provided: dict[str, str] = {}
+    for item in body.answers:
+        question = item.question.strip()
+        answer = item.answer.strip()
+        if not question or not answer:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                (
+                    "An empty answer cannot be saved — Aether will not send a "
+                    "blank response to an employer's question."
+                ),
+            )
+        provided[question] = answer
+
+    scope = coerce_scope(body.scope)
+    company = str(row.get("company") or "")
+    repo = AnswerBankRepository()
+    banked: list[dict[str, Any]] = []
+    for question, answer in provided.items():
+        banked_item = repo.upsert(
+            user_id,
+            question=question,
+            answer=answer,
+            provenance="user_answered",
+            provenance_detail=application_id,
+            scope=scope,
+            scope_value=company if scope == SCOPE_COMPANY else None,
+        )
+        if banked_item is not None:
+            banked.append(banked_item)
+
+    # The per-application layer: what the user just said, for THIS employer.
+    stored = row.get("answers")
+    answers_blob: dict[str, Any] = dict(stored) if isinstance(stored, dict) else {}
+    screening = answers_blob.get("screeningAnswers")
+    screening = dict(screening) if isinstance(screening, dict) else {}
+    screening.update(provided)
+    answers_blob["screeningAnswers"] = screening
+
+    captured = row.get("manualStepQuestions")
+    captured = captured if isinstance(captured, list) else []
+    resolve = build_resolver(
+        repo.list_for_user(user_id), screening_answers=screening, company=company
+    )
+    remaining = [
+        question_text_for_field(field)
+        for field in captured
+        if isinstance(field, dict) and field.get("required", True) and resolve(field) is None
+    ]
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            if remaining:
+                cur.execute(
+                    'UPDATE "Application" SET "answers" = %s::jsonb, '
+                    '"updatedAt" = NOW() WHERE "id" = %s AND "userId" = %s',
+                    (json.dumps(answers_blob), application_id, user_id),
+                )
+            else:
+                # Every captured question is answered: the obstacle is gone, so
+                # the row stops claiming one. transmittedAt is untouched —
+                # clearing a blocker is not a submission.
+                cur.execute(
+                    'UPDATE "Application" SET "answers" = %s::jsonb, '
+                    '"manualStepReason" = NULL, "manualStepDetail" = NULL, '
+                    '"manualStepQuestions" = NULL, "manualStepAt" = NULL, '
+                    '"updatedAt" = NOW() WHERE "id" = %s AND "userId" = %s',
+                    (json.dumps(answers_blob), application_id, user_id),
+                )
+        conn.commit()
+
+    from app.repositories.admin import write_audit
+
+    write_audit(
+        user_id,
+        "answer_bank.in_card_answer",
+        target_type="application",
+        target_id=application_id,
+        detail={"banked": len(banked), "remaining": len(remaining)},
+    )
+
+    if remaining:
+        detail = (
+            "Saved. "
+            f"{len(remaining)} question{'' if len(remaining) == 1 else 's'} still "
+            "need an answer before Aether can submit this one."
+        )
+    else:
+        detail = (
+            "Saved to your Answer Bank. Nothing has been sent — Aether will use "
+            "this answer on the next submission attempt for this application, "
+            "and on future applications that ask the same thing."
+        )
+
+    return {
+        "applicationId": application_id,
+        "banked": [
+            {
+                "id": item["id"],
+                "questionText": item["questionText"],
+                "sensitivity": item["sensitivity"],
+                "provenance": item["provenance"],
+                "reusable": item["sensitivity"] == "factual",
+            }
+            for item in banked
+        ],
+        "remainingQuestions": remaining,
+        # Honest, and deliberately explicit: the browser session that hit this
+        # question was NOT held open, so nothing resumed and nothing was sent.
+        "resumed": False,
+        "transmitted": False,
+        "detail": detail,
+    }
 
 
 @router.post("/{application_id}/reconfirm-submission")

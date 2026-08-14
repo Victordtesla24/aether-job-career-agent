@@ -359,6 +359,14 @@ def build_apply_profile(
     if isinstance(per_application, dict):
         custom.update(per_application)
     profile["customAnswers"] = custom
+    # U5d-3: the per-application answers are ALSO carried unmerged, keyed by
+    # the employer's QUESTION TEXT rather than a field name. ``customAnswers``
+    # is looked up by field name, so a question-keyed entry can never match
+    # there; the Answer Bank resolver matches on the question itself, which is
+    # what makes an in-card answer usable on the very next attempt.
+    profile["screeningAnswers"] = (
+        dict(per_application) if isinstance(per_application, dict) else {}
+    )
     return profile
 
 
@@ -473,6 +481,11 @@ def _attempt_transmission(user_id: str, application_id: str, approval_id: str) -
         cover_letter_text=str(application.get("coverLetter") or ""),
         evidence_dir=evidence_root(),
         apply_url=apply_url,
+        # U5d-3: the employer and the job this attempt is for, so a
+        # company-scoped banked answer applies only where the user scoped it
+        # and every usage audit row names the job it was used on.
+        company=str(application.get("company") or "") or None,
+        job_id=str(application.get("jobId") or "") or None,
     )
 
 

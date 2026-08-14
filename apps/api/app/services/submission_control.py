@@ -61,8 +61,23 @@ CARD_STATES = frozenset(
 #: two that can ever lead to a transmission, and both go through
 #: ``POST /applications/{id}/request-submission`` (create + approve) followed by
 #: the EXISTING ``POST /approvals/{id}/execute`` — never a private path.
+#:
+#: ``answer_question`` (U5d-3, ADR-SUB-AUTON-1 Pillar 4a) is the LAW OF MINIMAL
+#: USER ACTIVITY made concrete: the card renders the employer's own question
+#: with a real input, the user answers inside Aether, and the answer is banked.
+#: It transmits nothing either — ``POST /applications/{id}/answer-question``
+#: banks the answer and unblocks the card; submitting is still a separate,
+#: explicit act.
 ACTIONS = frozenset(
-    {"submit", "send_email", "open_posting", "reconfirm", "fix_artifacts", "none"}
+    {
+        "submit",
+        "send_email",
+        "open_posting",
+        "reconfirm",
+        "fix_artifacts",
+        "answer_question",
+        "none",
+    }
 )
 
 #: Application statuses that mean the user has already recorded this as sent.
@@ -107,6 +122,50 @@ def _missing_artifacts(row: dict[str, Any]) -> list[str]:
     if not (row.get("coverLetter") or "").strip():
         missing.append("coverLetter")
     return missing
+
+
+def _manual_step_questions(row: dict[str, Any]) -> list[dict[str, Any]]:
+    """The structured questions this row is blocked on — never a guess.
+
+    Reads ``Application.manualStepQuestions`` (U5d-3 additive column), which is
+    written straight from what the apply-executor parsed off the employer's
+    page. A row blocked BEFORE that column existed carries NULL and gets an
+    empty list, which is why the caller keeps the pre-U5d-3 "open the posting"
+    control for it: we did not capture that form's structure, so we cannot
+    honestly render its inputs.
+
+    Each entry is normalised to exactly the keys the card renders, and the
+    sensitivity class is RE-DERIVED from the question text rather than trusted
+    from the stored row — the card's "Aether will never send this for you"
+    note has to be true even for a row written by an older build.
+    """
+    from app.services.answer_bank import classify_sensitivity
+
+    raw = row.get("manualStepQuestions")
+    if not isinstance(raw, list):
+        return []
+    questions: list[dict[str, Any]] = []
+    for entry in raw:
+        if not isinstance(entry, dict):
+            continue
+        label = str(entry.get("label") or entry.get("name") or "").strip()
+        if not label:
+            continue
+        sensitivity = classify_sensitivity(label)
+        questions.append(
+            {
+                "name": str(entry.get("name") or label),
+                "label": label,
+                "kind": str(entry.get("kind") or "text"),
+                "options": [str(option) for option in (entry.get("options") or [])],
+                "required": bool(entry.get("required", True)),
+                "sensitivity": sensitivity,
+                # Honest, per-question: will answering this once let Aether
+                # answer it next time, or is it user-gated forever?
+                "reusable": sensitivity == "factual",
+            }
+        )
+    return questions
 
 
 def _fix_control(row: dict[str, Any], missing: list[str]) -> dict[str, Any]:
@@ -171,6 +230,11 @@ def describe_submission_control(row: dict[str, Any]) -> dict[str, Any]:
         "applyUrl": apply_url,
         "missing": [],
         "href": None,
+        # U5d-3 Pillar 4a: the employer's own questions, structured, so the
+        # card can render real inputs. Empty for every state that is not an
+        # unanswered-question manual step — including a manual step that is a
+        # CAPTCHA or a login wall, which have nothing to type.
+        "questions": [],
     }
 
     if transmitted_at is not None:
@@ -214,6 +278,28 @@ def describe_submission_control(row: dict[str, Any]) -> dict[str, Any]:
             ),
         }
     if manual_reason:
+        questions = _manual_step_questions(row)
+        if manual_reason == "unknown_required_question" and questions:
+            # PILLAR 4a. The blocker is a question, and we captured its
+            # structure, so the irreducible human step is answering it — which
+            # happens HERE, in the card. Nothing about that is a site visit,
+            # and the applyUrl still travels on the block so the user can
+            # always choose to go to the source instead.
+            count = len(questions)
+            return {
+                **base,
+                "state": "manual_step",
+                "action": "answer_question",
+                "questions": questions,
+                "label": (
+                    f"Answer it here — {count} question{'' if count == 1 else 's'}"
+                ),
+                "detail": (
+                    "This employer asks something Aether has no answer for and "
+                    "will not invent. Answer it below and Aether saves it for "
+                    "every future application that asks the same thing."
+                ),
+            }
         return {
             **base,
             "state": "manual_step",
