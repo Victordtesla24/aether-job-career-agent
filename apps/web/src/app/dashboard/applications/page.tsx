@@ -836,6 +836,18 @@ export default function ApplicationsPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {/* U5d-3 (ADR-SUB-AUTON-1 Pillar 1): the Answer Bank is reached from
+              here because this is the screen where its answers get used — a
+              card that stops to ask a question is the moment a user wants to
+              see, and edit, everything Aether already answers for them. */}
+          <Link
+            href="/dashboard/answer-bank"
+            data-testid="answer-bank-link"
+            className="flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-aether-muted transition hover:bg-white/10 hover:text-white max-sm:min-h-[44px]"
+          >
+            <i className="fa-solid fa-brain text-[10px]" aria-hidden="true" />
+            Answer Bank
+          </Link>
           <div
             className="flex rounded-lg border border-white/10 bg-white/5 p-0.5"
             role="tablist"
@@ -1266,6 +1278,11 @@ export default function ApplicationsPage() {
                                 application={card.app}
                                 onReconfirm={() => void reconfirm(card.app!)}
                                 onSettled={() => void load()}
+                                // U5d-3 Pillar 4a: an answer banked in the card
+                                // can clear the blocker server-side, so the
+                                // board re-reads rather than keeping a stale
+                                // "needs a manual step" on screen.
+                                onAnswered={() => void load()}
                               />
                             ) : null}
                             <CardLink stageKey={stage.key} />

@@ -28,6 +28,7 @@ from app.routers import (
     admin,
     agents,
     analytics,
+    answer_bank,
     applications,
     approvals,
     auth,
@@ -459,6 +460,9 @@ def create_app() -> FastAPI:
     app.include_router(stories.router, prefix="/stories", tags=["stories"])
     app.include_router(analytics.router, prefix="/analytics", tags=["analytics"])
     app.include_router(applications.router, prefix="/applications", tags=["applications"])
+    # U5d-3 (ADR-SUB-AUTON-1 Pillar 1): the user's own screening answers —
+    # view/edit/expire/delete, plus the onboarding questionnaire that seeds them.
+    app.include_router(answer_bank.router, prefix="/answer-bank", tags=["answer-bank"])
     app.include_router(workspaces.router, prefix="/workspaces", tags=["workspaces"])
     app.include_router(interviews.router, prefix="/interviews", tags=["interviews"])
     app.include_router(emails.router, prefix="/emails", tags=["emails"])
