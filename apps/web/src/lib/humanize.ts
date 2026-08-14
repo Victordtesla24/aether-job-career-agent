@@ -1,36 +1,49 @@
 /**
  * Customer-facing copy normalisation.
  *
- * Internal run/feed strings leak engineering jargon ("generation degraded",
- * "no worker heartbeat", "abandoned"). These helpers translate them into
- * calm, reassuring language before they ever reach the UI. They are applied
- * at *render* time only — the underlying feed/run helpers stay pure so their
+ * Internal run/feed strings occasionally leak engineering jargon (e.g.
+ * "generation degraded"). This helper translates that ONE case into calm,
+ * reassuring language before it ever reaches the UI. It is applied at
+ * *render* time only — the underlying feed/run helpers stay pure so their
  * unit tests keep asserting the raw domain strings.
+ *
+ * HONESTY INVARIANT (I4-FE-02 / I4-FE-02b / I4-FE-02c): this function must
+ * never rewrite a genuinely terminal/failed run into copy that reads as
+ * "paused", "retrying", or otherwise in-progress, and must never reduce a
+ * non-empty error to the empty string (a blank result renders identically
+ * to "no error" wherever a caller falls back to an em-dash on empty output —
+ * apps/web/src/app/dashboard/agents/page.tsx's run-error column does exactly
+ * that). `apps/api/app/services/agent_run_watchdog.py`'s `_honest_error()` /
+ * `ABANDONED_ERROR_MARKER` deliberately avoid retry-sounding wording because
+ * an abandoned run is chronic breakage, not a hiccup — this module must not
+ * put that wording back in on the way to the screen. A prior version of this
+ * file rewrote "abandoned" → "paused", "run failed" → "Agent run paused —
+ * retrying", and "no worker heartbeat" / "worker heartbeat missing" → "" ;
+ * all three were removed for that reason. Only cosmetic, truth-preserving
+ * rewrites belong in `ACTIVITY_PHRASE_MAP` below.
  */
 
 /** Ordered phrase → friendly-copy rewrites (case-insensitive, substring). */
 const ACTIVITY_PHRASE_MAP: Array<{ pattern: RegExp; replace: string }> = [
-  // Longer / more specific phrases first so they win over generic ones.
   { pattern: /generation degraded/gi, replace: "will retry automatically" },
-  { pattern: /no worker heartbeat/gi, replace: "" },
-  { pattern: /worker heartbeat missing/gi, replace: "" },
-  { pattern: /run failed/gi, replace: "Agent run paused — retrying" },
-  { pattern: /\babandoned\b/gi, replace: "paused" },
 ];
 
 /**
  * Humanise a single activity-feed / run message for display.
  *
  * Examples:
- *   "run failed"                              → "Agent run paused — retrying"
  *   "cover letter unavailable (generation degraded)"
- *                                             → "Could not generate — will retry automatically"
- *   "no worker heartbeat"                     → "" (stripped)
- *   "run abandoned"                           → "run paused"
+ *                                              → "Could not generate — will retry automatically"
+ *   "run abandoned — no worker heartbeat"      → unchanged (honest failure text is never rewritten)
+ *   "run failed"                               → unchanged (never claims a retry that isn't happening)
+ *
+ * Guarantee: for a non-empty `msg`, the return value is never the empty
+ * string.
  */
 export function humanizeActivityMessage(msg: string | null | undefined): string {
   if (!msg) return "";
-  let out = String(msg);
+  const original = String(msg);
+  let out = original;
 
   // Special-case: "<thing> unavailable (generation degraded)" reads better as a
   // single reassuring sentence than a literal phrase swap.
@@ -53,10 +66,12 @@ export function humanizeActivityMessage(msg: string | null | undefined): string 
 
   // Collapse an accidental "Agent Agent" — an agent whose display name already
   // ends in "Agent" (e.g. "Cover Letter Agent") followed by a template that
-  // begins with "Agent" ("Agent run paused") reads as "…Agent Agent run…".
+  // begins with "Agent" reads as "…Agent Agent…".
   result = result.replace(/\bAgent\s+Agent\b/g, "Agent");
 
-  return result;
+  // Never turn a non-empty input into an empty output — fall back to the
+  // untouched original message rather than silently erasing a real error.
+  return result.trim() ? result : original;
 }
 
 /**

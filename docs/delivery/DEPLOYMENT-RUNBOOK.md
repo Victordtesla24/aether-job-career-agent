@@ -970,19 +970,70 @@ recipe this section already documents, invoked on a schedule.
 
 ### Mechanism
 
-- `deploy/auto-deploy.sh` — the recipe: `git fetch origin main`; if this
-  checkout's `HEAD` already equals `origin/main`, it exits `0` immediately
-  (no-op — this is what makes 5-minute polling cheap). Otherwise it takes
-  `flock -n /tmp/aether-deploy.lock` (the same lock every manual/agent-driven
-  deploy on this VM uses, so a manual deploy and the timer can never race),
-  checks the working tree for foreign uncommitted WIP (never stashes,
-  resets, or cleans it away — see the `FOREIGN-WIP-MOVED.md` precedent — it
-  refuses loudly instead), then runs `git pull --ff-only`, installs Python
-  deps only if `apps/api/requirements.txt` changed, builds the web app only
-  if `apps/web/**` changed (through the same `verify-web-build.sh` gate as
-  §0.4), restarts all three services, and runs the same 3 health checks as
-  §5 Phase 5 (items 3, 3b, 4: API health via nginx, the Next.js `/api`
-  rewrite check, and the web root).
+- `deploy/auto-deploy.sh` — the recipe, in order:
+  1. **Branch guard.** Refuses loudly unless the checkout's current branch
+     is exactly `main` — protects against a shared-tree hazard where a
+     concurrent agent left the checkout on a foreign branch (see the
+     shared-tree git hazard notes); pulling and deploying from the wrong
+     branch would otherwise silently fast-forward that branch's ref.
+  2. **Cheap pre-lock check.** `git fetch origin main`; if this checkout's
+     `HEAD` already equals `origin/main`, it exits `0` immediately (no-op
+     — this is what makes 5-minute polling cheap, and no lock is taken for
+     this path).
+  3. **Lock.** Takes `flock -n /tmp/aether-deploy.lock` (the same lock
+     every manual/agent-driven deploy on this VM uses). If the lock is
+     already held, that is **benign, routine contention, not a failure**:
+     the script logs one `INFO` line and exits `0` — the next timer tick
+     is the retry.
+  4. **Re-check under the lock (idempotency, not just serialization).**
+     `HEAD` and `origin/main` are compared again now that the lock is
+     held. This closes a TOCTOU window: if a manual deploy took the lock,
+     pulled, and released it between steps 2 and 3, this tick would
+     otherwise redundantly stop/restart all three services for a commit
+     that's already live. Only if they still differ does the script
+     proceed.
+  5. **Foreign-WIP preservation-protocol check**, covering both tracked
+     and untracked files. Tracked modifications abort unconditionally.
+     Untracked files are compared against an explicit, documented allow
+     list — the exact 3 files from the `FOREIGN-WIP-MOVED.md` precedent
+     (`FOREIGN-WIP-MOVED.md` itself,
+     `apps/api/tests/fixtures/llm/cover_letter/quality.json`,
+     `apps/api/tests/test_blocker010_board_sweep_abort_recovery.py`) — any
+     **other** untracked or modified file aborts loudly, naming the
+     offending path(s). This script never stashes, resets, or cleans
+     anything away; it always refuses and leaves the tree exactly as
+     found.
+  6. **Pre-deployment check (§5 check 4): `AETHER_LLM_MODE`.** Refuses to
+     deploy unless `.env` has `AETHER_LLM_MODE=auto` or `=live` — the same
+     MV-application-tracker-001 BLOCKER guard §5 documents, now enforced
+     automatically since the unattended timer removes the human who would
+     otherwise run this check by hand.
+  7. `git pull --ff-only`, then installs Python deps only if
+     `apps/api/requirements.txt` changed, and builds the web app only if
+     `apps/web/**` changed.
+  8. **Web build gate — unconditional.** `scripts/verify-web-build.sh`
+     (the §0.4 gate) now runs on **every** tick that reaches this point,
+     not only when `apps/web/**` changed — it validates the CURRENT
+     on-disk build's baked-in `/api/*` rewrite upstream, which a restart
+     serves regardless of what this particular commit touched.
+  9. Restarts all three services, then runs the same 3 health checks as
+     §5 Phase 5 (items 3, 3b, 4: API health via nginx, the Next.js `/api`
+     rewrite check, and the web root) — each check **polls with a
+     retry+deadline** (every 3s, up to a 90s deadline per check) instead of
+     a single fixed-delay attempt. The first real deploy (canary `d4287c1`,
+     2026-08-13) proved a fixed `sleep 5` + one-shot `curl -sf` races real
+     service warmup: the API answered `200` in 2ms just 13s after restart,
+     but the one-shot check had already logged a false `FAILURE` 5s after
+     restart and left the systemd unit in `failed` state for a deploy that
+     actually succeeded — with the false alarm never self-clearing per the
+     no-retry-across-ticks contract below (see
+     `uat/reports/evidence/market-perf/u-cd/04-DEFECT-healthcheck-race-realdeploy.txt`).
+     The 90s-per-check deadline is deliberately generous: `aether-api` alone
+     can take up to ~90s to stop and restart under load, and warmup adds
+     more on top. Only a check that is still failing when its own deadline
+     is exhausted logs `FAILURE`; a successful check logs how long it took
+     (`healthy after Ns (attempt N)`) so operators can see how close to the
+     deadline a real deploy is running.
 - `deploy/aether-autodeploy.service` — `Type=oneshot` unit that runs the
   script once per trigger.
 - `deploy/aether-autodeploy.timer` — `OnCalendar=*:0/5` (every 5 minutes),
@@ -991,17 +1042,33 @@ recipe this section already documents, invoked on a schedule.
 
 Both unit files are tracked in-repo under `deploy/` per this repo's
 existing in-repo-unit-plus-symlink convention (see `deploy/aether-api.service`
-et al. in §1) and symlinked into `/etc/systemd/system/`, so `git log` on
-`deploy/` is the audit trail for the automation itself, and a VM image
-rebuild cannot silently lose it.
+et al. in §1), so `git log` on `deploy/` is the audit trail for the
+automation itself and a VM image rebuild cannot silently lose it. **Current
+status: shipped, NOT yet installed.** Being tracked in-repo does not mean
+the symlinks into `/etc/systemd/system/` exist yet — `systemctl list-timers`
+on this VM will not show `aether-autodeploy.timer` until an operator runs
+the `### Install` steps below. Until then, deploys still require the manual
+§5 recipe.
 
 ### Failure behavior — read before relying on this
 
-On **any** failure — a blocked pull (foreign WIP or diverged history), a
-failed dependency install, a failed web build or `verify-web-build.sh` gate,
-a service that doesn't come back active, or a failed health check — the
+On **any** failure — a non-`main` checkout, a blocked pull (foreign WIP or
+diverged history), a failing `AETHER_LLM_MODE` check, a failed dependency
+install, a failed web build or `verify-web-build.sh` gate, a service that
+doesn't come back active, or a health check that is still failing once its
+own 90s deadline is exhausted (see step 9 above — within that 90s window a
+health check polls silently every 3s and is not itself a failure) — the
 script logs one `FAILURE: ...` line to `/var/log/aether/deploy.log` and
-exits non-zero. **There is no automatic retry and no automatic rollback.**
+exits non-zero. **There is no automatic retry of the deploy recipe across
+timer ticks, and no automatic rollback.**
+
+**Exception — benign lock contention is not a failure.** If
+`/tmp/aether-deploy.lock` is already held (a manual deploy or another
+timer tick is mid-flight), the script logs `INFO: lock held by another
+deploy actor — skipping this tick (benign contention)` and exits `0`. This
+is routine and expected on a VM where every deploy actor shares the same
+lock — do **not** treat an `INFO` line as requiring attention; only
+`FAILURE` lines do.
 If the failure happened after `git pull` already advanced `HEAD` (the common
 case, since pull is early in the recipe), the next timer tick sees
 `HEAD == origin/main` and exits `0` — it will **not** re-attempt the failed
