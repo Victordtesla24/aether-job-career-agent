@@ -2094,34 +2094,32 @@ _RECOMMENDED_FOR_BACKEND: dict[str, str] = {
 def _agent_enabled_for_dispatch(user_id: str, agent_name: str) -> bool:
     """Whether ``user_id`` has NOT paused ``agent_name`` (ML-STOPALL-001).
 
-    ``agent_name`` is the BACKEND key (e.g. ``tailor``); ``AgentConfig`` is
-    keyed by the UI's ``agentKey`` (e.g. ``resumeTailoring``) — reuse the SAME
-    ``_UI_KEY_FOR_BACKEND`` mapping ``_user_model_override`` already relies on,
-    rather than inventing a second backend<->UI namespace translation.
+    2026-08-14 rebind: this used to resolve ``agent_name`` through the
+    single-key ``_UI_KEY_FOR_BACKEND`` mapping, which keeps only the LAST UI
+    card per backend. ``fitScorer`` is dispatched by THREE cards
+    (atsOptimization, matchScoring, skillGap;
+    ``_UI_KEY_FOR_BACKEND["fitScorer"] == "skillGap"``), so a user who
+    disabled only ``skillGap`` while leaving atsOptimization/matchScoring
+    running was wrongly refused HERE (inside ``_execute_reserved_run``, the
+    async worker's direct entry point) even though ``_dispatch``'s pre-check
+    — which already used the correct every-card rule — agreed the run should
+    proceed. Delegating to :func:`_agent_paused_by_user` (the interim guard's
+    helper, using ``_ALL_UI_KEYS_FOR_BACKEND``) makes both layers share the
+    ONE rule: a backend is paused only when EVERY UI card that can dispatch
+    it is disabled.
 
-    A user with NO persisted ``AgentConfig`` row for this agent has never
-    touched its toggle, so the honest default is ``enabled=True`` — unchanged
-    behaviour for every run that predates this check. A DB read fault also
-    resolves to ``True``: a config-lookup outage must never itself block a
-    run that was otherwise permitted.
+    Absent-row and read-fault semantics are unchanged by this rebind:
+    ``_agent_paused_by_user`` also treats a backend with no matching disabled
+    row as "not paused" (``all(key in disabled for key in ui_keys)`` is
+    vacuously true only when every key IS disabled; an empty ``disabled`` set
+    — no rows, or rows that are all ``enabled`` — leaves it False) and a DB
+    read fault as "not paused" (``except Exception: return False``) —
+    ``not False`` is ``True`` here, the exact same fail-open default this
+    function already returned on a read fault. The two helpers were already
+    in agreement on both edge cases; no reconciliation was needed.
     """
     _ensure_agent_config_schema()
-    ui_key = _UI_KEY_FOR_BACKEND.get(agent_name, agent_name)
-    try:
-        with get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    'SELECT "enabled" FROM "AgentConfig" '
-                    'WHERE "userId" = %s AND "agentKey" = %s',
-                    (user_id, ui_key),
-                )
-                row = cur.fetchone()
-    except Exception:  # noqa: BLE001 — a config-read fault must never itself
-        # block a run; fall back to the honest pre-existing default.
-        return True
-    if row is None:
-        return True
-    return bool(row[0])
+    return not _agent_paused_by_user(user_id, agent_name)
 
 
 def _user_model_override(user_id: str, agent_name: str) -> "str | None":
