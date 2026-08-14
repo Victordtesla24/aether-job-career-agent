@@ -86,6 +86,12 @@ describe("Topbar mobile header clip (MV-mobile-dashboard-001)", () => {
   });
 });
 
+// U-UI BELL-OVERLAP-01/BELL-OFFSCREEN-*/KANBAN-HEADER-OVERLAP-01 coverage
+// (opaque surface, z-index, backdrop, viewport-safe horizontal bound,
+// outside-click/Escape) now lives in the dedicated
+// topbar-notification-panel.test.tsx, which pins the exact contract the
+// fix was built against.
+
 describe("Topbar account-identity chip at mobile width (MV-mobile-dashboard-004)", () => {
   it("hides the redundant name/role text below the lg breakpoint", async () => {
     render(<Topbar />);

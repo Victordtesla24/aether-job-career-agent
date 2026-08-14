@@ -47,6 +47,29 @@ class SourceBlockedError(AdapterFetchError):
     """
 
 
+class SourceQuotaError(SourceBlockedError):
+    """The source is TEMPORARILY paused because a shared API quota ran out.
+
+    A subclass of :class:`SourceBlockedError` so every existing handler — the
+    scout's ``except SourceBlockedError`` branch, its server-wide block backoff
+    (which is exactly the right behaviour here: re-probing an exhausted key
+    from every user's run is the same hammering the backoff exists to stop) —
+    keeps working unchanged.
+
+    It exists because the two conditions mean OPPOSITE things to the user.
+    ``SourceBlockedError`` is structural and permanent ("this board refuses
+    this server"), so the UI renders a flat "unavailable (blocked by source)"
+    pill and deliberately suppresses the reason: nothing the user does changes
+    it. A quota pause is temporary and self-healing — the Adzuna key's daily
+    allowance resets at 00:00 UTC — and the honest message says exactly when
+    market data resumes, so the Jobs screen renders it as "market data paused
+    (API quota)" WITH that message (S-FIX-A/S-2). The frontend keys off the
+    class name the scout stringifies onto the source row
+    (``f"{type(exc).__name__}: {exc}"``), so the distinction stays a TYPE
+    decision made by the adapter, never a string sniff.
+    """
+
+
 class JobRaw(TypedDict):
     """Normalized job posting as produced by every adapter."""
 

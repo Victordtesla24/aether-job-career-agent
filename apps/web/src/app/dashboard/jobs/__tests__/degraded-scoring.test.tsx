@@ -37,6 +37,11 @@ vi.mock("../../../../lib/api/client", () => ({
   apiRequest: (...args: unknown[]) => apiRequest(...(args as [string])),
   apiBaseUrl: () => apiBaseUrl(),
   getToken: () => getToken(),
+  // MON-020: the page renders API failures through the shared friendly-error
+  // helper (which strips a proxy's raw HTML error page). Pass-through here —
+  // that helper has its own dedicated tests in lib/api/__tests__.
+  describeApiError: (e: unknown, fallback: string) =>
+    e instanceof Error ? e.message : fallback,
 }));
 
 vi.mock("../../../../lib/api/jobs", () => ({
@@ -77,6 +82,12 @@ function insightsFixture(degraded: boolean, semanticScoreOverride?: number) {
     semantic: semanticScore,
     semanticPath: degraded ? "degraded" : "local",
     semanticDegraded: degraded,
+    // R-04 (round 3): `atsMeasured` is now emitted on EVERY insights payload
+    // and read fail-closed by the page (absent => not measured), so a fixture
+    // must state it — the same discipline `lib/scoring/provenance.ts` already
+    // applies to `conversionMetrics`. Both cases here are engine-measured; it
+    // is the SEMANTIC half that degrades, which is what this file is about.
+    atsMeasured: true,
     experience: 70,
     skillsMatched: 4,
     skillsTotal: 5,

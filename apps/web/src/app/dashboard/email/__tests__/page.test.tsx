@@ -228,3 +228,28 @@ describe("MF-1: email detail panel honest full-body loading", () => {
     expect(fetchEmailThreadBodyMock).not.toHaveBeenCalled();
   });
 });
+
+describe("REV-U-UI-02: EMAIL-BODY-HORIZONTAL-OVERFLOW-01", () => {
+  it("wraps long unbroken tokens (e.g. a tracking URL) instead of overflowing the page", async () => {
+    // Live audit: an unbroken long token in the body pushed scrollWidth to
+    // 8x clientWidth with no wrap CSS at all, cascading to a page-wide
+    // horizontal scrollbar (body scrollWidth 4714 vs clientWidth 1440).
+    // jsdom doesn't lay out text, so this pins the CSS contract that fixes
+    // it: `overflow-wrap: break-word` (Tailwind's `break-words`) on the
+    // element that renders the raw body text.
+    const shortMessage = baseMessage({
+      id: "thread-short",
+      subject: "Quick note",
+      preview: "Thanks!",
+      body: "Thanks!",
+      bodyTruncated: false,
+    });
+    fetchEmailInboxMock.mockResolvedValue(inboxWith([shortMessage]));
+
+    render(<EmailCenterPage />);
+    await screen.findByTestId("email-center");
+
+    const body = await screen.findByTestId("email-body");
+    expect(body.className).toMatch(/\bbreak-words\b/);
+  });
+});

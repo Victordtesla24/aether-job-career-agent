@@ -262,6 +262,302 @@ def conversion(current_user: CurrentUser, period: str = "all") -> dict[str, Any]
 
 
 # --------------------------------------------------------------------------
+# Agent Performance Policy (U-AX build spec item 2) — the LIVE self-improvement
+# loop, made legible: which tier the agents are running at, WHICH measured
+# metric forced it, what they do differently, and what each agent's last run
+# actually consumed.
+# --------------------------------------------------------------------------
+
+
+def _policy_run_view(run: dict[str, Any] | None) -> dict[str, Any] | None:
+    """One agent's last run as the policy panel needs it, or ``None``.
+
+    ``None`` means the agent has genuinely never run for this user — the
+    honest answer. It is deliberately NOT an empty object with zeroed fields,
+    which would render as "ran, scored nothing".
+    """
+    if run is None:
+        return None
+    return {
+        "runId": run.get("id"),
+        "status": run.get("status"),
+        "startedAt": run.get("startedAt"),
+        "completedAt": run.get("completedAt"),
+        "costUsd": float(run["costUsd"]) if run.get("costUsd") is not None else None,
+        "jobId": run.get("jobId"),
+        "applicationId": run.get("applicationId"),
+        # The tier this run OBEYED and the exact snapshot it consumed —
+        # NULL for every run recorded before the policy loop existed, never
+        # back-stamped with today's verdict.
+        "policyTier": run.get("policyTier"),
+        "policyInputs": run.get("metricSnapshot"),
+    }
+
+
+@router.get("/agent-policy")
+def agent_policy(current_user: CurrentUser) -> dict[str, Any]:
+    """The current rigor tier, why it is what it is, and per-agent visibility.
+
+    Everything here is derived from the SAME
+    ``services.quality_policy.resolve_policy_for_user`` that governs live agent
+    runs — the panel cannot show one tier while the agents obey another,
+    because there is only one computation.
+
+    ``perAgent`` covers every REAL (backend-having) catalog agent, reporting
+    ``lastRun: null`` for agents that have never run rather than omitting them:
+    "this agent has never run" is information a subscriber is entitled to, and
+    silently dropping the row would read as though the agent did not exist.
+    """
+    from app.repositories.agent_run import AgentRunRepository
+    from app.routers.agents import AGENT_CATALOG
+    from app.services.quality_policy import resolve_policy_for_user
+
+    user_id = current_user["id"]
+    policy = resolve_policy_for_user(user_id)
+    metrics = policy.get("metrics") or {}
+    last_runs = AgentRunRepository().last_policy_run_by_agent(user_id)
+
+    per_agent = [
+        {
+            "agentKey": entry["key"],
+            "name": entry["name"],
+            "backend": entry["backend"],
+            "lastRun": _policy_run_view(last_runs.get(entry["backend"])),
+        }
+        for entry in AGENT_CATALOG
+        if entry.get("backend")
+    ]
+
+    return {
+        "tier": policy["tier"],
+        "triggers": policy["triggers"],
+        "behaviour": policy.get("behaviour"),
+        "knobs": policy.get("knobs"),
+        "thresholds": policy.get("thresholds"),
+        "metricSnapshot": {
+            "sampleSize": metrics.get("sampleSize", 0),
+            # Percentage for display; the policy itself compares fractions.
+            "conversionRate": _percent(metrics.get("conversionRate")),
+            "interviewCount": metrics.get("interviewCount", 0),
+            "dimensionScores": metrics.get("dimensionScores") or {},
+            "dimensionSampleSize": metrics.get("dimensionSampleSize", 0),
+            "dimensionsEvaluated": policy.get("dimensionsEvaluated", 0),
+            # False when the underlying reads failed — the panel must say so
+            # rather than render zeros as measurements.
+            "available": bool(metrics.get("available", False)),
+            "unavailableReason": metrics.get("reason"),
+        },
+        "perAgent": per_agent,
+    }
+
+
+def _percent(fraction: Any) -> float:
+    """A 0-1 fraction as a display percentage, rounded once, at this boundary.
+
+    ``quality_policy`` compares FRACTIONS (0.2 == the 1-in-5 target); every
+    analytics surface renders PERCENTAGES. Converting in exactly one helper is
+    what stops the two representations drifting apart across endpoints.
+    """
+    try:
+        return round(float(fraction or 0.0) * 100, 2)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+@router.get("/agent-policy/history")
+def agent_policy_history(current_user: CurrentUser, limit: int = 500) -> dict[str, Any]:
+    """Rigor tier over time, next to the metrics that forced it (U-AX item 2c).
+
+    Derived entirely from instrumentation that already exists —
+    ``AgentRun.policyTier`` + ``AgentRun.metricSnapshot``, both written by the
+    single enforcement seam (``routers/agents.py::_with_quality_policy``) at
+    the moment the run was authorised. So a point on this series is not a
+    reconstruction of what the policy WOULD have said; it is what the agent
+    actually obeyed.
+
+    Consecutive runs whose (tier, sample size, conversion rate) are unchanged
+    collapse into ONE point carrying a ``runs`` count. Thirty identical rows is
+    not a trend, and rendering them as one would make a genuinely flat period
+    look like activity.
+
+    Honest gaps: runs that recorded NO tier (everything predating the loop) are
+    excluded from the series and reported separately as ``runsWithoutPolicy``,
+    never back-filled with today's verdict.
+    """
+    from app.repositories.agent_run import AgentRunRepository
+    from app.services.quality_policy import (
+        DIMENSION_FLOOR,
+        INTERVIEW_CONVERSION_TARGET,
+        MIN_SAMPLE_SIZE,
+    )
+
+    rows, without_policy = AgentRunRepository().policy_tier_history(
+        current_user["id"], limit=max(1, min(limit, 2000))
+    )
+
+    points: list[dict[str, Any]] = []
+    previous_key: tuple[Any, ...] | None = None
+    for row in rows:
+        snapshot = row.get("metricSnapshot") or {}
+        metrics = snapshot.get("metrics") if isinstance(snapshot, dict) else None
+        metrics = metrics if isinstance(metrics, dict) else {}
+        dimension_scores = metrics.get("dimensionScores")
+        dimension_scores = dimension_scores if isinstance(dimension_scores, dict) else {}
+        below_floor = sorted(
+            key
+            for key, value in dimension_scores.items()
+            if isinstance(value, (int, float))
+            and not isinstance(value, bool)
+            and float(value) <= DIMENSION_FLOOR
+        )
+        tier = row.get("policyTier")
+        sample_size = int(metrics.get("sampleSize") or 0)
+        conversion = _percent(metrics.get("conversionRate"))
+        key = (tier, sample_size, conversion)
+        if key == previous_key and points:
+            points[-1]["runs"] += 1
+            continue
+        previous_key = key
+        points.append(
+            {
+                "at": row.get("createdAt"),
+                "tier": tier,
+                "runs": 1,
+                "conversionRate": conversion,
+                "sampleSize": sample_size,
+                "interviewCount": int(metrics.get("interviewCount") or 0),
+                "dimensionsBelowFloor": below_floor,
+                "dimensionsEvaluated": len(dimension_scores),
+                "triggers": (
+                    snapshot.get("triggers")
+                    if isinstance(snapshot, dict) and isinstance(snapshot.get("triggers"), list)
+                    else []
+                ),
+            }
+        )
+
+    return {
+        "available": bool(points),
+        "reason": (
+            None
+            if points
+            else "no agent run has recorded a rigor policy yet — the trend starts "
+            "with the first instrumented run"
+        ),
+        "runsWithoutPolicy": without_policy,
+        "thresholds": {
+            "interviewConversionTarget": _percent(INTERVIEW_CONVERSION_TARGET),
+            "dimensionFloor": DIMENSION_FLOOR,
+            "minSampleSize": MIN_SAMPLE_SIZE,
+        },
+        "points": points,
+    }
+
+
+#: Display labels for the cohort tiers. An unrecognised tier keeps its raw key
+#: rather than being relabelled into one of these — a tier this table does not
+#: know about is a fact, not a rendering problem to paper over.
+_COHORT_LABELS: dict[str, str] = {
+    "standard": "Standard rigor",
+    "heightened": "Heightened rigor",
+    "insufficient_data": "Insufficient data",
+}
+
+#: Stable display order; unknown tiers sort after these, alphabetically.
+_COHORT_ORDER: dict[str, int] = {"standard": 0, "heightened": 1, "insufficient_data": 2}
+
+
+@router.get("/agent-policy/cohorts")
+def agent_policy_cohorts(current_user: CurrentUser) -> dict[str, Any]:
+    """Interview-conversion progress per policy-tier cohort (U-AX item 3).
+
+    "Applications under each policy tier" — read from
+    ``Application.policyTierAtSubmission``, which submission-time
+    instrumentation has been writing since round 2 and nothing read until now.
+    This is the surface that turns the rigor loop from a claim into a
+    measurement: if heightened rigor works, its cohort converts better than the
+    standard one, and if it does not, that is visible too.
+
+    Honesty rules:
+
+    * Same counting semantics as ``quality_policy.collect_policy_metrics`` and
+      the conversion chart — DISTINCT jobs, submitted == "left draft",
+      interview reached == status ``interview`` or ``offer`` — so no two
+      surfaces can quote different denominators.
+    * A cohort below ``MIN_SAMPLE_SIZE`` reports ``conversionRate: null``. One
+      application that did not convert is not "0%"; it is one application, and
+      printing a rate there would invite exactly the wrong conclusion about the
+      tier that produced it.
+    * Applications submitted before the policy existed carry NULL and form
+      their own labelled bucket. Folding them into a real tier would credit (or
+      blame) a policy that was not running when they were sent.
+    """
+    from app.services.quality_policy import INTERVIEW_CONVERSION_TARGET, MIN_SAMPLE_SIZE
+
+    target = _percent(INTERVIEW_CONVERSION_TARGET)
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                '''
+                SELECT "policyTierAtSubmission" AS tier,
+                       COUNT(DISTINCT "jobId") FILTER (
+                           WHERE "status" <> 'draft'::"ApplicationStatus") AS submitted,
+                       COUNT(DISTINCT "jobId") FILTER (
+                           WHERE "status" IN ('interview'::"ApplicationStatus",
+                                              'offer'::"ApplicationStatus")
+                       ) AS interviewed
+                FROM "Application"
+                WHERE "userId" = %s
+                GROUP BY 1
+                ''',
+                (current_user["id"],),
+            )
+            rows = cur.fetchall()
+
+    cohorts: list[dict[str, Any]] = []
+    untagged = {"submitted": 0, "interviewed": 0}
+    for tier, submitted, interviewed in rows:
+        submitted = int(submitted or 0)
+        interviewed = int(interviewed or 0)
+        if tier is None:
+            untagged["submitted"] += submitted
+            untagged["interviewed"] += interviewed
+            continue
+        if submitted == 0:
+            # Drafts only — nothing was ever sent under this tier, so there is
+            # no outcome to report and a 0-denominator row would read as 0%.
+            continue
+        sufficient = submitted >= MIN_SAMPLE_SIZE
+        rate = round(interviewed / submitted * 100, 2) if sufficient else None
+        cohorts.append(
+            {
+                "tier": tier,
+                "label": _COHORT_LABELS.get(str(tier), str(tier)),
+                "submitted": submitted,
+                "interviewed": interviewed,
+                "conversionRate": rate,
+                "sufficientSample": sufficient,
+                "meetsTarget": (rate >= target) if rate is not None else None,
+                "gapPoints": round(max(0.0, target - rate), 2) if rate is not None else None,
+            }
+        )
+    cohorts.sort(key=lambda c: (_COHORT_ORDER.get(str(c["tier"]), 99), str(c["tier"])))
+
+    return {
+        "target": target,
+        "minSampleSize": MIN_SAMPLE_SIZE,
+        "cohorts": cohorts,
+        "untagged": {
+            **untagged,
+            "reason": (
+                "submitted before the rigor policy was instrumented — no tier was "
+                "recorded for these, so their outcome cannot be attributed to one"
+            ),
+        },
+    }
+
+
+# --------------------------------------------------------------------------
 # Real-Time Market Pulse (real DB-derived market intelligence)
 # --------------------------------------------------------------------------
 

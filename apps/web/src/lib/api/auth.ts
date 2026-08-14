@@ -136,3 +136,72 @@ export async function registerAccount(
   }
   return (await res.json()) as RegisterResult;
 }
+
+/**
+ * Result of POST /auth/forgot-password (O-4). ``ok`` is always true — the
+ * endpoint never reveals whether the email matched an account
+ * (anti-enumeration). ``emailSendingEnabled`` is the one honest signal: when
+ * false, no outbound-email provider is configured on the backend today, so
+ * no link was ever actually sent for ANY address.
+ *
+ * ``deliveryDegraded`` (MF-3): true when the provider IS configured but the
+ * most recent attempted send in this deployment actually failed (bad
+ * credentials, provider outage, unverified sending domain). A configured
+ * provider is not the same as a working one — the UI must not claim "we've
+ * sent a link" when the last real attempt failed.
+ */
+export interface ForgotPasswordResult {
+  ok: boolean;
+  emailSendingEnabled: boolean;
+  deliveryDegraded: boolean;
+}
+
+function toRateLimitError(res: Response): AuthApiError {
+  const retryAfterSeconds = parseRetryAfter(res);
+  const wait = retryAfterSeconds ? ` Try again in ${retryAfterSeconds}s.` : "";
+  return new AuthApiError(`Too many attempts. Please wait and try again.${wait}`, 429, retryAfterSeconds);
+}
+
+export async function forgotPassword(
+  email: string,
+  baseUrl: string = apiBaseUrl(),
+): Promise<ForgotPasswordResult> {
+  const res = await fetch(`${baseUrl}/auth/forgot-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+  if (!res.ok) {
+    if (res.status === 429) throw toRateLimitError(res);
+    if (res.status === 422) {
+      const detail = await extractDetail(res);
+      throw new AuthApiError(cleanValidationDetail(detail), 422);
+    }
+    throw new AuthApiError(`Request failed (${res.status}). Please try again.`, res.status);
+  }
+  return (await res.json()) as ForgotPasswordResult;
+}
+
+export async function resetPassword(
+  token: string,
+  password: string,
+  baseUrl: string = apiBaseUrl(),
+): Promise<void> {
+  const res = await fetch(`${baseUrl}/auth/reset-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token, password }),
+  });
+  if (!res.ok) {
+    if (res.status === 429) throw toRateLimitError(res);
+    if (res.status === 400) {
+      const detail = await extractDetail(res);
+      throw new AuthApiError(detail || "This reset link is invalid or has expired.", 400);
+    }
+    if (res.status === 422) {
+      const detail = await extractDetail(res);
+      throw new AuthApiError(cleanValidationDetail(detail), 422);
+    }
+    throw new AuthApiError(`Reset failed (${res.status}). Please try again.`, res.status);
+  }
+}

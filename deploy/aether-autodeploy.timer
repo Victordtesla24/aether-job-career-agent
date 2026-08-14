@@ -1,0 +1,11 @@
+# Fires aether-autodeploy.service every 5 minutes.
+# Install/disable instructions: see aether-autodeploy.service header.
+[Unit]
+Description=Poll origin/main and auto-deploy Aether every 5 minutes
+
+[Timer]
+OnCalendar=*:0/5
+Persistent=false
+
+[Install]
+WantedBy=timers.target

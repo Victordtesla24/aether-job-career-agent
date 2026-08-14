@@ -344,7 +344,7 @@ def test_real_request_body_carries_a_bounded_max_tokens(
     remaining credit could never cover. The body on the wire must now carry the
     per-call-class ceiling.
     """
-    from app.services.llm_client import LLMClient, _MAX_TOKENS_BY_CALL_CLASS
+    from app.services.llm_client import _MAX_TOKENS_BY_CALL_CLASS, LLMClient
 
     payloads = _record_payloads(monkeypatch, lambda _p: _ok('{"entailed": true}'))
     LLMClient(mode="auto", fixture_dir=tmp_path).complete(

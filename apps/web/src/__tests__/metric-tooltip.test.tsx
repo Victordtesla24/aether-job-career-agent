@@ -9,7 +9,7 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
-import MetricTooltip from "../components/MetricTooltip";
+import MetricTooltip, { computeFlip, computeHorizontalShift } from "../components/MetricTooltip";
 
 afterEach(() => {
   cleanup();
@@ -81,5 +81,47 @@ describe("MetricTooltip", () => {
     fireEvent.keyDown(trigger, { key: "Escape" });
     expect(tooltip.className).toMatch(/opacity-0/);
     expect(document.activeElement).toBe(trigger);
+  });
+});
+
+// U-UI TOOLTIP-CLIP-BOTTOM-01: the "Applied→Screened" stage-conversion tile
+// opened its popover 8px below the trigger unconditionally; near the bottom
+// of the viewport that clipped the popover's bottom edge (measured 7.6px
+// past a 900px-tall viewport, live audit dashboard_analytics tooltip-10).
+describe("computeFlip (U-UI TOOLTIP-CLIP-BOTTOM-01)", () => {
+  it("flips above when the popover would clip the viewport bottom", () => {
+    // Live audit geometry: trigger bottom-ish at y=828 (rect.bottom ~820),
+    // popover height ~79.6, viewport 900 tall -> 820+8+79.6+8 > 900.
+    expect(computeFlip(820, 79.6, 900)).toBe(true);
+  });
+
+  it("stays below when there is enough room", () => {
+    expect(computeFlip(200, 80, 900)).toBe(false);
+  });
+
+  it("is exactly on the boundary — fits with no margin left over stays below", () => {
+    // trigger.bottom(100) + gap(8) + height(50) + margin(8) === viewport(166)
+    expect(computeFlip(100, 50, 166)).toBe(false);
+    expect(computeFlip(100, 50, 165)).toBe(true);
+  });
+});
+
+describe("computeHorizontalShift (U-UI TOOLTIP-CLIP-BOTTOM-01 — horizontal bounds)", () => {
+  it("shifts right when centring the popover would push it off the left edge", () => {
+    // A trigger near x=10 centring a 224px popover would put its left edge
+    // at 10-112=-102 — well past the viewport's left edge.
+    const shift = computeHorizontalShift(10, 224, 1440);
+    expect(shift).toBeGreaterThan(0);
+    expect(10 - 224 / 2 + shift).toBeGreaterThanOrEqual(8);
+  });
+
+  it("shifts left when centring the popover would push it off the right edge", () => {
+    const shift = computeHorizontalShift(1430, 224, 1440);
+    expect(shift).toBeLessThan(0);
+    expect(1430 + 224 / 2 + shift).toBeLessThanOrEqual(1440 - 8);
+  });
+
+  it("applies no shift when the popover comfortably fits centred", () => {
+    expect(computeHorizontalShift(720, 224, 1440)).toBe(0);
   });
 });

@@ -45,6 +45,12 @@ import {
 } from "../../../lib/api/jobAlerts";
 import { coverLetterDegraded } from "../../../components/dashboard/feed";
 import Orchestration from "../../../components/agents/Orchestration";
+import OrchestrationMap from "../../../components/agents/OrchestrationMap";
+import RunPolicyInputs from "../../../components/agents/RunPolicyInputs";
+import {
+  fetchOrchestrationMap,
+  type OrchestrationMapData,
+} from "../../../lib/api/agentPolicy";
 import { useRealtimeResources } from "../../../hooks/useRealtime";
 import ProviderConnections from "../../../components/agents/ProviderConnections";
 import ModelPicker from "../../../components/agents/ModelPicker";
@@ -175,6 +181,10 @@ export default function AgentsPage() {
   // proxy) — `null` before the first read resolves, so the banner stays
   // hidden rather than flashing "unavailable" during initial load.
   const [credits, setCredits] = useState<OpenRouterCredits | null>(null);
+  // U-AX item 5: all 22 catalog agents in their defined workflow map(s),
+  // honest real-vs-planned status. Loaded independently so its own failure
+  // never blanks the rest of the console.
+  const [orchestrationMap, setOrchestrationMap] = useState<OrchestrationMapData | null>(null);
   const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const runStartedAt = useRef<number>(0);
 
@@ -199,6 +209,24 @@ export default function AgentsPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // U-AX item 5: independent load (its own failure must not blank the agent
+  // catalog above) — not part of `load()`/polling since the map itself only
+  // changes on a new run, not every 3s tick.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const map = await fetchOrchestrationMap();
+        if (!cancelled) setOrchestrationMap(map);
+      } catch {
+        if (!cancelled) setOrchestrationMap(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // F-01 (ADR-F01-PROVIDER-CREDENTIAL-AUTHZ). GET /agents/providers exposes the
   // OPERATOR's deployment-wide credential state (source, last-4 secretHint,
@@ -485,7 +513,17 @@ export default function AgentsPage() {
     startPolling("agent");
     try {
       const params = scoutParams ?? (await resolveParams(backend));
-      const output = await runAgent(AGENT_ROUTE[backend] ?? backend, params);
+      // MON-020: a scout pass really takes minutes (production discovery-cron
+      // measurement: 255-473s typical, 968s worst case) while Cloudflare aborts
+      // the request at ~100s. Run it through the endpoint's background mode —
+      // `runAgent` still awaits the real terminal result via `resolveRun`, so
+      // the success/failure notice below means exactly what it did before.
+      const output = await runAgent(
+        AGENT_ROUTE[backend] ?? backend,
+        params,
+        {},
+        { background: backend === "scout" },
+      );
       setNotice(missingResumeNotice(output) ?? agentSuccessNotice(backend, output));
     } catch (e) {
       setNotice(runErrorNotice(e, backend));
@@ -916,6 +954,26 @@ export default function AgentsPage() {
 
       <Orchestration agents={agents} runs={runs} />
 
+      {/* U-AX item 5: the defined end-to-end workflow map(s) — every catalog
+          agent, honest real-vs-planned status, stage role, metrics consumed,
+          threshold responsibilities, last-run tier + trend. DISTINCT from the
+          task-queue/performance widget above. */}
+      {orchestrationMap ? (
+        <section className="space-y-3">
+          <div>
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-aether-muted-dim">
+              Agent Orchestration — Workflow Maps
+            </h2>
+            <p className="mt-0.5 text-xs text-aether-muted-dim">
+              Every agent in the catalog, placed in the workflow it actually plays a part in —
+              real agents show what they consume and improve on; planned agents are labelled
+              roadmap stages, never shown as running.
+            </p>
+          </div>
+          <OrchestrationMap data={orchestrationMap} />
+        </section>
+      ) : null}
+
       <section className="space-y-3">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-aether-muted-dim">
           Recent runs
@@ -933,6 +991,11 @@ export default function AgentsPage() {
                   <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3">Started</th>
                   <th className="px-4 py-3">Error</th>
+                  {/* U-AX item 2(b)/5: per-run "policy inputs consumed" — the
+                      metric snapshot the agent sourced and the resulting
+                      rigor level, honest "not recorded" for pre-instrumentation
+                      runs. */}
+                  <th className="px-4 py-3">Policy</th>
                 </tr>
               </thead>
               <tbody>
@@ -981,6 +1044,9 @@ export default function AgentsPage() {
                     </td>
                     <td className="px-4 py-2.5 text-xs text-aether-muted-dim">
                       {humanizeActivityMessage(run.error) || "—"}
+                    </td>
+                    <td className="max-w-[220px] px-4 py-2.5">
+                      <RunPolicyInputs run={run} />
                     </td>
                   </tr>
                 ))}

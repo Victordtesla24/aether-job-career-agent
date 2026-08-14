@@ -927,6 +927,10 @@ def _record_run(
     # Entitlement gate FIRST (GAP-P6-PAYWALL): no active paid subscription -> an
     # honest 402 before any audit row, quota reserve, or LLM call.
     _require_active_subscription(user_id, agent_name=agent_name, system_run=system_run)
+    # U-AX: idempotent — ``_dispatch`` has normally stamped the policy already;
+    # this covers the direct ``_record_run`` callers (the pipeline's supervisor
+    # and matcher nodes) so EVERY AgentRun row carries the tier it ran under.
+    params = _with_quality_policy(user_id, params)
     runs = AgentRunRepository()
     audit, provider = _billing_audit(user_id, agent_name)
     if system_run or skip_quota:
@@ -1913,14 +1917,22 @@ def _agent_callable(
         from app.agents.tailor_agent import TailoringAgent
 
         job_id = _require_job_id(params)
+        # U-AX: the resolved rigor tier's knobs (iteration ceiling + ATS
+        # target). ``{}`` keeps the agent's shipped defaults verbatim.
+        knobs = _policy_knobs(params)
         return "tailor", (
-            lambda: TailoringAgent().run(user_id, job_id, params.get("resume_id"))
+            lambda: TailoringAgent().run(
+                user_id, job_id, params.get("resume_id"), policy_knobs=knobs
+            )
         )
     if name in ("coverLetter", "cover-letter"):
         from app.agents.cover_letter_agent import CoverLetterAgent
 
         job_id = _require_job_id(params)
-        return "coverLetter", (lambda: CoverLetterAgent().run(user_id, job_id))
+        knobs = _policy_knobs(params)
+        return "coverLetter", (
+            lambda: CoverLetterAgent().run(user_id, job_id, policy_knobs=knobs)
+        )
     if name in ("storyExtractor", "story-extractor"):
         from app.agents.story_extractor import StoryExtractorAgent
 
@@ -2082,6 +2094,55 @@ _RUNNABLE_BACKENDS = frozenset(
 )
 
 
+def _with_quality_policy(user_id: str, params: dict[str, Any]) -> dict[str, Any]:
+    """The SINGLE rigor-policy enforcement seam (U-AX build spec items 2-3).
+
+    Resolves this user's deterministic rigor tier once and merges it into the
+    run's own params as ``qualityPolicy``. Placing it here — upstream of
+    ``_agent_callable`` (which reads ``qualityPolicy.knobs`` to configure the
+    tailor loop / cover-letter retries) and upstream of
+    ``AgentRunRepository.start`` (which persists ``policyTier`` +
+    ``metricSnapshot`` off the same dict) — is what guarantees the tier the
+    agent OBEYED and the tier the run card DISPLAYS are the same object, not
+    two independent computations that could disagree.
+
+    Idempotent: an already-stamped params dict (async worker replaying a stored
+    payload, or ``_dispatch`` handing off to ``_record_run``) is returned
+    unchanged, so the policy is resolved exactly once per run.
+
+    Never raises: a policy-resolution failure must not take down an agent run.
+    ``resolve_policy_for_user`` already fails closed to an honest
+    ``insufficient_data`` verdict with a stated reason; this guard covers the
+    residual (import/programming) case by leaving params untouched, which
+    persists NULL columns — "no policy recorded" — rather than a fabricated
+    tier.
+    """
+    if isinstance(params.get("qualityPolicy"), dict):
+        return params
+    try:
+        from app.services.quality_policy import resolve_policy_for_user
+
+        policy = resolve_policy_for_user(user_id)
+    except Exception:  # noqa: BLE001
+        logger.warning("rigor policy unresolved for user %s", user_id, exc_info=True)
+        return params
+    return {**params, "qualityPolicy": policy}
+
+
+def _policy_knobs(params: dict[str, Any]) -> dict[str, Any]:
+    """The pipeline knobs for this run, or ``{}`` when no policy was resolved.
+
+    ``{}`` means "use the callee's shipped defaults" — the exact behaviour that
+    shipped before U-AX, so an unresolved policy degrades to today's product
+    rather than to a weaker one.
+    """
+    policy = params.get("qualityPolicy")
+    if not isinstance(policy, dict):
+        return {}
+    knobs = policy.get("knobs")
+    return knobs if isinstance(knobs, dict) else {}
+
+
 def _dispatch(
     user_id: str, name: str, params: dict[str, Any], *, system_run: bool = False,
     skip_quota: bool = False,
@@ -2094,6 +2155,9 @@ def _dispatch(
     ``skip_quota`` is threaded to ``_record_run`` so automated system operations
     (e.g. the board sweep) bypass the user's paid plan-quota reserve/spend-cap
     gates while still keeping the cooldown block and an honest audit trail."""
+    # U-AX: resolve the rigor tier BEFORE binding the callable, so the agent
+    # receives the knobs and the AgentRun row records the very same policy.
+    params = _with_quality_policy(user_id, params)
     canonical, fn = _agent_callable(user_id, name, params)
     return _record_run(
         user_id, canonical, params, fn,
@@ -2194,7 +2258,12 @@ def _enqueue_to_arq(job_id: str) -> str | None:
 
 
 def _enqueue_single_agent(
-    user_id: str, agent_key: str, params: dict[str, Any], *, system_run: bool = False
+    user_id: str,
+    agent_key: str,
+    params: dict[str, Any],
+    *,
+    system_run: bool = False,
+    singleton: bool = False,
 ) -> str:
     """Enqueue a metered single-agent run (tailor / coverLetter), blueprint §3.2.
 
@@ -2205,12 +2274,31 @@ def _enqueue_single_agent(
     (never a silent success, never a silent sync fallthrough).
 
     ``system_run`` (ADR-P7-05) is honored for the paywall check exactly as the
-    sync path — but ONLY for ``_SYSTEM_RUN_EXEMPT_AGENTS`` (scout, fitScorer),
-    which are NOT enqueued here, so a metered agent with a valid secret still
-    hits the paywall (402). Threaded for parity + defense in depth."""
+    sync path — but ONLY for ``_SYSTEM_RUN_EXEMPT_AGENTS``, so a metered agent
+    with a valid secret still hits the paywall (402).
+
+    ``scout`` reaches this seam too since MON-020 (``/scout/run?background=true``).
+    It is not in :data:`_LLM_TIER_BY_BACKEND`, so ``_call_is_metered`` returns
+    False for it and no quota is reserved or refunded — identical to what the
+    synchronous ``_record_run`` path already does for scout. Nothing about the
+    metering, paywall or cooldown decision changes with the transport.
+
+    ``singleton`` (MON-020 round-2) makes the enqueue IDEMPOTENT for agents of
+    which one run per user is the whole unit of work: if a run is already in
+    flight, its job id comes back and nothing new is created or queued. It is a
+    SERVER-side guard on purpose — the browser's ``disabled`` flag is per
+    component, so it cannot cover a second tab, the three separate buttons that
+    reach this endpoint, or a direct POST. Deliberately 202-with-the-existing-id
+    rather than 409: the caller's intent ("make sure discovery is running") is
+    already satisfied, and the frontend polls the returned id either way."""
     # 1) Paywall FIRST (honest 402 before any row/reserve/enqueue) — scoped
     #    system-run exemption applies identically to the sync path.
     _require_active_subscription(user_id, agent_name=agent_key, system_run=system_run)
+    # U-AX: stamp the rigor policy onto the params BEFORE they are persisted to
+    # both the AgentRun row and the BackgroundJob payload, so the ARQ worker
+    # replays the exact policy this enqueue resolved (never a fresh one that
+    # could differ by the time the job is picked up).
+    params = _with_quality_policy(user_id, params)
     runs = AgentRunRepository()
     audit, provider = _billing_audit(user_id, agent_key)
     if system_run:
@@ -2227,6 +2315,22 @@ def _enqueue_single_agent(
             # upstream costs the user nothing; a real quota row keeps its 429.
             _raise_if_llm_circuit_open(provider, block)
             raise _quota_429(provider, block.get("expiresAt"))
+    repo = BackgroundJobRepository()
+    # 2b) Duplicate-run guard, part one (MON-020): hand back the run that is
+    #     already in flight instead of starting a second one. The lookup is
+    #     cheap and covers every ordinary double-submit; the same-millisecond
+    #     race is closed at the DB in step 4 (``create_singleton``), so this
+    #     read is an optimisation and a stale-job RELEASE, never the guarantee.
+    #     Applying the same lazy watchdog ``GET /agents/jobs/{id}`` applies is
+    #     what keeps a dead worker from locking the user out of syncing: a job
+    #     past the staleness window is failed (honestly, with its refund) here
+    #     and the new run proceeds.
+    if singleton:
+        active = repo.find_active(user_id, agent_key)
+        if active is not None:
+            active = _apply_stale_watchdog(active, repo)
+            if active.get("status") in ("enqueued", "processing"):
+                return str(active["id"])
     # 3) Atomic reserve AT ENQUEUE (metered calls only — ``_call_is_metered``
     #    keeps this seam in step with the sync path for opt-in-LLM backends).
     metered = _call_is_metered(agent_key, params)
@@ -2241,13 +2345,30 @@ def _enqueue_single_agent(
             raise _plan_quota_429("spend_cap_exceeded", reserved)
         reserved_flag = True
     # 4) AgentRun audit row + BackgroundJob row.
-    run = runs.start(user_id, agent_key, params)
-    _persist_billing_audit(runs, run["id"], audit)
-    repo = BackgroundJobRepository()
-    job_id = repo.create(
-        user_id, agent_key, run_id=run["id"], params=params,
-        quota_reserved=reserved_flag,
-    )
+    if singleton:
+        # Duplicate-run guard, part two: the job row is claimed FIRST, because
+        # that insert (advisory-locked + backed by the partial unique index) is
+        # the atomic claim. Only the winner then writes the AgentRun audit row,
+        # so a lost race leaves no orphan "running" run in the user's history.
+        job_id, created = repo.create_singleton(
+            user_id, agent_key, params=params, quota_reserved=reserved_flag
+        )
+        if not created:
+            # Another request claimed it between step 2b and here. We never ran
+            # anything, so anything we reserved goes straight back.
+            if reserved_flag and quota_repo is not None:
+                quota_repo.refund_run(user_id)
+            return job_id
+        run = runs.start(user_id, agent_key, params)
+        _persist_billing_audit(runs, run["id"], audit)
+        repo.set_run_id(job_id, run["id"])
+    else:
+        run = runs.start(user_id, agent_key, params)
+        _persist_billing_audit(runs, run["id"], audit)
+        job_id = repo.create(
+            user_id, agent_key, run_id=run["id"], params=params,
+            quota_reserved=reserved_flag,
+        )
     # 5) Enqueue; compensate on failure (refund + fail + honest 503).
     try:
         arq_job_id = _enqueue_to_arq(job_id)
@@ -2294,13 +2415,36 @@ def _enqueue_pipeline(
 def _job_stale_thresholds() -> tuple[int, int]:
     """(enqueued_secs, processing_secs) staleness windows (blueprint §7.4).
 
-    enqueued stale > 15 min; processing stale > 12 min. Tunable via
-    ``AETHER_JOB_STALE_SECONDS`` (the enqueued window; processing = that − 180)."""
+    ``enqueued`` stale > 15 min, tunable via ``AETHER_JOB_STALE_SECONDS``: how
+    long a job may sit unclaimed before we conclude no worker will claim it.
+
+    ``processing`` is a DIFFERENT question — "has the worker died mid-run?" —
+    so it is derived from the worker's own per-job execution ceiling
+    (:func:`app.workers.queue.job_timeout_seconds`) plus a 120s settling margin,
+    and overridable with ``AETHER_JOB_PROCESSING_STALE_SECONDS`` (MON-020).
+
+    It used to be ``enqueued − 180``, which only accidentally sat above the ARQ
+    ceiling. Now that background discovery runs share this queue (measured
+    255-473s typical, 968s worst case) the two numbers must not drift apart: a
+    processing window BELOW the ceiling makes the lazy watchdog mark a run
+    "generation timed out (worker unavailable)" — and refund it — while the
+    worker is still legitimately executing it, i.e. a fabricated failure on a
+    run that then completes. Deriving it from the ceiling makes that
+    structurally impossible rather than merely unlikely."""
+    from app.workers.queue import job_timeout_seconds
+
     try:
         enq = int(os.environ.get("AETHER_JOB_STALE_SECONDS", "900"))
     except ValueError:
         enq = 900
-    return enq, max(60, enq - 180)
+    default_proc = job_timeout_seconds() + 120
+    try:
+        proc = int(
+            os.environ.get("AETHER_JOB_PROCESSING_STALE_SECONDS", str(default_proc))
+        )
+    except ValueError:
+        proc = default_proc
+    return enq, max(60, proc)
 
 
 def _job_age_seconds(anchor: Any) -> float:
@@ -2573,12 +2717,97 @@ class ScoutRunRequest(BaseModel):
     location: str | None = Field(default=None, min_length=1)
 
 
+def _guard_scout_cooldown(user_id: str, request: Request, system_run: bool) -> None:
+    """Per-user manual-Sync cooldown (S-FIX-A / S-7).
+
+    Scout is deterministic and unmetered, so it is exempt from the plan-quota
+    and spend-cap machinery entirely — before this, nothing at all slowed a
+    user clicking Sync repeatedly, and every uncached run spends from the ONE
+    shared Adzuna daily budget (250 calls/day for the whole deployment). The
+    limiter lives on ``app.state`` (see ``app.main.create_app``) so each app —
+    and each test — owns isolated counters.
+
+    SCHEDULED runs are exempt: the platform's own sweep is already paced, and
+    counting it would let the automation lock a user out of their own button.
+    The refusal is an honest 429 naming the wait and the automatic fallback —
+    never a silent no-op or a fabricated "no new jobs".
+    """
+    if system_run:
+        return
+    limiter = getattr(request.app.state, "scout_rate_limiter", None)
+    if limiter is None:  # app built without the limiter (older test harness)
+        return
+    if limiter.allow(user_id):
+        return
+    retry_after = limiter.retry_after(user_id)
+    minutes = max(1, round(retry_after / 60))
+    raise HTTPException(
+        status.HTTP_429_TOO_MANY_REQUESTS,
+        detail={
+            "error": "scout_cooldown",
+            "message": (
+                f"Sync is cooling down — {limiter.max_calls} manual refreshes in "
+                f"{int(limiter.window_seconds // 60)} minutes is the cap. "
+                f"Try again in about {minutes} minute{'s' if minutes != 1 else ''}; "
+                "scheduled discovery keeps running for you in the background."
+            ),
+            "retryAfterSeconds": retry_after,
+            "limit": limiter.max_calls,
+            "windowSeconds": int(limiter.window_seconds),
+        },
+        headers={"Retry-After": str(retry_after)},
+    )
+
+
 @router.post("/scout/run", status_code=status.HTTP_202_ACCEPTED)
 def run_scout(
-    body: ScoutRunRequest, current_user: CurrentUser, request: Request
+    body: ScoutRunRequest,
+    current_user: CurrentUser,
+    request: Request,
+    background: bool = Query(
+        default=False,
+        description=(
+            "Enqueue the discovery pass onto the background worker and return "
+            "a job id to poll at GET /agents/jobs/{job_id}, instead of running "
+            "the whole pass inside this request."
+        ),
+    ),
 ) -> dict[str, Any]:
-    """Kick off a scout discovery run for the authenticated user."""
+    """Kick off a scout discovery run for the authenticated user.
+
+    TWO modes, and the DEFAULT is deliberately the synchronous one:
+
+    * ``background=false`` (default) — the pass runs in-request and the response
+      carries its real counts. ``scripts/discovery_cron.sh`` depends on exactly
+      this: it POSTs here and then immediately POSTs ``/agents/fit-scorer/run``
+      to score whatever landed, so scout MUST have finished first. Flipping the
+      default would silently break scheduled discovery for every user. The cron
+      calls 127.0.0.1 directly with no proxy in front of it and no client
+      timeout, so a multi-minute run is perfectly fine there.
+
+    * ``background=true`` (MON-020) — the pass is enqueued onto the SAME ARQ
+      ``run_agent_job`` machinery every other long-running agent already uses,
+      and the caller immediately gets ``{"status": "enqueued", "job_id"}`` to
+      poll at ``GET /agents/jobs/{job_id}``. This is what the browser uses (the
+      Jobs screen's Sync button, Settings' "Sync All Job Boards"): those calls
+      cross Cloudflare, which aborts a request at ~100s and answers with its own
+      HTML error page, while a real pass measures 255-473s (968s worst case).
+      Background mode is IDEMPOTENT per user: a POST while a pass is already
+      enqueued/processing returns that pass's ``job_id`` instead of starting a
+      second one (a second pass would search the same boards for the same user,
+      double the upstream calls and race its own upserts). The guard lives on
+      the server because the three buttons that call this — Jobs "Sync Now",
+      Settings' "Sync All Job Boards", the Agents console — each only know
+      their own component's disabled flag.
+
+    Both modes resolve the search target FIRST (F-02), so the AgentRun audit row
+    — and, in background mode, the queued job's params — record the search that
+    ACTUALLY runs: the caller's own profile values when the body omitted them,
+    never two nulls and never a borrowed persona. Both modes go through the same
+    entitlement/cooldown gates; background mode adds no bypass.
+    """
     user_id = current_user["id"]
+    _guard_scout_cooldown(user_id, request, _is_system_run(request))
     # F-02: resolve BEFORE dispatch (same as ``run_pipeline``) so the AgentRun
     # audit row records the search that ACTUALLY ran — the caller's own profile
     # values when the body omitted them — rather than the two nulls it was sent.
@@ -2586,9 +2815,23 @@ def run_scout(
     # second DB read, and refuses identically if this route is bypassed.
     params = body.model_dump()
     params["query"], params["location"] = _resolve_scout_target(user_id, params)
+    system_run = _is_system_run(request)
+    if background:
+        # A queue outage raises an honest 503 from ``_enqueue_single_agent``.
+        # There is deliberately NO fallback to the synchronous path: silently
+        # falling back would reintroduce the very 100s proxy timeout this mode
+        # exists to escape, and would look to the caller like a slow success.
+        #
+        # ``singleton=True``: a user gets ONE discovery pass at a time. A second
+        # POST while one is running is answered with THAT run's job id — same
+        # 202 envelope, no second pass, no second set of upstream board calls.
+        job_id = _enqueue_single_agent(
+            user_id, "scout", params, system_run=system_run, singleton=True
+        )
+        return {"status": "enqueued", "job_id": job_id}
     output = _dispatch(
         user_id, "scout", params,
-        system_run=_is_system_run(request),
+        system_run=system_run,
     )
     return {
         "status": "accepted",
@@ -2646,6 +2889,160 @@ def run_fit_scorer(
         except Exception:  # noqa: BLE001 — best-effort; cron still fires
             pass
     return {"status": "completed", "scored": output["scored"], "errors": output["errors"]}
+
+
+def _positive_int_env(name: str, default: int) -> int:
+    """Positive int from the environment; malformed/non-positive -> ``default``.
+
+    Non-positive falls back deliberately: a 0 cap would silently disable the
+    sweep (and a 0 budget the guard), which is exactly the silent-no-op failure
+    these bounds exist to prevent.
+    """
+    try:
+        value = int(os.environ.get(name, default))
+    except (TypeError, ValueError):
+        return default
+    return value if value > 0 else default
+
+
+def _sweep_eligible_users(limit: int) -> list[dict[str, str]]:
+    """Every subscriber the scheduled sweep must serve (S-FIX-A / S-1).
+
+    "Must serve" = has a usable search target (a non-empty ``targetRole`` — a
+    run without one is refused by ``_resolve_scout_target`` rather than
+    completed with somebody else's persona), is not suspended, and — while the
+    subscription gate is ON — holds an ENTITLED PAID subscription by exactly
+    the same definition the paywall uses (``SubscriptionRepository``'s
+    ``_ENTITLED_STATUSES`` + ``planId != 'free'``). When the operator turns the
+    gate off (freemium), entitlement is not a filter, mirroring
+    ``_require_active_subscription``.
+
+    Oldest accounts first, bounded by ``limit``, so the sweep is deterministic
+    and its external-API cost is predictable.
+    """
+    from app.repositories.billing import _ensure_billing_tables
+
+    ensure_user_profile_columns()
+    _ensure_billing_tables()
+    entitled_clause = ""
+    params: tuple[Any, ...] = (limit,)
+    if subscription_gate_enabled():
+        statuses = SubscriptionRepository._ENTITLED_STATUSES
+        entitled_clause = (
+            ' AND EXISTS (SELECT 1 FROM "Subscription" s WHERE s."userId" = u."id"'
+            ' AND s."status" = ANY(%s) AND s."planId" <> \'free\')'
+        )
+        params = (list(statuses), limit)
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT u."id", u."email" FROM "User" u'
+                ' WHERE btrim(COALESCE(u."targetRole", \'\')) <> \'\''
+                ' AND COALESCE(u."suspended", false) = false'
+                f"{entitled_clause}"
+                ' ORDER BY u."createdAt" ASC LIMIT %s',
+                params,
+            )
+            return rows_to_dicts(cur)
+
+
+@router.post("/discovery/sweep")
+def run_discovery_sweep(request: Request) -> dict[str, Any]:
+    """Scheduled discovery for EVERY entitled subscriber (S-FIX-A / S-1).
+
+    THE GAP THIS CLOSES: the only automatic discovery path was
+    ``scripts/discovery_cron.sh``, which logs in as ONE hardcoded account and
+    runs scout + fit-scorer for that user alone. Every other paying subscriber
+    got zero automatic job discovery — their board only moved when they clicked
+    Sync. For a job-search product that is the core value, so it cannot depend
+    on the customer remembering to press a button.
+
+    Authenticated by the ``X-Aether-System-Run`` shared secret ALONE (no user
+    session — the platform has no password for its subscribers, and inventing
+    one would be far worse than a scoped secret). The secret is compared in
+    constant time by ``_is_system_run``; when ``AETHER_SYSTEM_RUN_SECRET`` is
+    unset the endpoint is unreachable (401) rather than open.
+
+    Each user's runs go through the SAME ``_dispatch`` as their own manual run,
+    with ``system_run=True`` — so the scoped paywall exemption for scout /
+    fit-scorer applies exactly as it already does for the cron, and every other
+    guard (quota reserve, spend cap, AgentRun audit row) is untouched. Runs are
+    SPACED (``AETHER_DISCOVERY_SWEEP_SPACING_SECONDS``) and bounded
+    (``AETHER_DISCOVERY_SWEEP_USER_CAP``) so N subscribers cannot burst the
+    shared Adzuna budget or the 25-connection database ceiling; the adapter's
+    own cache + daily-budget guard is the second line.
+
+    One user's failure is reported against THAT user and never aborts the rest,
+    and the response carries the live Adzuna budget so the operator can see
+    exactly how much of the day's quota the sweep consumed.
+    """
+    if not _is_system_run(request):
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED,
+            detail={
+                "error": "system_run_required",
+                "message": (
+                    "The scheduled discovery sweep requires a valid "
+                    "X-Aether-System-Run secret."
+                ),
+            },
+        )
+    cap = _positive_int_env("AETHER_DISCOVERY_SWEEP_USER_CAP", 25)
+    spacing = max(
+        0.0, float(os.environ.get("AETHER_DISCOVERY_SWEEP_SPACING_SECONDS", "5") or 5)
+    )
+    users = _sweep_eligible_users(cap)
+    rows: list[dict[str, Any]] = []
+    for index, user in enumerate(users):
+        user_id = str(user["id"])
+        row: dict[str, Any] = {
+            "userId": user_id, "email": user.get("email"), "status": "ok",
+            "persisted": 0, "updated": 0, "scored": 0, "error": None,
+        }
+        try:
+            query, location = _resolve_scout_target(user_id, {})
+            scout = _dispatch(
+                user_id, "scout", {"query": query, "location": location},
+                system_run=True,
+            )
+            row["persisted"] = int(scout.get("persisted") or 0)
+            row["updated"] = int(scout.get("updated") or 0)
+            row["perSource"] = scout.get("per_source", [])
+            scored = _dispatch(user_id, "fitScorer", {"rescore": False}, system_run=True)
+            row["scored"] = int(scored.get("scored") or 0)
+            # Parity with POST /agents/fit-scorer/run (RT-008): newly scored
+            # jobs are exactly the board work the sweep consumes, so nudge it
+            # now instead of waiting up to 10 minutes for the ARQ cron.
+            # Best-effort — an enqueue hiccup must not taint an honest run.
+            if row["scored"] > 0:
+                try:
+                    from app.workers.board_sweep import enqueue_user_sweep
+
+                    enqueue_user_sweep(user_id)
+                except Exception:  # noqa: BLE001 — cron remains the floor
+                    pass
+        except Exception as exc:  # noqa: BLE001 — report, never abort the sweep
+            row["status"] = "error"
+            row["error"] = f"{type(exc).__name__}: {exc}"
+            logger.warning("discovery-sweep: user %s failed: %s", user_id, row["error"])
+        rows.append(row)
+        # Space the runs so N users do not burst the shared external API budget
+        # or the database connection ceiling. Never sleeps after the last user.
+        if spacing and index < len(users) - 1:
+            time.sleep(spacing)
+    from app.services.discovery.adzuna_adapter import budget_snapshot
+
+    logger.info(
+        "discovery-sweep: %d users swept (%d errors)",
+        len(rows), sum(1 for r in rows if r["status"] == "error"),
+    )
+    return {
+        "status": "completed",
+        "sweptUsers": len(rows),
+        "userCap": cap,
+        "users": rows,
+        "adzunaBudget": budget_snapshot(),
+    }
 
 
 @router.post("/board-sweep/trigger", status_code=status.HTTP_202_ACCEPTED)
@@ -3233,6 +3630,307 @@ def _latest_failure_is_hard(runs: list[dict[str, Any]] | None) -> bool:
         return False
     chronic = len(runs) >= 3 and all(r["status"] == "failed" for r in runs[:3])
     return chronic or not _is_transient_failure(latest)
+
+
+# ---------------------------------------------------------------------------
+# Agent orchestration maps (U-AX build spec item 5) — the end-to-end workflow
+# every catalog agent occupies, with its real/planned status, the metrics it
+# consumes, the thresholds it is answerable for, and its measured trend.
+# ---------------------------------------------------------------------------
+
+#: THREE maps rather than one dense graph, exercising the architect's explicit
+#: decomposition freedom (U-PLAN.md item 5, "one or MULTIPLE workflow maps
+#: allowed — the constraint is the END RESULT"): the application pipeline is
+#: the linear path an application actually travels; the learning loop is a
+#: CYCLE over that pipeline's outcomes (drawing it as another pipeline stage
+#: would misrepresent it as a step rather than a feedback loop); and the
+#: enrichment map is a fan-out of context providers that no single application
+#: stage owns. Rendering them separately is what makes each one readable.
+#:
+#: ``(mapKey, mapName, mapSubtitle, [(stage, [agentKey, ...]), ...])``.
+_ORCHESTRATION_MAPS: tuple[tuple[str, str, str, tuple[tuple[str, tuple[str, ...]], ...]], ...] = (
+    (
+        "application-pipeline",
+        "Application Pipeline",
+        "The path one job posting travels from discovery to a tracked application.",
+        (
+            ("Discovery", ("jobDiscovery",)),
+            ("Fit Scoring", ("matchScoring", "atsOptimization", "skillGap", "jobMatching")),
+            ("Tailoring", ("resumeTailoring",)),
+            ("Cover Letter", ("coverLetter",)),
+            ("Quality Gates", ("compliance",)),
+            ("Submission", ("submission", "emailAgent")),
+            ("Tracking", ("notification", "scheduling")),
+        ),
+    ),
+    (
+        "learning-loop",
+        "Learning Loop",
+        "The cycle that reads the pipeline's real outcomes and re-tunes how hard "
+        "the agents try on the next run.",
+        (
+            ("Orchestration", ("orchestration",)),
+            ("Signal Capture", ("storyExtraction", "sentimentAnalysis")),
+            ("Learning", ("learningFeedback",)),
+        ),
+    ),
+    (
+        "enrichment",
+        "Context & Enrichment",
+        "Evidence and market context the pipeline draws on — none of these "
+        "advance an application on their own.",
+        (
+            ("Market Intelligence", ("marketTrends", "salaryIntelligence")),
+            ("Employer Research", ("companyResearch",)),
+            ("Outreach", ("recruiterOutreach", "reference")),
+            ("Interview Readiness", ("interviewPrep",)),
+        ),
+    ),
+)
+
+#: Per-agent metric/threshold visibility. Keys are catalog keys; an agent
+#: absent from this table reports EMPTY lists — honest ("nothing recorded")
+#: rather than a generic filler sentence that would read as a real
+#: responsibility. Thresholds name only the two the product actually measures
+#: (the >80% 10-dimension floor and the 1-in-5 interview conversion target,
+#: U2c/U5 ENRICHMENT MANDATE item 2).
+_AGENT_METRIC_VISIBILITY: dict[str, dict[str, tuple[str, ...]]] = {
+    "jobDiscovery": {
+        "metrics": ("jobs discovered per run", "source availability"),
+        "thresholds": (),
+    },
+    "matchScoring": {
+        "metrics": ("10-dimension fit scores", "ATS score"),
+        "thresholds": ("every fit dimension > 80%",),
+    },
+    "atsOptimization": {
+        "metrics": ("ATS keyword + semantic subscores",),
+        "thresholds": ("every fit dimension > 80%",),
+    },
+    "skillGap": {
+        "metrics": ("matched vs missing JD keywords",),
+        "thresholds": ("every fit dimension > 80%",),
+    },
+    "jobMatching": {
+        "metrics": ("fit score ranking",),
+        "thresholds": (),
+    },
+    "resumeTailoring": {
+        "metrics": (
+            "ATS score before/after",
+            "interview conversion rate",
+            "policy rigor tier",
+        ),
+        "thresholds": (
+            "ATS target score set by the current rigor tier",
+            "every fit dimension > 80%",
+        ),
+    },
+    "coverLetter": {
+        "metrics": (
+            "cover-letter quality score",
+            "interview conversion rate",
+            "policy rigor tier",
+        ),
+        "thresholds": ("cover-letter quality target 85",),
+    },
+    "compliance": {
+        "metrics": ("fabrication/entailment guard verdicts",),
+        "thresholds": ("zero unverifiable claims shipped",),
+    },
+    "submission": {
+        "metrics": ("applications submitted", "transmission channel"),
+        "thresholds": ("1 interview per 5 submitted applications",),
+    },
+    "emailAgent": {
+        "metrics": ("messages transmitted",),
+        "thresholds": (),
+    },
+    "notification": {"metrics": ("status transitions recorded",), "thresholds": ()},
+    "scheduling": {"metrics": ("interviews scheduled",), "thresholds": ()},
+    "orchestration": {
+        "metrics": ("pipeline step outcomes", "policy rigor tier"),
+        "thresholds": ("1 interview per 5 submitted applications",),
+    },
+    "storyExtraction": {"metrics": ("evidence stories captured",), "thresholds": ()},
+    "sentimentAnalysis": {"metrics": ("employer response sentiment",), "thresholds": ()},
+    "learningFeedback": {
+        "metrics": (
+            "interview conversion rate",
+            "10-dimension fit scores at submission",
+            "ATS score trend",
+        ),
+        "thresholds": (
+            "1 interview per 5 submitted applications",
+            "every fit dimension > 80%",
+        ),
+    },
+    "marketTrends": {"metrics": ("live market volumes (Adzuna, ABS)",), "thresholds": ()},
+    "salaryIntelligence": {"metrics": ("advertised salary benchmarks",), "thresholds": ()},
+    "companyResearch": {"metrics": ("employer profile coverage",), "thresholds": ()},
+    "recruiterOutreach": {"metrics": ("outreach messages sent",), "thresholds": ()},
+    "reference": {"metrics": ("references recorded",), "thresholds": ()},
+    "interviewPrep": {"metrics": ("prep packs generated",), "thresholds": ()},
+}
+
+#: Where a per-run numeric quality signal lives inside ``AgentRun.output``, per
+#: agent backend. ONLY these two agents record one today; every other agent's
+#: trend is honestly reported as unavailable rather than substituted with
+#: duration or cost, which measure the machine and not the work.
+_TREND_METRIC_PATHS: dict[str, tuple[tuple[str, ...], str]] = {
+    "tailor": (("tailoringSummary", "bestScore"), "best ATS score"),
+    "coverLetter": (("quality", "overall"), "cover-letter quality score"),
+}
+
+
+def _numeric_at(payload: Any, path: tuple[str, ...]) -> float | None:
+    """Follow ``path`` through nested dicts to a real number, else ``None``."""
+    node: Any = payload
+    for key in path:
+        if not isinstance(node, dict):
+            return None
+        node = node.get(key)
+    if isinstance(node, bool) or not isinstance(node, (int, float)):
+        return None
+    return float(node)
+
+
+def _agent_trend(backend: str, runs: list[dict[str, Any]] | None) -> dict[str, Any]:
+    """This agent's improvement trend across its recent runs — or an honest null.
+
+    ``runs`` is newest-first (``AgentRunRepository.recent_runs_by_agent``).
+    ``direction`` is non-null ONLY when the agent records a comparable
+    per-run quality number and at least two runs carry one; otherwise it is
+    ``None`` with a ``basis`` explaining why. An agent that has never run gets
+    zeros and a null direction — never an invented "steady".
+    """
+    runs = runs or []
+    spec = _TREND_METRIC_PATHS.get(backend)
+    if spec is None:
+        return {
+            "runs": len(runs),
+            "metric": None,
+            "latest": None,
+            "previous": None,
+            "delta": None,
+            "direction": None,
+            "basis": "this agent records no comparable per-run quality metric",
+        }
+    path, label = spec
+    # Oldest-first so "previous" really is the earlier run.
+    series = [
+        value
+        for run in reversed(runs)
+        if (value := _numeric_at(run.get("output"), path)) is not None
+    ]
+    if len(series) < 2:
+        return {
+            "runs": len(runs),
+            "metric": label,
+            "latest": series[-1] if series else None,
+            "previous": None,
+            "delta": None,
+            "direction": None,
+            "basis": (
+                "not enough scored runs yet to compare"
+                if series
+                else "no scored run recorded yet"
+            ),
+        }
+    latest, previous = series[-1], series[-2]
+    delta = round(latest - previous, 2)
+    return {
+        "runs": len(runs),
+        "metric": label,
+        "latest": latest,
+        "previous": previous,
+        "delta": delta,
+        "direction": (
+            "improving" if delta > 0 else "declining" if delta < 0 else "steady"
+        ),
+        "basis": f"{label}, latest run vs the one before it",
+    }
+
+
+@router.get("/orchestration-map")
+def orchestration_map(current_user: CurrentUser) -> dict[str, Any]:
+    """Every catalog agent placed in a defined end-to-end workflow (U-AX item 5).
+
+    HONESTY INVARIANTS enforced structurally, not by convention:
+
+    * ``status`` is ``real`` iff the catalog entry has a backend implementation
+      and ``planned`` otherwise — a roadmap card can never render as executing.
+    * ``lastRunPolicyTier`` / ``trend`` come from THIS user's own AgentRun rows.
+      An agent that has never run reports ``null``, never a fabricated tier or
+      a manufactured "steady" trend.
+    * Any catalog agent not placed in a map above lands in an explicit
+      "Unmapped" stage rather than disappearing, so adding an agent to the
+      catalog can never silently shrink this view.
+    """
+    user_id = current_user["id"]
+    last_runs = AgentRunRepository().last_policy_run_by_agent(user_id)
+    recent_runs = AgentRunRepository().recent_runs_by_agent(user_id, window=5)
+
+    def entry_for(agent_key: str) -> dict[str, Any]:
+        catalog = _CATALOG_BY_KEY[agent_key]
+        backend = catalog.get("backend")
+        visibility = _AGENT_METRIC_VISIBILITY.get(agent_key, {})
+        last = last_runs.get(backend) if backend else None
+        return {
+            "agentKey": agent_key,
+            "name": catalog["name"],
+            "backend": backend,
+            "status": "real" if backend else "planned",
+            "runnable": bool(backend) and backend in _RUNNABLE_BACKENDS,
+            "metricsConsumed": list(visibility.get("metrics", ())),
+            "thresholds": list(visibility.get("thresholds", ())),
+            "lastRunPolicyTier": (last or {}).get("policyTier"),
+            "lastRunAt": (last or {}).get("createdAt"),
+            "lastRunStatus": (last or {}).get("status"),
+            "trend": _agent_trend(backend or "", recent_runs.get(backend or "")),
+        }
+
+    placed: set[str] = set()
+    maps: list[dict[str, Any]] = []
+    for map_key, map_name, subtitle, stages in _ORCHESTRATION_MAPS:
+        stage_payload = []
+        for stage_name, agent_keys in stages:
+            known = [k for k in agent_keys if k in _CATALOG_BY_KEY]
+            placed.update(known)
+            stage_payload.append(
+                {"stage": stage_name, "agents": [entry_for(k) for k in known]}
+            )
+        maps.append(
+            {
+                "key": map_key,
+                "name": map_name,
+                "subtitle": subtitle,
+                "stages": stage_payload,
+            }
+        )
+
+    unmapped = [a["key"] for a in AGENT_CATALOG if a["key"] not in placed]
+    if unmapped:
+        # Visible-by-construction drift guard: a newly added catalog agent
+        # shows up here labelled as unplaced instead of vanishing from the
+        # workflow view.
+        maps.append(
+            {
+                "key": "unmapped",
+                "name": "Not yet placed in a workflow",
+                "subtitle": (
+                    "These agents exist in the catalog but have not been assigned "
+                    "a workflow stage yet."
+                ),
+                "stages": [
+                    {
+                        "stage": "Unmapped",
+                        "agents": [entry_for(k) for k in unmapped],
+                    }
+                ],
+            }
+        )
+    return {"maps": maps}
 
 
 @router.get("/catalog")

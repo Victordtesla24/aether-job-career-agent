@@ -108,3 +108,72 @@ describe("sourceStatusView blocked sources (RT-008)", () => {
     expect(view.errorText).toBeNull();
   });
 });
+
+/**
+ * S-FIX-A round 2 (finding S-FIX-A-R2-03) — a shared-key DAILY QUOTA pause is
+ * temporary and self-healing, and the backend now says so in an honest
+ * message. RT-008's blocked pill deliberately suppresses the row's error (a
+ * permanent structural refusal is not user-actionable), which was swallowing
+ * that message whole and telling a paying subscriber "unavailable (blocked by
+ * source)" — i.e. "this board is blocking us" — when the truth is "the shared
+ * daily API quota is used up and resets at midnight UTC".
+ */
+const QUOTA_ERROR =
+  "SourceQuotaError: Adzuna daily API quota reached (225/225 calls on " +
+  "2026-08-14); it resets at 00:00 UTC. No cached listings for this search yet.";
+
+describe("sourceStatusView quota pauses (S-FIX-A/S-2)", () => {
+  it("labels a quota pause as paused market data, not as a source block", () => {
+    const [view] = sourceStatusView(
+      [row({ source: "adzuna", status: "blocked", lastError: QUOTA_ERROR })],
+      NOW,
+    );
+    expect(view.badge).toBe("neutral");
+    expect(view.badgeLabel).toBe("market data paused (API quota)");
+    expect(view.badgeLabel).not.toContain("blocked by source");
+  });
+
+  it("surfaces the backend's real quota copy instead of discarding it", () => {
+    const [view] = sourceStatusView(
+      [row({ source: "adzuna", status: "blocked", lastError: QUOTA_ERROR })],
+      NOW,
+    );
+    expect(view.errorText).not.toBeNull();
+    expect(view.errorText).toContain("Adzuna daily API quota reached");
+    expect(view.errorText).toContain("00:00 UTC");
+    // The exception class name is plumbing, never user copy.
+    expect(view.errorText).not.toContain("SourceQuotaError");
+  });
+
+  it("keeps RT-008's structural block exactly as it was", () => {
+    const [view] = sourceStatusView(
+      [
+        row({
+          source: "wellfound",
+          status: "blocked",
+          lastError:
+            "SourceBlockedError: Wellfound public listings unavailable: HTTP Error 403: Forbidden",
+        }),
+      ],
+      NOW,
+    );
+    expect(view.badgeLabel).toBe("unavailable (blocked by source)");
+    expect(view.errorText).toBeNull();
+  });
+
+  it("falls back to the humanized rendering if a quota row carries a raw dump", () => {
+    const [view] = sourceStatusView(
+      [
+        row({
+          source: "adzuna",
+          status: "blocked",
+          lastError:
+            "SourceQuotaError: quota exhausted https://api.adzuna.com/v1/api/jobs/au/search/1?app_key=leak",
+        }),
+      ],
+      NOW,
+    );
+    expect(view.errorText).not.toBeNull();
+    expect(view.errorText).not.toContain("app_key");
+  });
+});

@@ -1,0 +1,22 @@
+# Aether pull-based auto-deploy — runs deploy/auto-deploy.sh once per trigger.
+# Triggered by aether-autodeploy.timer (every 5 minutes); this unit itself
+# is oneshot and not enabled standalone.
+#
+# Install: sudo ln -sf /home/ubuntu/github_repos/aether-job-career-agent/deploy/aether-autodeploy.service /etc/systemd/system/aether-autodeploy.service
+#          sudo ln -sf /home/ubuntu/github_repos/aether-job-career-agent/deploy/aether-autodeploy.timer /etc/systemd/system/aether-autodeploy.timer
+#          sudo systemctl daemon-reload && sudo systemctl enable --now aether-autodeploy.timer
+# Logs:    /var/log/aether/deploy.log (script-managed, see auto-deploy.sh);
+#          `journalctl -u aether-autodeploy.service` for stdout/stderr of the
+#          script process itself (this unit's own crash output, not the
+#          per-deploy narrative log).
+# Disable: systemctl disable --now aether-autodeploy.timer
+[Unit]
+Description=Aether pull-based auto-deploy (one poll-and-deploy attempt)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+WorkingDirectory=/home/ubuntu/github_repos/aether-job-career-agent
+ExecStart=/home/ubuntu/github_repos/aether-job-career-agent/deploy/auto-deploy.sh

@@ -209,6 +209,16 @@ def test_primary_attempt_capped_so_fallback_gets_a_turn(monkeypatch) -> None:
     and the fallback is starved -> honest 503 (the live-QA failure)."""
     monkeypatch.setenv("AETHER_LLM_MODE", "auto")
     monkeypatch.setenv("AETHER_LLM_BUDGET_SECONDS", "100")
+    # ML-U1X-a: the primary slicing this test pins is applied ONLY when
+    # ``plan_attempt_count`` says the budget can hold MORE THAN ONE attempt. The
+    # default expected-attempt estimate is 70.9 s (low end of the observed
+    # REASONING band), so a 100 s budget holds exactly ONE attempt and the
+    # primary correctly gets the WHOLE window rather than a 55 % slice. Pin a
+    # small per-attempt estimate so this test keeps exercising the multi-attempt
+    # regime the GAP-P6-TAIL-003 cap actually governs; the single-attempt regime
+    # is pinned separately by test_u1x_a_reliability.py::
+    # test_auto_gives_the_primary_the_whole_window_when_only_one_attempt_fits.
+    monkeypatch.setenv("AETHER_LLM_EXPECTED_ATTEMPT_SECONDS", "10")
     monkeypatch.setenv("AETHER_LLM_PRIMARY_BUDGET_FRACTION", "0.55")
     monkeypatch.setenv("AETHER_MODEL_REASONING", "primary-model")
     monkeypatch.setenv("AETHER_MODEL_FALLBACK", "fallback-model")

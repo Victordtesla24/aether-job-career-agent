@@ -1589,6 +1589,37 @@ def _build_openrouter_request(
     }
 
 
+#: Phrases a provider uses when it refuses a request PARAMETER (as opposed to
+#: refusing the prompt, the model or the credential). Seeded from the verbatim
+#: production body in ``uat/reports/evidence/market-perf/mon-019/`` —
+#: ``"`temperature` is deprecated for this model."`` — plus the wordings the
+#: OpenAI-compatible gateways use for the same class of rejection.
+_PARAMETER_REJECTION_PHRASES: tuple[str, ...] = (
+    "deprecated",
+    "not supported",
+    "unsupported",
+    "does not support",
+    "unrecognized",
+    "unknown parameter",
+    "not a supported parameter",
+    "not permitted",
+)
+
+
+def _rejects_request_parameter(body: str, parameter: str) -> bool:
+    """Whether a 400 body blames ``parameter`` specifically.
+
+    Deliberately CONSERVATIVE, and never a general-purpose 400 handler: the
+    provider must name the parameter AND use rejection wording, so a generic
+    ``{"error":{"code":400}}`` (prompt too long, malformed request, refusal…)
+    is still spent on its first request instead of being blindly reshaped.
+    """
+    text = (body or "").lower()
+    if parameter.lower() not in text:
+        return False
+    return any(phrase in text for phrase in _PARAMETER_REJECTION_PHRASES)
+
+
 def verify_provider_credential(
     provider: str, *, timeout: float = 15.0
 ) -> tuple[bool, str, str]:
@@ -2829,6 +2860,10 @@ class LLMClient:
 
         started = time.monotonic()
         resp = _execute(req, max_seconds)
+        #: The body actually on the wire for the LAST request of this attempt —
+        #: a re-send below strips a key from THIS, never from the original, so
+        #: each parameter is dropped at most once per attempt.
+        sent = req
         if free_chain and resp.status_code == 400 and "reasoning" in req["json"]:
             # The rescue list is env-overridable against a CHURNING free catalog,
             # so an operator can legitimately point it at a model that rejects
@@ -2851,7 +2886,44 @@ class LLMClient:
                     **req,
                     "json": {k: v for k, v in req["json"].items() if k != "reasoning"},
                 }
+                sent = unshaped
                 resp = _execute(unshaped, remaining)
+        if (
+            resp.status_code == 400
+            and "temperature" in sent["json"]
+            and _rejects_request_parameter(resp.text, "temperature")
+        ):
+            # MON-019: the provider explicitly refused a request PARAMETER we
+            # chose, not the prompt or the model. Same reasoning (and the same
+            # bound) as the free-chain re-send above: drop ONLY the named key
+            # and re-send once — same model, same prompt, same credential, so
+            # this is a re-send, not model substitution (ADR-ML-3), and it is
+            # never silent (the warning below names the model and the body).
+            #
+            # Why it matters beyond the historical signature: a user-CHOSEN
+            # model gets a single-model chain, so one parameter-shape 400 would
+            # otherwise spend the whole run — and OpenRouter serves many models
+            # that take native params instead of ``temperature`` (ADR-ML-4).
+            # A 400 that does NOT name the parameter is still spent on the
+            # first request exactly as before.
+            remaining = (
+                None if max_seconds is None
+                else max_seconds - (time.monotonic() - started)
+            )
+            if remaining is None or remaining >= 1.0:
+                logger.warning(
+                    "model %s rejected the temperature parameter (HTTP 400: %s); "
+                    "re-sending once without it — same model, no substitution",
+                    model_id, resp.text[:150],
+                )
+                stripped = {
+                    **sent,
+                    "json": {
+                        k: v for k, v in sent["json"].items() if k != "temperature"
+                    },
+                }
+                sent = stripped
+                resp = _execute(stripped, remaining)
         if provider == "anthropic" and resp.status_code == 429:
             # Wire the LIVE 429 → cooldown block (GAP-P7-DEF-A §5.4). A genuine
             # subscription-quota 429 (oauth_token or api_key) records a block and

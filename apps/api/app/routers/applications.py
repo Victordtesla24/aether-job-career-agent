@@ -20,8 +20,10 @@ from app.db import (
     rows_to_dicts,
 )
 from app.middleware.auth import CurrentUser
+from app.repositories.application_status_event import record_status_event_best_effort
 from app.routers.analytics import get_application_counts
 from app.services.stage_transitions import move_application_stage, move_job_stage
+from app.services.submission_snapshot import record_submission_snapshot
 
 logger = logging.getLogger(__name__)
 
@@ -631,6 +633,11 @@ def submit_application(
     the active pipeline board and moves to the Applied view (phase4).
     """
     submitted_job_id: str | None = None
+    #: Bound inside the draft branch below; kept declared here so the U-AX
+    #: snapshot call after the transaction is unambiguously defined on every
+    #: path (it only runs when ``submitted_job_id`` is set, i.e. that branch
+    #: ran and assigned it).
+    tailored_resume_id: str | None = None
     ensure_application_unique_active_index()
     with get_connection() as conn:
         with conn.cursor() as cur:
@@ -751,6 +758,17 @@ def submit_application(
                 if cur.fetchone() is not None:
                     submitted_job_id = row[2]
                 conn.commit()
+    # U-AX instrumentation: ``submitted_job_id`` is set ONLY when the
+    # compare-and-swap above genuinely promoted this draft (RETURNING matched),
+    # so the loser of a double-submit race records nothing — the transition it
+    # would claim never happened.
+    if submitted_job_id is not None:
+        record_status_event_best_effort(
+            application_id, "draft", "submitted", "applications.submit"
+        )
+        record_submission_snapshot(
+            current_user["id"], application_id, submitted_job_id, tailored_resume_id
+        )
     # Phase 4: advance the parent job to 'applied' so the card flushes from
     # the active board. Guarded forward-only via advance_status — an
     # already-applied job is left untouched (idempotent).

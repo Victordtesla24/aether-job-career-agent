@@ -19,7 +19,13 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { apiBaseUrl, apiRequest, getToken } from "../../../lib/api/client";
+import {
+  ApiError,
+  apiBaseUrl,
+  apiRequest,
+  describeApiError,
+  getToken,
+} from "../../../lib/api/client";
 import { resolveRun } from "../../../lib/api/agents";
 import { fetchMe } from "../../../lib/api/admin";
 import {
@@ -62,6 +68,12 @@ interface Insights {
   /** Unambiguous, client-branchable twin of semanticPath — true iff
    *  `semantic` (and everything blended from it below) is a placeholder. */
   semanticDegraded?: boolean;
+  /** R-04: false when the ATS ENGINE produced no score at all for this
+   *  (résumé, posting) pair — `scored` can still be true there, because the
+   *  router falls back to copying `Job.fitScore` into every subscore. A copied
+   *  fit score is not a measured keyword match, so nothing résumé-derived on
+   *  this payload may be presented as one. */
+  atsMeasured?: boolean;
   experience: number;
   skillsMatched: number;
   skillsTotal: number;
@@ -91,6 +103,18 @@ type SourceFilter = (typeof SOURCE_FILTERS)[number];
 /** Minimum-salary bands (in thousands, "0" = no filter) — MV-job-discovery-004. */
 const SALARY_FILTERS = ["0", "100", "150", "200"] as const;
 type SalaryFilter = (typeof SALARY_FILTERS)[number];
+
+/**
+ * U-UI JOBS-HEIGHT-BLOWOUT-MOBILE / JOBS-SCREENSHOT-TIMEOUT-DESKTOP: with
+ * every discovered job rendered into the DOM at once, a real account with
+ * ~3,800 discovered jobs pushed `document.body.scrollHeight` to ~733,000px
+ * (≈870x a 844px mobile viewport) — 2,921 unvirtualized card DOM nodes.
+ * Render only the first `JOBS_RENDER_PAGE_SIZE` matches; "Load more" grows
+ * the render window. Selection, counts, the detail panel and bulk actions
+ * all keep operating against the full filtered `visible` list below — only
+ * the list DOM is paginated.
+ */
+const JOBS_RENDER_PAGE_SIZE = 60;
 
 /** Display label + badge for a job source (wireframe source bar naming). */
 const SOURCE_LABEL: Record<string, string> = {
@@ -207,6 +231,48 @@ function autopilotSuppressionHint(job: Job): string | null {
   return `Autopilot paused for this job until ${when} — recent generation attempts couldn't produce a letter`;
 }
 
+/**
+ * Either shape `POST /agents/scout/run` can answer with (MON-020):
+ * the 202 enqueue envelope (`?background=true`) that `resolveRun` polls, or the
+ * synchronous result body the discovery cron still receives. `resolveRun`
+ * collapses the first into the second, so downstream only ever reads the counts.
+ */
+interface ScoutRunEnvelope {
+  job_id?: string;
+  status?: string;
+  persisted?: number;
+  updated?: number;
+  errors?: unknown[];
+}
+
+/**
+ * Honest one-line summary of a FINISHED discovery run, built only from the
+ * counts the backend actually returned. A run that found nothing says so
+ * plainly rather than being dressed up, and a run whose sources reported
+ * errors admits it instead of silently under-reporting.
+ */
+function discoverySummary(out: ScoutRunEnvelope): string {
+  const added = Number(out?.persisted ?? 0);
+  const updated = Number(out?.updated ?? 0);
+  const failed = Array.isArray(out?.errors) ? out.errors.length : 0;
+  const parts: string[] = [];
+  if (added === 0 && updated === 0) {
+    parts.push("Discovery finished — no new roles matched this search.");
+  } else {
+    parts.push(
+      `Discovery finished — ${added} new role${added === 1 ? "" : "s"} added, ` +
+        `${updated} updated.`,
+    );
+  }
+  if (failed > 0) {
+    parts.push(
+      `${failed} source${failed === 1 ? "" : "s"} reported an error, so this ` +
+        "pass may be incomplete.",
+    );
+  }
+  return parts.join(" ");
+}
+
 // ---------------------------------------------------------------------------
 // Presentational: circular match-score ring (SVG)
 // ---------------------------------------------------------------------------
@@ -289,6 +355,15 @@ export default function JobsPage() {
   const [sort, setSort] = useState<"fitScore" | "createdAt">("fitScore");
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // MON-020 — what the background discovery run is doing RIGHT NOW, and what it
+  // finished with. A real pass takes minutes (production discovery-cron
+  // measurement: 255-473s typical, 968s worst case), so the button can no longer
+  // just sit there: `syncPhase` narrates the phase actually in flight and
+  // `syncResult` reports the counts the completed run really returned. Neither
+  // is a fabricated percentage or ETA — nothing server-side reports progress
+  // granularity, so nothing here claims any.
+  const [syncPhase, setSyncPhase] = useState<string | null>(null);
+  const [syncResult, setSyncResult] = useState<string | null>(null);
   // Honest-no-op notice (MV-adv-A-002) — a legitimate business outcome (every
   // proposed edit rejected by the anti-fabrication guard), rendered as an
   // informational notice, never the red error banner, matching Resume
@@ -503,6 +578,21 @@ export default function JobsPage() {
     });
   }, [marketJobs, remoteOnly, matchMin, locationQuery, roleQuery, salaryMinFilter]);
 
+  // U-UI JOBS-HEIGHT-BLOWOUT-MOBILE: only the first `renderLimit` matches of
+  // `visible` are mounted as cards; `visible` itself (used for selection,
+  // counts, "select all" and the detail panel below) stays the full filtered
+  // list. Reset to the first page whenever the filter/sort criteria change —
+  // not merely when `visible`'s contents shift (e.g. a background refresh
+  // updating a fitScore in place shouldn't yank an already-loaded page back).
+  const [renderLimit, setRenderLimit] = useState(JOBS_RENDER_PAGE_SIZE);
+  useEffect(() => {
+    setRenderLimit(JOBS_RENDER_PAGE_SIZE);
+  }, [market, remoteOnly, matchMin, locationQuery, roleQuery, salaryMinFilter, sort, sourceFilter]);
+  const renderedJobs = useMemo(
+    () => visible.slice(0, renderLimit),
+    [visible, renderLimit],
+  );
+
   const counts = useMemo(() => {
     const all = jobs ?? [];
     return {
@@ -619,19 +709,56 @@ export default function JobsPage() {
   // not measured (fails closed, matching the same rule applied server-side).
   const insightsSemanticTrusted =
     selectedInsights?.semanticPath === "local" || selectedInsights?.semanticPath === "hf_api";
+  // FAIL CLOSED, same rule as every other provenance read on this screen: only
+  // an explicit `true` counts as measured.
+  const insightsAtsMeasured = selectedInsights?.atsMeasured === true;
   const step = selected ? applyStep[selected.id] ?? "idle" : "idle";
 
-  /** Run the real discovery pass for an already-resolved, user-owned target. */
+  /**
+   * Run the real discovery pass for an already-resolved, user-owned target.
+   *
+   * MON-020: the scout is ENQUEUED (`?background=true`) and polled through the
+   * existing background-job machinery instead of being awaited inside the HTTP
+   * request. A real pass takes minutes, Cloudflare aborts the request at ~100s,
+   * and the raw HTML error page it returns used to land in this screen's red
+   * banner. The synchronous mode still exists and is untouched — it is what
+   * `scripts/discovery_cron.sh` uses, and it must stay synchronous there
+   * because the cron fit-scores immediately afterwards.
+   */
   const runDiscoveryFor = async (query: string, location: string) => {
     setRunning(true);
     setError(null);
+    setSyncResult(null);
+    setSyncPhase("Queuing your discovery run…");
     try {
-      await apiRequest("/agents/scout/run", { method: "POST", body: { query, location } });
+      const enqueued = await apiRequest<ScoutRunEnvelope>(
+        "/agents/scout/run?background=true",
+        { method: "POST", body: { query, location } },
+      );
+      setSyncPhase(
+        "Searching your connected job boards. A full pass usually takes a few " +
+          "minutes — you can leave this page and the run keeps going.",
+      );
+      const out = await resolveRun(enqueued);
+      setSyncPhase("Scoring the new roles against your résumé…");
       await apiRequest("/agents/fit-scorer/run", { method: "POST" });
       setInsights({});
       await Promise.all([load(), loadSourceStatus()]);
+      setSyncPhase(null);
+      setSyncResult(discoverySummary(out));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Discovery run failed");
+      setSyncPhase(null);
+      // A structured backend refusal (the Sync cooldown 429 from
+      // /agents/scout/run, S-FIX-A/S-7) already says exactly what happened and
+      // when to retry. Show THAT sentence rather than the transport-level
+      // "POST /agents/scout/run failed (429): {…}" wrapper, which buries the
+      // honest message inside raw JSON. Anything else keeps the shared
+      // describeApiError rendering.
+      const detailMessage =
+        e instanceof ApiError && typeof e.detail?.message === "string"
+          ? e.detail.message
+          : null;
+      setError(detailMessage ?? describeApiError(e, "Discovery run failed"));
     } finally {
       setRunning(false);
     }
@@ -1138,7 +1265,13 @@ export default function JobsPage() {
                   <span
                     data-testid="source-status-error"
                     title={s.errorText}
-                    className="max-w-[220px] truncate text-red-300/90"
+                    // A quota pause is a neutral, self-healing state (S-FIX-A/S-2)
+                    // — it carries an explanation but must not read as a failure,
+                    // so the alarm colour follows the badge, not the presence of
+                    // text.
+                    className={`max-w-[220px] truncate ${
+                      s.badge === "error" ? "text-red-300/90" : "text-aether-muted-dim"
+                    }`}
                   >
                     — {s.errorText}
                   </span>
@@ -1248,6 +1381,35 @@ export default function JobsPage() {
         </button>
       </div>
 
+      {/* MON-020 — narrate the background discovery run while it is in flight,
+          then report what it actually finished with. Both are driven by real
+          state (the polled job, then the run's own counts); neither invents a
+          percentage, an ETA, or a result. */}
+      {syncPhase ? (
+        <p
+          data-testid="discovery-progress"
+          role="status"
+          aria-live="polite"
+          className="flex items-center gap-2 rounded-xl border border-aether-coral/30 bg-aether-coral/10 p-3 text-sm text-aether-coral"
+        >
+          <span
+            aria-hidden="true"
+            className="h-2 w-2 shrink-0 animate-pulse rounded-full bg-aether-coral"
+          />
+          {syncPhase}
+        </p>
+      ) : null}
+
+      {syncResult ? (
+        <p
+          data-testid="discovery-result"
+          role="status"
+          className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-300"
+        >
+          {syncResult}
+        </p>
+      ) : null}
+
       {error ? (
         <p role="alert" className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">
           {error}
@@ -1344,7 +1506,7 @@ export default function JobsPage() {
             </div>
 
             <div className="grid content-start gap-3">
-              {visible.map((job) => {
+              {renderedJobs.map((job) => {
                 const ins = insights[job.id];
                 const active = selected?.id === job.id;
                 return (
@@ -1495,6 +1657,18 @@ export default function JobsPage() {
                 );
               })}
             </div>
+            {visible.length > renderedJobs.length ? (
+              <div className="mt-4 flex justify-center">
+                <button
+                  type="button"
+                  data-testid="jobs-load-more"
+                  onClick={() => setRenderLimit((n) => n + JOBS_RENDER_PAGE_SIZE)}
+                  className="rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-xs font-medium text-aether-muted transition hover:bg-white/10 hover:text-white"
+                >
+                  Load more ({visible.length - renderedJobs.length} remaining)
+                </button>
+              </div>
+            ) : null}
           </div>
 
           {/* Detail panel (jd16–jd36) */}
@@ -1592,13 +1766,17 @@ export default function JobsPage() {
                     <div className="rounded-lg bg-white/5 p-3">
                       <p className="mb-1 text-[11px] text-aether-muted-dim">Skills matched</p>
                       <p className="mono text-sm font-semibold text-aether-green" data-testid="skills-matched">
-                        {selectedInsights ? `${selectedInsights.skillsMatched} / ${selectedInsights.skillsTotal}` : "—"}
+                        {selectedInsights && insightsAtsMeasured
+                          ? `${selectedInsights.skillsMatched} / ${selectedInsights.skillsTotal}`
+                          : "—"}
                       </p>
                     </div>
                     <div className="rounded-lg bg-white/5 p-3">
                       <p className="mb-1 text-[11px] text-aether-muted-dim">Skill gap</p>
                       <p className="text-sm font-semibold text-aether-yellow" data-testid="skill-gap">
-                        {selectedInsights ? selectedInsights.skillGap ?? "None" : "—"}
+                        {selectedInsights && insightsAtsMeasured
+                          ? selectedInsights.skillGap ?? "None"
+                          : "—"}
                       </p>
                     </div>
                   </div>
@@ -1655,7 +1833,17 @@ export default function JobsPage() {
                   ) : (
                     <div className="h-40 animate-pulse rounded-xl bg-white/5" aria-busy="true" />
                   )}
-                  {selectedInsights && !insightsSemanticTrusted ? (
+                  {selectedInsights && !insightsAtsMeasured ? (
+                    /* R-04: the engine itself failed, so keyword match and
+                       experience fit were never computed either — a narrower
+                       "semantic only" caveat would understate what is missing. */
+                    <p className="mt-3 text-xs text-aether-muted-dim" data-testid="insights-ats-unmeasured-note">
+                      The scoring engine could not analyse this posting against your
+                      résumé, so every résumé-derived dimension above reads as “—”.
+                      The salary, location and source-stability signals are computed
+                      from the posting itself and are unaffected.
+                    </p>
+                  ) : selectedInsights && !insightsSemanticTrusted ? (
                     <p className="mt-3 text-xs text-aether-muted-dim" data-testid="insights-semantic-degraded-note">
                       Semantic similarity could not be measured for this analysis — a
                       neutral placeholder stood in instead, so Industry Match, Culture

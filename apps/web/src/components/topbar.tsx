@@ -13,6 +13,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { fetchAgents } from "../lib/api/agents";
 import { fetchApprovals, type Approval } from "../lib/api/approvals";
 import { isExpired } from "./approvals/lib";
@@ -194,7 +195,16 @@ export function Topbar({ subtitle }: { title?: string; subtitle?: string }) {
   // list them, honestly reflecting the same items the count is derived from.
   const [approvalItems, setApprovalItems] = useState<Approval[]>([]);
   const [bellOpen, setBellOpen] = useState(false);
+  // U-UI BELL-OVERLAP-01/BELL-OFFSCREEN-*: the panel (+ its backdrop) now
+  // render through a portal, out of the blurred `.glass` header's subtree,
+  // as a `position: fixed` box positioned entirely with viewport-safe CSS
+  // (`inset-x-4 sm:inset-x-auto sm:right-8 sm:w-80` — see the render below)
+  // instead of `absolute right-0` nested inside that header. `mounted`
+  // gates the portal until we're on the client (SSR safety).
+  const [mounted, setMounted] = useState(false);
   const bellRef = useRef<HTMLDivElement | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const bellButtonRef = useRef<HTMLButtonElement | null>(null);
   const [query, setQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const searchIndex = useRef<SearchHit[] | null>(null);
@@ -296,11 +306,22 @@ export function Topbar({ subtitle }: { title?: string; subtitle?: string }) {
     };
   }, []);
 
+  // The panel now portals to document.body (see the render below), so it
+  // can only mount once we're on the client.
+  useEffect(() => setMounted(true), []);
+
   // M-05/M-09: close the notifications panel on an outside click or Escape.
+  // The full-viewport backdrop rendered with the panel is the primary
+  // click-to-close affordance; this listener is defence-in-depth for clicks
+  // that land on the bell button itself (which sits under the backdrop) or
+  // any future content stacked above it.
   useEffect(() => {
     if (!bellOpen) return;
     function onDown(e: MouseEvent) {
-      if (bellRef.current && !bellRef.current.contains(e.target as Node)) setBellOpen(false);
+      const target = e.target as Node;
+      if (bellRef.current?.contains(target)) return;
+      if (panelRef.current?.contains(target)) return;
+      setBellOpen(false);
     }
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") setBellOpen(false);
@@ -310,6 +331,33 @@ export function Topbar({ subtitle }: { title?: string; subtitle?: string }) {
     return () => {
       document.removeEventListener("mousedown", onDown);
       document.removeEventListener("keydown", onKey);
+    };
+  }, [bellOpen]);
+
+  // REV-U-UI-05: the panel is portaled to the end of document.body, so
+  // without this, Tab from the bell no longer reaches its menuitems — a
+  // keyboard user would have to traverse the rest of the header, sidebar and
+  // page first. Move focus into the panel's first focusable item the instant
+  // it opens; on close, hand focus back to the bell — but only when nothing
+  // else already claimed it (Escape and most outside-clicks leave
+  // `document.activeElement` on `<body>` once the focused menu item
+  // unmounts, whereas a click that lands on some other real control on the
+  // page already owns focus by the time this cleanup runs, and forcing focus
+  // back to the bell in that case would yank it away from what the user
+  // just clicked).
+  useEffect(() => {
+    if (!bellOpen) return;
+    const panel = panelRef.current;
+    if (!panel) return;
+    const bellButton = bellButtonRef.current;
+    const focusable = panel.querySelector<HTMLElement>(
+      '[role="menuitem"], a[href], button, [tabindex]:not([tabindex="-1"])',
+    );
+    (focusable ?? panel).focus();
+    return () => {
+      if (document.activeElement === document.body) {
+        bellButton?.focus();
+      }
     };
   }, [bellOpen]);
 
@@ -415,6 +463,7 @@ export function Topbar({ subtitle }: { title?: string; subtitle?: string }) {
         <RealtimeStatusBadge compact hideWhenIdle className="max-w-[8.5rem] shrink-0 sm:max-w-none" />
         <div className="relative" ref={bellRef}>
           <button
+            ref={bellButtonRef}
             type="button"
             onClick={() => setBellOpen((v) => !v)}
             aria-haspopup="menu"
@@ -433,56 +482,101 @@ export function Topbar({ subtitle }: { title?: string; subtitle?: string }) {
               <span className="absolute top-2 right-2.5 w-2 h-2 rounded-full bg-aether-coral" />
             ) : null}
           </button>
-          {bellOpen ? (
-            <div
-              role="menu"
-              data-testid="notification-panel"
-              className="absolute right-0 top-12 z-50 w-80 max-w-[calc(100vw-2rem)] rounded-xl border border-white/10 bg-aether-bg-elevated shadow-xl shadow-black/40"
-            >
-              <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
-                <span className="text-sm font-semibold text-aether-text">Notifications</span>
-                {pendingApprovals > 0 ? (
-                  <span className="rounded-full bg-aether-coral/15 px-2 py-0.5 text-[11px] font-medium text-aether-coral">
-                    {pendingApprovals} pending
-                  </span>
-                ) : null}
-              </div>
-              {approvalItems.length === 0 ? (
-                <p
-                  data-testid="notification-empty"
-                  className="px-4 py-6 text-center text-sm text-aether-muted"
-                >
-                  No new notifications.
-                </p>
-              ) : (
-                <ul className="max-h-80 overflow-y-auto py-1">
-                  {approvalItems.slice(0, 6).map((a) => (
-                    <li key={a.id}>
-                      <Link
-                        href="/dashboard/approvals"
-                        role="menuitem"
-                        onClick={() => setBellOpen(false)}
-                        className="flex flex-col gap-0.5 px-4 py-2.5 hover:bg-white/5"
-                      >
-                        <span className="text-sm text-aether-text">{approvalLabel(a.type)}</span>
-                        <span className="text-[11px] text-aether-muted-dim">
-                          {timeAgo(a.createdAt)}
-                        </span>
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <Link
-                href="/dashboard/approvals"
-                onClick={() => setBellOpen(false)}
-                className="block border-t border-white/10 px-4 py-2.5 text-center text-xs font-semibold text-aether-indigo hover:bg-white/5"
-              >
-                View all approvals
-              </Link>
-            </div>
-          ) : null}
         </div>
+        {/*
+          U-UI BELL-OVERLAP-01 / KANBAN-HEADER-OVERLAP-01 / BELL-OFFSCREEN-*:
+          the panel + its backdrop are portaled to document.body instead of
+          living `absolute` inside the `.glass` (backdrop-filter) header —
+          that escapes the ancestor's filter/stacking context entirely, so
+          the panel's own opaque surface renders correctly (no bleed-through)
+          regardless of where in the header tree the bell button sits.
+          Horizontal position is plain viewport-safe CSS (no JS measurement
+          to go stale on resize/scroll): `inset-x-4` keeps it fully on-screen
+          with equal margins on narrow viewports where a fixed 320px box
+          anchored to the button would run off the left edge (measured
+          x=-107 on a 390px viewport pre-fix); `sm:inset-x-auto sm:right-8
+          sm:w-80` anchors it flush with the header's own right content edge
+          once there's room. It may still legitimately sit on top of page
+          content (e.g. kanban column headers) — that's an intentional
+          overlay now backed by a solid surface, a dismissible backdrop and
+          a real z-index, not a rendering defect.
+
+          REV-U-UI-03: the bell is not the header's rightmost control (Admin
+          link + <UserMenu/> sit to its right) and the header's own gutter is
+          `sm:px-8` (32px) — `sm:right-4` (16px) neither points at the bell
+          nor lines up with the header's content edge, and overhangs that
+          gutter by 16px. `sm:right-8` matches the header's own right inset
+          exactly, so the panel lands flush with the same edge the sibling
+          UserMenu dropdown (`absolute right-0` off the rightmost, edge-
+          aligned avatar button) already uses.
+        */}
+        {mounted && bellOpen
+          ? createPortal(
+              <>
+                <div
+                  aria-hidden="true"
+                  data-testid="notification-backdrop"
+                  onClick={() => setBellOpen(false)}
+                  className="fixed inset-0 z-40 bg-black/20"
+                />
+                <div
+                  ref={panelRef}
+                  role="menu"
+                  // REV-U-UI-05: focusable as a last-resort landing spot (the
+                  // panel always has a real focusable descendant today — see
+                  // the effect above — but a `tabindex` of -1 here means
+                  // focus still lands somewhere sane inside the panel rather
+                  // than silently no-opping if that ever stops being true).
+                  tabIndex={-1}
+                  data-testid="notification-panel"
+                  className="animate-fade-in fixed top-16 z-50 inset-x-4 sm:inset-x-auto sm:right-8 sm:w-80 rounded-xl border border-white/10 bg-aether-bg-elevated shadow-xl shadow-black/40"
+                >
+                  <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+                    <span className="text-sm font-semibold text-aether-text">Notifications</span>
+                    {pendingApprovals > 0 ? (
+                      <span className="rounded-full bg-aether-coral/15 px-2 py-0.5 text-[11px] font-medium text-aether-coral">
+                        {pendingApprovals} pending
+                      </span>
+                    ) : null}
+                  </div>
+                  {approvalItems.length === 0 ? (
+                    <p
+                      data-testid="notification-empty"
+                      className="px-4 py-6 text-center text-sm text-aether-muted"
+                    >
+                      No new notifications.
+                    </p>
+                  ) : (
+                    <ul className="max-h-80 overflow-y-auto py-1">
+                      {approvalItems.slice(0, 6).map((a) => (
+                        <li key={a.id}>
+                          <Link
+                            href="/dashboard/approvals"
+                            role="menuitem"
+                            onClick={() => setBellOpen(false)}
+                            className="flex flex-col gap-0.5 px-4 py-2.5 hover:bg-white/5"
+                          >
+                            <span className="text-sm text-aether-text">{approvalLabel(a.type)}</span>
+                            <span className="text-[11px] text-aether-muted-dim">
+                              {timeAgo(a.createdAt)}
+                            </span>
+                          </Link>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  <Link
+                    href="/dashboard/approvals"
+                    onClick={() => setBellOpen(false)}
+                    className="block border-t border-white/10 px-4 py-2.5 text-center text-xs font-semibold text-aether-indigo hover:bg-white/5"
+                  >
+                    View all approvals
+                  </Link>
+                </div>
+              </>,
+              document.body,
+            )
+          : null}
         {isAdmin ? (
           <Link
             href="/admin"
