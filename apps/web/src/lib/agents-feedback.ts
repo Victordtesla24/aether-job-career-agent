@@ -168,6 +168,84 @@ export function agentSuccessNotice(agent: string, output: Record<string, unknown
         hrefLabel: "open Story Bank →",
       };
     }
+    // F3 (agents-uplift/u5d re-review, MUST-FIX): before this case existed,
+    // EVERY Submission Agent run fell to the `default:` arm below and rendered
+    // a hardcoded green "submission finished successfully." — regardless of
+    // what actually happened. `submission_agent.py`'s `_describe` computes an
+    // honest terminal state (module-level `STATE_*`) and an honest `message`
+    // for exactly this reason; `transmitted` is read back from
+    // `Application."transmittedAt"` AFTER the write and is the ONLY state
+    // backed by real transmission evidence (`transmissionRef` is the proof).
+    // Every other state — `awaiting_approval`, `manual_step_required`,
+    // `recorded_not_transmitted`, `no_change`, `none` — means nothing left
+    // the system, so this must NEVER render `kind: "success"` for them: doing
+    // so reproduces the exact production illusion (three real runs that wrote
+    // nothing / transmitted nothing, all shown as "Submitted…") this whole
+    // workstream exists to kill. The backend's own sentence (already honest
+    // and state-specific) is used verbatim rather than re-authored here, so
+    // this banner can never drift out of sync with `_describe`'s wording.
+    case "submission": {
+      const message =
+        typeof output.message === "string" && output.message.trim()
+          ? output.message
+          : undefined;
+      if (output.submissionState === "transmitted") {
+        return {
+          kind: "success",
+          text: message ?? "Submission Agent finished — your application was transmitted.",
+          href: "/dashboard/applications",
+          hrefLabel: "view it in your tracker →",
+        };
+      }
+      if (output.submissionState === "awaiting_approval") {
+        return {
+          kind: "info",
+          text:
+            message ??
+            "Recorded in your tracker and queued for sending — NOT transmitted yet. Approve it in Approvals to send.",
+          href: "/dashboard/approvals",
+          hrefLabel: "review it in Approvals →",
+        };
+      }
+      // manual_step_required, recorded_not_transmitted, no_change, none — and
+      // any future state this switch does not yet know by name: an unknown
+      // state must default to the same honest non-success arm, never to
+      // `default:`'s generic "finished successfully.".
+      return {
+        kind: "info",
+        text: message ?? "Submission Agent finished — nothing was transmitted.",
+        href: "/dashboard/applications",
+        hrefLabel: "open your tracker →",
+      };
+    }
+    // F3 audit (same review): the Email Agent's per-agent Run button
+    // dispatches `mode: "triage"` and, like submission, computes an honest
+    // `connected`/`degraded`/`message` (`email_agent.py`'s `_triage`) that
+    // this switch was discarding in favour of the same blanket "emailAgent
+    // finished successfully." — including when Gmail was never connected
+    // (0 threads synced, 0 triaged) or a sync failure degraded the run.
+    // `degraded` is the single flag `_triage` sets on both of those honest
+    // non-outcomes, so it is the only signal this needs to read.
+    case "emailAgent": {
+      const message =
+        typeof output.message === "string" && output.message.trim()
+          ? output.message
+          : undefined;
+      if (output.degraded === true) {
+        return {
+          kind: "info",
+          text: message ?? "Email Agent could not triage your inbox — Gmail is not connected.",
+          href: "/dashboard/email",
+          hrefLabel: "connect Gmail →",
+        };
+      }
+      return {
+        kind: "success",
+        text: message ?? "Email Agent finished triaging your inbox.",
+        href: "/dashboard/email",
+        hrefLabel: "open Email Center →",
+      };
+    }
     default:
       return { kind: "success", text: `${agent} finished successfully.` };
   }
