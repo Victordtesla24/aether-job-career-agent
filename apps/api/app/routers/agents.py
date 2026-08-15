@@ -3728,6 +3728,14 @@ def run_tailor(
         # dict persisted on the Resume row, so the response and a later reload
         # always agree.
         "tailoringSummary": output.get("tailoringSummary", {}),
+        # U2c (ad0eb388): the 80%-all-dimensions quality-floor verdict for the
+        # SHIPPED version — already computed by TailoringLoop and lifted to
+        # the top level of TailorRunResult "so the run card can read it
+        # without unpacking the summary" (tailor_agent.py), but this
+        # hand-built whitelist previously dropped it, the exact bug class
+        # test_router_whitelist_does_not_silently_drop_new_result_fields
+        # exists to catch. ``None`` iff the gate was never armed for this run.
+        "qualityGate": output.get("qualityGate"),
     }
 
 
