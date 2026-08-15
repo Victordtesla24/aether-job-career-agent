@@ -51,7 +51,7 @@ export default function SankeyFlow({ data }: { data: SankeyData }) {
   });
 
   return (
-    <div className="mt-4 overflow-x-auto rounded-2xl border border-white/10 bg-[#0F0F12] p-6">
+    <div className="elev-1 mt-4 overflow-x-auto rounded-2xl p-6">
       <svg
         viewBox={`0 0 ${FRAME_W} 380`}
         className="w-full min-w-[1000px]"
@@ -75,7 +75,7 @@ export default function SankeyFlow({ data }: { data: SankeyData }) {
         {nodes.map((n) => (
           <rect key={n.key} x={n.x} y={n.top} width={NODE_W} height={n.h} rx={3} fill={n.color} />
         ))}
-        {nodes.map((n, i) => (
+        {nodes.map((n) => (
           <g key={`t-${n.key}`}>
             <text
               x={n.x + NODE_W / 2}
@@ -90,7 +90,7 @@ export default function SankeyFlow({ data }: { data: SankeyData }) {
             <text
               x={n.x + NODE_W / 2}
               y={348}
-              fill={i === 0 ? "#4F74B5" : n.color}
+              fill={n.color}
               fontSize="13"
               fontWeight="700"
               textAnchor="middle"

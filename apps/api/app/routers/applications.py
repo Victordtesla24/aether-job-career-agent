@@ -158,12 +158,19 @@ def funnel_sankey(current_user: CurrentUser) -> dict[str, Any]:
             screened, interviewed, offers = cur.fetchone()
     return {
         "stages": [
-            {"key": "jobs_found", "label": "Jobs Found", "value": jobs_found, "color": "#4F46E5"},
-            {"key": "applied", "label": "Applied", "value": applied, "color": "#818CF8"},
-            {"key": "screened", "label": "Screened", "value": screened, "color": "#FF6B35"},
+            # R-VIZ: the funnel is ONE measure (a count) walking ordered
+            # stages, so it takes an ordinal gilt ramp anchored on chart-gold
+            # — not five categorical hues (a 5th hue is forbidden) and not one
+            # flat gold that erases the progression. Values only: keys, labels
+            # and shape are untouched. Every step clears 4.5:1 on the card
+            # ground #0F0F12, because the client paints each stage's numeral
+            # in its own node colour.
+            {"key": "jobs_found", "label": "Jobs Found", "value": jobs_found, "color": "#9C8038"},
+            {"key": "applied", "label": "Applied", "value": applied, "color": "#AE8E32"},
+            {"key": "screened", "label": "Screened", "value": screened, "color": "#C9A84C"},
             {"key": "interviewed", "label": "Interviewed", "value": interviewed,
-             "color": "#F59E0B"},
-            {"key": "offers", "label": "Offers", "value": offers, "color": "#34D399"},
+             "color": "#D4B65C"},
+            {"key": "offers", "label": "Offers", "value": offers, "color": "#E8D5A3"},
         ],
         "dropoffs": [
             {"after": "jobs_found", "count": jobs_found - applied,
