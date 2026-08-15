@@ -7,16 +7,19 @@ import { StoryForm } from "./story-form";
 
 /**
  * Category → accent classes. Literal Tailwind strings so the JIT compiler keeps
- * them (arbitrary values can't be built dynamically).
+ * them (arbitrary values can't be built dynamically). Colours are the validated
+ * CHART_PALETTE (`../charts/tokens`) in fixed order — RULINGS.md R6: categorical
+ * identity anywhere in the UI draws from the chart-kit hues, never a bespoke
+ * rainbow. Order: #AE8E32 gold, #4F74B5 sapphire, #C16F7B rose, #439FC8 sky.
  */
 const CATEGORY_STYLE: Record<
   string,
   { border: string; badge: string }
 > = {
-  Delivery: { border: "border-l-[#FF6B35]", badge: "bg-[#FF6B35]/15 text-[#FF6B35]" },
-  Leadership: { border: "border-l-[#4F46E5]", badge: "bg-[#4F46E5]/20 text-[#818CF8]" },
-  "Risk & Compliance": { border: "border-l-[#A78BFA]", badge: "bg-[#A78BFA]/20 text-[#A78BFA]" },
-  Technical: { border: "border-l-[#38BDF8]", badge: "bg-[#38BDF8]/15 text-[#38BDF8]" },
+  Delivery: { border: "border-l-[#AE8E32]", badge: "bg-[#AE8E32]/15 text-[#AE8E32]" },
+  Leadership: { border: "border-l-[#4F74B5]", badge: "bg-[#4F74B5]/20 text-[#4F74B5]" },
+  "Risk & Compliance": { border: "border-l-[#C16F7B]", badge: "bg-[#C16F7B]/20 text-[#C16F7B]" },
+  Technical: { border: "border-l-[#439FC8]", badge: "bg-[#439FC8]/15 text-[#439FC8]" },
 };
 
 const DEFAULT_STYLE = { border: "border-l-white/20", badge: "bg-white/10 text-aether-muted" };
@@ -132,7 +135,7 @@ export function StoryCard({
             aria-pressed={story.starred ?? false}
             aria-label={story.starred ? "Unstar story" : "Star story"}
             onClick={onToggleStar}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-[#FBBF24] transition-colors duration-[--dur-fast] hover:bg-white/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-aether-coral/50"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-aether-coral transition-colors duration-[--dur-fast] hover:bg-white/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-aether-coral/50"
           >
             <i className={`${story.starred ? "fa-solid" : "fa-regular"} fa-star`} aria-hidden="true" />
           </button>
@@ -160,10 +163,10 @@ export function StoryCard({
       <div className="grid grid-cols-1 gap-3 text-[12.5px] sm:grid-cols-2 lg:grid-cols-4">
         {(
           [
-            ["Situation", story.situation, "text-[#818CF8]"],
-            ["Task", story.task, "text-[#818CF8]"],
-            ["Action", story.action, "text-[#818CF8]"],
-            ["Result", story.result, "text-[#34D399]"],
+            ["Situation", story.situation, "text-aether-violet"],
+            ["Task", story.task, "text-aether-violet"],
+            ["Action", story.action, "text-aether-violet"],
+            ["Result", story.result, "text-state-ok"],
           ] as const
         ).map(([label, value, labelCls]) => (
           // min-w-0: CSS Grid items default to `min-width: auto` (i.e. sized
@@ -178,7 +181,7 @@ export function StoryCard({
                 stories the un-clamped grid made this page 9,071px tall at
                 1600 (b3/before/before-notes.json); the full text lives one
                 click away in the sheet, not inline (X-2). */}
-            <p className="line-clamp-3 min-w-0 break-words leading-[1.55] text-[#C7C7D6]">{value}</p>
+            <p className="line-clamp-3 min-w-0 break-words leading-[1.55] text-aether-muted">{value}</p>
           </div>
         ))}
       </div>

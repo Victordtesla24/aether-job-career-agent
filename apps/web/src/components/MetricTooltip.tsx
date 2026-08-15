@@ -102,7 +102,7 @@ export default function MetricTooltip({ label, value, tooltip, className }: Metr
           onFocus={() => setOpen(true)}
           onBlur={() => setOpen(false)}
           onKeyDown={handleKeyDown}
-          className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-aether-muted-dim outline-none transition hover:text-white focus-visible:ring-2 focus-visible:ring-aether-coral/60"
+          className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-aether-muted-dim outline-none transition hover:text-aether-text focus-visible:ring-2 focus-visible:ring-aether-coral/60"
         >
           <i className="fa-solid fa-circle-info text-[10px]" aria-hidden="true" />
         </button>
@@ -113,7 +113,7 @@ export default function MetricTooltip({ label, value, tooltip, className }: Metr
           data-testid="metric-tooltip-popover"
           data-placement={placement}
           style={{ transform: `translateX(calc(-50% + ${shiftX}px))` }}
-          className={`pointer-events-none absolute left-1/2 z-20 w-56 max-w-[calc(100vw-2rem)] rounded-lg border border-white/10 bg-[#1C1C29] p-3 text-[11px] font-normal leading-relaxed text-aether-muted shadow-2xl transition-opacity duration-150 ${
+          className={`pointer-events-none absolute left-1/2 z-20 w-56 max-w-[calc(100vw-2rem)] rounded-lg border border-white/10 bg-surface-2 p-3 text-[11px] font-normal leading-relaxed text-aether-muted shadow-2xl transition-opacity duration-150 ${
             /* U-UI TOOLTIP-CLIP-BOTTOM-01: flip above the trigger when there
              * isn't enough room below (see computeFlip / the useLayoutEffect
              * above) instead of always anchoring `top-6`, which clipped the

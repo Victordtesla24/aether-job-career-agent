@@ -108,7 +108,7 @@ export function UserMenu({
       {open ? (
         <div
           role="menu"
-          className="absolute right-0 mt-2 w-44 rounded-xl border border-white/10 bg-[#16162a] shadow-xl overflow-hidden z-50"
+          className="absolute right-0 mt-2 w-44 rounded-xl border border-white/10 bg-surface-2 shadow-xl overflow-hidden z-50"
         >
           <button
             type="button"

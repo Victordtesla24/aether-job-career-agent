@@ -33,9 +33,9 @@ const AGENT_NAMES: Record<string, string> = {
 };
 
 const AGENT_TILES: Record<string, FeedTile> = {
-  scout: { icon: "fa-magnifying-glass", cls: "bg-aether-indigo/15 border-aether-indigo/25 text-[#818CF8]" },
-  matcher: { icon: "fa-wand-magic-sparkles", cls: "bg-aether-indigo/15 border-aether-indigo/25 text-[#818CF8]" },
-  fitScorer: { icon: "fa-gauge-high", cls: "bg-aether-indigo/15 border-aether-indigo/25 text-[#818CF8]" },
+  scout: { icon: "fa-magnifying-glass", cls: "bg-aether-indigo/15 border-aether-indigo/25 text-aether-violet" },
+  matcher: { icon: "fa-wand-magic-sparkles", cls: "bg-aether-indigo/15 border-aether-indigo/25 text-aether-violet" },
+  fitScorer: { icon: "fa-gauge-high", cls: "bg-aether-indigo/15 border-aether-indigo/25 text-aether-violet" },
   tailor: { icon: "fa-file-pen", cls: "bg-aether-coral/15 border-aether-coral/25 text-aether-coral" },
   coverLetter: { icon: "fa-file-lines", cls: "bg-aether-amber/15 border-aether-amber/25 text-aether-amber" },
   submission: { icon: "fa-check", cls: "bg-aether-green/15 border-aether-green/25 text-aether-green" },
@@ -86,8 +86,8 @@ export function runBadge(run: AgentRun): FeedBadge {
     return { label: "Unavailable", cls: "bg-white/8 text-aether-muted border-white/10" };
   }
   const byAgent: Record<string, FeedBadge> = {
-    scout: { label: "Discovered", cls: "bg-aether-indigo/15 text-[#818CF8] border-aether-indigo/20" },
-    matcher: { label: "Discovered", cls: "bg-aether-indigo/15 text-[#818CF8] border-aether-indigo/20" },
+    scout: { label: "Discovered", cls: "bg-aether-indigo/15 text-aether-violet border-aether-indigo/20" },
+    matcher: { label: "Discovered", cls: "bg-aether-indigo/15 text-aether-violet border-aether-indigo/20" },
     tailor: { label: "Tailored", cls: "bg-aether-coral/15 text-aether-coral border-aether-coral/20" },
     submission: { label: "Submitted", cls: "bg-aether-green/15 text-aether-green border-aether-green/20" },
     coverLetter: { label: "Drafted", cls: "bg-aether-amber/15 text-aether-amber border-aether-amber/20" },

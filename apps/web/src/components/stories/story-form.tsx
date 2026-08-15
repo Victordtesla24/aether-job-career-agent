@@ -119,7 +119,7 @@ export function StoryForm({ initial, submitLabel, onSubmit, onCancel }: StoryFor
           type="submit"
           disabled={saving}
           data-testid="story-form-submit"
-          className="min-h-[44px] rounded-xl bg-aether-coral px-4 py-2 text-sm font-semibold text-aether-bg transition hover:bg-[#ff7d4d] disabled:opacity-50"
+          className="min-h-[44px] rounded-xl bg-aether-coral px-4 py-2 text-sm font-semibold text-aether-bg transition hover:bg-aether-coral-accent disabled:opacity-50"
         >
           {saving ? "Saving…" : submitLabel}
         </button>

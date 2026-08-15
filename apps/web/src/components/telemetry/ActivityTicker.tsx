@@ -180,7 +180,7 @@ export default function ActivityTicker({
                       aria-hidden="true"
                       className={`h-1.5 w-1.5 shrink-0 translate-y-[-1px] rounded-full ${tone.dot}`}
                     />
-                    <span className="type-mono-micro min-w-0 flex-1 truncate text-[#C8C8DC] group-hover:text-white">
+                    <span className="type-mono-micro min-w-0 flex-1 truncate text-aether-muted group-hover:text-aether-text">
                       {row.text}
                     </span>
                     {/* The delta chip only exists when the wire proved a count

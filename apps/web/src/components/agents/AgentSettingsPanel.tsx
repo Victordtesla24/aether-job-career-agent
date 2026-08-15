@@ -152,10 +152,10 @@ export default function AgentSettingsPanel({
           data-testid={`agent-thinking-${agent.key}`}
           value={thinking}
           onChange={(e) => setThinking(e.target.value as ThinkingEffort)}
-          className="w-full rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-white outline-none focus:border-aether-indigo/50"
+          className="w-full rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-aether-text outline-none focus:border-aether-indigo/50 [&>option]:bg-surface-2"
         >
           {EFFORTS.map((eff) => (
-            <option key={eff} value={eff} className="bg-[#1C1C29]">
+            <option key={eff} value={eff}>
               {eff.charAt(0).toUpperCase() + eff.slice(1)}
             </option>
           ))}
@@ -174,13 +174,13 @@ export default function AgentSettingsPanel({
           data-testid={`agent-credential-${agent.key}`}
           value={credentialRef}
           onChange={(e) => setCredentialRef(e.target.value)}
-          className="w-full rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-white outline-none focus:border-aether-indigo/50"
+          className="w-full rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-aether-text outline-none focus:border-aether-indigo/50 [&>option]:bg-surface-2"
         >
-          <option value="" className="bg-[#1C1C29]">
+          <option value="">
             Deployment default
           </option>
           {providerCreds.map((c) => (
-            <option key={c.id} value={c.id} className="bg-[#1C1C29]">
+            <option key={c.id} value={c.id}>
               {c.authMode === "subscription_oauth" ? "Subscription" : "API key"}
               {c.secretHint ? ` (${c.secretHint})` : ""}
             </option>
@@ -210,7 +210,7 @@ export default function AgentSettingsPanel({
         onClick={() => void save()}
         disabled={saving}
         data-testid={`agent-settings-save-${agent.key}`}
-        className="flex w-full items-center justify-center gap-2 rounded-lg bg-aether-indigo px-3 py-1.5 text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+        className="flex w-full items-center justify-center gap-2 rounded-lg bg-aether-indigo px-3 py-1.5 text-xs font-semibold text-aether-text transition hover:opacity-90 disabled:opacity-50"
       >
         <i className="fa-solid fa-floppy-disk text-[10px]" aria-hidden="true" />
         {saving ? "Saving…" : "Save settings"}

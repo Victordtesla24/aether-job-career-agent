@@ -245,7 +245,7 @@ export default function StoryBankPage() {
           [
             ["Total Stories", effectiveStats.total, "text-aether-text"],
             ["Quantified w/ Metrics", effectiveStats.quantified, "text-state-ok"],
-            ["Starred", effectiveStats.starred, "text-[#FBBF24]"],
+            ["Starred", effectiveStats.starred, "text-aether-coral"],
             ["Categories Covered", effectiveStats.categories, "text-state-info"],
           ] as const
         ).map(([label, value, cls]) => (

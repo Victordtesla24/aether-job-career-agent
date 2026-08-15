@@ -3,22 +3,26 @@
 import type { Story } from "../../lib/api/stories";
 import { extractorTriggerState } from "./logic";
 
-/** Canonical interview questions mapped to the best-matching live story. */
+/**
+ * Canonical interview questions mapped to the best-matching live story.
+ * Accents mirror story-card's CATEGORY_STYLE — the validated CHART_PALETTE in
+ * fixed order (RULINGS.md R6). "Delivery, Technical" keeps Delivery's gold.
+ */
 const MAPPER_QUESTIONS: { q: string; categories: string[]; accent: string }[] = [
   {
     q: "“Tell me about a time you improved a process.”",
     categories: ["Delivery", "Technical"],
-    accent: "text-[#FF6B35]",
+    accent: "text-[#AE8E32]",
   },
   {
     q: "“Describe leading a large team.”",
     categories: ["Leadership"],
-    accent: "text-[#818CF8]",
+    accent: "text-[#4F74B5]",
   },
   {
     q: "“A time you handled compliance risk.”",
     categories: ["Risk & Compliance"],
-    accent: "text-[#A78BFA]",
+    accent: "text-[#C16F7B]",
   },
 ];
 
@@ -71,7 +75,7 @@ export function StoryAside({
             const match = bestStory(stories, categories);
             return (
               <div key={q} className="elev-2 rounded-xl p-3">
-                <div className="mb-1 text-[#C7C7D6]">{q}</div>
+                <div className="mb-1 text-aether-muted">{q}</div>
                 <div
                   className={`flex items-center text-[11px] ${match ? accent : "text-aether-muted-dim"}`}
                 >
@@ -98,17 +102,17 @@ export function StoryAside({
 
       <section className="elev-1 rounded-2xl p-5" data-testid="coverage-gaps">
         <div className="mb-3 flex items-center gap-2">
-          <i className="fa-solid fa-triangle-exclamation text-[#FBBF24]" aria-hidden="true" />
+          <i className="fa-solid fa-triangle-exclamation text-state-warn" aria-hidden="true" />
           <h2 className="text-[13px] font-semibold tracking-[-0.01em]">Coverage Gaps</h2>
         </div>
-        <div className="space-y-2 text-[13px] text-[#C7C7D6]">
+        <div className="space-y-2 text-[13px] text-aether-muted">
           {COVERAGE_THEMES.map(({ label, keywords }) => {
             const count = coverageCount(stories, keywords);
             const status =
               count === 0
                 ? { text: "No story", cls: "text-state-danger" }
                 : count === 1
-                  ? { text: "Thin", cls: "text-[#FBBF24]" }
+                  ? { text: "Thin", cls: "text-state-warn" }
                   : { text: "Covered", cls: "text-state-ok" };
             return (
               <div key={label} className="flex items-center justify-between gap-2">
@@ -124,7 +128,7 @@ export function StoryAside({
           onClick={onDraftMissing}
           disabled={extractorState.disabled}
           aria-busy={drafting}
-          className="mt-4 min-h-[44px] w-full rounded-xl bg-aether-indigo px-3 py-2 text-xs font-semibold text-white transition hover:bg-[#5b52ea] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-aether-indigo/50 disabled:opacity-60"
+          className="mt-4 min-h-[44px] w-full rounded-xl bg-aether-indigo px-3 py-2 text-xs font-semibold text-white transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-aether-indigo/50 disabled:opacity-60"
         >
           <i
             className={`fa-solid ${drafting ? "fa-spinner fa-spin" : "fa-wand-magic-sparkles"} mr-1`}

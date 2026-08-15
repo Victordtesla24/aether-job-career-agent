@@ -589,13 +589,13 @@ export default function DashboardPage() {
             <div className="mb-4 flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <span className="flex h-8 w-8 items-center justify-center rounded-lg border border-aether-indigo/25 bg-aether-indigo/15">
-                  <i className="fa-solid fa-book-bookmark text-xs text-[#818CF8]" aria-hidden="true" />
+                  <i className="fa-solid fa-book-bookmark text-xs text-aether-violet" aria-hidden="true" />
                 </span>
                 <h2 className="text-[15px] font-semibold">Story Bank</h2>
               </div>
               <Link
                 href="/dashboard/stories"
-                className="max-sm:min-h-11 max-sm:px-3 max-sm:inline-flex max-sm:items-center flex items-center gap-1 text-xs text-[#818CF8] transition hover:text-white"
+                className="max-sm:min-h-11 max-sm:px-3 max-sm:inline-flex max-sm:items-center flex items-center gap-1 text-xs text-aether-violet transition hover:text-white"
               >
                 Open <i className="fa-solid fa-arrow-right text-[9px]" aria-hidden="true" />
               </Link>
@@ -614,7 +614,7 @@ export default function DashboardPage() {
               </p>
             ) : (
               <>
-                <p className="mb-4 text-sm text-[#C8C8DC]">
+                <p className="mb-4 text-sm text-aether-muted">
                   <span className="mono font-bold text-white">{stories.data.length}</span> STAR
                   achievement{stories.data.length === 1 ? "" : "s"} ready to deploy
                 </p>
@@ -627,7 +627,7 @@ export default function DashboardPage() {
                       key={s.id}
                       className="flex items-center justify-between rounded-lg border border-white/10 bg-white/5 px-3 py-2"
                     >
-                      <span className="truncate text-xs text-[#C8C8DC]">{s.title}</span>
+                      <span className="truncate text-xs text-aether-muted">{s.title}</span>
                       <span className="mono ml-2 shrink-0 rounded bg-aether-coral/15 px-1.5 py-0.5 text-[10px] text-aether-coral">
                         {Object.keys(s.metrics ?? {}).length} metrics
                       </span>
@@ -677,7 +677,7 @@ export default function DashboardPage() {
                 />
                 <CrmRow
                   icon="fa-user-plus"
-                  color="text-[#818CF8] bg-aether-indigo/10"
+                  color="text-aether-violet bg-aether-indigo/10"
                   count={crm.data.warmIntrosPending}
                   label="warm intro pending"
                 />
