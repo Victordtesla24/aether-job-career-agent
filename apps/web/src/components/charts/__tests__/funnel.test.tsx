@@ -99,8 +99,8 @@ describe("C-1 — a zero step", () => {
     const numeral = root.querySelectorAll('[data-testid="funnel-value"]')[2] as HTMLElement;
     expect(numeral.textContent).toBe("0");
     expect(numeral.dataset.tone).toBe("neutral");
-    expect(numeral.style.color).toBe("rgb(139, 139, 163)");
-    expect(STATE.neutral).toBe("#8B8BA3");
+    expect(numeral.style.color).toBe("rgb(140, 138, 130)");
+    expect(STATE.neutral).toBe("#8C8A82");
   });
 
   it("shows a dash, not 0%, for the conversion into a zero-denominator step", () => {

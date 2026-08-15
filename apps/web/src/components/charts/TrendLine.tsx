@@ -297,7 +297,7 @@ function TrendSvg({
             cy={y(point.value)}
             r={3}
             fill={STROKE}
-            stroke="#0A0A0F"
+            stroke="#0F0F12"
             strokeWidth={1}
           >
             <title>{`${point.label}: ${formatNumber(point.value)}`}</title>

@@ -89,7 +89,7 @@ describe("C-1 — an empty bucket", () => {
     expect(zero).toHaveLength(1);
     expect(zero[0]?.getAttribute("height")).toBe("1");
     expect(zero[0]?.getAttribute("fill")).toBe(HAIRLINE);
-    expect(zero[0]?.getAttribute("fill")).not.toBe(CHART_PALETTE[4]);
+    expect(zero[0]?.getAttribute("fill")).not.toBe(CHART_PALETTE[0]);
   });
 
   it("sits at the baseline, not above it", () => {

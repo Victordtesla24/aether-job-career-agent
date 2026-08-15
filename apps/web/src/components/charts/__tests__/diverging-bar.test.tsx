@@ -53,10 +53,10 @@ describe("shared zero axis", () => {
     );
     const positive = root.querySelector('[data-row="Median salary"] [data-testid="bar"]') as HTMLElement;
     const negative = root.querySelector('[data-row="Response rate"] [data-testid="bar"]') as HTMLElement;
-    expect(positive.style.backgroundColor).toBe("rgb(52, 211, 153)");
-    expect(negative.style.backgroundColor).toBe("rgb(248, 113, 113)");
-    expect(DIVERGING.positive).toBe("#34D399");
-    expect(DIVERGING.negative).toBe("#F87171");
+    expect(positive.style.backgroundColor).toBe("rgb(111, 175, 141)");
+    expect(negative.style.backgroundColor).toBe("rgb(185, 84, 75)");
+    expect(DIVERGING.positive).toBe("#6FAF8D");
+    expect(DIVERGING.negative).toBe("#B9544B");
     expect(root.querySelector('[data-row="Median salary"]')?.textContent).toContain("+A$12,000");
     expect(root.querySelector('[data-row="Response rate"]')?.textContent).toContain("-8 pts");
   });

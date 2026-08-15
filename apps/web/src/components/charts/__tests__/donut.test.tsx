@@ -97,7 +97,7 @@ describe("legend", () => {
     // Lever is grouped into Other, but it is still a MEASURED source: it wears
     // Other's colour. state-neutral means "no data" (Rule D-1) and must never
     // land on a source that returned 12 jobs.
-    expect(lever.style.backgroundColor).not.toBe("rgb(139, 139, 163)");
+    expect(lever.style.backgroundColor).not.toBe("rgb(140, 138, 130)");
     expect(lever.style.backgroundColor).toBe(other.style.backgroundColor);
   });
 

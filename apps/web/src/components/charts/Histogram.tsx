@@ -45,7 +45,7 @@ export interface HistogramProps {
   action?: React.ReactNode;
 }
 
-const BAR_COLOUR = CHART_PALETTE[4]; // c5 violet-300
+const BAR_COLOUR = CHART_PALETTE[0]; // c1 chart-gold — one measure, one hue
 
 export function Histogram({
   title,

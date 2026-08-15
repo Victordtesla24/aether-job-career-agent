@@ -36,14 +36,14 @@ describe("the grid", () => {
     );
   });
 
-  it("maps values onto the declared 5-step coral ramp", () => {
+  it("maps values onto the declared 5-step gilt ramp", () => {
     const root = renderChart(
       <Heatmap title="Demand" windowLabel="last 14 days" rows={ROWS} unit="postings" />,
     );
     expect(CHART_HEAT).toHaveLength(5);
     const hottest = root.querySelector('[data-cell="Tue/13:00"]') as HTMLElement;
     expect(hottest.dataset.heatStep).toBe("5");
-    expect(hottest.style.backgroundColor).toBe("rgba(255, 107, 53, 0.85)");
+    expect(hottest.style.backgroundColor).toBe("rgba(201, 168, 76, 0.85)");
   });
 
   it("labels every heat step with the value range it stands for (C-5)", () => {
@@ -98,8 +98,8 @@ describe("C-1 / C-2 — an empty cell versus an unknown cell", () => {
     const cell = root.querySelector('[data-cell="Tue/09:00"]') as HTMLElement;
     expect(cell.dataset.mark).toBe("unmeasured");
     expect(cell.dataset.heatStep).toBeUndefined();
-    expect(cell.style.backgroundColor).toBe("rgb(16, 16, 24)");
-    expect(SURFACE.s1).toBe("#101018");
+    expect(cell.style.backgroundColor).toBe("rgb(15, 15, 18)");
+    expect(SURFACE.s1).toBe("#0F0F12");
     expect(cell.style.backgroundImage).toContain("repeating-linear-gradient");
     expect(cell.getAttribute("title")).toContain("no data");
     expect(cell.getAttribute("title")).toContain("collector had not started");

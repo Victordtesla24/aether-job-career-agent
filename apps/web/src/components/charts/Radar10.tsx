@@ -328,7 +328,7 @@ function RadarPlotBody({
             textAnchor={anchor}
             dominantBaseline="middle"
             className="text-[10px]"
-            fill={vertex.measured ? "#A0A0B8" : STATE.neutral}
+            fill={vertex.measured ? "rgba(245,241,232,0.62)" : STATE.neutral}
             textDecoration={vertex.measured ? undefined : "line-through"}
           >
             {vertex.measured ? vertex.label : `${vertex.label} ${NOT_MEASURED}`}
