@@ -56,7 +56,7 @@ export function AppErrorScreen({
           <button
             type="button"
             onClick={() => reset()}
-            className="rounded-xl bg-gradient-to-r from-aether-indigo to-aether-violet px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90"
+            className="rounded-xl bg-aether-coral px-4 py-2 text-sm font-semibold text-[#0A0A0A] transition hover:bg-aether-coral-accent"
           >
             <i className="fa-solid fa-rotate-right mr-2" aria-hidden="true" />
             Try again

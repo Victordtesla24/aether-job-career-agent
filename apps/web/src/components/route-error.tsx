@@ -36,7 +36,7 @@ export function RouteError({
     <div
       role="alert"
       data-testid="route-error"
-      className="mx-auto mt-6 max-w-lg rounded-2xl border border-aether-coral/30 bg-aether-coral/5 p-6 text-center"
+      className="mx-auto mt-6 max-w-lg rounded-[14px] border border-[#B9544B]/40 bg-[#B9544B]/10 p-6 text-center"
     >
       <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-aether-coral/15">
         <i className="fa-solid fa-triangle-exclamation text-lg text-aether-coral" aria-hidden="true" />
@@ -58,7 +58,7 @@ export function RouteError({
           type="button"
           onClick={() => reset()}
           data-testid="route-error-retry"
-          className="rounded-xl bg-gradient-to-r from-aether-indigo to-aether-violet px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90"
+          className="rounded-xl bg-aether-coral px-4 py-2 text-sm font-semibold text-[#0A0A0A] transition hover:bg-aether-coral-accent"
         >
           <i className="fa-solid fa-rotate-right mr-2" aria-hidden="true" />
           Try again
@@ -87,7 +87,7 @@ export function RouteSkeleton({ section }: { section: string }) {
       <div className="h-8 w-56 animate-pulse rounded-lg bg-white/5" />
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="h-24 animate-pulse rounded-2xl border border-white/10 bg-white/5" />
+          <div key={i} className="h-24 animate-pulse rounded-[14px] border border-white/10 bg-white/5" />
         ))}
       </div>
       <div className="space-y-3">

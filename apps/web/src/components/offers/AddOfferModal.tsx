@@ -163,7 +163,7 @@ export function AddOfferModal({ open, onClose, onAdd }: Props) {
             placeholder={opts.placeholder}
             aria-invalid={errors[key] ? true : undefined}
             aria-describedby={errors[key] ? errId : undefined}
-            className={`min-h-[44px] w-full rounded-lg border bg-black/25 py-2.5 text-sm text-white placeholder:text-aether-muted-dim focus:outline-none focus:ring-2 focus:ring-aether-coral/50 ${
+            className={`min-h-[44px] w-full rounded-lg border bg-black/25 py-2.5 text-sm text-aether-text placeholder:text-aether-muted-dim focus:outline-none focus:ring-2 focus:ring-aether-coral/50 ${
               NUMERIC_FIELDS.includes(key) ? "pl-7 pr-3" : "px-3"
             } ${errors[key] ? "border-red-500/60" : "border-white/10"}`}
           />
@@ -202,7 +202,7 @@ export function AddOfferModal({ open, onClose, onAdd }: Props) {
             aria-label="Close"
             className="flex h-11 w-11 shrink-0 items-center justify-center text-aether-muted transition hover:text-white"
           >
-            ✕
+            <i className="fa-solid fa-xmark" aria-hidden="true" />
           </button>
         </div>
 
@@ -224,7 +224,7 @@ export function AddOfferModal({ open, onClose, onAdd }: Props) {
                 name="currency"
                 value={draft.currency}
                 onChange={(e) => setDraft((prev) => ({ ...prev, currency: e.target.value }))}
-                className="min-h-[44px] w-full rounded-lg border border-white/10 bg-black/25 px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-aether-coral/50"
+                className="min-h-[44px] w-full rounded-lg border border-white/10 bg-black/25 px-3 py-2.5 text-sm text-aether-text focus:outline-none focus:ring-2 focus:ring-aether-coral/50 [&>option]:bg-surface-2"
               >
                 {CURRENCIES.map((c) => (
                   <option key={c} value={c}>
@@ -252,7 +252,7 @@ export function AddOfferModal({ open, onClose, onAdd }: Props) {
             <button
               type="button"
               onClick={onClose}
-              className="glass-raised min-h-[44px] rounded-xl px-4 py-2.5 text-[13px] transition hover:border-white/20"
+              className="bg-surface-2 min-h-[44px] rounded-xl border border-white/10 px-4 py-2.5 text-[13px] transition hover:border-white/20"
             >
               Cancel
             </button>

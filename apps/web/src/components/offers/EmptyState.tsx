@@ -5,7 +5,7 @@
 export function EmptyState({ onAddOffer }: { onAddOffer: () => void }) {
   return (
     <div data-testid="offers-empty-state">
-      <div className="glass flex flex-col items-center rounded-2xl border border-dashed border-white/15 px-8 py-16 text-center">
+      <div className="bg-surface-1 flex flex-col items-center rounded-2xl border border-dashed border-white/15 px-8 py-16 text-center">
         <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl border border-aether-coral/25 bg-aether-coral/10">
           <i className="fa-solid fa-scale-balanced text-2xl text-aether-coral" aria-hidden="true" />
         </div>

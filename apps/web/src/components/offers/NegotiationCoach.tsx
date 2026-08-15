@@ -25,25 +25,25 @@ export function NegotiationCoach({ negotiation }: { negotiation: Negotiation }) 
 
   return (
     <section
-      className="glass rounded-2xl border border-white/10 p-5"
+      className="bg-surface-1 rounded-2xl border border-white/10 p-5"
       data-testid="negotiation-coach"
     >
       <div className="mb-3 flex items-center gap-2">
-        <i className="fa-solid fa-comments-dollar text-[#34D399]" aria-hidden="true" />
+        <i className="fa-solid fa-comments-dollar text-[#B9707A]" aria-hidden="true" />
         <h2 className="text-sm font-semibold">Negotiation Coach</h2>
       </div>
 
-      <div className="mb-3 rounded-xl border border-[#34D399]/20 bg-[#34D399]/10 p-3 text-[12px] text-[#C7C7D6]">
+      <div className="mb-3 rounded-xl border border-[#B9707A]/20 bg-[#B9707A]/10 p-3 text-[12px] text-aether-muted">
         <i className="fa-solid fa-lightbulb mr-1 text-aether-yellow" aria-hidden="true" />
         {negotiation?.insight ?? "No coaching insight available yet."}
       </div>
 
-      <div className="space-y-2 text-[12px] text-[#C7C7D6]">
+      <div className="space-y-2 text-[12px] text-aether-muted">
         <div className="flex items-baseline gap-1">
           <i className="fa-solid fa-arrow-up-right-dots mr-1 text-aether-coral" aria-hidden="true" />
           <span>Suggested counter:</span>
           {hasCounter ? (
-            <span className="mono font-semibold text-white" data-testid="suggested-counter">
+            <span className="mono font-semibold text-aether-text" data-testid="suggested-counter">
               ${counter.toLocaleString()} base
             </span>
           ) : (
@@ -56,7 +56,7 @@ export function NegotiationCoach({ negotiation }: { negotiation: Negotiation }) 
           {(negotiation?.leverage ?? []).map((point) => (
             <li key={point} className="flex items-start gap-2">
               <i
-                className="fa-solid fa-shield-halved mt-0.5 shrink-0 text-[#818CF8]"
+                className="fa-solid fa-shield-halved mt-0.5 shrink-0 text-[#B9707A]"
                 aria-hidden="true"
               />
               <span>{point}</span>
@@ -73,7 +73,7 @@ export function NegotiationCoach({ negotiation }: { negotiation: Negotiation }) 
             aria-expanded={showDraft}
             aria-controls="counter-email-draft"
             onClick={() => setShowDraft((v) => !v)}
-            className="mt-4 flex min-h-[44px] w-full items-center justify-center rounded-xl bg-aether-indigo px-3 py-2.5 text-xs font-semibold text-white transition hover:opacity-90"
+            className="mt-4 flex min-h-[44px] w-full items-center justify-center rounded-xl bg-burgundy px-3 py-2.5 text-xs font-semibold text-white transition hover:opacity-90"
           >
             <i className="fa-solid fa-wand-magic-sparkles mr-1" aria-hidden="true" />
             {showDraft ? "Hide counter email" : "Draft counter email"}

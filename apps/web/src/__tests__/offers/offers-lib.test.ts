@@ -28,9 +28,9 @@ describe("money", () => {
 });
 
 describe("weight palette", () => {
-  it("returns the ordered wireframe colors and wraps", () => {
-    expect(weightColor(0)).toBe("#FF6B35");
-    expect(weightColor(4)).toBe("#FBBF24");
+  it("returns the ordered gilt ramp and wraps", () => {
+    expect(weightColor(0)).toBe("#8A7433");
+    expect(weightColor(4)).toBe("#E8D5A3");
     expect(weightColor(5)).toBe(WEIGHT_COLORS[0]);
   });
   it("sums weights", () => {

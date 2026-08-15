@@ -15,16 +15,17 @@ type UiOffer = Omit<Offer, "fitScore"> & {
 export const money = (n: number): string => `$${Math.round(n / 1000)}k`;
 
 /**
- * Ordered accent palette for the priority-weight bars, matching the wireframe
- * (`weights-of11`): compensation→coral, growth→indigo, culture→violet,
- * work-life→green, location→yellow. Falls back to coral for extra rows.
+ * Ordered accent ramp for the priority-weight bars (`weights-of11`). Weight is
+ * ONE measure — how much a single priority counts — so the five rows read as
+ * an ordinal gilt ramp (dark → light) rather than a categorical rainbow.
+ * Falls back to the first (darkest) step for extra rows.
  */
 export const WEIGHT_COLORS = [
-  "#FF6B35", // coral
-  "#818CF8", // indigo-400
-  "#A78BFA", // violet-400
-  "#34D399", // green
-  "#FBBF24", // yellow
+  "#8A7433",
+  "#A38A3D",
+  "#C9A84C",
+  "#D4B65C",
+  "#E8D5A3",
 ] as const;
 
 export const weightColor = (index: number): string =>

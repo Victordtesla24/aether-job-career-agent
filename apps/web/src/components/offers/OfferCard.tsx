@@ -16,7 +16,7 @@ function Row({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex justify-between">
       <dt className="text-aether-muted">{label}</dt>
-      <dd className="mono text-[#C7C7D6]">{value}</dd>
+      <dd className="mono text-aether-muted">{value}</dd>
     </div>
   );
 }
@@ -46,15 +46,15 @@ export function OfferCard({
     <article
       data-testid="offer-card"
       data-company={offer.company}
-      className={`glass-raised min-w-0 rounded-2xl border-t-2 p-5 ${
-        isTop ? "border-t-[#34D399]" : "border-t-white/10"
+      className={`bg-surface-2 min-w-0 rounded-2xl border-t-2 p-5 ${
+        isTop ? "border-t-[#B9707A]" : "border-t-white/10"
       }`}
     >
       <div className="mb-3 flex items-center justify-between gap-2">
         <span className="truncate text-sm font-semibold">{offer.company}</span>
         <div className="flex shrink-0 items-center gap-2">
           {isTop ? (
-            <span className="rounded bg-[#34D399]/15 px-2 py-0.5 text-[10px] font-semibold text-[#34D399]">
+            <span className="rounded bg-[#722F37]/25 px-2 py-0.5 text-[10px] font-semibold text-[#B9707A]">
               Top pick
             </span>
           ) : null}
@@ -82,7 +82,7 @@ export function OfferCard({
         <Row label="Equity" value={money(offer.equity)} />
         <div className="flex justify-between">
           <dt className="text-aether-muted">Location</dt>
-          <dd className="truncate pl-2 text-right text-[#C7C7D6]">{offer.location}</dd>
+          <dd className="truncate pl-2 text-right text-aether-muted">{offer.location}</dd>
         </div>
       </dl>
 
@@ -94,7 +94,7 @@ export function OfferCard({
           </span>
         ) : (
           <span
-            className={`mono text-lg font-bold ${isTop ? "text-[#34D399]" : "text-white"}`}
+            className={`mono text-lg font-bold ${isTop ? "text-[#B9707A]" : "text-aether-text"}`}
           >
             {offer.fitScore}
           </span>
