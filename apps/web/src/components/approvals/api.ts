@@ -1,4 +1,8 @@
 /** Approval-modal API calls (decision context body + single-approval fetch). */
+import {
+  executeApproval as executeSubmission,
+  type ExecuteSubmissionResult,
+} from "../../lib/api/applications";
 import { ApprovalSchema, type Approval } from "../../lib/api/approvals";
 import { apiRequest } from "../../lib/api/client";
 
@@ -49,7 +53,15 @@ export async function decideApproval(
  * `email_send` this is the ONLY call that actually sends the Gmail message;
  * approving alone never sends anything (see apps/api/app/routers/approvals.py
  * `execute_gated_action`/`_execute_email_send`).
+ *
+ * Returns the server's parsed outcome (delegating to the U5d-2 client in
+ * `lib/api/applications`), because a site submission legitimately answers
+ * 200 with `transmitted: false` (manual_step / no_confirmation / unproven)
+ * and the caller must be able to SHOW that instead of rendering the click
+ * as nothing — the owner-reported "nothing is happening" defect
+ * (2026-08-15, Easygo). Callers that only care that the call fired may
+ * still ignore the result.
  */
-export async function executeApproval(id: string): Promise<void> {
-  await apiRequest<unknown>(`/approvals/${id}/execute`, { method: "POST" });
+export async function executeApproval(id: string): Promise<ExecuteSubmissionResult> {
+  return executeSubmission(id);
 }

@@ -16,15 +16,88 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
-const NAV: Array<{ href: string; label: string }> = [
-  { href: "/admin", label: "Overview" },
-  { href: "/admin/health", label: "Health" },
+export interface AdminNavItem {
+  href: string;
+  label: string;
+  /** The section is part of ADMIN-2.0 but its screen is not in this tree yet. */
+  pending?: boolean;
+  /** REQUIRED when `pending`. Rendered as the row's title attribute. */
+  pendingReason?: string;
+  /**
+   * One line saying which system this section is, for rows whose label alone
+   * cannot separate them from a neighbour. Rendered as the link's title.
+   */
+  hint?: string;
+}
+
+/**
+ * ADMIN-2.0 — the admin sections, in the order the brief fixes:
+ * Dashboard, Users, Subscriptions, Billing, Sales agents, Promos, Spend,
+ * Health, Audit log, Settings. Money and accounts first, operations after.
+ *
+ * WHY ONE ENTRY IS STILL MARKED `pending` INSTEAD OF LINKED. BE-1 landed
+ * `GET /admin/billing/summary`, but the platform-wide billing SCREEN behind
+ * this entry does not exist in this tree — there is no
+ * `app/admin/billing/page.tsx` on any branch. (FE-2 built the PER-USER billing
+ * panel, which lives on the user detail page, not here.) Linking anyway would
+ * hand the owner a 404 dressed as a working section, which is exactly the kind
+ * of fake-completeness this programme forbids. So it holds its place in the
+ * stated order, renders as visibly disabled with the reason on hover, and
+ * becomes a link by deleting one flag when the screen lands.
+ *
+ * FE-2 flipped PROMOS the same way: `app/admin/promos/page.tsx` now exists, so
+ * the entry is a real link.
+ *
+ * TWO DIFFERENT SALES SYSTEMS LIVE IN THIS CONSOLE, and the nav must not blur
+ * them. `/admin/sales-agents` (plural) is the ADMIN-2.0 BE-2 RESELLER surface:
+ * human resellers, referral codes, attributed signups, commission reports. It
+ * moves no money and sends no mail. `/admin/sales-agent` (singular) is the
+ * NATIVE SALES AI AGENT console: an in-app autonomous outreach agent with its
+ * own tables, a 30-minute systemd timer, an admin "Run now", and real Gmail
+ * sends gated by a shadow/LIVE switch. Unrelated systems, unrelated sources of
+ * truth — so each keeps its own route, its own name, and a `hint` saying which
+ * one it is, because "Sales agents" and "Sales AI agent" are not
+ * self-disambiguating on adjacent rows.
+ *
+ * REFIX ROUND 1 — WHY THAT WORDING CHANGED. Until `origin/main@382f0c2`, the
+ * singular route was a placeholder and this file called it "Growth engine", a
+ * "read-only window onto the EXTERNAL growth engine ... that has no backend
+ * here". `382f0c2` replaced that placeholder with the native agent described
+ * above, which made the label and the description false — an admin nav calling
+ * a live outbound-email console an inert external window is precisely the kind
+ * of fabricated claim this programme forbids. Both are corrected here as part
+ * of merging that commit, rather than carried forward.
+ *
+ * `admin-nav.test.tsx` pins the order, both hrefs, both labels, the presence of
+ * both hints, that the singular entry is never again described as external, and
+ * that nothing already reachable became unreachable.
+ */
+export const ADMIN_NAV: readonly AdminNavItem[] = [
+  { href: "/admin", label: "Dashboard" },
   { href: "/admin/users", label: "Users" },
   { href: "/admin/subscriptions", label: "Subscriptions" },
-  { href: "/admin/sales-agent", label: "Sales Agent" },
-  { href: "/admin/spend", label: "Spend (US$)" },
-  { href: "/admin/settings", label: "Settings" },
+  {
+    href: "/admin/billing",
+    label: "Billing",
+    pending: true,
+    pendingReason:
+      "The platform-wide billing screen is not built yet. Its API (GET /admin/billing/summary) is live, and per-user billing truth is on each user's detail page; this screen ships in a later ADMIN-2.0 slice.",
+  },
+  {
+    href: "/admin/sales-agents",
+    label: "Sales agents",
+    hint: "Human resellers: referral codes, attributed signups and commission reports. Reporting only — it pays nobody.",
+  },
+  {
+    href: "/admin/sales-agent",
+    label: "Sales AI agent",
+    hint: "The native in-app outreach agent: campaigns, leads, outreach log and LinkedIn drafts. It sends real email whenever it is not in shadow mode.",
+  },
+  { href: "/admin/promos", label: "Promos" },
+  { href: "/admin/spend", label: "Spend" },
+  { href: "/admin/health", label: "Health" },
   { href: "/admin/audit-log", label: "Audit log" },
+  { href: "/admin/settings", label: "Settings" },
 ];
 
 function isActive(pathname: string, href: string): boolean {
@@ -61,20 +134,38 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           <p className="text-xs text-aether-muted-dim">Platform control</p>
         </div>
         <nav className="flex flex-col gap-1">
-          {NAV.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              onClick={() => setMobileNavOpen(false)}
-              className={`rounded-md px-3 py-2 text-sm transition-colors ${
-                isActive(pathname, item.href)
-                  ? "bg-aether-indigo/20 text-aether-text"
-                  : "text-aether-muted hover:bg-white/5 hover:text-aether-text"
-              }`}
-            >
-              {item.label}
-            </Link>
-          ))}
+          {ADMIN_NAV.map((item) =>
+            item.pending ? (
+              <span
+                key={item.href}
+                data-testid={`admin-nav-pending-${item.href}`}
+                aria-disabled="true"
+                title={item.pendingReason}
+                className="flex cursor-not-allowed items-center justify-between gap-2 rounded-md px-3 py-2 text-sm text-aether-muted-dim"
+              >
+                {item.label}
+                {/* The state is a word, not a colour: a greyed row alone would
+                    be indistinguishable from a low-contrast theme. */}
+                <span className="type-mono-micro rounded border border-white/10 px-1 py-px text-[9px] uppercase tracking-wide">
+                  soon
+                </span>
+              </span>
+            ) : (
+              <Link
+                key={item.href}
+                href={item.href}
+                title={item.hint}
+                onClick={() => setMobileNavOpen(false)}
+                className={`rounded-md px-3 py-2 text-sm transition-colors ${
+                  isActive(pathname, item.href)
+                    ? "bg-aether-indigo/20 text-aether-text"
+                    : "text-aether-muted hover:bg-white/5 hover:text-aether-text"
+                }`}
+              >
+                {item.label}
+              </Link>
+            ),
+          )}
         </nav>
         <div className="mt-8 border-t border-white/10 pt-4 px-2">
           <Link href="/dashboard" className="text-xs text-aether-muted-dim hover:text-aether-text">

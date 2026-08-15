@@ -5,7 +5,7 @@ import logging
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, HTTPException, Query, Request, status
 from pydantic import BaseModel, EmailStr, field_validator
 
 from app.db import ensure_user_profile_columns, get_connection, rows_to_dicts
@@ -39,6 +39,10 @@ class RegisterRequest(BaseModel):
     # Persisted on the User row so self-registered users don't get a blank
     # profile name; absent/blank values leave ``name`` NULL.
     name: str | None = None
+    # ADMIN-2.0 BE-2 — sales-agent referral code from a ``?ref=<code>`` landing
+    # link. Optional and inert: absent (the normal case) means the registration
+    # path performs exactly the work it did before this field existed.
+    ref: str | None = None
 
     @field_validator("password")
     @classmethod
@@ -85,7 +89,11 @@ class TokenResponse(BaseModel):
     response_model=UserResponse,
     status_code=status.HTTP_201_CREATED,
 )
-def register(request: Request, body: RegisterRequest) -> UserResponse:
+def register(
+    request: Request,
+    body: RegisterRequest,
+    ref: str | None = Query(default=None),
+) -> UserResponse:
     # Public-registration gate (§15 admin settings): when an admin has turned
     # signup off, self-service registration is refused. Checked before the rate
     # limiter so a disabled signup returns a clean 403.
@@ -109,6 +117,29 @@ def register(request: Request, body: RegisterRequest) -> UserResponse:
             status_code=status.HTTP_409_CONFLICT,
             detail="An account with this email already exists",
         ) from None
+    # ADMIN-2.0 BE-2 — sales-agent attribution. The code may arrive in the body
+    # or on the query string (``/auth/register?ref=CODE``), because the signup
+    # page reaches here from a ``/signup?ref=CODE`` landing link.
+    #
+    # Deliberately AFTER the account exists and deliberately non-fatal: an
+    # account is the user's, a referral credit is the operator's bookkeeping,
+    # and a growth feature must never be able to stop somebody registering. The
+    # failure is LOGGED with its traceback rather than swallowed, and
+    # ``attribute_signup`` returns before touching the database at all when no
+    # code was supplied — so a signup without ``?ref=`` does exactly what it
+    # did before this feature existed.
+    referral_code = body.ref or ref
+    if referral_code:
+        from app.repositories.sales_agents import attribute_signup
+
+        try:
+            attribute_signup(user["id"], referral_code)
+        except Exception:  # noqa: BLE001 — never block a registration
+            logger.warning(
+                "Referral attribution failed for a new account; the account was "
+                "created and is simply unattributed.",
+                exc_info=True,
+            )
     return UserResponse(id=user["id"], email=user["email"], createdAt=user["createdAt"])
 
 

@@ -21,20 +21,41 @@
  * * "Credentials" sets a password (hashed server-side, never displayed or
  *   logged, existing sessions invalidated) or changes email/username, both
  *   uniqueness-checked server-side.
+ *
+ * ADMIN-2.0 FE-2 adds three more, each with its own honesty rule:
+ *
+ * * "Billing truth" shows the LOCAL `Subscription` row and STRIPE side by side.
+ *   They can disagree — the owner account is the live proof (a stale `pro/active`
+ *   row with nothing cancellable behind it) — and merging them into one figure
+ *   would hide the very discrepancy an admin is here to resolve. "Stripe could
+ *   not be read" is a THIRD state, never rendered as "Stripe has nothing".
+ * * "Reconcile local" clears a stale row in OUR database and makes no Stripe
+ *   call at all. It is offered only where the backend can actually perform it.
+ * * "Delete" is SOFT and says so: `deletedAt` plus a suspension, with the
+ *   account's work and audit history preserved, reversible with Restore. The
+ *   admin/owner refusal is a server guard; this page surfaces that 409 rather
+ *   than pretending a hidden button is the protection.
  */
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import { AdminPageHeader } from "../../../../components/admin/admin-shell";
+import {
+  ConfirmPanel,
+  StatusPill,
+  formatAudExact,
+} from "../../../../components/admin/admin-ui";
 import { ApiError } from "../../../../lib/api/client";
 import { formatDateTime } from "../../../../lib/format";
 import {
   cancelUserSubscription,
+  deleteAdminUser,
   fetchAdminUser,
   fetchUserAuditLog,
   formatUsd,
   refundUserSubscription,
+  restoreAdminUser,
   setEntitlementOverride,
   setSpendCap,
   setSuspended,
@@ -44,8 +65,26 @@ import {
   type AuditEntry,
   type EntitlementOverrideKind,
 } from "../../../../lib/api/admin";
+import {
+  fetchUserBilling,
+  reconcileLocalBilling,
+  setCustomPrice,
+  type AdminUserBilling,
+} from "../../../../lib/api/adminBilling";
 
 const OVERRIDE_PLANS = ["free", "starter", "pro", "power"] as const;
+
+/** Mirrors `admin_billing.BILLABLE_STATUSES` — "really on the hook" locally. */
+const BILLABLE_STATUSES = ["active", "trialing", "past_due"];
+/** Mirrors `stripe_gateway.LIVE_SUBSCRIPTION_STATUSES`. */
+const LIVE_STRIPE_STATUSES = [
+  "active",
+  "trialing",
+  "past_due",
+  "unpaid",
+  "incomplete",
+  "paused",
+];
 
 function Panel({
   title,
@@ -84,6 +123,18 @@ export default function AdminUserDetailPage() {
   const [capInput, setCapInput] = useState("");
   const [busy, setBusy] = useState(false);
 
+  // Billing truth (ADMIN-2.0). Loaded alongside the account but failing
+  // independently: a Stripe outage must not blank the page it sits on.
+  const [billing, setBilling] = useState<AdminUserBilling | null>(null);
+  const [billingError, setBillingError] = useState<string | null>(null);
+  const [reconcileOpen, setReconcileOpen] = useState(false);
+  const [priceAmount, setPriceAmount] = useState("");
+  const [priceInterval, setPriceInterval] = useState<"month" | "year">("month");
+
+  // Delete flow
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState("");
+
   // Entitlement override form
   const [overrideKind, setOverrideKind] = useState<EntitlementOverrideKind>("none");
   const [overridePlan, setOverridePlan] = useState<string>("pro");
@@ -115,6 +166,22 @@ export default function AdminUserDetailPage() {
       } catch {
         // The trail is supplementary: a failure here must not blank the page.
         setAudit([]);
+      }
+      try {
+        const b = await fetchUserBilling(userId);
+        setBilling(b);
+        setBillingError(null);
+        // Seed the negotiated-price field from whatever is really charged today,
+        // so the admin edits a number rather than retyping one from memory.
+        const current = b.local?.customPrice?.amountAud ?? b.stripe.subscription?.amountAud;
+        if (typeof current === "number") setPriceAmount(String(current));
+        const interval = b.local?.customPrice?.interval ?? b.stripe.subscription?.interval;
+        if (interval === "month" || interval === "year") setPriceInterval(interval);
+      } catch (e) {
+        // Same rule as the audit trail: this panel failing must not take the
+        // account with it. The reason is shown IN the panel, not swallowed.
+        setBilling(null);
+        setBillingError(e instanceof Error ? e.message : "Failed to load billing");
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load user");
@@ -242,6 +309,65 @@ export default function AdminUserDetailPage() {
     }, "Latest paid charge refunded; the account was revoked to Free.");
   };
 
+  const onReconcileLocal = () => {
+    setReconcileOpen(false);
+    void run(async () => {
+      const result = await reconcileLocalBilling(userId);
+      // Report which Stripe answer authorised the clear, and that nothing was
+      // written to Stripe — the two facts that make this action safe.
+      const checked =
+        result.stripeChecked === "no_customer_on_file"
+          ? "no Stripe customer was on file"
+          : result.stripeChecked === "customer_not_found_at_stripe"
+            ? "the recorded Stripe customer does not exist at Stripe"
+            : "Stripe showed no live subscription";
+      return `Local subscription row cleared to Free — ${checked}, and no Stripe object was changed.`;
+    }, "Local subscription row cleared.");
+  };
+
+  const onSaveCustomPrice = () => {
+    const amount = Number(priceAmount);
+    if (priceAmount.trim() === "" || !Number.isFinite(amount) || amount <= 0) {
+      setError("The negotiated amount must be a number greater than 0 (AUD).");
+      return;
+    }
+    void run(async () => {
+      const result = await setCustomPrice(userId, {
+        amountAud: Math.round(amount * 100) / 100,
+        interval: priceInterval,
+      });
+      return (
+        `Repriced to ${formatAudExact(result.amountAud)} per ${result.interval} — ` +
+        "the existing subscription was changed in place with no proration, so no " +
+        "charge, credit or refund was raised. It applies from the next renewal."
+      );
+    }, "Negotiated price saved.");
+  };
+
+  const onDeleteUser = () => {
+    const typed = deleteConfirm.trim();
+    void run(async () => {
+      const result = await deleteAdminUser(userId, typed);
+      setDeleteOpen(false);
+      setDeleteConfirm("");
+      return (
+        `Account soft-deleted${result.deletedAt ? ` at ${formatDateTime(result.deletedAt)}` : ""}: ` +
+        "it is suspended and hidden from normal use, its jobs, applications, runs " +
+        "and audit history are preserved, and it is reversible with Restore."
+      );
+    }, "Account soft-deleted (reversible with Restore).");
+  };
+
+  const onRestoreUser = () => {
+    void run(async () => {
+      const result = await restoreAdminUser(userId);
+      // Restore deliberately does NOT lift the suspension. Never imply it did.
+      return result.suspended
+        ? "Account restored — it is still suspended. Lift the suspension deliberately below."
+        : "Account restored.";
+    }, "Account restored.");
+  };
+
   if (error && !detail) return <p className="text-sm text-red-300">{error}</p>;
   if (!detail) return <p className="text-sm text-aether-muted">Loading…</p>;
 
@@ -249,10 +375,73 @@ export default function AdminUserDetailPage() {
   const ent = detail.entitlement;
   const unlimited = ent?.unlimited === true;
   const overrideActive = ent?.overrideActive === true;
+  const deleted = Boolean(u.deletedAt);
+
+  // ---- Billing truth, derived exactly as the backend derives it ------------
+  const local = billing?.local ?? null;
+  const truth = billing?.stripe ?? null;
+  const mismatchState: "match" | "mismatch" | "not-evaluated" = !billing
+    ? "not-evaluated"
+    : !billing.mismatch.evaluated
+      ? "not-evaluated"
+      : billing.mismatch.hasMismatch
+        ? "mismatch"
+        : "match";
+  const stripeHasLive = Boolean(
+    truth?.available &&
+      (truth.subscriptions ?? []).some((s) => LIVE_STRIPE_STATUSES.includes(s.status ?? "")),
+  );
+  /** A row worth reconciling at all: paid-looking, or pointing at a subscription. */
+  const staleCandidate = Boolean(
+    local && ((local.planId ?? "free") !== "free" || local.stripeSubscriptionId),
+  );
+  /**
+   * Only offer reconcile where the backend can actually perform it (the
+   * 29ea6bc rule: never present a control whose only possible outcome is a
+   * refusal). The backend consults Stripe first and its answer is binding — a
+   * live subscription is a 409, and an unreadable Stripe with a customer on
+   * file is a 503 — so both of those cases are explained instead of offered.
+   */
+  const needsStripeAnswer = Boolean(local?.stripeCustomerId);
+  const canReconcile =
+    staleCandidate && (!needsStripeAnswer || Boolean(truth?.available && !stripeHasLive));
+  /** Repricing needs a live LOCAL subscription id in a billable status. */
+  const canReprice = Boolean(
+    local?.stripeSubscriptionId && BILLABLE_STATUSES.includes(local?.status ?? ""),
+  );
 
   return (
     <div>
       <AdminPageHeader title={u.name || u.email} subtitle={u.email} />
+
+      {deleted ? (
+        <div
+          data-testid="admin-user-deleted-banner"
+          className="mb-4 rounded-xl border border-red-500/40 bg-red-500/[0.07] p-3"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-red-200">
+                This account is deleted (soft) — deleted {formatDateTime(u.deletedAt)}.
+              </p>
+              <p className="type-meta mt-1 max-w-prose">
+                It is suspended and cannot be used, while its jobs, applications, runs
+                and audit history are preserved. Restoring returns the record; it does
+                not lift the suspension.
+              </p>
+            </div>
+            <button
+              type="button"
+              data-testid="admin-restore-user"
+              onClick={onRestoreUser}
+              disabled={busy}
+              className={PRIMARY_BTN}
+            >
+              Restore account
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {notice ? (
         <p role="status" className="mb-3 text-sm text-aether-green" data-testid="admin-user-notice">
@@ -588,6 +777,341 @@ export default function AdminUserDetailPage() {
           >
             {u.suspended ? "Unsuspend user" : "Suspend user"}
           </button>
+        </Panel>
+      </div>
+
+      {/* ------------------------------------------------------------------ *
+       * BILLING TRUTH. Two columns because there are genuinely two sources of
+       * truth, and the panel's job is to show whether they agree — not to pick
+       * one and present it as "the subscription".
+       * ------------------------------------------------------------------ */}
+      <div className="mt-4">
+        <Panel title="Billing truth — local row vs Stripe" testId="admin-billing-panel">
+          {billingError ? (
+            <p data-testid="admin-billing-error" className="text-sm text-red-300">
+              Could not load the billing surface: {billingError}. Nothing on this
+              panel is being shown from cache or guessed — retry, or check Stripe
+              directly.
+            </p>
+          ) : !billing ? (
+            <p className="text-sm text-aether-muted">Loading billing…</p>
+          ) : (
+            <>
+              <div className="mb-3 flex flex-wrap items-center gap-2">
+                <StatusPill
+                  testId="admin-billing-mismatch"
+                  state={mismatchState}
+                  tone={
+                    mismatchState === "match"
+                      ? "good"
+                      : mismatchState === "mismatch"
+                        ? "warn"
+                        : "neutral"
+                  }
+                  title={
+                    mismatchState === "not-evaluated"
+                      ? "Stripe could not be read, so no comparison was made."
+                      : undefined
+                  }
+                >
+                  {mismatchState === "match"
+                    ? "Match"
+                    : mismatchState === "mismatch"
+                      ? "Mismatch"
+                      : "Not compared"}
+                </StatusPill>
+                <span className="type-meta">
+                  {mismatchState === "match"
+                    ? "The local row and Stripe agree."
+                    : mismatchState === "mismatch"
+                      ? "The local row and Stripe disagree — see the reasons below."
+                      : "Stripe could not be read, so no comparison was performed. This is not a claim that Stripe holds nothing."}
+                </span>
+              </div>
+
+              {mismatchState === "mismatch" ? (
+                <ul
+                  data-testid="admin-billing-mismatch-reasons"
+                  className="mb-3 list-disc space-y-1 rounded-xl border border-aether-amber/40 bg-aether-amber/[0.06] py-2 pl-8 pr-3 text-xs text-aether-amber"
+                >
+                  {billing.mismatch.reasons.map((reason) => (
+                    <li key={reason}>{reason}</li>
+                  ))}
+                </ul>
+              ) : null}
+
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                <div data-testid="admin-billing-local" className="min-w-0">
+                  <p className="type-section mb-2">This database (Subscription row)</p>
+                  {local ? (
+                    <dl className="grid grid-cols-2 gap-y-1.5 text-sm">
+                      <dt className="text-aether-muted">Plan</dt>
+                      <dd className="text-aether-text">{local.planId ?? "—"}</dd>
+                      <dt className="text-aether-muted">Status</dt>
+                      <dd className="text-aether-text">{local.status ?? "—"}</dd>
+                      <dt className="text-aether-muted">Interval</dt>
+                      <dd className="text-aether-text">{local.billingInterval ?? "—"}</dd>
+                      <dt className="text-aether-muted">Stripe customer</dt>
+                      <dd className="mono break-all text-[11px] text-aether-text">
+                        {local.stripeCustomerId ?? "—"}
+                      </dd>
+                      <dt className="text-aether-muted">Stripe subscription</dt>
+                      <dd className="mono break-all text-[11px] text-aether-text">
+                        {local.stripeSubscriptionId ?? "—"}
+                      </dd>
+                      <dt className="text-aether-muted">Period ends</dt>
+                      <dd className="text-aether-text">
+                        {formatDateTime(local.currentPeriodEnd)}
+                        {local.cancelAtPeriodEnd ? " · cancels then" : ""}
+                      </dd>
+                      <dt className="text-aether-muted">Row updated</dt>
+                      <dd className="text-aether-text">{formatDateTime(local.updatedAt)}</dd>
+                    </dl>
+                  ) : (
+                    <p className="text-sm text-aether-muted">
+                      No local subscription row for this account.
+                    </p>
+                  )}
+                </div>
+
+                <div data-testid="admin-billing-stripe" className="min-w-0">
+                  <p className="type-section mb-2">Stripe (live)</p>
+                  {!truth?.available ? (
+                    <p
+                      data-testid="admin-billing-stripe-unavailable"
+                      className="rounded-lg border border-white/10 bg-white/[0.02] p-2.5 text-xs text-aether-amber"
+                    >
+                      Stripe could not be read: {truth?.reason ?? "no reason reported."} Nothing
+                      below is inferred in its place.
+                    </p>
+                  ) : truth.customer ? (
+                    <dl className="grid grid-cols-2 gap-y-1.5 text-sm">
+                      <dt className="text-aether-muted">Customer</dt>
+                      <dd className="mono break-all text-[11px] text-aether-text">
+                        {truth.customer.id ?? "—"}
+                      </dd>
+                      <dt className="text-aether-muted">Email at Stripe</dt>
+                      <dd className="break-all text-aether-text">{truth.customer.email ?? "—"}</dd>
+                      <dt className="text-aether-muted">Subscription</dt>
+                      <dd className="text-aether-text">
+                        {truth.subscription
+                          ? `${truth.subscription.status ?? "—"}${
+                              truth.subscription.amountAud !== null
+                                ? ` · ${formatAudExact(truth.subscription.amountAud)}/${truth.subscription.interval ?? "?"}`
+                                : ""
+                            }`
+                          : "none"}
+                      </dd>
+                      <dt className="text-aether-muted">Live subscriptions</dt>
+                      <dd className="mono text-aether-text tabular-nums">
+                        {(truth.subscriptions ?? []).filter((s) =>
+                          LIVE_STRIPE_STATUSES.includes(s.status ?? ""),
+                        ).length}
+                      </dd>
+                      <dt className="text-aether-muted">Payment method</dt>
+                      <dd className="text-aether-text">
+                        {truth.paymentMethod?.last4
+                          ? `${truth.paymentMethod.brand ?? "card"} ···· ${truth.paymentMethod.last4}` +
+                            (truth.paymentMethod.expMonth && truth.paymentMethod.expYear
+                              ? ` (exp ${truth.paymentMethod.expMonth}/${truth.paymentMethod.expYear})`
+                              : "")
+                          : "none on file"}
+                      </dd>
+                      <dt className="text-aether-muted">Invoices</dt>
+                      <dd className="mono text-aether-text tabular-nums">
+                        {(truth.invoices ?? []).length}
+                      </dd>
+                      {truth.customer.delinquent ? (
+                        <>
+                          <dt className="text-aether-muted">Delinquent</dt>
+                          <dd className="text-aether-amber">yes</dd>
+                        </>
+                      ) : null}
+                    </dl>
+                  ) : (
+                    <p className="text-sm text-aether-muted">
+                      {truth.note ??
+                        "Stripe holds no customer for this account. (This IS Stripe's answer, not a failed read.)"}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div className="mt-4 border-t border-white/5 pt-3">
+                {canReconcile ? (
+                  <>
+                    <button
+                      type="button"
+                      data-testid="admin-billing-reconcile"
+                      onClick={() => setReconcileOpen(true)}
+                      disabled={busy}
+                      className={QUIET_BTN}
+                    >
+                      Reconcile local row
+                    </button>
+                    {reconcileOpen ? (
+                      <ConfirmPanel
+                        testId="admin-billing-reconcile-confirm-panel"
+                        confirmTestId="admin-billing-reconcile-confirm"
+                        cancelTestId="admin-billing-reconcile-cancel"
+                        title="Clear the local subscription row?"
+                        confirmLabel="Clear the local row"
+                        busy={busy}
+                        onConfirm={onReconcileLocal}
+                        onCancel={() => setReconcileOpen(false)}
+                        body={
+                          <>
+                            This edits ONLY this database: the local row is set back to
+                            Free and any negotiated price on it is cleared. No Stripe
+                            call is made — nothing is cancelled, charged or refunded at
+                            Stripe, and the customer is not notified. The server checks
+                            Stripe first and refuses if a live subscription exists.
+                          </>
+                        }
+                      />
+                    ) : null}
+                  </>
+                ) : (
+                  <p data-testid="admin-billing-reconcile-na" className="type-meta max-w-prose">
+                    {!staleCandidate
+                      ? "Nothing to reconcile: the local row is already Free with no Stripe subscription attached."
+                      : stripeHasLive
+                        ? "Not reconcilable: Stripe shows a live subscription for this customer, so the local row is correct rather than stale. Cancel or refund it instead."
+                        : "Not reconcilable right now: Stripe could not be read, and this account has a Stripe customer on file. Clearing the row without Stripe's answer could destroy a live customer's record."}
+                  </p>
+                )}
+              </div>
+            </>
+          )}
+        </Panel>
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Panel title="Negotiated price (AUD)" testId="admin-custom-price">
+          {local?.customPrice?.amountAud ? (
+            <p
+              data-testid="admin-custom-price-current"
+              className="mb-3 rounded-lg border border-aether-indigo/40 bg-aether-indigo/[0.08] p-2.5 text-xs text-aether-text"
+            >
+              Currently {formatAudExact(local.customPrice.amountAud)} per{" "}
+              {local.customPrice.interval ?? "period"} — set{" "}
+              {formatDateTime(local.customPrice.setAt)}
+              {local.customPrice.setBy ? ` by ${local.customPrice.setBy}` : ""}.
+            </p>
+          ) : null}
+
+          {canReprice ? (
+            <>
+              <p className="mb-2 text-xs text-aether-muted">
+                Reprices the customer&apos;s EXISTING subscription in place. No second
+                subscription is opened, no proration is applied, and no charge, credit
+                or refund is raised — the amount takes effect at the next renewal. No
+                GST line is added (the operator is not GST-registered).
+              </p>
+              <div className="flex flex-wrap items-end gap-2">
+                <label className="text-xs text-aether-muted">
+                  Amount (AUD)
+                  <input
+                    aria-label="Custom amount (AUD)"
+                    inputMode="decimal"
+                    value={priceAmount}
+                    onChange={(e) => setPriceAmount(e.target.value)}
+                    className={`${FIELD} mt-1 w-32`}
+                  />
+                </label>
+                <label className="text-xs text-aether-muted">
+                  Interval
+                  <select
+                    aria-label="Billing interval"
+                    value={priceInterval}
+                    onChange={(e) => setPriceInterval(e.target.value === "year" ? "year" : "month")}
+                    className={`${FIELD} mt-1`}
+                  >
+                    <option value="month">per month</option>
+                    <option value="year">per year</option>
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  data-testid="admin-custom-price-save"
+                  onClick={onSaveCustomPrice}
+                  disabled={busy}
+                  className={PRIMARY_BTN}
+                >
+                  Save negotiated price
+                </button>
+              </div>
+            </>
+          ) : (
+            <p data-testid="admin-custom-price-na" className="text-sm text-aether-muted">
+              This account has no live Stripe subscription to reprice. A negotiated
+              price only exists as a change to a real subscription — to grant access
+              without one, use the entitlement override above.
+            </p>
+          )}
+        </Panel>
+
+        <Panel title="Delete account" testId="admin-danger-zone">
+          {deleted ? (
+            <p className="text-sm text-aether-muted">
+              Already deleted (soft) — use Restore at the top of this page to reverse
+              it. There is no hard delete: every job, application, run and audit row
+              references this account, and destroying them is not something this panel
+              can undo.
+            </p>
+          ) : (
+            <>
+              <p className="mb-2 text-xs text-aether-muted">
+                A soft delete: the account is stamped deleted and suspended, so it
+                really cannot be used, while its work and audit history are preserved.
+                Reversible with Restore. Administrator accounts and the owner identity
+                are refused by the server.
+              </p>
+              {deleteOpen ? (
+                <ConfirmPanel
+                  tone="critical"
+                  testId="admin-delete-user-panel"
+                  confirmTestId="admin-delete-user-confirm"
+                  cancelTestId="admin-delete-user-cancel"
+                  title={`Delete ${u.email}?`}
+                  confirmLabel="Delete this account"
+                  busy={busy}
+                  confirmDisabled={
+                    deleteConfirm.trim().toLowerCase() !== u.email.trim().toLowerCase()
+                  }
+                  onConfirm={onDeleteUser}
+                  onCancel={() => {
+                    setDeleteOpen(false);
+                    setDeleteConfirm("");
+                  }}
+                  body={
+                    <>
+                      Type the account&apos;s email address to confirm. The server checks
+                      it too, so a mis-routed link cannot delete the wrong person.
+                    </>
+                  }
+                >
+                  <input
+                    aria-label="Type the email address to confirm deletion"
+                    value={deleteConfirm}
+                    onChange={(e) => setDeleteConfirm(e.target.value)}
+                    placeholder={u.email}
+                    className={`${FIELD} mt-2`}
+                  />
+                </ConfirmPanel>
+              ) : (
+                <button
+                  type="button"
+                  data-testid="admin-delete-user"
+                  onClick={() => setDeleteOpen(true)}
+                  disabled={busy}
+                  className="rounded-md bg-red-500/20 px-4 py-2 text-sm font-medium text-red-300 hover:bg-red-500/30 disabled:opacity-50"
+                >
+                  Delete account…
+                </button>
+              )}
+            </>
+          )}
         </Panel>
       </div>
 

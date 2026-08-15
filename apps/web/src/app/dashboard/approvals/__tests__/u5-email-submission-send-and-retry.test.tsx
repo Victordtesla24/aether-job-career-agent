@@ -221,6 +221,27 @@ describe("a failed send stays visible and is really retryable (MUST-FIX 2)", () 
     expect(screen.queryByTestId("unsent-badge")).toBeNull();
   });
 
+  it("a 200 manual_step outcome is SHOWN, never rendered as nothing", async () => {
+    // Owner-reported (2026-08-15, Easygo): the site path answers 200 with
+    // transmitted:false when the agent hit an honest obstacle, and the old
+    // retry discarded that body — the click looked like NOTHING happened.
+    strandedQueue();
+    executeApprovalMock.mockResolvedValue({
+      status: "manual_step",
+      transmitted: false,
+      reason: "unknown_required_question",
+      detail: "Aether needs your answer to: Country",
+    });
+
+    render(<ApprovalsPage />);
+    fireEvent.click(await screen.findByTestId("retry-send-btn"));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toMatch(/not sent/i);
+    expect(alert.textContent).toMatch(/needs your answer to: country/i);
+    expect(alert.textContent).toMatch(/applications page/i);
+  });
+
   it("a retry that fails again says nothing was sent and keeps the affordance", async () => {
     strandedQueue();
     executeApprovalMock.mockRejectedValue(new Error("Gmail authorization expired"));

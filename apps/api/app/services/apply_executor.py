@@ -1074,9 +1074,10 @@ def _fill_value(page: Any, field: dict[str, Any], value: Any, documents: dict[st
             answer_tokens = {t for t in re.findall(r"[a-z0-9]+", text_value.lower()) if len(t) > 1}
             best_idx, best_score, second_score = -1, 0, 0
             for idx in range(count):
+                option_text = str(options.nth(idx).inner_text() or "").lower()
                 option_tokens = {
                     t
-                    for t in re.findall(r"[a-z0-9]+", str(options.nth(idx).inner_text() or "").lower())
+                    for t in re.findall(r"[a-z0-9]+", option_text)
                     if len(t) > 1
                 }
                 score = len(answer_tokens & option_tokens)

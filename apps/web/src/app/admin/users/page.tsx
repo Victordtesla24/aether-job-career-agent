@@ -3,20 +3,213 @@
 /**
  * /admin/users — user list with filters + LLM spend in US$ (§15 Tier 1).
  * Columns: name, email, plan, last-login, signup date, LLM spend (USD).
+ *
+ * ADMIN-2.0 FE-2 adds the ADD-USER flow. The whole design of that modal follows
+ * from one property of `POST /admin/users`: it returns a generated temporary
+ * password EXACTLY ONCE. The API hashes it, never stores the plaintext, never
+ * writes it to the audit row, and exposes no route that can read it back — so
+ * the modal cannot treat that value as something it can fetch again. It shows
+ * the credential on its own step, says plainly that it is shown once, gives a
+ * copy button that reports whether the copy actually happened, and requires a
+ * deliberate acknowledgement to dismiss. The remedy if it is lost (set a new
+ * password from the user's own page) is stated there rather than left to be
+ * discovered.
+ *
+ * Soft-deleted accounts stay in this list, flagged. BE-1's delete is a soft one
+ * — `deletedAt` plus a suspension, with every job, application, run and audit
+ * row preserved — so hiding the row would show an erasure that did not happen.
  */
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { AdminPageHeader } from "../../../components/admin/admin-shell";
+import {
+  CopyButton,
+  FIELD,
+  PRIMARY_BTN,
+  QUIET_BTN,
+  StatusPill,
+} from "../../../components/admin/admin-ui";
 import { formatDate } from "../../../lib/format";
 import {
+  createAdminUser,
   fetchAdminUsers,
   formatUsd,
   type AdminUser,
+  type CreatedUser,
   type UserFilters,
 } from "../../../lib/api/admin";
 
 const PLANS = ["", "free", "starter", "pro", "power"];
+
+/**
+ * The add-user modal. Two steps, deliberately: a form, then the credential.
+ * They are never on screen together, so the moment the password exists it is
+ * the only thing the admin is being asked to deal with.
+ */
+function AddUserModal({
+  onClose,
+  onCreated,
+}: {
+  onClose: () => void;
+  /** Called when the admin acknowledges the credential — the list reloads then. */
+  onCreated: () => void;
+}) {
+  const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [created, setCreated] = useState<CreatedUser | null>(null);
+
+  const submit = async () => {
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail || !trimmedEmail.includes("@")) {
+      setError("Enter the new user's email address.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await createAdminUser({
+        email: trimmedEmail,
+        // An empty display name is absence, not a blank name — don't send it.
+        ...(name.trim() ? { name: name.trim() } : {}),
+      });
+      setCreated(result);
+    } catch (e) {
+      // The backend's own sentence ("That email is already registered.") is
+      // more useful than anything this layer could invent.
+      setError(e instanceof Error ? e.message : "Could not create the account.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/60 p-4 sm:items-center">
+      <div
+        data-testid="admin-add-user-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Add user"
+        className="elev-3 w-full max-w-lg rounded-2xl p-5"
+      >
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-base font-semibold text-aether-text">
+              {created ? "Account created" : "Add user"}
+            </h2>
+            <p className="type-meta mt-1">
+              {created
+                ? "Hand these credentials to the new user."
+                : "Creates an ordinary account. Administrator access is never granted here."}
+            </p>
+          </div>
+          {/* No dismiss affordance exists once the credential is on screen —
+              the only way past it is the acknowledgement below. */}
+          {created ? null : (
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close"
+              className="rounded-md border border-white/10 px-2 py-1 text-sm text-aether-muted hover:text-white"
+            >
+              ✕
+            </button>
+          )}
+        </div>
+
+        {error ? (
+          <p role="alert" data-testid="admin-add-user-error" className="mb-3 text-sm text-red-300">
+            {error}
+          </p>
+        ) : null}
+
+        {created ? (
+          <div>
+            <dl className="mb-3 grid grid-cols-3 gap-y-2 text-sm">
+              <dt className="text-aether-muted">Email</dt>
+              <dd className="col-span-2 text-aether-text">{created.email}</dd>
+              <dt className="text-aether-muted">Name</dt>
+              <dd className="col-span-2 text-aether-text">{created.name || "—"}</dd>
+            </dl>
+
+            <p className="type-section mb-1.5">Temporary password</p>
+            <div className="flex flex-wrap items-center gap-2 rounded-xl border border-aether-amber/40 bg-aether-amber/[0.06] p-3">
+              <code
+                data-testid="admin-temp-password"
+                className="mono min-w-0 flex-1 break-all text-sm text-aether-text"
+              >
+                {created.tempPassword}
+              </code>
+              <CopyButton
+                value={created.tempPassword}
+                testId="admin-temp-password-copy"
+                ariaLabel="Copy the temporary password"
+              />
+            </div>
+            <p data-testid="admin-temp-password-warning" className="type-meta mt-2 max-w-prose">
+              Shown once. It is stored only as a hash — it is not written to the audit
+              log and cannot be retrieved from anywhere, by anyone, after you close
+              this. If it is lost, set a new password from this user&apos;s page instead.
+            </p>
+            <p className="type-meta mt-1 max-w-prose text-aether-muted-dim">
+              The account is flagged as still using an admin-generated password until
+              the user sets one of their own.
+            </p>
+
+            <div className="mt-4 flex justify-end">
+              <button
+                type="button"
+                data-testid="admin-add-user-done"
+                onClick={onCreated}
+                className={PRIMARY_BTN}
+              >
+                I&apos;ve saved the password
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-3">
+            <label className="text-xs text-aether-muted">
+              Email
+              <input
+                aria-label="New user email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className={`${FIELD} mt-1`}
+              />
+            </label>
+            <label className="text-xs text-aether-muted">
+              Name (optional)
+              <input
+                aria-label="New user name (optional)"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className={`${FIELD} mt-1`}
+              />
+            </label>
+            <div className="mt-1 flex justify-end gap-2">
+              <button type="button" onClick={onClose} className={QUIET_BTN}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                data-testid="admin-add-user-submit"
+                onClick={() => void submit()}
+                disabled={busy}
+                className={PRIMARY_BTN}
+              >
+                {busy ? "Creating…" : "Create account"}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default function AdminUsersPage() {
   const [rows, setRows] = useState<AdminUser[]>([]);
@@ -26,6 +219,7 @@ export default function AdminUsersPage() {
   const [q, setQ] = useState("");
   const [plan, setPlan] = useState("");
   const [suspendedOnly, setSuspendedOnly] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -56,53 +250,64 @@ export default function AdminUsersPage() {
         subtitle="Accounts with plan, activity and LLM spend (US$ — LLM providers bill USD)."
       />
 
-      <form
-        className="mb-4 flex flex-wrap items-end gap-3"
-        onSubmit={(e) => {
-          e.preventDefault();
-          void load();
-        }}
-      >
-        {/* ADMIN-FULL: the backend's `q` filter also matches `username` (a real
-            login identity), so the hint below names all three fields it searches. */}
-        <label className="flex flex-col text-xs text-aether-muted">
-          Search
-          <input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="email, username or name"
-            className="mt-1 w-56 rounded-md border border-white/10 bg-aether-bg px-3 py-2 text-sm text-aether-text placeholder:text-aether-muted-dim"
-          />
-        </label>
-        <label className="flex flex-col text-xs text-aether-muted">
-          Plan
-          <select
-            value={plan}
-            onChange={(e) => setPlan(e.target.value)}
-            className="mt-1 rounded-md border border-white/10 bg-aether-bg px-3 py-2 text-sm text-aether-text"
-          >
-            {PLANS.map((p) => (
-              <option key={p} value={p}>
-                {p === "" ? "All plans" : p}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="flex items-center gap-2 pb-2 text-xs text-aether-muted">
-          <input
-            type="checkbox"
-            checked={suspendedOnly}
-            onChange={(e) => setSuspendedOnly(e.target.checked)}
-          />
-          Suspended only
-        </label>
-        <button
-          type="submit"
-          className="rounded-md bg-aether-indigo px-4 py-2 text-sm font-medium text-white hover:bg-aether-indigo/90"
+      <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+        <form
+          className="flex flex-wrap items-end gap-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void load();
+          }}
         >
-          Apply
+          {/* ADMIN-FULL: the backend's `q` filter also matches `username` (a real
+              login identity), so the hint below names all three fields it searches. */}
+          <label className="flex flex-col text-xs text-aether-muted">
+            Search
+            <input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="email, username or name"
+              className="mt-1 w-56 rounded-md border border-white/10 bg-aether-bg px-3 py-2 text-sm text-aether-text placeholder:text-aether-muted-dim"
+            />
+          </label>
+          <label className="flex flex-col text-xs text-aether-muted">
+            Plan
+            <select
+              value={plan}
+              onChange={(e) => setPlan(e.target.value)}
+              className="mt-1 rounded-md border border-white/10 bg-aether-bg px-3 py-2 text-sm text-aether-text"
+            >
+              {PLANS.map((p) => (
+                <option key={p} value={p}>
+                  {p === "" ? "All plans" : p}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="flex items-center gap-2 pb-2 text-xs text-aether-muted">
+            <input
+              type="checkbox"
+              checked={suspendedOnly}
+              onChange={(e) => setSuspendedOnly(e.target.checked)}
+            />
+            Suspended only
+          </label>
+          <button
+            type="submit"
+            className="rounded-md bg-aether-indigo px-4 py-2 text-sm font-medium text-white hover:bg-aether-indigo/90"
+          >
+            Apply
+          </button>
+        </form>
+
+        <button
+          type="button"
+          data-testid="admin-add-user"
+          onClick={() => setAddOpen(true)}
+          className={PRIMARY_BTN}
+        >
+          Add user
         </button>
-      </form>
+      </div>
 
       {error ? <p className="text-sm text-red-300">{error}</p> : null}
 
@@ -121,19 +326,22 @@ export default function AdminUsersPage() {
           </thead>
           <tbody className="divide-y divide-white/5">
             {rows.map((u) => (
-              <tr key={u.id} className="hover:bg-white/5">
+              <tr key={u.id} data-testid={`admin-user-row-${u.id}`} className="hover:bg-white/5">
                 <td className="px-4 py-3 text-aether-text">
-                  {u.name || "—"}
-                  {u.isAdmin ? (
-                    <span className="ml-2 rounded bg-aether-violet/20 px-1.5 py-0.5 text-[10px] text-aether-violet">
-                      admin
-                    </span>
-                  ) : null}
-                  {u.suspended ? (
-                    <span className="ml-2 rounded bg-red-500/15 px-1.5 py-0.5 text-[10px] text-red-300">
-                      suspended
-                    </span>
-                  ) : null}
+                  <span className="mr-2">{u.name || "—"}</span>
+                  <span className="inline-flex flex-wrap gap-1 align-middle">
+                    {u.isAdmin ? <StatusPill tone="accent">admin</StatusPill> : null}
+                    {/* Deleted first: it is the strongest fact about the row, and
+                        a soft-deleted account is always suspended too, so the
+                        suspension pill alone would under-state it. */}
+                    {u.deletedAt ? (
+                      <StatusPill tone="critical" title={`Soft-deleted ${u.deletedAt}`}>
+                        deleted
+                      </StatusPill>
+                    ) : u.suspended ? (
+                      <StatusPill tone="warn">suspended</StatusPill>
+                    ) : null}
+                  </span>
                 </td>
                 <td className="px-4 py-3 text-aether-muted">{u.email}</td>
                 <td className="px-4 py-3 text-aether-muted">{u.plan ?? "—"}</td>
@@ -165,6 +373,16 @@ export default function AdminUsersPage() {
       <p className="mt-3 text-xs text-aether-muted-dim">
         {loading ? "Loading…" : `${rows.length} of ${total} users`}
       </p>
+
+      {addOpen ? (
+        <AddUserModal
+          onClose={() => setAddOpen(false)}
+          onCreated={() => {
+            setAddOpen(false);
+            void load();
+          }}
+        />
+      ) : null}
     </div>
   );
 }

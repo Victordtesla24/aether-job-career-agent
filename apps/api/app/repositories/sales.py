@@ -34,7 +34,12 @@ from typing import Any
 
 import psycopg2
 
-from app.db import get_connection, new_id, rows_to_dicts
+from app.db import (
+    ensure_user_lifecycle_columns,
+    get_connection,
+    new_id,
+    rows_to_dicts,
+)
 
 #: Ratified consent types (build brief §4.1). Anything else is refused.
 CONSENT_TYPES = frozenset(
@@ -629,10 +634,21 @@ class SalesRepository:
         MRR joins ``Subscription.billingInterval`` so an annual plan counts at
         its true monthly-equivalent (priceAudAnnual / 12) instead of being
         double-counted at the full monthly price.
+
+        ``signups`` excludes accounts an admin has deleted. ADMIN-2.0's delete
+        is SOFT (``User.deletedAt``; eight child tables cascade off ``User.id``,
+        so the row cannot go away), which means a plain ``COUNT(*)`` would keep
+        counting deleted accounts as growth forever — and would disagree with
+        ``/admin/metrics/executive``, which already excludes them
+        (``admin_metrics.py:90,179``). Two admin screens contradicting each
+        other about the same population is exactly the kind of untraceable
+        figure this console is not allowed to show. Lazy-DDL contract as in
+        ``_lifecycle_candidates``: the column post-dates this repository.
         """
+        ensure_user_lifecycle_columns()
         with get_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute('SELECT COUNT(*) FROM "User"')
+                cur.execute('SELECT COUNT(*) FROM "User" WHERE "deletedAt" IS NULL')
                 signups = int(cur.fetchone()[0])
                 cur.execute(
                     '''
