@@ -561,21 +561,20 @@ def agent_policy_cohorts(current_user: CurrentUser) -> dict[str, Any]:
 # Real-Time Market Pulse (real DB-derived market intelligence)
 # --------------------------------------------------------------------------
 
-#: Brand colours for known job sources; unknown sources cycle the palette.
-#: R-VIZ: fixed CHART_PALETTE order (gold/sapphire/rose/sky) for the top 4,
-#: every source beyond that — named or unmapped — shares the Other/neutral
-#: tone rather than taking a 5th hue.
-_SOURCE_COLORS = {
-    "linkedin": "#AE8E32",
-    "seek": "#4F74B5",
-    "indeed": "#C16F7B",
-    "glassdoor": "#439FC8",
-    "angellist": "#8C8A82",
-    "wellfound": "#8C8A82",
-    "company": "#8C8A82",
-    "referral": "#8C8A82",
-}
-_PALETTE = ["#AE8E32", "#4F74B5", "#C16F7B", "#439FC8", "#8C8A82", "#8C8A82"]
+#: R-VIZ chart palette, in fixed order and NEVER cycled. The donut assigns
+#: these by RANK — the largest source takes chart-gold, the next sapphire, and
+#: so on — because a colour that means "biggest slice" is readable, whereas the
+#: old per-name map handed four different named sources (angellist, wellfound,
+#: company, referral) the SAME hue and so drew differently-labelled segments in
+#: one colour, which is exactly the collision the uniqueness invariant below
+#: exists to prevent.
+_CHART_PALETTE = ["#AE8E32", "#4F74B5", "#C16F7B", "#439FC8"]
+
+#: The single reserved overflow tone (--state-neutral). Anything past the top
+#: four — including the rolled-up "Other" slice — wears this, because R-VIZ
+#: forbids a fifth hue. It is the ONE colour a donut may legitimately repeat:
+#: it does not identify a source, it says "this is the tail".
+_CHART_OTHER = "#8C8A82"
 
 #: Whether the PROBABILITY model has any market evidence to reason from. It has
 #: none — no factor below is computed from anything outside this user's own
@@ -1061,22 +1060,14 @@ def market_pulse(current_user: CurrentUser) -> dict[str, Any]:
     for _, idx in sorted(remainders, key=lambda x: (-x[0], x[1]))[:remaining]:
         floored[idx] += 1
 
-    # Fallback colors for unmapped sources must skip colors already claimed
-    # by mapped sources — otherwise adjacent donut segments are identical.
-    claimed = {
-        _SOURCE_COLORS[str(r["source"]).lower()]
-        for r in source_rows
-        if str(r["source"]).lower() in _SOURCE_COLORS
-    }
-    fallback_cycle = [c for c in _PALETTE if c not in claimed] or list(_PALETTE)
-    fallback_idx = 0
+    # Colours are assigned by RANK (source_rows arrives ordered by count), so
+    # the top four slices each get their own CHART_PALETTE hue and everything
+    # past them — plus the rolled-up "Other" — takes the reserved overflow
+    # tone. No cycling, no fifth hue, and no two NAMED sources sharing a hue.
     sources: list[dict[str, Any]] = []
     for idx, r in enumerate(source_rows):
         label = str(r["source"])
-        color = _SOURCE_COLORS.get(label.lower())
-        if color is None:
-            color = fallback_cycle[fallback_idx % len(fallback_cycle)]
-            fallback_idx += 1
+        color = _CHART_PALETTE[idx] if idx < len(_CHART_PALETTE) else _CHART_OTHER
         sources.append(
             {
                 "label": label[:1].upper() + label[1:],
@@ -1089,7 +1080,7 @@ def market_pulse(current_user: CurrentUser) -> dict[str, Any]:
             {
                 "label": "Other",
                 "value": floored[len(top5_counts)],
-                "color": fallback_cycle[fallback_idx % len(fallback_cycle)],
+                "color": _CHART_OTHER,
             }
         )
 

@@ -355,11 +355,7 @@ class TestAnalytics:
         assert 0 in measured, measured  # the measured zero is still in the mean
         assert pulse["probability"]["score"] == round(sum(measured) / len(measured))
 
-    def test_source_donut_colors_are_unique(self, client, auth_headers, user_id):
-        """An unmapped source must not receive a fallback color already
-        claimed by a mapped source (seek=#FF6B35 was duplicated at palette
-        index 1, merging adjacent donut segments)."""
-        _seed_funnel(user_id, jobs=3, statuses=["submitted"])  # 3 seek jobs
+    def _seed_source(self, user_id, source, title="Board role"):
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
@@ -368,16 +364,47 @@ class TestAnalytics:
                         "description", "source", "sourceUrl", "createdAt", "updatedAt")
                     VALUES (%s, %s, %s, %s, %s, %s, %s, NOW(), NOW())
                     ''',
-                    (new_id(), user_id, "Unmapped board role", "Acme",
-                     "desc", "customboard", "https://example.com/custom"),
+                    (new_id(), user_id, title, "Acme",
+                     "desc", source, f"https://example.com/{source}/{new_id()}"),
                 )
             conn.commit()
+
+    def test_source_donut_colors_are_unique(self, client, auth_headers, user_id):
+        """No two NAMED donut segments may share a colour — differently
+        labelled segments in one hue read as a single slice. R-VIZ assigns
+        CHART_PALETTE by rank, so the reserved overflow tone #8C8A82 is the
+        only colour a donut may repeat (see the overflow case below)."""
+        _seed_funnel(user_id, jobs=3, statuses=["submitted"])  # 3 seek jobs
+        self._seed_source(user_id, "customboard", title="Unmapped board role")
         pulse = client.get("/analytics/market-pulse", headers=auth_headers).json()
         sources = pulse["sources"]
         labels = {s["label"].lower() for s in sources}
         assert {"seek", "customboard"} <= labels
         colors = [s["color"] for s in sources]
         assert len(colors) == len(set(colors)), f"duplicate donut colors: {colors}"
+        # Rank order walks CHART_PALETTE from the top, never cycling.
+        assert colors[0] == "#AE8E32"
+
+    def test_source_donut_overflow_shares_only_the_reserved_other_tone(
+        self, client, auth_headers, user_id
+    ):
+        """R-VIZ: top-4 hues + Other (#8C8A82), never a fifth hue. With more
+        sources than palette steps, the first four are distinct and every
+        overflow source collapses onto the ONE reserved neutral — it must
+        never wrap back onto CHART_PALETTE[0]."""
+        _seed_funnel(user_id, jobs=5, statuses=["submitted"])  # 5 seek jobs
+        for extra, count in (
+            ("linkedin", 4), ("indeed", 3), ("glassdoor", 2),
+            ("customboard", 1), ("referral", 1),
+        ):
+            for _ in range(count):
+                self._seed_source(user_id, extra)
+        pulse = client.get("/analytics/market-pulse", headers=auth_headers).json()
+        colors = [s["color"] for s in pulse["sources"]]
+        assert colors[:4] == ["#AE8E32", "#4F74B5", "#C16F7B", "#439FC8"], colors
+        overflow = colors[4:]
+        assert overflow, "expected at least one overflow slice"
+        assert set(overflow) == {"#8C8A82"}, colors
 
     def test_conversion_rates(self, client, auth_headers, user_id):
         _seed_funnel(user_id, jobs=4, statuses=["submitted", "offer"])
