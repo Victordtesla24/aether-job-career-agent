@@ -16,15 +16,55 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
-const NAV: Array<{ href: string; label: string }> = [
-  { href: "/admin", label: "Overview" },
-  { href: "/admin/health", label: "Health" },
+export interface AdminNavItem {
+  href: string;
+  label: string;
+  /** The section is part of ADMIN-2.0 but its screen is not in this tree yet. */
+  pending?: boolean;
+  /** REQUIRED when `pending`. Rendered as the row's title attribute. */
+  pendingReason?: string;
+}
+
+/**
+ * ADMIN-2.0 FE-1 — the admin sections, in the order the brief fixes:
+ * Dashboard, Users, Subscriptions, Billing, Sales agents, Promos, Spend,
+ * Health, Audit log, Settings. Money and accounts first, operations after.
+ *
+ * WHY TWO ENTRIES ARE MARKED `pending` INSTEAD OF LINKED. BE-1 has already
+ * landed the API for both (`GET /admin/billing/summary`, and the
+ * `GET/POST/DELETE /admin/promos` trio), but their SCREENS belong to a later
+ * frontend slice and do not exist in this tree — there is no
+ * `app/admin/billing/page.tsx` and no `app/admin/promos/page.tsx` on any
+ * branch. Linking to them anyway would hand the owner two 404s dressed as
+ * working sections, which is exactly the kind of fake-completeness this
+ * programme forbids. So they hold their place in the stated order, render as
+ * visibly disabled with the reason on hover, and become links by deleting one
+ * flag when the screens land. `admin-nav.test.tsx` pins both halves of that:
+ * the order, and the absence of a live link to a route that does not exist.
+ */
+export const ADMIN_NAV: readonly AdminNavItem[] = [
+  { href: "/admin", label: "Dashboard" },
   { href: "/admin/users", label: "Users" },
   { href: "/admin/subscriptions", label: "Subscriptions" },
-  { href: "/admin/sales-agent", label: "Sales Agent" },
-  { href: "/admin/spend", label: "Spend (US$)" },
-  { href: "/admin/settings", label: "Settings" },
+  {
+    href: "/admin/billing",
+    label: "Billing",
+    pending: true,
+    pendingReason:
+      "The billing screen is not built yet. Its API (GET /admin/billing/summary) is live; the screen ships in a later ADMIN-2.0 slice.",
+  },
+  { href: "/admin/sales-agent", label: "Sales agents" },
+  {
+    href: "/admin/promos",
+    label: "Promos",
+    pending: true,
+    pendingReason:
+      "The promotions screen is not built yet. Its API (GET/POST/DELETE /admin/promos) is live; the screen ships in a later ADMIN-2.0 slice.",
+  },
+  { href: "/admin/spend", label: "Spend" },
+  { href: "/admin/health", label: "Health" },
   { href: "/admin/audit-log", label: "Audit log" },
+  { href: "/admin/settings", label: "Settings" },
 ];
 
 function isActive(pathname: string, href: string): boolean {
@@ -61,20 +101,37 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
           <p className="text-xs text-aether-muted-dim">Platform control</p>
         </div>
         <nav className="flex flex-col gap-1">
-          {NAV.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              onClick={() => setMobileNavOpen(false)}
-              className={`rounded-md px-3 py-2 text-sm transition-colors ${
-                isActive(pathname, item.href)
-                  ? "bg-aether-indigo/20 text-aether-text"
-                  : "text-aether-muted hover:bg-white/5 hover:text-aether-text"
-              }`}
-            >
-              {item.label}
-            </Link>
-          ))}
+          {ADMIN_NAV.map((item) =>
+            item.pending ? (
+              <span
+                key={item.href}
+                data-testid={`admin-nav-pending-${item.href}`}
+                aria-disabled="true"
+                title={item.pendingReason}
+                className="flex cursor-not-allowed items-center justify-between gap-2 rounded-md px-3 py-2 text-sm text-aether-muted-dim"
+              >
+                {item.label}
+                {/* The state is a word, not a colour: a greyed row alone would
+                    be indistinguishable from a low-contrast theme. */}
+                <span className="type-mono-micro rounded border border-white/10 px-1 py-px text-[9px] uppercase tracking-wide">
+                  soon
+                </span>
+              </span>
+            ) : (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={() => setMobileNavOpen(false)}
+                className={`rounded-md px-3 py-2 text-sm transition-colors ${
+                  isActive(pathname, item.href)
+                    ? "bg-aether-indigo/20 text-aether-text"
+                    : "text-aether-muted hover:bg-white/5 hover:text-aether-text"
+                }`}
+              >
+                {item.label}
+              </Link>
+            ),
+          )}
         </nav>
         <div className="mt-8 border-t border-white/10 pt-4 px-2">
           <Link href="/dashboard" className="text-xs text-aether-muted-dim hover:text-aether-text">
