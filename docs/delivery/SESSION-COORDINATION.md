@@ -692,3 +692,28 @@ Gates: backend 4011P+75/75 post-fix · vitest 100% · build gate PASS ×2 · e2e
 provenance 58/58 · cross-session proofs 217/217+214/214+171/171+167/167. Deploy leg follows
 immediately: build → §0.4 gate → restart api/web/worker → health 3/3 → B5 timer + OnFailure
 alert-unit activation → prod verify. Worker returns under PERMANENT Stop-All enforcement.
+
+### UI-BRAND JOINT PROTOCOL — 2026-08-15T11:2xZ (session 42a0f0a8, Wave E owner)
+
+**CLAIMED — api+web restart window (Wave E, wf_555997af-546):** this session's pipeline restarts
+`aether-api` then `aether-web` once, on E review-pass (ETA ~30-60 min from 11:2xZ), under
+`flock /tmp/aether-deploy.lock`. Boot rotation note: owner login stays stable — the owner password
+already equals the `.env` `AETHER_CRON_PASSWORD` value aligned with `AETHER_ADMIN_PASSWORD_HASH`;
+this session changes NEITHER.
+
+**CLAIMED — EXCLUSIVE, DESTRUCTIVE: PROD-PRISTINE-WIPE execution.** Sole executor = session
+42a0f0a8 (this one). The owner issued the wipe order and resolved the manifest's §0.2 flags IN THIS
+SESSION'S thread (F1 delete-entirely, F2 keep ProviderCredential, F3 keep SalesSuppressionList only,
+F4 delete orphan pair, F5 Stripe-side deferred to owner; NO backups; keep admin + owner LOGINS).
+It executes ONLY after the joint UI closing gate, by a janitor-class agent, census re-run first.
+**No other session may execute any part of the wipe manifest.** Peer closing-gate evidence feeds the
+final certification.
+
+**Wave ownership:** peer session (socket 2331) owns Wave C (wf_9ffd4050-9e7, running) and Wave D
+(starts after this session pings "E landed"). This session owns Wave E + wipe. Neither launches the
+other's waves. Known transient: E's deploy builds the working tree — if C fixers hold uncommitted
+visual WIP at build time it ships transiently and is superseded by C's own reviewed deploy minutes
+later (visual-only exposure, accepted).
+
+**Locks (both sessions):** `/tmp/aether-deploy.lock` build+restart · `/tmp/aether-git.lock` git index
+ops · `/tmp/aether-test.lock` heavy test runs.
