@@ -16,7 +16,9 @@ with PyMuPDF instead of rebuilding it:
 - For each *changed* work bullet we redact only that bullet's text box (the
   coral ``•`` marker and all surrounding chrome are left intact), then
   re-render the reworded text at the exact same origin, size, leading and
-  bold-lead-in/grey-body structure, with a subtle peach highlight behind it.
+  bold-lead-in/grey-body structure. The employer-facing document stops there;
+  the subtle peach highlight behind a reworded bullet is drawn ONLY for the
+  Résumé Studio diff preview (``render_tailored_pdf(..., highlight=True)``).
 
 The measurements below (``_RIGHT_MARGIN``, ``_LINE_PITCH``, the colour tuples,
 the body-line font-size band) were read straight off the source PDF with
@@ -64,7 +66,10 @@ _CORAL_TOL = 0.08
 #: Bold lead-in colour (≈ #2B2B2B) and grey body colour (≈ #4D4D4D).
 _BOLD_RGB = (0.169, 0.169, 0.169)
 _BODY_RGB = (0.302, 0.302, 0.302)
-#: Subtle peach wash drawn behind a changed bullet.
+#: Subtle peach wash drawn behind a changed bullet — a STUDIO affordance, drawn
+#: only when a caller explicitly asks for the diff preview (``highlight=True``).
+#: The employer-facing download never carries it: see the ``highlight`` flag on
+#: :func:`render_tailored_pdf` (RFMT-2).
 _HIGHLIGHT_RGB = (0.996, 0.906, 0.875)
 _HIGHLIGHT_OPACITY = 0.55
 
@@ -290,11 +295,11 @@ def _render_block(
     *,
     reg: Any,
     bold: Any,
-    highlight: Any,
+    highlight: Any | None,
     font_reg: Any,
     font_bold: Any,
 ) -> None:
-    """Draw ``new_full`` into ``block``'s slot with a highlight behind it.
+    """Draw ``new_full`` into ``block``'s slot, over ``highlight`` when there is one.
 
     The reworded text keeps the original bold lead-in ("Prefix:") in the dark
     weight and the remainder in grey, wrapped at the original width and placed
@@ -302,6 +307,12 @@ def _render_block(
     the font size (and its proportional line pitch) is stepped down until it
     fits, so it never renders on top of the next bullet and nothing below
     shifts.
+
+    ``highlight`` is the page's diff-preview shape, or ``None`` for the clean
+    employer-facing render — in which case no rectangle is drawn at all, so the
+    produced bytes carry no ``_HIGHLIGHT_RGB`` fill anywhere (RFMT-2). Only the
+    wash is conditional: the text placement, sizing and colours below are the
+    same in both variants, so the two renders differ by the tint and nothing else.
     """
     x0 = block["x0"]
     width = _RIGHT_MARGIN - x0
@@ -321,7 +332,10 @@ def _render_block(
     size, pitch, lines = _fit_text(font_reg, new_full.split(), width, available)
 
     bottom = block["baseline"] + (len(lines) - 1) * pitch + size * 0.3
-    highlight.draw_rect(fitz.Rect(x0 - 2, block["top"] - 1.5, _RIGHT_MARGIN + 1, bottom))
+    if highlight is not None:
+        highlight.draw_rect(
+            fitz.Rect(x0 - 2, block["top"] - 1.5, _RIGHT_MARGIN + 1, bottom)
+        )
 
     consumed = 0
     for row, line in enumerate(lines):
@@ -380,7 +394,10 @@ def extract_pdf_bullets(pdf_path: Path | str) -> list[str]:
 
 
 def render_tailored_pdf(
-    original: Path | bytes, changes: list[tuple[str, str]]
+    original: Path | bytes,
+    changes: list[tuple[str, str]],
+    *,
+    highlight: bool = False,
 ) -> bytes:
     """Return format-preserving PDF bytes for a tailored resume.
 
@@ -408,6 +425,20 @@ def render_tailored_pdf(
     bullet. The previous implementation spliced ``after`` onto the bullet's
     original continuation, which duplicated and dangled text whenever the
     rewrite already restated that continuation (GAP-P4-044).
+
+    ``highlight`` selects the DIFF PREVIEW variant. It defaults to ``False`` —
+    the clean, employer-facing document — and that default is the whole point of
+    the flag (RFMT-2). The peach wash is a Résumé Studio affordance that tells
+    the subscriber which lines were reworded; it is not part of their résumé, and
+    a recruiter opening a tinted file sees an annotated draft. Live production
+    shipped that wash on NINE bullets across all three pages of a tailored
+    download (``uat/reports/evidence/models-live/resume-format/``). With the flag
+    off NO shape is created and NO rectangle drawn, so the produced bytes carry
+    no ``_HIGHLIGHT_RGB`` fill anywhere — an opacity-0 rectangle would still put
+    the colour in the file, and would put it back on the page the first time the
+    opacity constant moved. Everything else — the redaction, the text placement,
+    the fit ladder, and therefore the fidelity the caller verifies afterwards —
+    is identical in both variants: the preview is the download plus a tint.
 
     :raises PdfRenderError: the bytes/path could not be opened as a PDF.
     """
@@ -458,18 +489,23 @@ def render_tailored_pdf(
                 )
             page.apply_redactions()
 
-            highlight = page.new_shape()
+            # No shape object at all on the clean download path, so nothing can
+            # commit a ``_HIGHLIGHT_RGB`` fill into the page's content stream.
+            wash = page.new_shape() if highlight else None
             reg = fitz.TextWriter(page.rect, color=_BODY_RGB)
             bold = fitz.TextWriter(page.rect, color=_BOLD_RGB)
             font_reg, font_bold = fitz.Font("helv"), fitz.Font("hebo")
             for block, new_full in page_edits:
                 _render_block(
                     block, new_full,
-                    reg=reg, bold=bold, highlight=highlight,
+                    reg=reg, bold=bold, highlight=wash,
                     font_reg=font_reg, font_bold=font_bold,
                 )
-            highlight.finish(fill=_HIGHLIGHT_RGB, color=None, fill_opacity=_HIGHLIGHT_OPACITY)
-            highlight.commit(overlay=True)  # over the redacted white, under text
+            if wash is not None:
+                wash.finish(
+                    fill=_HIGHLIGHT_RGB, color=None, fill_opacity=_HIGHLIGHT_OPACITY
+                )
+                wash.commit(overlay=True)  # over the redacted white, under text
             reg.write_text(page)
             bold.write_text(page)
 
@@ -498,8 +534,9 @@ def render_tailored_pdf(
 #   swap ever fired and the download carried two byte-identical pages.
 #
 # Both are structural, so the fix is structural: one flowing document, drawn
-# once, paginated by content, with the tailored lines washed in coral where the
-# tailoring diff says a line was reworded.
+# once, paginated by content, with the tailored wording swapped in wherever the
+# tailoring diff says a line was reworded — and, for the Studio's diff preview
+# only, those lines washed in coral (RFMT-2: the download itself is unmarked).
 #
 # Geometry/palette are the measurements read off Vik_Resume_Final.pdf (top-
 # origin points; reportlab's origin is bottom-left, so a top ``y`` maps to
@@ -510,7 +547,7 @@ def render_tailored_pdf(
 # prove the bullet survived.
 _PANEL_HEX = "#FCD9CF"   # peach title panel
 _ACCENT_HEX = "#F4715C"  # coral accent rule under the title panel
-_CHANGE_HEX = "#FF6B35"  # coral wash behind a tailored bullet
+_CHANGE_HEX = "#FF6B35"  # coral wash behind a tailored bullet (PREVIEW only)
 _INK_HEX = "#2B2B2B"     # near-black headings / body ink
 _MUTE_HEX = "#4D4D4D"    # muted grey sub-text
 
@@ -647,8 +684,14 @@ def _draw_heading(flow: _Flow, heading: str) -> None:
     flow.y -= _HEADING_PT + 8.0
 
 
-def _draw_flow_bullet(flow: _Flow, text: str, *, tailored: bool) -> None:
-    """One bullet, kept whole: washed in coral when the tailoring reworded it."""
+def _draw_flow_bullet(flow: _Flow, text: str, *, washed: bool) -> None:
+    """One bullet, kept whole: washed in coral only for the diff PREVIEW variant.
+
+    ``washed`` is the caller's ``highlight`` flag AND "the tailoring reworded
+    this line" — never the second alone. The employer-facing download draws the
+    reworded wording with no wash behind it (RFMT-2); the swap itself still
+    happens, so the file always carries the tailored words either way.
+    """
     text_x = _M_X + _BULLET_INDENT
     lines = _wrap_rl(text, "Helvetica", _BODY_PT, _M_MAX - text_x)
     block_h = len(lines) * _BULLET_LEAD
@@ -656,7 +699,7 @@ def _draw_flow_bullet(flow: _Flow, text: str, *, tailored: bool) -> None:
     # whole page still flows rather than being truncated.
     if block_h <= _TOP_Y - _BOTTOM_Y:
         flow.reserve(block_h)
-    if tailored:
+    if washed:
         flow.c.setFillColor(HexColor(_CHANGE_HEX))
         flow.c.setFillAlpha(_CHANGE_ALPHA)
         flow.c.rect(
@@ -713,6 +756,7 @@ def create_branded_resume_pdf(
     changes: list[tuple[str, str]] | None = None,
     *,
     contact: list[str] | tuple[str, ...] | None = None,
+    highlight: bool = False,
 ) -> bytes:
     """Render the WHOLE résumé in the Aether template, over as many pages as it needs.
 
@@ -728,9 +772,17 @@ def create_branded_resume_pdf(
     (``kind`` is ``"line"`` or ``"bullet"``); the older ``{"heading",
     "bullets"}`` shape is still accepted. ``contact`` carries the contact
     details. ``changes`` is the tailoring diff as ``(before, after)`` pairs: a
-    line matching either half is drawn over a light coral ``#FF6B35`` wash so
-    the reworded lines stand out, and a section still holding the BASELINE
-    wording is swapped for the tailored wording.
+    section still holding the BASELINE wording is swapped for the tailored
+    wording, and — in the diff PREVIEW variant only — a line matching either
+    half is drawn over a light coral ``#FF6B35`` wash so the reworded lines
+    stand out.
+
+    ``highlight`` gates that wash, and defaults to ``False`` for the same reason
+    :func:`render_tailored_pdf`'s does (RFMT-2): this renderer is a DOWNLOAD path
+    too — every branch that cannot preserve a user's own document falls back to
+    it — so an employer-facing file produced here must be as free of diff
+    marking as one produced by the splice. The swap is unconditional: the
+    tailored wording is in the file in both variants.
     """
     swaps = {
         _normalize(before): after
@@ -769,8 +821,10 @@ def create_branded_resume_pdf(
                 _draw_flow_bullet(
                     flow,
                     drawn,
-                    tailored=_normalize(drawn) in tailored
-                    or _normalize(text) in swaps,
+                    washed=highlight
+                    and (
+                        _normalize(drawn) in tailored or _normalize(text) in swaps
+                    ),
                 )
             else:
                 flow.text_block(

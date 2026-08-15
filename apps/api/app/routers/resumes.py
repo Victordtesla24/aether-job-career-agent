@@ -787,13 +787,25 @@ def _inplace_render_or_fallback(
 
 
 def _render_resume(
-    resume_id: str, user_id: str, *, branded: bool = False
+    resume_id: str, user_id: str, *, branded: bool = False, highlight: bool = False
 ) -> _RenderedResume:
     """Produce a résumé download AND verify the fidelity claim made about it.
 
     Shared by ``GET /resumes/{id}/download`` and ``GET /resumes/{id}/fidelity``
     so the report and the file can never disagree: the report is derived from
-    THIS artifact, by re-reading it, not from the résumé's metadata.
+    THIS artifact, by re-reading it, not from the résumé's metadata. ``highlight``
+    is part of that pact — both endpoints default it to ``False`` and pass the
+    caller's own value through, so the report always describes the exact variant
+    the same request would have downloaded.
+
+    ``highlight`` selects the Résumé Studio DIFF PREVIEW (the peach/coral wash
+    behind each reworded line) instead of the clean, employer-facing document.
+    It defaults to ``False`` on EVERY render path below — splice, branded opt-in
+    and branded fallback alike — because a résumé sent to an employer must not
+    carry diff marking (RFMT-2; live production shipped the wash on nine bullets
+    across all three pages of a tailored download). Nothing else about any path
+    changes with the flag: the redaction, the in-place splice, the completeness
+    check and the fidelity contract are byte-for-byte the same work.
 
     That distinction is not academic. Until this round the splice branch
     described itself from a formatHash match alone and claimed "every other
@@ -853,7 +865,8 @@ def _render_resume(
 
         name, title, objective, sections, contact = _branded_content(resume)
         pdf_bytes = create_branded_resume_pdf(
-            name, title, objective, sections, changes or None, contact=contact
+            name, title, objective, sections, changes or None,
+            contact=contact, highlight=highlight,
         )
         return _RenderedResume(
             content=pdf_bytes,
@@ -982,7 +995,9 @@ def _render_resume(
                             native_report, None, byte_identical=True
                         ),
                     )
-                spliced = render_tailored_pdf(bytes(data), changes)
+                spliced = render_tailored_pdf(
+                    bytes(data), changes, highlight=highlight
+                )
                 shipped, fallback_report = _inplace_render_or_fallback(
                     spliced,
                     _PDF_CONTENT_TYPE,
@@ -1017,7 +1032,9 @@ def _render_resume(
                 filename=f"resume-{resume_id[:8]}.pdf",
                 fidelity=verified_fidelity(splice_report, None, byte_identical=True),
             )
-        spliced = render_tailored_pdf(original, changes)  # splice in place
+        spliced = render_tailored_pdf(  # splice in place
+            original, changes, highlight=highlight
+        )
         # MODELS-LIVE R-FMT §2/§3 — the format-preservation ruling that replaces
         # the U2b all-or-nothing gate here. The in-place engine only redraws
         # right-column work bullets, so a rewrite aimed at the left rail cannot
@@ -1046,7 +1063,8 @@ def _render_resume(
     # branded template; never serve the operator's bundled PDF bytes.
     name, title, objective, sections, contact = _branded_content(resume)
     pdf_bytes = create_branded_resume_pdf(
-        name, title, objective, sections, changes or None, contact=contact
+        name, title, objective, sections, changes or None,
+        contact=contact, highlight=highlight,
     )
     reflow_report = fallback_report or describe_fidelity(
         bundled_match=False,
@@ -1112,23 +1130,61 @@ _BRANDED_OPTIN = Query(
 )
 
 
+#: The Résumé Studio diff-preview opt-in shared by ``/download`` and
+#: ``/fidelity`` (RFMT-2). Default ``False``, so what a plain download returns is
+#: the clean, employer-facing document: no peach splice wash, no coral branded
+#: wash, no diff marking of any kind. Studio asks for ``?diff=true`` when it
+#: wants to SHOW the subscriber which lines were reworded; the Download button
+#: never does.
+_DIFF_PREVIEW = Query(
+    False,
+    description=(
+        "Return the Résumé Studio diff preview — the same document with the "
+        "reworded lines washed in the tailoring highlight. Off by default: the "
+        "file a subscriber sends to an employer carries no diff marking."
+    ),
+)
+
+
+def _diff_requested(value: Any) -> bool:
+    """Resolve the ``diff`` option safely for IN-PROCESS handler calls.
+
+    ``download_resume`` is not only an HTTP route: the email / auto-submission
+    path calls it directly (``services/email_attachments.py``), where FastAPI
+    never resolves the defaults and the parameter arrives as the ``Query``
+    object itself — which is TRUTHY. A plain ``if diff:`` would therefore turn
+    the diff preview ON for every emailed and auto-submitted résumé: the one
+    document with the least excuse for carrying diff marking, since it goes
+    straight to an employer and the subscriber never sees it.
+
+    So only a genuine ``True`` — a request that actually asked for the preview
+    — counts. Anything else (the unresolved default, ``?diff=false``, ``None``)
+    is the clean employer-facing render.
+    """
+    return value is True
+
+
 @router.get("/{resume_id}/fidelity")
 def resume_fidelity(
     resume_id: str,
     current_user: CurrentUser,
     branded: bool = _BRANDED_OPTIN,
+    diff: bool = _DIFF_PREVIEW,
 ) -> dict[str, Any]:
     """What a download of THIS version really does — verified, not asserted.
 
     Renders the version exactly as ``/download`` would (honouring the same
-    ``branded`` opt-in), re-reads the produced document, and reports per-change
-    whether the tailored wording is genuinely in it: ``changesRequested`` /
-    ``changesApplied`` / ``changesDropped``, plus the rewrites that could not be
-    applied. Resume Studio renders this report for the version the user opened;
+    ``branded`` and ``diff`` options), re-reads the produced document, and
+    reports per-change whether the tailored wording is genuinely in it:
+    ``changesRequested`` / ``changesApplied`` / ``changesDropped``, plus the
+    rewrites that could not be applied.
+    Resume Studio renders this report for the version the user opened;
     the listing (which cannot re-render every version) says the check is pending
     rather than claiming an outcome.
     """
-    rendered = _render_resume(resume_id, current_user["id"], branded=branded)
+    rendered = _render_resume(
+        resume_id, current_user["id"], branded=branded, highlight=_diff_requested(diff)
+    )
     return {
         "resume_id": resume_id,
         "formatPreserved": rendered.fidelity.preserved,
@@ -1141,6 +1197,7 @@ def download_resume(
     resume_id: str,
     current_user: CurrentUser,
     branded: bool = _BRANDED_OPTIN,
+    diff: bool = _DIFF_PREVIEW,
 ) -> Response:
     """Download a résumé in the baseline document's OWN format (U2b / R-F4).
 
@@ -1181,8 +1238,18 @@ def download_resume(
     ``X-Aether-Format-Confidence`` and the requested/applied/dropped change
     counts. The full report (including any rewrite that could not be applied)
     is at ``GET /resumes/{id}/fidelity``.
+
+    The file this returns is UNMARKED (RFMT-2). Whichever branch renders it, the
+    tailoring's own diff highlight — the peach wash behind a spliced bullet, the
+    coral wash behind a branded one — is NOT drawn: this is the document a
+    subscriber sends to an employer, and a recruiter opening a tinted file sees
+    an annotated draft rather than a résumé. Résumé Studio asks for that marking
+    explicitly with ``?diff=true`` when it is showing the subscriber what
+    changed; the Download button does not, and never should.
     """
-    rendered = _render_resume(resume_id, current_user["id"], branded=branded)
+    rendered = _render_resume(
+        resume_id, current_user["id"], branded=branded, highlight=_diff_requested(diff)
+    )
     return Response(
         content=rendered.content,
         media_type=rendered.media_type,

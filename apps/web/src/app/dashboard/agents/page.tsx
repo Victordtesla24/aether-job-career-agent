@@ -28,7 +28,7 @@
  * instant its tab is shown.
  *
  * Every control is wired to a real endpoint — nothing is mock. The full
- * pipeline ("Run All") is a synchronous ~30–120 s call, so the UI streams live
+ * pipeline ("Run pipeline") is a synchronous ~30–120 s call, so the UI streams live
  * progress and a completion/failure notice (see lib/agents-feedback).
  */
 import Link from "next/link";
@@ -70,11 +70,22 @@ import {
 import { coverLetterDegraded } from "../../../components/dashboard/feed";
 import Orchestration from "../../../components/agents/Orchestration";
 import OrchestrationMap from "../../../components/agents/OrchestrationMap";
+import ConductorBand from "../../../components/agents/ConductorBand";
+import ConductorRail from "../../../components/agents/ConductorRail";
+import { useRunEverything } from "../../../components/agents/use-run-everything";
+import {
+  RUN_PIPELINE_LABEL,
+  type SupervisorConfig,
+} from "../../../components/agents/conductor";
 import RunPolicyInputs from "../../../components/agents/RunPolicyInputs";
 import {
   fetchOrchestrationMap,
   type OrchestrationMapData,
 } from "../../../lib/api/agentPolicy";
+import {
+  fetchOrchestrationPlan,
+  type OrchestrationPlan,
+} from "../../../lib/api/orchestrationPlan";
 import { useRealtimeResources } from "../../../hooks/useRealtime";
 import ProviderConnections from "../../../components/agents/ProviderConnections";
 import ModelPicker from "../../../components/agents/ModelPicker";
@@ -84,6 +95,7 @@ import AgentStatsRow from "../../../components/agents/AgentStats";
 import LowCreditBanner from "../../../components/agents/LowCreditBanner";
 import TestRunModal from "../../../components/agents/TestRunModal";
 import {
+  fetchAgentConfig,
   fetchAgentStats,
   fetchCatalog,
   fetchOpenRouterCredits,
@@ -106,7 +118,7 @@ import {
   missingTargetLabel,
   type DiscoveryProfile,
 } from "../../../lib/discovery/search-target";
-import { ApiError } from "../../../lib/api/client";
+import { ApiError, describeApiError } from "../../../lib/api/client";
 import {
   agentSuccessNotice,
   missingResumeNotice,
@@ -168,6 +180,11 @@ const CATALOG_PROVIDER = "openrouter";
 //: `CATALOG_PROVIDER` above.
 const ANTHROPIC_PROVIDER = "anthropic";
 
+//: P1-B — the catalog key of the supervisor card (backend `supervisor`). Its
+//: AgentConfig is what the Conductor band reads its model binding from, so the
+//: key lives in one place rather than in a string literal per call site.
+const ORCHESTRATION_AGENT_KEY = "orchestration";
+
 /** Surface the backend's honest `detail` from an ApiError (already lifted by
  *  fetchProviderCatalog), else a safe generic message. */
 function catalogErrorText(e: unknown): string {
@@ -220,8 +237,22 @@ export default function AgentsPage() {
   // honest real-vs-planned status. Loaded independently so its own failure
   // never blanks the rest of the console.
   const [orchestrationMap, setOrchestrationMap] = useState<OrchestrationMapData | null>(null);
+  // P1-B CONDUCTOR: the Supervisor's plan, read BEFORE anything runs (it costs
+  // $0 — the endpoint dispatches nothing). Its own state triple, because the
+  // band must be able to say "not read yet" and "the read failed, here is the
+  // server's sentence" as two different things.
+  const [orchestrationPlan, setOrchestrationPlan] = useState<OrchestrationPlan | null>(null);
+  const [planFetchedAt, setPlanFetchedAt] = useState<number | null>(null);
+  const [planError, setPlanError] = useState<string | null>(null);
+  // The orchestration agent's own AgentConfig — the ONLY honest source for
+  // "which credential does the supervisor consume", which the catalog row
+  // (model only) cannot answer.
+  const [supervisorConfig, setSupervisorConfig] = useState<SupervisorConfig | null>(null);
   const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const runStartedAt = useRef<number>(0);
+  // Wraps the Conductor band AND the workflow maps, so the rail can be measured
+  // between them (a band cannot draw into a map from inside its own panel).
+  const conductorStackRef = useRef<HTMLDivElement | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -256,6 +287,54 @@ export default function AgentsPage() {
         if (!cancelled) setOrchestrationMap(map);
       } catch {
         if (!cancelled) setOrchestrationMap(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // P1-B: the Supervisor's plan. Independent of `load()` for the same reason
+  // the map is — its failure must not blank the console — and re-read on demand
+  // (`loadPlan`) so the band's counts follow the server rather than a snapshot
+  // taken once at mount.
+  const loadPlan = useCallback(async () => {
+    try {
+      const plan = await fetchOrchestrationPlan();
+      setOrchestrationPlan(plan);
+      setPlanFetchedAt(Date.now());
+      setPlanError(null);
+    } catch (e) {
+      // The plan is not shown at all rather than shown stale: a count that no
+      // longer matches the server is the one thing this band may not print.
+      setOrchestrationPlan(null);
+      setPlanFetchedAt(null);
+      setPlanError(describeApiError(e, "The plan endpoint did not answer."));
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadPlan();
+  }, [loadPlan]);
+
+  // The orchestration agent's live config (provider + auth mode). A failure
+  // leaves it null, and the band then says the binding has not been read —
+  // never a placeholder model.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const cfg = await fetchAgentConfig(ORCHESTRATION_AGENT_KEY);
+        if (!cancelled) {
+          setSupervisorConfig({
+            key: cfg.key,
+            model: cfg.model,
+            provider: cfg.provider ?? null,
+            authMode: cfg.authMode ?? null,
+          });
+        }
+      } catch {
+        if (!cancelled) setSupervisorConfig(null);
       }
     })();
     return () => {
@@ -473,6 +552,31 @@ export default function AgentsPage() {
     },
     [stopPolling],
   );
+
+  // The supervisor's catalog row — its NAME and the model the server says it
+  // actually runs on. Null until the catalog loads, so the band says "not read
+  // yet" rather than printing a model nobody has confirmed.
+  const supervisorAgent = useMemo(() => {
+    const row = catalog?.agents.find((a) => a.key === ORCHESTRATION_AGENT_KEY);
+    return row ? { key: row.key, name: row.name, model: row.model } : null;
+  }, [catalog]);
+
+  // P1-B — "Run everything": ONE server-recorded plan over all three workflows.
+  // Deliberately NOT folded into `busy`/`pipeline` above: that pair models a
+  // SYNCHRONOUS call this tab is holding open, while a plan runs on the queue
+  // and outlives this tab. The hook watches the recorded plan row instead, and
+  // the console's one-run-at-a-time rule is still enforced where it is real —
+  // on the server (the plan admission claim and the silo index).
+  const runEverything = useRunEverything();
+  const planPhase = runEverything.state.phase;
+
+  // A settled plan changed the run history and every card's last-run state, so
+  // re-read both — the same refresh a finished single run performs.
+  useEffect(() => {
+    if (planPhase !== "settled") return;
+    void load();
+    void loadPlan();
+  }, [planPhase, load, loadPlan]);
 
   const pipeline = async () => {
     setBusy("pipeline");
@@ -827,7 +931,7 @@ export default function AgentsPage() {
         {/* S-UI §4.1: ONE primary action (coral). Everything else is a ghost of
             equal weight, and the destructive bulk action moves into an overflow
             menu — it used to sit in the header at full red weight, competing
-            with "Run All" for the eye. The menu is always mounted (hidden, not
+            with "Run pipeline" for the eye. The menu is always mounted (hidden, not
             unmounted) so every control stays keyboard-reachable and no
             automation has to guess whether it exists. */}
         <div className="flex flex-wrap items-center gap-2">
@@ -881,7 +985,12 @@ export default function AgentsPage() {
             ) : (
               <>
                 <i className="fa-solid fa-play text-[10px]" aria-hidden="true" />
-                Run All
+                {/* ADR-AGI-3 Decision 2 — was "Run All", which named a set it
+                    does not run: this control runs the SEQUENTIAL pipeline
+                    (`_PIPELINE_PLAN`, 5 steps), while the Conductor band's
+                    "Run everything" runs all 19 dispatches. Two controls named
+                    alike over different sets is the named failure mode. */}
+                {RUN_PIPELINE_LABEL}
               </>
             )}
           </button>
@@ -1128,6 +1237,28 @@ export default function AgentsPage() {
           </span>
         </div>
 
+        {/* ── P1-B CONDUCTOR STACK ─────────────────────────────────────────
+            The Conductor band and the maps it conducts share one positioned
+            wrapper so the rail can be MEASURED between them (ADR-AGI-3
+            Decision 2: structural manages-edges from the band into each map's
+            header, drawn in the U-STORY-3a linkage language). The rail is
+            decorative; the same claim is stated in words inside the band. */}
+        <div ref={conductorStackRef} className="relative space-y-6">
+          <ConductorRail wrapperRef={conductorStackRef} maps={orchestrationMap} />
+          <ConductorBand
+            plan={orchestrationPlan}
+            planFetchedAt={planFetchedAt}
+            planError={planError}
+            maps={orchestrationMap}
+            supervisorConfig={supervisorConfig}
+            supervisorAgent={supervisorAgent}
+            runs={runs}
+            run={runEverything.state}
+            onRunEverything={() => void runEverything.run()}
+            onDismissRun={runEverything.dismiss}
+            busyBackend={busy}
+          />
+
         {/* U-AX item 5 / S-UI §4.1: the defined end-to-end workflow map(s) —
             every catalog agent, honest real-vs-planned status, stage role,
             metrics consumed, threshold responsibilities, last-run tier +
@@ -1151,7 +1282,8 @@ export default function AgentsPage() {
                 button on the Agents tab makes, with the same quota checks, the
                 same polling and the same truthful banner. `busy` is handed over
                 so the map refuses a second run while the console is already
-                running something (Run All included), exactly as Run All does. */}
+                running something (Run pipeline included), exactly as Run
+                pipeline does. */}
             <OrchestrationMap
               data={orchestrationMap}
               runs={runs}
@@ -1160,6 +1292,7 @@ export default function AgentsPage() {
             />
           </section>
         ) : null}
+        </div>
 
         <Orchestration agents={agents} runs={runs} />
 

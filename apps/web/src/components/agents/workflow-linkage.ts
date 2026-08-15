@@ -394,11 +394,11 @@ const HOP = {
     to: "agent.jobDiscovery",
     kind: "triggers",
     mechanism: "_pipeline_core sequential _dispatch",
-    // Line numbers recomputed at the ORCH-EXEC integration merge (P1-A +
-    // B6 + D.524 + B1b + ML-STOPALL-001 all shift agents.py); anchors
-    // unchanged. The final provenance re-anchor pass revalidates every
-    // citation once the last agents.py ticket lands.
-    evidence: "apps/api/app/routers/agents.py:3786,3818",
+    // Line numbers recomputed at the ORCH-EXEC final integration merge
+    // (P1-A + B6 + D.524 + B1b + ML-STOPALL-001..004 + interim guards all
+    // shift agents.py); anchors unchanged. The provenance re-anchor pass
+    // revalidates every citation before the landing gates.
+    evidence: "apps/api/app/routers/agents.py:3872,3904",
     discoveryEvidence: "apps/api/app/routers/agents.py:3380",
     anchors: [
       "def _pipeline_core(",
@@ -480,7 +480,7 @@ const HOP = {
     // honest-refusal check + its helper were inserted earlier in the file) —
     // re-verified against HEAD, same anchors, new line numbers.
     evidence:
-      "apps/api/app/agents/company_research_agent.py:53,183; narrative opt-in at apps/api/app/routers/agents.py:1772,2324",
+      "apps/api/app/agents/company_research_agent.py:53,183; narrative opt-in at apps/api/app/routers/agents.py:1784,2382",
     discoveryEvidence:
       "apps/api/app/agents/company_research_agent.py:53; narrative opt-in at apps/api/app/routers/agents.py:2020-2027",
     anchors: [

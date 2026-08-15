@@ -162,24 +162,27 @@ export interface TailorRunResult {
 }
 
 /**
- * Download a resume version as a PDF.
+ * Fetch one rendered résumé version as a PDF blob.
  *
  * Streams `GET /resumes/{id}/download` (a binary PDF, so it bypasses the JSON
- * `apiRequest` helper), then triggers a browser download of the returned blob.
+ * `apiRequest` helper) with the 401-retry and gateway-HTML handling both
+ * callers below need.
  *
- * MON-011 (MONITORING-LEDGER.md): whether the returned PDF actually
- * reproduces the original document's layout depends on the server's
- * `resolve_original_pdf` match (apps/api/app/services/resume_pdf.py) — true
- * only for the bundled seed PDFs and versions tailored from them. Every real
- * user upload (base or tailored) falls through to the generic branded
- * template instead. This function makes no promise about which happened;
- * callers must read the resume's own `formatPreserved` flag (`ResumeSchema`
- * above) before telling the user their layout was preserved.
+ * `diff` selects the Résumé Studio PREVIEW variant (`?diff=true`) — the same
+ * document with the reworded lines washed in the tailoring highlight. It is
+ * OFF here and off on the server (RFMT-2), so the bytes a plain call returns
+ * are the employer-facing file: no peach splice wash, no coral branded wash,
+ * no diff marking of any kind. Only the Studio's own preview affordance turns
+ * it on; the Download button never does.
  */
-export async function downloadResume(id: string, options: RequestOptions = {}): Promise<void> {
+async function fetchResumePdf(
+  id: string,
+  options: RequestOptions & { diff?: boolean } = {},
+): Promise<Blob> {
   const baseUrl = options.baseUrl ?? apiBaseUrl();
+  const path = `/resumes/${id}/download${options.diff ? "?diff=true" : ""}`;
   const fetchPdf = async (token: string): Promise<Response> =>
-    fetch(`${baseUrl}/resumes/${id}/download`, {
+    fetch(`${baseUrl}${path}`, {
       headers: { Authorization: `Bearer ${token}` },
     });
 
@@ -203,8 +206,27 @@ export async function downloadResume(id: string, options: RequestOptions = {}): 
     }
     throw new ApiError(`GET /resumes/${id}/download failed (${res.status}): ${detail}`, res.status);
   }
+  return res.blob();
+}
 
-  const blob = await res.blob();
+/**
+ * Download a resume version as a PDF — the file the user sends to an employer.
+ *
+ * Requests the CLEAN render: no `?diff=true`, so the saved document carries no
+ * tailoring highlight (RFMT-2). Use `previewTailoredResume` for the marked-up
+ * Studio preview.
+ *
+ * MON-011 (MONITORING-LEDGER.md): whether the returned PDF actually
+ * reproduces the original document's layout depends on the server's
+ * `resolve_original_pdf` match (apps/api/app/services/resume_pdf.py) — true
+ * only for the bundled seed PDFs and versions tailored from them. Every real
+ * user upload (base or tailored) falls through to the generic branded
+ * template instead. This function makes no promise about which happened;
+ * callers must read the resume's own `formatPreserved` flag (`ResumeSchema`
+ * above) before telling the user their layout was preserved.
+ */
+export async function downloadResume(id: string, options: RequestOptions = {}): Promise<void> {
+  const blob = await fetchResumePdf(id, options);
   if (typeof document !== "undefined" && typeof URL !== "undefined") {
     const url = URL.createObjectURL(blob);
     try {
@@ -218,6 +240,29 @@ export async function downloadResume(id: string, options: RequestOptions = {}): 
       URL.revokeObjectURL(url);
     }
   }
+}
+
+/**
+ * The Résumé Studio PREVIEW of a tailored version: the same render with the
+ * reworded lines washed in the tailoring highlight (`?diff=true`).
+ *
+ * Returns an object URL for the marked-up PDF, so the Studio can open it for
+ * viewing, plus the `revoke` that releases it once the viewer has it. Nothing
+ * is saved to disk — this variant exists to SHOW the subscriber which lines
+ * changed, and is deliberately not what `downloadResume` returns.
+ */
+export async function previewTailoredResume(
+  id: string,
+  options: RequestOptions = {},
+): Promise<{ url: string; revoke: () => void }> {
+  const blob = await fetchResumePdf(id, { ...options, diff: true });
+  if (typeof URL === "undefined" || typeof URL.createObjectURL !== "function") {
+    // Honest refusal rather than a blank frame: this browser cannot hold the
+    // blob, so there is nothing to preview.
+    throw new Error("Preview is not available in this browser.");
+  }
+  const url = URL.createObjectURL(blob);
+  return { url, revoke: () => URL.revokeObjectURL(url) };
 }
 
 export async function runTailorAgent(jobId: string, options: RequestOptions = {}): Promise<TailorRunResult> {

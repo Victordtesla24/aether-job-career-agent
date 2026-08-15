@@ -47,6 +47,7 @@ from app.routers import (
     networking,
     offers,
     resumes,
+    sales_agent,
     stories,
     workspaces,
 )
@@ -509,6 +510,12 @@ def create_app() -> FastAPI:
     app.include_router(offers.router, prefix="/offers", tags=["offers"])
     app.include_router(billing.router, prefix="/billing", tags=["billing"])
     app.include_router(admin.router, prefix="/admin", tags=["admin"])
+    # Native Sales AI Agent — admin-only surface (every route gates on
+    # AdminUser; anonymous 401, non-admin 403). Public contract:
+    # /api/admin/sales-agent/*.
+    app.include_router(
+        sales_agent.router, prefix="/admin/sales-agent", tags=["admin"]
+    )
     # The dashboard's ONE shared realtime channel (W-RT). Shares
     # ``app.state.sse_stream_slots`` with the agent-run stream above, so both
     # kinds of stream draw on a single global budget against the database's

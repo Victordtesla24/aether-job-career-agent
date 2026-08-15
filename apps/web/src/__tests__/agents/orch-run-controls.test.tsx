@@ -17,11 +17,11 @@
  *      its own honest reason rather than offered a button that can only 404;
  *   4. a multi-selection dispatches in the MAP'S STAGE ORDER, whatever order
  *      the nodes were clicked in;
- *   5. "Run workflow" is Run All scoped to THAT map — never another map's
+ *   5. "Run workflow" is Run pipeline scoped to THAT map — never another map's
  *      agents, never a planned node;
  *   6. three nodes sharing one backend (`matchScoring` / `atsOptimization` /
  *      `skillGap` all resolve to `fitScorer`) produce ONE dispatch, exactly as
- *      Run All does — a per-node dispatch would bill three metered runs;
+ *      Run pipeline does — a per-node dispatch would bill three metered runs;
  *   7. an agent whose run is genuinely in flight (per the run store) offers no
  *      second run, and says which state it is in;
  *   8. an API refusal (quota / spend cap) surfaces the API's OWN words at the
@@ -181,7 +181,9 @@ describe("ORCH-RUN plan — stage order, one-run-per-backend, honest refusals", 
     expect(runAvailability(nodeOf("jobDiscovery")).runnable).toBe(true);
     expect(
       runAvailability(nodeOf("jobDiscovery"), { busyBackend: "pipeline" }).reason,
-    ).toMatch(/Run All is in progress/i);
+      // P1-B rename (ADR-AGI-3 Decision 2): the header control is "Run
+      // pipeline (5 steps)" now, and this message names the same control.
+    ).toMatch(/Run pipeline is in progress/i);
   });
 
   it("refuses a second run of an agent the run store reports as live", () => {
@@ -261,7 +263,7 @@ describe("ORCH-RUN — every real node can be run on its own", () => {
 
     const control = screen.getByTestId("orchestration-run-jobDiscovery") as HTMLButtonElement;
     expect(control.disabled).toBe(true);
-    expect(control.getAttribute("title")).toMatch(/run all is in progress/i);
+    expect(control.getAttribute("title")).toMatch(/run pipeline is in progress/i);
   });
 
   it("renders no run affordance at all when the console passes no trigger", () => {
@@ -291,7 +293,7 @@ describe("ORCH-RUN — a selection runs in the map's stage order", () => {
     await waitFor(() => expect(calls).toEqual(["scout", "tailor"]));
   });
 
-  it("collapses nodes that share one backend into the single run Run All would make", async () => {
+  it("collapses nodes that share one backend into the single run Run pipeline would make", async () => {
     const { fn, calls } = triggerStub();
     renderMap({ onRunAgent: fn });
 
@@ -328,10 +330,10 @@ describe("ORCH-RUN — a selection runs in the map's stage order", () => {
 });
 
 // ---------------------------------------------------------------------------
-// 4. Run workflow — Run All scoped to one map
+// 4. Run workflow — Run pipeline scoped to one map
 // ---------------------------------------------------------------------------
 
-describe("ORCH-RUN — 'Run workflow' is Run All scoped to that map", () => {
+describe("ORCH-RUN — 'Run workflow' is Run pipeline scoped to that map", () => {
   it("runs every runnable agent of THAT map, in stage order, and nothing else", async () => {
     const { fn, calls } = triggerStub();
     renderMap({ onRunAgent: fn });

@@ -1,80 +1,128 @@
 "use client";
 
 /**
- * /admin/sales-agent — visibility into the autonomous growth/marketing
- * engine that drives Aether subscriptions.
+ * /admin/sales-agent — the NATIVE Sales AI Agent console.
  *
- * IMPORTANT — architecture honesty: the growth engine itself does NOT run
- * inside this app. It runs as an external scheduled process (6x/day) that
- * reads/writes a Google Sheet (CRM + activity log) and two Google Docs
- * (LinkedIn content calendar, messaging playbook), and sends email through
- * a separate Gmail account. There is no backend job, queue, or table for it
- * in this codebase, so this page cannot show "live" engine internals from
- * Aether's own API — it does two honest things instead:
- *   1. Re-projects REAL Aether subscription data this app already has
- *      (GET /api/admin/users, the same admin-gated endpoint /admin/users
- *      and /admin/subscriptions use) into growth-relevant numbers: total
- *      signups, paid conversions by plan, and an estimated MRR.
- *   2. Links out to the actual system of record (the Sheet + Docs) for
- *      real campaign/lead detail, rather than faking an embedded view of
- *      data this backend cannot see.
- * No new backend endpoint was added for this page — it reuses the existing
- * AdminUser-gated /api/admin/users route, same pattern as /admin/subscriptions.
+ * This page replaced the old "external growth engine" placeholder: the sales
+ * agent now runs INSIDE this app (30-min systemd timer + admin "Run now"),
+ * with its own AdminUser-gated API under /api/admin/sales-agent/*. Everything
+ * shown here is a live database query — no estimates, no fabricated metrics;
+ * reply rate honestly reads "not observable" until real sends exist.
+ *
+ * Compliance surfaced in the UI: LinkedIn items are DRAFTS ONLY (copy button,
+ * never a post button — LinkedIn's Terms prohibit automated posting), the
+ * suppression list is permanent, and shadow (dry-run) mode is prominently
+ * labelled so the operator always knows whether emails can actually leave.
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { AdminPageHeader } from "../../../components/admin/admin-shell";
-import { fetchAdminUsers, type AdminUser } from "../../../lib/api/admin";
+import { describeApiError } from "../../../lib/api/client";
+import {
+  fetchSalesCampaigns,
+  fetchSalesHealth,
+  fetchSalesLeads,
+  fetchSalesOutreach,
+  fetchSalesOverview,
+  fetchSalesSendingAccounts,
+  runSalesAgentNow,
+  setSalesSendingAccount,
+  updateSalesCampaign,
+  type SalesCampaign,
+  type SalesHealth,
+  type SalesLeadList,
+  type SalesOutreachList,
+  type SalesOverview,
+  type SalesRunResult,
+  type SalesSendingAccount,
+} from "../../../lib/api/salesAgent";
 
-// Monthly AUD list price per plan (docs/subscription/billing-architecture.md,
-// ADR-P6-PRICING). Used only to ESTIMATE MRR from plan mix — an annual
-// subscriber is counted at this same monthly-equivalent rate since the
-// admin/users API does not expose billingInterval, so this is a floor
-// estimate, not a Stripe-verified figure. Labelled as such below.
-const MONTHLY_AUD_BY_PLAN: Record<string, number> = {
-  starter: 19,
-  pro: 39,
-  power: 69,
-};
+type Tab = "campaigns" | "leads" | "outreach" | "linkedin";
 
-const GROWTH_ENGINE_LINKS = [
-  {
-    label: "CRM & Learning Log (Google Sheet)",
-    href: "https://docs.google.com/spreadsheets/d/1hiaoc7lDKW09IKbHwL9FlJAYU37k290ZjQUvB2v_52M/edit",
-    detail: "Prospects, Email_Log, LinkedIn_Content_Queue, Learnings, Metrics, Suppression_List",
-  },
-  {
-    label: "LinkedIn Content Calendar (Google Doc)",
-    href: "https://docs.google.com/document/d/1FgpWoxG_AAUodf8Nz21QsTiApj0eSz5jeSDXvCiyFSM/edit",
-    detail: "Draft-only queue — a human posts these manually (LinkedIn's Terms prohibit automated posting)",
-  },
-  {
-    label: "Messaging Playbook & Email Templates (Google Doc)",
-    href: "https://docs.google.com/document/d/1mc5tPZRN3kKGKTO2-S1W6CDYPoiDECH0yKapoW9j760/edit",
-    detail: "ICP, positioning, pricing, compliance footer, and the 4 approved outreach templates",
-  },
+const TABS: { key: Tab; label: string }[] = [
+  { key: "campaigns", label: "Campaigns" },
+  { key: "leads", label: "Leads" },
+  { key: "outreach", label: "Outreach log" },
+  { key: "linkedin", label: "LinkedIn drafts" },
 ];
 
-function planLabel(plan: string | null): string {
-  if (!plan) return "Free";
-  return plan.charAt(0).toUpperCase() + plan.slice(1);
+function fmtDate(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleString();
 }
 
-export default function AdminSalesAgentPage() {
-  const [rows, setRows] = useState<AdminUser[]>([]);
-  const [total, setTotal] = useState(0);
-  const [error, setError] = useState<string | null>(null);
+function StatCard({ label, value, note }: { label: string; value: string; note?: string }) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-aether-bg-elevated p-4">
+      <p className="text-xs uppercase tracking-wide text-aether-muted-dim">{label}</p>
+      <p className="mt-1 text-2xl font-semibold text-aether-text">{value}</p>
+      {note ? <p className="mt-1 text-xs text-aether-muted-dim">{note}</p> : null}
+    </div>
+  );
+}
+
+function OutcomeBadge({ outcome }: { outcome: string | null }) {
+  const o = outcome ?? "unknown";
+  const color =
+    o === "sent"
+      ? "bg-emerald-500/15 text-emerald-300"
+      : o === "dry_run"
+        ? "bg-sky-500/15 text-sky-300"
+        : o === "draft_queued"
+          ? "bg-indigo-500/15 text-indigo-300"
+          : o === "blocked" || o === "unsubscribed"
+            ? "bg-amber-500/15 text-amber-300"
+            : o === "error" || o === "bounced"
+              ? "bg-red-500/15 text-red-300"
+              : "bg-white/10 text-aether-muted";
+  return (
+    <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${color}`}>
+      {o}
+    </span>
+  );
+}
+
+export default function SalesAgentPage() {
+  const [overview, setOverview] = useState<SalesOverview | null>(null);
+  const [health, setHealth] = useState<SalesHealth | null>(null);
+  const [accounts, setAccounts] = useState<SalesSendingAccount[]>([]);
+  const [campaigns, setCampaigns] = useState<SalesCampaign[]>([]);
+  const [leads, setLeads] = useState<SalesLeadList | null>(null);
+  const [outreach, setOutreach] = useState<SalesOutreachList | null>(null);
+  const [drafts, setDrafts] = useState<SalesOutreachList | null>(null);
+  const [tab, setTab] = useState<Tab>("campaigns");
+  const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
+  const [running, setRunning] = useState(false);
+  const [runResult, setRunResult] = useState<SalesRunResult | null>(null);
+  const [editing, setEditing] = useState<string | null>(null);
+  const [editBody, setEditBody] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
-    setError(null);
+    setError("");
     try {
-      const res = await fetchAdminUsers({});
-      setRows(res.users);
-      setTotal(res.total);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load subscriber data");
+      const [ov, he, ac, ca, le, ou, dr] = await Promise.all([
+        fetchSalesOverview(),
+        fetchSalesHealth(),
+        fetchSalesSendingAccounts(),
+        fetchSalesCampaigns(),
+        fetchSalesLeads({ limit: 100 }),
+        fetchSalesOutreach({ limit: 100 }),
+        fetchSalesOutreach({ channel: "linkedin_draft", limit: 50 }),
+      ]);
+      setOverview(ov);
+      setHealth(he);
+      setAccounts(ac);
+      setCampaigns(ca);
+      setLeads(le);
+      setOutreach(ou);
+      setDrafts(dr);
+    } catch (err) {
+      setError(describeApiError(err, "Failed to load the sales agent console."));
     } finally {
       setLoading(false);
     }
@@ -84,111 +132,430 @@ export default function AdminSalesAgentPage() {
     void load();
   }, [load]);
 
-  // Entitled-paid definition mirrors SubscriptionRepository.has_active_paid_subscription:
-  // status in (active, trialing, past_due) AND plan != free.
-  const entitled = useMemo(
-    () =>
-      rows.filter((u) => {
-        const status = (u.subStatus ?? "").toLowerCase();
-        const plan = (u.plan ?? "free").toLowerCase();
-        return plan !== "free" && ["active", "trialing", "past_due"].includes(status);
-      }),
-    [rows],
-  );
-
-  const planCounts = useMemo(() => {
-    const counts: Record<string, number> = { free: 0, starter: 0, pro: 0, power: 0 };
-    for (const u of rows) {
-      const key = (u.plan ?? "free").toLowerCase();
-      counts[key] = (counts[key] ?? 0) + 1;
+  const onRunNow = useCallback(async () => {
+    setRunning(true);
+    setError("");
+    try {
+      const result = await runSalesAgentNow();
+      setRunResult(result);
+      await load();
+    } catch (err) {
+      setError(describeApiError(err, "Run failed."));
+    } finally {
+      setRunning(false);
     }
-    return counts;
-  }, [rows]);
+  }, [load]);
 
-  const estimatedMrrAud = useMemo(
-    () =>
-      entitled.reduce((sum, u) => {
-        const plan = (u.plan ?? "free").toLowerCase();
-        return sum + (MONTHLY_AUD_BY_PLAN[plan] ?? 0);
-      }, 0),
-    [entitled],
+  const onToggleAccount = useCallback(
+    async (account: SalesSendingAccount) => {
+      setError("");
+      try {
+        await setSalesSendingAccount(account.id, !account.usedForSalesAgent);
+        await load();
+      } catch (err) {
+        setError(describeApiError(err, "Could not update the sending account."));
+      }
+    },
+    [load],
   );
+
+  const onSaveCampaign = useCallback(
+    async (c: SalesCampaign) => {
+      setSaving(true);
+      setError("");
+      try {
+        await updateSalesCampaign(c.id, { templateBody: editBody });
+        setEditing(null);
+        await load();
+      } catch (err) {
+        setError(describeApiError(err, "Could not save the campaign."));
+      } finally {
+        setSaving(false);
+      }
+    },
+    [editBody, load],
+  );
+
+  const onToggleCampaign = useCallback(
+    async (c: SalesCampaign) => {
+      setError("");
+      try {
+        await updateSalesCampaign(c.id, { active: !c.active });
+        await load();
+      } catch (err) {
+        setError(describeApiError(err, "Could not update the campaign."));
+      }
+    },
+    [load],
+  );
+
+  const copyDraft = useCallback(async (id: string, body: string | null) => {
+    if (!body) return;
+    try {
+      await navigator.clipboard.writeText(body);
+      setCopiedId(id);
+      setTimeout(() => setCopiedId(null), 2000);
+    } catch {
+      /* clipboard unavailable — non-fatal */
+    }
+  }, []);
+
+  // Health alarm: red banner when the timer has been silent past the stale
+  // line (2× the 30-min interval) or the ledger itself errored.
+  const healthAlarm =
+    health != null && (health.status === "stale" || health.status === "error");
 
   return (
     <div>
       <AdminPageHeader
         title="Sales Agent"
-        subtitle="Real Aether subscriber numbers, plus links to the growth engine's actual system of record."
+        subtitle="Native in-app growth agent — inbound leads, lifecycle emails, LinkedIn drafts. Every number below is a live database query."
       />
 
-      {error ? <p className="mb-4 text-sm text-red-300">{error}</p> : null}
+      {error ? <p className="mb-3 text-sm text-red-300">{error}</p> : null}
 
-      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div className="rounded-xl border border-white/10 bg-aether-bg-elevated p-4">
-          <p className="text-xs uppercase tracking-wide text-aether-muted-dim">Total signups</p>
-          <p className="mt-1 text-2xl font-semibold text-aether-text">{loading ? "…" : total}</p>
+      {healthAlarm ? (
+        <div className="mb-4 rounded-xl border border-red-500/40 bg-red-500/10 p-4 text-sm text-red-200">
+          <p className="font-semibold">Sales agent scheduler alarm</p>
+          <p className="mt-1">{health?.detail}</p>
         </div>
-        <div className="rounded-xl border border-white/10 bg-aether-bg-elevated p-4">
-          <p className="text-xs uppercase tracking-wide text-aether-muted-dim">Paid conversions</p>
-          <p className="mt-1 text-2xl font-semibold text-aether-text">
-            {loading ? "…" : entitled.length}
-          </p>
+      ) : null}
+
+      {/* Health / control strip */}
+      <div className="mb-5 rounded-xl border border-white/10 bg-aether-bg-elevated p-4">
+        <div className="flex flex-wrap items-center gap-3">
+          <span
+            className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
+              health?.status === "ok"
+                ? "bg-emerald-500/15 text-emerald-300"
+                : healthAlarm
+                  ? "bg-red-500/15 text-red-300"
+                  : "bg-white/10 text-aether-muted"
+            }`}
+          >
+            {health ? `scheduler: ${health.status}` : "scheduler: …"}
+          </span>
+          <span
+            className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
+              health?.enabled ? "bg-emerald-500/15 text-emerald-300" : "bg-white/10 text-aether-muted"
+            }`}
+          >
+            {health?.enabled ? "enabled" : "disabled"}
+          </span>
+          <span
+            className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
+              health?.dryRun ? "bg-sky-500/15 text-sky-300" : "bg-amber-500/15 text-amber-300"
+            }`}
+          >
+            {health?.dryRun ? "shadow mode (dry-run — no email leaves)" : "LIVE sending"}
+          </span>
+          <span className="text-xs text-aether-muted-dim">
+            Last run: {fmtDate(health?.lastRunAt)} · fires every {health?.intervalMinutes ?? 30} min
+          </span>
+          <button
+            type="button"
+            onClick={() => void onRunNow()}
+            disabled={running}
+            className="ml-auto rounded-md bg-aether-indigo px-4 py-2 text-sm font-medium text-white hover:bg-aether-indigo/90 disabled:opacity-50"
+          >
+            {running ? "Running…" : "Run now"}
+          </button>
         </div>
-        <div className="rounded-xl border border-white/10 bg-aether-bg-elevated p-4">
+        {health?.detail ? (
+          <p className="mt-2 text-xs text-aether-muted-dim">{health.detail}</p>
+        ) : null}
+
+        {/* Sending accounts */}
+        <div className="mt-3 border-t border-white/10 pt-3">
           <p className="text-xs uppercase tracking-wide text-aether-muted-dim">
-            Estimated MRR (AUD)
+            Sending Gmail accounts (the agent polls + sends ONLY from flagged accounts)
           </p>
-          <p className="mt-1 text-2xl font-semibold text-aether-text">
-            {loading ? "…" : `$${estimatedMrrAud}`}
-          </p>
-          <p className="mt-1 text-[10px] text-aether-muted-dim">
-            Monthly list price × plan mix — a floor estimate, not Stripe-verified (annual billing
-            intervals aren&apos;t distinguished by this API).
-          </p>
+          {accounts.length === 0 ? (
+            <p className="mt-2 text-sm text-aether-muted">
+              No Gmail accounts connected for the admin user.
+            </p>
+          ) : (
+            <ul className="mt-2 flex flex-wrap gap-2">
+              {accounts.map((a) => (
+                <li
+                  key={a.id}
+                  className="flex items-center gap-2 rounded-md border border-white/10 bg-aether-bg px-3 py-2 text-sm"
+                >
+                  <span className="text-aether-text">{a.accountEmail ?? a.id}</span>
+                  {a.isPrimary ? (
+                    <span className="text-xs text-aether-muted-dim">(primary)</span>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => void onToggleAccount(a)}
+                    className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                      a.usedForSalesAgent
+                        ? "bg-emerald-500/15 text-emerald-300"
+                        : "bg-white/10 text-aether-muted hover:bg-white/20"
+                    }`}
+                  >
+                    {a.usedForSalesAgent ? "sales sending: ON" : "sales sending: off"}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          {health && health.sendingAccounts === 0 ? (
+            <p className="mt-2 text-xs text-amber-300">
+              No account is flagged — the agent honestly no-ops inbound polling and sending
+              until one is enabled above.
+            </p>
+          ) : null}
         </div>
-        <div className="rounded-xl border border-white/10 bg-aether-bg-elevated p-4">
-          <p className="text-xs uppercase tracking-wide text-aether-muted-dim">Conversion rate</p>
-          <p className="mt-1 text-2xl font-semibold text-aether-text">
-            {loading || total === 0 ? "—" : `${((entitled.length / total) * 100).toFixed(1)}%`}
-          </p>
-        </div>
+
+        {runResult ? (
+          <div className="mt-3 rounded-md border border-white/10 bg-aether-bg p-3 text-xs text-aether-muted">
+            <p className="font-medium text-aether-text">Last manual run</p>
+            <pre className="mt-1 overflow-x-auto whitespace-pre-wrap">
+              {JSON.stringify(runResult, null, 2)}
+            </pre>
+          </div>
+        ) : null}
       </div>
 
-      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {(["free", "starter", "pro", "power"] as const).map((p) => (
-          <div key={p} className="rounded-xl border border-white/10 bg-aether-bg-elevated p-4">
-            <p className="text-xs uppercase tracking-wide text-aether-muted-dim">{planLabel(p)}</p>
-            <p className="mt-1 text-xl font-semibold text-aether-text">
-              {loading ? "…" : (planCounts[p] ?? 0)}
-            </p>
-          </div>
+      {/* Overview cards */}
+      <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+        <StatCard label="Signups" value={overview ? String(overview.signups) : "…"} />
+        <StatCard
+          label="Paid conversions"
+          value={overview ? String(overview.paidConversions) : "…"}
+        />
+        <StatCard
+          label="MRR (A$)"
+          value={overview ? overview.mrrAud.toFixed(2) : "…"}
+          note="billingInterval-aware (annual ÷ 12)"
+        />
+        <StatCard label="Leads" value={overview ? String(overview.leads) : "…"} />
+        <StatCard
+          label="Reply rate"
+          value={
+            overview
+              ? overview.replyRate === null
+                ? "n/a"
+                : `${(overview.replyRate * 100).toFixed(1)}%`
+              : "…"
+          }
+          note={
+            overview && overview.replyRate === null
+              ? "not observable — no real sends yet"
+              : undefined
+          }
+        />
+        <StatCard
+          label="Suppressed"
+          value={overview ? String(overview.suppressionCount) : "…"}
+          note="permanent unsubscribe list"
+        />
+      </div>
+
+      {/* Tabs */}
+      <div className="mb-4 flex flex-wrap gap-2">
+        {TABS.map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            onClick={() => setTab(t.key)}
+            className={`rounded-md px-4 py-2 text-sm font-medium ${
+              tab === t.key
+                ? "bg-aether-indigo text-white"
+                : "border border-white/10 bg-aether-bg-elevated text-aether-muted hover:text-aether-text"
+            }`}
+          >
+            {t.label}
+          </button>
         ))}
       </div>
 
-      <div className="rounded-xl border border-white/10 bg-aether-bg-elevated p-5">
-        <h2 className="text-sm font-semibold text-aether-text">Growth engine (external)</h2>
-        <p className="mt-1 text-xs text-aether-muted">
-          The autonomous outreach/marketing engine runs outside this app on a 6x/day schedule: it
-          scans a connected Gmail inbox for real inbound signals, replies with an approved
-          template, drafts LinkedIn content for manual posting, and emails a daily summary. Its
-          live activity log, lead list, and content queue live here, not in this backend:
-        </p>
-        <ul className="mt-3 space-y-2">
-          {GROWTH_ENGINE_LINKS.map((link) => (
-            <li key={link.href}>
-              <a
-                href={link.href}
-                target="_blank"
-                rel="noreferrer"
-                className="text-sm text-aether-indigo hover:underline"
-              >
-                {link.label}
-              </a>
-              <p className="text-xs text-aether-muted-dim">{link.detail}</p>
-            </li>
+      {loading ? <p className="text-sm text-aether-muted">Loading…</p> : null}
+
+      {/* -------------------------------------------------------- campaigns */}
+      {tab === "campaigns" && !loading ? (
+        <div className="space-y-3">
+          <p className="text-xs text-aether-muted-dim">
+            Templates use {"{{name}}"} placeholders. The compliance footer (sender identity +
+            unsubscribe instruction) is appended server-side on every send — it is not part of
+            the editable template and cannot be removed here.
+          </p>
+          {campaigns.map((c) => (
+            <div key={c.id} className="rounded-xl border border-white/10 bg-aether-bg-elevated p-4">
+              <div className="flex flex-wrap items-center gap-3">
+                <p className="font-medium text-aether-text">{c.name}</p>
+                <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs text-aether-muted">
+                  {c.type}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => void onToggleCampaign(c)}
+                  className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                    c.active
+                      ? "bg-emerald-500/15 text-emerald-300"
+                      : "bg-white/10 text-aether-muted hover:bg-white/20"
+                  }`}
+                >
+                  {c.active ? "active" : "inactive"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditing(editing === c.id ? null : c.id);
+                    setEditBody(c.templateBody);
+                  }}
+                  className="ml-auto rounded-md border border-white/10 px-3 py-1 text-xs text-aether-muted hover:text-aether-text"
+                >
+                  {editing === c.id ? "Cancel" : "Edit template"}
+                </button>
+              </div>
+              {editing === c.id ? (
+                <div className="mt-3">
+                  <textarea
+                    value={editBody}
+                    onChange={(e) => setEditBody(e.target.value)}
+                    rows={10}
+                    className="w-full rounded-md border border-white/10 bg-aether-bg p-3 font-mono text-xs text-aether-text"
+                  />
+                  <button
+                    type="button"
+                    disabled={saving || !editBody.trim()}
+                    onClick={() => void onSaveCampaign(c)}
+                    className="mt-2 rounded-md bg-aether-indigo px-4 py-2 text-sm font-medium text-white hover:bg-aether-indigo/90 disabled:opacity-50"
+                  >
+                    {saving ? "Saving…" : "Save template"}
+                  </button>
+                </div>
+              ) : (
+                <pre className="mt-3 max-h-48 overflow-y-auto whitespace-pre-wrap rounded-md bg-aether-bg p-3 text-xs text-aether-muted">
+                  {c.templateBody}
+                </pre>
+              )}
+            </div>
           ))}
-        </ul>
-      </div>
+        </div>
+      ) : null}
+
+      {/* ------------------------------------------------------------ leads */}
+      {tab === "leads" && !loading ? (
+        <div className="overflow-x-auto rounded-xl border border-white/10">
+          <table className="min-w-full text-sm">
+            <thead className="bg-aether-bg-elevated text-left text-xs uppercase tracking-wide text-aether-muted-dim">
+              <tr>
+                <th className="px-4 py-3">Email</th>
+                <th className="px-4 py-3">Name</th>
+                <th className="px-4 py-3">Source</th>
+                <th className="px-4 py-3">Consent</th>
+                <th className="px-4 py-3">Status</th>
+                <th className="px-4 py-3">Created</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5">
+              {(leads?.leads ?? []).map((l) => (
+                <tr key={l.id} className="hover:bg-white/5">
+                  <td className="px-4 py-3 text-aether-text">{l.email}</td>
+                  <td className="px-4 py-3 text-aether-muted">{l.name ?? "—"}</td>
+                  <td className="px-4 py-3 text-aether-muted">{l.source}</td>
+                  <td className="px-4 py-3">
+                    <span title={l.consentEvidence} className="text-aether-muted">
+                      {l.consentType}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <OutcomeBadge outcome={l.status} />
+                  </td>
+                  <td className="px-4 py-3 text-aether-muted">{fmtDate(l.createdAt)}</td>
+                </tr>
+              ))}
+              {(leads?.leads ?? []).length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-6 text-center text-aether-muted">
+                    No leads yet. Leads are only ever created from ratified consent signals
+                    (inbound email, existing accounts) — never from guessed addresses.
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+
+      {/* --------------------------------------------------------- outreach */}
+      {tab === "outreach" && !loading ? (
+        <div className="overflow-x-auto rounded-xl border border-white/10">
+          <table className="min-w-full text-sm">
+            <thead className="bg-aether-bg-elevated text-left text-xs uppercase tracking-wide text-aether-muted-dim">
+              <tr>
+                <th className="px-4 py-3">When</th>
+                <th className="px-4 py-3">Channel</th>
+                <th className="px-4 py-3">Recipient</th>
+                <th className="px-4 py-3">Subject</th>
+                <th className="px-4 py-3">Outcome</th>
+                <th className="px-4 py-3">Detail</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5">
+              {(outreach?.entries ?? []).map((o) => (
+                <tr key={o.id} className="hover:bg-white/5">
+                  <td className="px-4 py-3 text-aether-muted">{fmtDate(o.createdAt)}</td>
+                  <td className="px-4 py-3 text-aether-muted">{o.channel}</td>
+                  <td className="px-4 py-3 text-aether-text">{o.recipient ?? "—"}</td>
+                  <td className="px-4 py-3 text-aether-muted" title={o.body ?? undefined}>
+                    {o.subject ?? "—"}
+                  </td>
+                  <td className="px-4 py-3">
+                    <OutcomeBadge outcome={o.outcome} />
+                  </td>
+                  <td className="px-4 py-3 text-xs text-aether-muted-dim">{o.detail ?? "—"}</td>
+                </tr>
+              ))}
+              {(outreach?.entries ?? []).length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-6 text-center text-aether-muted">
+                    No outreach recorded yet. In shadow mode, would-be sends appear here as
+                    dry_run rows with the full email body.
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+
+      {/* --------------------------------------------------------- linkedin */}
+      {tab === "linkedin" && !loading ? (
+        <div className="space-y-3">
+          <p className="text-xs text-aether-muted-dim">
+            Drafts only — LinkedIn&apos;s Terms prohibit automated posting, so there is no
+            &quot;post&quot; button anywhere. Copy a draft and post it manually.
+          </p>
+          {(drafts?.entries ?? []).map((d) => (
+            <div key={d.id} className="rounded-xl border border-white/10 bg-aether-bg-elevated p-4">
+              <div className="flex items-center gap-3">
+                <OutcomeBadge outcome={d.outcome} />
+                <span className="text-xs text-aether-muted-dim">{fmtDate(d.createdAt)}</span>
+                <button
+                  type="button"
+                  onClick={() => void copyDraft(d.id, d.body)}
+                  className="ml-auto rounded-md border border-white/10 px-3 py-1 text-xs text-aether-muted hover:text-aether-text"
+                >
+                  {copiedId === d.id ? "Copied ✓" : "Copy draft"}
+                </button>
+              </div>
+              <pre className="mt-3 whitespace-pre-wrap rounded-md bg-aether-bg p-3 text-xs text-aether-muted">
+                {d.body ?? d.detail ?? "(no body)"}
+              </pre>
+            </div>
+          ))}
+          {(drafts?.entries ?? []).length === 0 ? (
+            <p className="rounded-xl border border-white/10 bg-aether-bg-elevated p-6 text-center text-sm text-aether-muted">
+              No LinkedIn drafts queued yet — the agent queues at most one per 24 hours when
+              the linkedin_draft campaign is active.
+            </p>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -1,0 +1,38 @@
+P1-B ROUND-2 MUST-FIX #1 — Tailwind CSS-emission probe, AFTER the fix
+repo/branch : /home/ubuntu/github_repos/aether-wt-p1b @ feat/uagi-p1b
+tree HEAD   : 5ae56ecbd6a0d23ab8c955352904bfb9103b2396 + working-tree fix
+captured UTC: 2026-08-14T22:33:46Z
+method      : identical to the BEFORE probe (same temp config, same input css)
+
+SOURCE UNDER TEST (fixed) — apps/web/src/components/agents/ConductorBand.tsx:
+219:            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-state-ok" aria-hidden="true" />
+254:            className="rounded-md border border-state-warn/40 bg-state-warn/10 px-3 py-2 text-[11.5px] leading-[1.5] text-state-warn"
+310:            <span className="w-full text-[12px] leading-[1.5] text-state-warn">
+324:                ? "border-state-ok/40 bg-state-ok/10"
+326:                  ? "border-state-warn/40 bg-state-warn/10"
+328:                    ? "border-state-danger/40 bg-state-danger/10"
+585:                      data-testid={`conductor-plan-state-${card.cardKey}`}
+
+EMITTED RULE-TEXT MATCHES IN THE BUILT STYLESHEET:
+  state-err      0
+  state-danger   2
+  state-ok       3
+  state-warn     3
+
+THE RULES THAT NOW EXIST FOR THE HALTED/FAILED BANNER:
+
+.border-state-danger\/40 {
+  border-color: rgb(248 113 113 / 0.4)
+}
+
+--
+
+.bg-state-danger\/10 {
+  background-color: rgb(248 113 113 / 0.1)
+}
+
+
+READING: 'state-err' is gone from the source (0). 'state-danger' now emits real
+         rules, so the halted / failed / 'the plan did not start' banner renders
+         with a red-tinted border AND background — the failure is now painted,
+         not merely worded.
