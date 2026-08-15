@@ -221,7 +221,14 @@ describe("no new wiring (S-UI binding constraint 1)", () => {
     await screen.findByTestId("policy-cohorts");
 
     const called = apiRequest.mock.calls.map((c) => String(c[0])).sort();
+    // Pin amended for B1b's AgentDirective display (ADR-AGI-2 P1: active
+    // directives + metric rationales shown on the analytics policy panel —
+    // docs/delivery/ORCH-B1-BLUEPRINT-2026-08-14.md §8). The S-UI
+    // constraint's intent (no UNINTENTIONAL wiring) is preserved — this is a
+    // reviewed, deliberate endpoint addition, not new wiring the panel picked
+    // up by accident.
     expect(called).toEqual([
+      "/agents/directives",
       "/analytics/agent-policy",
       "/analytics/agent-policy/cohorts",
       "/analytics/agent-policy/history",
