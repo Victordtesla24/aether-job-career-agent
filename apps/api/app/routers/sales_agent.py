@@ -206,6 +206,121 @@ def generate_content(_admin: AdminUser) -> dict[str, Any]:
         ) from exc
 
 
+# ------------------------------------------------ persistent brand editor
+class BrandTemplateUpdate(BaseModel):
+    body: str = Field(min_length=1, max_length=20000)
+    footnote: str = Field(min_length=1, max_length=4000)
+    footer: str = Field(min_length=1, max_length=4000)
+
+
+class BrandArtifactCreate(BaseModel):
+    """Human-authored copy only; rendering is deterministic and local."""
+
+    title: str = Field(min_length=1, max_length=120)
+    message: str = Field(min_length=1, max_length=400)
+    cta: str = Field(min_length=1, max_length=120)
+
+
+@router.get("/brand/templates")
+def list_brand_templates(_admin: AdminUser) -> dict[str, Any]:
+    from app.repositories.brand_templates import BrandTemplateRepository
+
+    return {"templates": BrandTemplateRepository().list_templates()}
+
+
+@router.put("/brand/templates/{kind}")
+def update_brand_template(
+    kind: str, payload: BrandTemplateUpdate, admin: AdminUser
+) -> dict[str, Any]:
+    """Persist only the auto-reply override and audit it atomically."""
+    from app.repositories.admin import _ensure_admin_schema, write_audit
+    from app.repositories.brand_templates import BrandTemplateRepository
+
+    repo = BrandTemplateRepository()
+    _ensure_admin_schema()
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                row = repo.update(
+                    kind,
+                    body=payload.body,
+                    footnote=payload.footnote,
+                    footer=payload.footer,
+                    cur=cur,
+                )
+                write_audit(
+                    admin["id"],
+                    "brand_template.updated",
+                    target_type="brand_template",
+                    target_id=kind,
+                    detail={"kind": kind, "fields": ["body", "footnote", "footer"]},
+                    cur=cur,
+                )
+            conn.commit()
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Unknown document kind.") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return row
+
+
+@router.post("/brand/artifacts", status_code=status.HTTP_201_CREATED)
+def create_brand_artifact(
+    payload: BrandArtifactCreate, admin: AdminUser
+) -> Any:
+    """Create or reuse an auditable, design-system-grounded SVG poster.
+
+    This admin-only endpoint accepts supplied copy rather than an LLM prompt:
+    it cannot fabricate performance claims and has no social-posting path.
+    Identical normalized input returns its existing artifact (200), not a new
+    creative.
+    """
+    from app.repositories.admin import _ensure_admin_schema, write_audit
+    from app.services.brand_artifacts import ARTIFACT_KIND, build_poster
+
+    try:
+        artifact_input, digest, svg = build_poster(
+            payload.title, payload.message, payload.cta
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    repo = _repo()
+    _ensure_admin_schema()
+    row, reused = repo.get_or_create_brand_artifact(
+        kind=ARTIFACT_KIND,
+        input_hash=digest,
+        artifact_input=artifact_input,
+        content=svg,
+        created_by_id=admin["id"],
+    )
+    if not reused:
+        write_audit(
+            admin["id"],
+            "sales_brand_artifact.created",
+            target_type="sales_brand_artifact",
+            target_id=row["id"],
+            detail={"kind": ARTIFACT_KIND, "inputHash": digest},
+        )
+    response = {
+        "id": row["id"],
+        "kind": row["kind"],
+        "inputHash": row["inputHash"],
+        "input": row["input"],
+        "svg": row["content"],
+        "createdAt": row["createdAt"],
+        "reused": reused,
+    }
+    if reused:
+        # FastAPI allows the endpoint's default 201 but dedupe is observable.
+        from fastapi.encoders import jsonable_encoder
+        from fastapi.responses import JSONResponse
+
+        return JSONResponse(
+            status_code=status.HTTP_200_OK, content=jsonable_encoder(response)
+        )
+    return response
+
+
 # ----------------------------------------------------------- brand documents
 @router.get("/brand/documents")
 def brand_documents(_admin: AdminUser) -> dict[str, Any]:
@@ -262,6 +377,7 @@ def brand_document_preview(
     render against the LIVE Plan catalog row (real prices + gst_breakdown);
     customer fields render as explicit merge fields — nothing is fabricated."""
     from app.repositories.billing import PlanRepository
+    from app.repositories.brand_templates import BrandTemplateRepository
     from app.services.brand_documents import DOCUMENT_KINDS, render_document
 
     if kind not in DOCUMENT_KINDS:
@@ -280,7 +396,12 @@ def brand_document_preview(
         "title": DOCUMENT_KINDS[kind]["title"],
         "planId": plan_row["id"] if plan_row else None,
         "interval": interval if plan_row else None,
-        "html": render_document(kind, plan_row, interval),
+        "html": render_document(
+            kind,
+            plan_row,
+            interval,
+            editable_template=BrandTemplateRepository().get_stored(kind),
+        ),
     }
 
 

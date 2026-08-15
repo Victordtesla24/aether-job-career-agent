@@ -186,6 +186,37 @@ export const BrandDocumentsSchema = z.object({
 });
 export type BrandDocuments = z.infer<typeof BrandDocumentsSchema>;
 
+export const BrandTemplateSchema = z.object({
+  kind: z.string(),
+  body: z.string(),
+  footnote: z.string(),
+  footer: z.string(),
+  updatedAt: z.string().nullable(),
+  isDefault: z.boolean().optional(),
+});
+export type BrandTemplate = z.infer<typeof BrandTemplateSchema>;
+
+export async function fetchBrandTemplates(options: RequestOptions = {}): Promise<BrandTemplate[]> {
+  const data = z.object({ templates: z.array(BrandTemplateSchema) }).parse(
+    await apiRequest<unknown>("/admin/sales-agent/brand/templates", options),
+  );
+  return data.templates;
+}
+
+export async function updateBrandTemplate(
+  kind: string,
+  patch: Pick<BrandTemplate, "body" | "footnote" | "footer">,
+  options: RequestOptions = {},
+): Promise<BrandTemplate> {
+  return BrandTemplateSchema.parse(
+    await apiRequest<unknown>(`/admin/sales-agent/brand/templates/${kind}`, {
+      ...options,
+      method: "PUT",
+      body: patch,
+    }),
+  );
+}
+
 export async function fetchBrandDocuments(
   options: RequestOptions = {},
 ): Promise<BrandDocuments> {

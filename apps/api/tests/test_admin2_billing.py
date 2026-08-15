@@ -143,6 +143,78 @@ def test_admin2_billing_routes_reject_non_admins(client, auth_headers, method, p
 
 
 # --------------------------------------------------------------------------- #
+# (b) CATALOG PRICING — the plan's future checkout amount, never a subscriber
+# repricing. Existing subscriptions retain their Stripe price until changed by
+# their own lifecycle path.
+# --------------------------------------------------------------------------- #
+
+
+def test_admin_can_list_and_update_catalog_plan_prices_with_an_audit_row(client):
+    admin_headers, admin_id = _admin(client)
+
+    before = client.get("/admin/plans", headers=admin_headers)
+    assert before.status_code == 200, before.text
+    starter = next(plan for plan in before.json()["plans"] if plan["id"] == "starter")
+    assert starter["priceAudMonthly"] == 19.0
+    assert starter["priceAudAnnual"] == 179.0
+
+    changed = client.put(
+        "/admin/plans/starter/pricing",
+        json={"priceAudMonthly": 21.5, "priceAudAnnual": 199.0},
+        headers=admin_headers,
+    )
+    assert changed.status_code == 200, changed.text
+    assert changed.json() == {
+        "id": "starter",
+        "name": "Starter",
+        "priceAudMonthly": 21.5,
+        "priceAudAnnual": 199.0,
+        "currency": "AUD",
+    }
+
+    reloaded = client.get("/admin/plans", headers=admin_headers)
+    starter = next(plan for plan in reloaded.json()["plans"] if plan["id"] == "starter")
+    assert starter["priceAudMonthly"] == 21.5
+    assert starter["priceAudAnnual"] == 199.0
+
+    audit = _audit_rows("starter")
+    row = next(entry for entry in audit if entry["action"] == "update_plan_pricing")
+    assert row["actor"] == admin_id
+    assert row["detail"]["before"] == {"priceAudMonthly": 19.0, "priceAudAnnual": 179.0}
+    assert row["detail"]["after"] == {"priceAudMonthly": 21.5, "priceAudAnnual": 199.0}
+
+
+@pytest.mark.parametrize(
+    "method,path,body,status_code",
+    [
+        ("GET", "/admin/plans", None, 401),
+        ("PUT", "/admin/plans/starter/pricing", {"priceAudMonthly": 20}, 401),
+    ],
+)
+def test_catalog_pricing_routes_require_admin(client, auth_headers, method, path, body, status_code):
+    anonymous = client.request(method, path, json=body)
+    assert anonymous.status_code == status_code
+    non_admin = client.request(method, path, json=body, headers=auth_headers)
+    assert non_admin.status_code == 403
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"priceAudMonthly": -1},
+        {"priceAudMonthly": True},
+        {"priceAudAnnual": -1},
+        {"priceAudMonthly": 20, "priceAudAnnual": True},
+        {},
+    ],
+)
+def test_catalog_pricing_rejects_invalid_or_empty_edits(client, body):
+    admin_headers, _ = _admin(client)
+    response = client.put("/admin/plans/starter/pricing", json=body, headers=admin_headers)
+    assert response.status_code == 422, response.text
+
+
+# --------------------------------------------------------------------------- #
 # (c) CUSTOM PRICING
 # --------------------------------------------------------------------------- #
 

@@ -157,6 +157,19 @@ def test_a_soft_deleted_account_is_not_a_lifecycle_email_candidate(client):
     )
 
 
+def test_a_suspended_account_is_not_a_lifecycle_email_candidate(client):
+    admin_headers, _ = _admin(client)
+    uid, email = _dormant_free_account(client)
+    assert email.lower() in _candidate_emails(), "precondition: was a candidate"
+
+    suspended = client.post(f"/admin/users/{uid}/suspend", headers=admin_headers)
+    assert suspended.status_code == 200, suspended.text
+
+    assert email.lower() not in _candidate_emails(), (
+        "a suspended account is still queued for a real marketing email"
+    )
+
+
 def test_the_soft_delete_does_not_shrink_the_candidate_set_for_anyone_else(client):
     """The filter must remove exactly the deleted account, not the population."""
     admin_headers, _ = _admin(client)

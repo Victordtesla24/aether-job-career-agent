@@ -28,6 +28,7 @@ from app.agents.sales_agent import (
     SalesAgent,
     append_compliance_footer,
     personalize_template,
+    sales_agent_live_scope,
 )
 from app.repositories.sales import (
     ConsentViolationError,
@@ -205,6 +206,86 @@ def test_disabled_agent_is_an_honest_noop(monkeypatch):
     assert "AETHER_SALES_AGENT_ENABLED" in result["reason"]
 
 
+def test_sales_live_scope_defaults_to_inbound(monkeypatch):
+    monkeypatch.delenv("AETHER_SALES_AGENT_LIVE_SCOPE", raising=False)
+
+    assert sales_agent_live_scope() == "inbound"
+
+
+def test_sales_live_scope_all_explicitly_enables_lifecycle(monkeypatch):
+    monkeypatch.setenv("AETHER_SALES_AGENT_LIVE_SCOPE", "all")
+
+    assert sales_agent_live_scope() == "all"
+
+
+def test_default_live_scope_skips_lifecycle_but_keeps_inbound_polling(monkeypatch):
+    class FakeRuns:
+        def start(self, *args, **kwargs):  # noqa: ANN002, ANN003
+            return {"id": "run-1"}
+
+        def finish(self, *args, **kwargs):  # noqa: ANN002, ANN003
+            return None
+
+    class FakeRepo:
+        def seed_default_campaigns(self):
+            return None
+
+        def sales_sending_accounts(self, admin_id):
+            return [{"id": "acct-1", "accountEmail": "sales@example.com"}]
+
+    agent = SalesAgent(repo=FakeRepo())  # type: ignore[arg-type]
+    calls: list[str] = []
+    monkeypatch.setenv("AETHER_SALES_AGENT_ENABLED", "true")
+    monkeypatch.delenv("AETHER_SALES_AGENT_LIVE_SCOPE", raising=False)
+    monkeypatch.setattr("app.agents.sales_agent.resolve_admin_user_id", lambda: "admin-1")
+    monkeypatch.setattr("app.agents.sales_agent.AgentRunRepository", FakeRuns)
+    monkeypatch.setattr("app.agents.sales_agent.ensure_agent_config", lambda admin_id: None)
+    monkeypatch.setattr("app.agents.sales_agent.resolve_model", lambda: ("test-model", "test"))
+    monkeypatch.setattr(agent, "_poll_account", lambda *args, **kwargs: calls.append("inbound"))
+    monkeypatch.setattr(agent, "_run_lifecycle", lambda *args, **kwargs: calls.append("lifecycle"))
+    monkeypatch.setattr(agent, "_run_linkedin_draft", lambda *args, **kwargs: None)
+    monkeypatch.setattr(agent, "_run_digest", lambda *args, **kwargs: None)
+
+    result = agent.run(trigger="manual", dry_run=False)
+
+    assert result["liveScope"] == "inbound"
+    assert calls == ["inbound"]
+
+
+def test_all_live_scope_runs_lifecycle(monkeypatch):
+    class FakeRuns:
+        def start(self, *args, **kwargs):  # noqa: ANN002, ANN003
+            return {"id": "run-1"}
+
+        def finish(self, *args, **kwargs):  # noqa: ANN002, ANN003
+            return None
+
+    class FakeRepo:
+        def seed_default_campaigns(self):
+            return None
+
+        def sales_sending_accounts(self, admin_id):
+            return []
+
+    agent = SalesAgent(repo=FakeRepo())  # type: ignore[arg-type]
+    calls: list[str] = []
+    monkeypatch.setenv("AETHER_SALES_AGENT_ENABLED", "true")
+    monkeypatch.setenv("AETHER_SALES_AGENT_LIVE_SCOPE", "all")
+    monkeypatch.setattr("app.agents.sales_agent.resolve_admin_user_id", lambda: "admin-1")
+    monkeypatch.setattr("app.agents.sales_agent.AgentRunRepository", FakeRuns)
+    monkeypatch.setattr("app.agents.sales_agent.ensure_agent_config", lambda admin_id: None)
+    monkeypatch.setattr("app.agents.sales_agent.resolve_model", lambda: ("test-model", "test"))
+    monkeypatch.setattr(agent, "_poll_account", lambda *args, **kwargs: calls.append("inbound"))
+    monkeypatch.setattr(agent, "_run_lifecycle", lambda *args, **kwargs: calls.append("lifecycle"))
+    monkeypatch.setattr(agent, "_run_linkedin_draft", lambda *args, **kwargs: None)
+    monkeypatch.setattr(agent, "_run_digest", lambda *args, **kwargs: None)
+
+    result = agent.run(trigger="manual", dry_run=False)
+
+    assert result["liveScope"] == "all"
+    assert calls == ["lifecycle"]
+
+
 def test_inbound_interest_to_dry_run_pipeline(repo, sales_env, monkeypatch):
     sender = _email("prospect")
     thread = f"t-{uuid.uuid4().hex[:12]}"
@@ -345,6 +426,9 @@ ROUTES = [
     ("GET", "/admin/sales-agent/campaigns/some-id/preview"),
     ("GET", "/admin/sales-agent/brand/documents"),
     ("GET", "/admin/sales-agent/brand/documents/invoice/preview"),
+    ("GET", "/admin/sales-agent/brand/templates"),
+    ("PUT", "/admin/sales-agent/brand/templates/auto_reply"),
+    ("POST", "/admin/sales-agent/brand/artifacts"),
 ]
 
 
@@ -502,6 +586,39 @@ def test_campaign_preview_route_renders_branded_html(client, admin_headers):
     assert missing.status_code == 404
 
 
+def test_admin_creates_branded_poster_and_identical_request_reuses_it(
+    client, admin_headers
+):
+    payload = {
+        "title": "Human-approved job search",
+        "message": "Every outbound action waits for your explicit yes.",
+        "cta": "Explore Aether Career Job Agent",
+    }
+    first = client.post(
+        "/admin/sales-agent/brand/artifacts", headers=admin_headers, json=payload
+    )
+    assert first.status_code == 201
+    created = first.json()
+    assert created["reused"] is False
+    assert created["kind"] == "poster"
+    assert created["inputHash"]
+    assert created["svg"].startswith("<svg")
+    # Aether design-system grounding: canonical mark plus its ink/gilt palette.
+    assert "/brand/aether-mark.svg" in created["svg"]
+    assert "#08080A" in created["svg"]
+    assert "#C9A84C" in created["svg"]
+    assert "Aether Career Job Agent" in created["svg"]
+
+    second = client.post(
+        "/admin/sales-agent/brand/artifacts", headers=admin_headers, json=payload
+    )
+    assert second.status_code == 200
+    reused = second.json()
+    assert reused["reused"] is True
+    assert reused["id"] == created["id"]
+    assert reused["inputHash"] == created["inputHash"]
+
+
 class _FakeLLM:
     """Deterministic stand-in — generate tests must not depend on live LLMs."""
 
@@ -620,3 +737,142 @@ def test_brand_document_preview_rejects_unknown_kind_and_plan(
         "/admin/sales-agent/brand/documents/invoice/preview?interval=weekly",
         headers=admin_headers,
     ).status_code == 422
+
+
+# ----------------------------------------------------- persistent brand editor
+def test_brand_template_editor_persists_copy_footnote_and_audit(client, admin_headers):
+    listed = client.get("/admin/sales-agent/brand/templates", headers=admin_headers)
+    assert listed.status_code == 200
+    original = next(t for t in listed.json()["templates"] if t["kind"] == "auto_reply")
+    assert original["body"]
+    assert original["footer"]
+
+    updated = client.put(
+        "/admin/sales-agent/brand/templates/auto_reply",
+        headers=admin_headers,
+        json={
+            "body": "Hello {{name}},\n\nThanks for contacting us.",
+            "footnote": "Support replies are reviewed in Melbourne time.",
+            "footer": "Aether Career Job Agent — Operated by Vikram Sarkar\nhttps://example.test/unsubscribe",
+        },
+    )
+    assert updated.status_code == 200
+    data = updated.json()
+    assert data["body"].startswith("Hello {{name}}")
+    assert data["footnote"] == "Support replies are reviewed in Melbourne time."
+    assert "unsubscribe" in data["footer"].lower()
+    assert data["updatedAt"]
+
+    persisted = client.get("/admin/sales-agent/brand/templates", headers=admin_headers)
+    saved = next(t for t in persisted.json()["templates"] if t["kind"] == "auto_reply")
+    assert saved["body"] == data["body"]
+    assert saved["footnote"] == data["footnote"]
+
+    preview = client.get(
+        "/admin/sales-agent/brand/documents/auto_reply/preview", headers=admin_headers
+    )
+    assert preview.status_code == 200
+    html = preview.json()["html"]
+    assert "Thanks for contacting us." in html
+    assert "Support replies are reviewed in Melbourne time." in html
+    assert "https://example.test/unsubscribe" in html
+
+    from app.db import get_connection
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT "action", "targetType", "targetId" FROM "AdminAuditLog" '
+                'WHERE "targetType"=%s AND "targetId"=%s ORDER BY "createdAt" DESC LIMIT 1',
+                ("brand_template", "auto_reply"),
+            )
+            audit = cur.fetchone()
+    assert audit == ("brand_template.updated", "brand_template", "auto_reply")
+
+
+def test_brand_template_editor_rejects_empty_or_non_compliant_footer(client, admin_headers):
+    for footer in (
+        "",
+        "   ",
+        "Aether Career Job Agent — Operated by Vikram Sarkar",
+        "Aether Career Job Agent\nReply unsubscribe to opt out.",
+        "Aether Career Job Agent\nhttps://example.test/preferences",
+        "Aether Career Job Agent\nhttp://example.test/unsubscribe",
+        "Aether Career Job Agent\n/unsubscribe",
+        "Aether Job Agent\nhttps://example.test/unsubscribe",
+    ):
+        response = client.put(
+            "/admin/sales-agent/brand/templates/auto_reply",
+            headers=admin_headers,
+            json={
+                "body": "Hello {{name}},",
+                "footnote": "A footnote.",
+                "footer": footer,
+            },
+        )
+        assert response.status_code == 422
+
+
+def test_brand_template_editor_requires_exact_identity_and_https_unsubscribe_url(
+    client, admin_headers
+):
+    response = client.put(
+        "/admin/sales-agent/brand/templates/auto_reply",
+        headers=admin_headers,
+        json={
+            "body": "Hello {{name}},",
+            "footnote": "A footnote.",
+            "footer": (
+                "Aether Career Job Agent — Operated by Vikram Sarkar\n"
+                "https://example.test/unsubscribe"
+            ),
+        },
+    )
+    assert response.status_code == 200, response.text
+
+
+def test_brand_template_editor_rejects_plan_backed_document_overrides(
+    client, admin_headers
+):
+    response = client.put(
+        "/admin/sales-agent/brand/templates/invoice",
+        headers=admin_headers,
+        json={
+            "body": "Incorrect static invoice copy",
+            "footnote": "Incorrect static footnote.",
+            "footer": (
+                "Aether Career Job Agent — Operated by Vikram Sarkar\n"
+                "https://example.test/unsubscribe"
+            ),
+        },
+    )
+    assert response.status_code == 422
+    assert "auto_reply" in response.json()["detail"]
+
+    preview = client.get(
+        "/admin/sales-agent/brand/documents/invoice/preview?plan=starter&interval=monthly",
+        headers=admin_headers,
+    )
+    assert preview.status_code == 200, preview.text
+    assert "A$19.00" in preview.json()["html"]
+    assert "Incorrect static invoice copy" not in preview.json()["html"]
+
+
+def test_render_document_uses_persisted_auto_reply_override():
+    from app.services.brand_documents import render_document
+
+    html = render_document(
+        "auto_reply",
+        editable_template={
+            "body": "Hello {{name}},\nThanks for contacting us.",
+            "footnote": "Support replies are reviewed in Melbourne time.",
+            "footer": (
+                "Aether Career Job Agent — Operated by Vikram Sarkar\n"
+                "https://example.test/unsubscribe"
+            ),
+        },
+    )
+    assert "Thanks for contacting us." in html
+    assert "Support replies are reviewed in Melbourne time." in html
+    assert "https://example.test/unsubscribe" in html
+    assert 'href="https://example.test/unsubscribe"' in html

@@ -24,6 +24,7 @@ Grounding rules (STRICT — mirrors the sales agent's honesty contract):
 from __future__ import annotations
 
 import html as _html
+import re
 from typing import Any, Optional
 
 from app.repositories.billing import gst_breakdown
@@ -34,6 +35,10 @@ from app.services.sales_branding import BRAND, brand_logo_url
 BUSINESS_NAME = "Aether Career Job Agent"
 BUSINESS_OPERATOR = "Operated by Vikram Sarkar"
 BUSINESS_URL = "https://5cb5f0620.abacusai.cloud"
+_UNSUBSCRIBE_URL = re.compile(
+    r"https://[^\s<>\"']+/[^\s<>\"，。]*unsubscribe[^\s<>\"，。]*",
+    re.IGNORECASE,
+)
 
 #: Registry of document kinds this module can render. ``needsPlan`` documents
 #: are rendered against a LIVE Plan catalog row; the others are plan-free.
@@ -107,11 +112,34 @@ def _plan_price(plan: dict[str, Any], interval: str) -> tuple[float, str]:
     return float(plan.get("priceAudMonthly") or 0), "per month"
 
 
-def _chrome(title: str, inner_html: str, footnote: str) -> str:
+def _render_footer_override(footer: str) -> str:
+    """Escape editable footer text while preserving a clickable opt-out URL."""
+    escaped = _esc(footer).replace("\n", "<br>")
+
+    def link(match: re.Match[str]) -> str:
+        url = match.group(0)
+        return f'<a href="{url}" style="color:{BRAND["goldAccessible"]};">{url}</a>'
+
+    return _UNSUBSCRIBE_URL.sub(link, escaped)
+
+
+def _chrome(
+    title: str, inner_html: str, footnote: str, footer_override: Optional[str] = None
+) -> str:
     """Shared branded document chrome — same DS tokens, gradient bars, logo
     and identity block as the sales email wrapper."""
     g = BRAND
     title_html = _esc(title)
+    footer_html = (
+        _render_footer_override(footer_override)
+        if footer_override is not None
+        else (
+            f'{BUSINESS_NAME} — {BUSINESS_OPERATOR}<br>\n'
+            f'           <a href="{BUSINESS_URL}" '
+            f'style="color:{g["goldAccessible"]};\n'
+            f'              text-decoration:none;">{BUSINESS_URL}</a>'
+        )
+    )
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -156,9 +184,7 @@ def _chrome(title: str, inner_html: str, footnote: str) -> str:
                      border-right:1px solid {g['cardBorder']};
                      border-top:1px solid {g['hairline']};" align="center">
         <p style="margin:0 0 6px 0;font-family:{g['bodyFont']};font-size:12px;
-                  line-height:1.7;color:{g['fg3']};">{BUSINESS_NAME} — {BUSINESS_OPERATOR}<br>
-           <a href="{BUSINESS_URL}" style="color:{g['goldAccessible']};
-              text-decoration:none;">{BUSINESS_URL}</a></p>
+                  line-height:1.7;color:{g['fg3']};">{footer_html}</p>
         <p style="margin:0;font-family:{g['bodyFont']};font-size:11px;
                   line-height:1.6;color:{g['fg3']};">{_esc(footnote)}</p>
       </td></tr>
@@ -368,7 +394,10 @@ def render_cancellation_confirmed(
 
 # --------------------------------------------------------------- dispatcher
 def render_document(
-    kind: str, plan: Optional[dict[str, Any]] = None, interval: str = "monthly"
+    kind: str,
+    plan: Optional[dict[str, Any]] = None,
+    interval: str = "monthly",
+    editable_template: Optional[dict[str, Any]] = None,
 ) -> str:
     """Render a registered document kind. Plan-backed kinds REQUIRE a live
     Plan row (the router resolves it via PlanRepository); rendering never
@@ -377,6 +406,17 @@ def render_document(
         raise KeyError(f"Unknown document kind: {kind}")
     if DOCUMENT_KINDS[kind]["needsPlan"] and plan is None:
         raise ValueError(f"Document kind '{kind}' requires a plan row.")
+    if editable_template is not None:
+        if kind != "auto_reply":
+            raise ValueError("Only auto_reply supports persistent template overrides.")
+        body = _esc(editable_template["body"]).replace("\n", "<br>")
+        inner = _para(body)
+        return _chrome(
+            DOCUMENT_KINDS[kind]["title"],
+            inner,
+            editable_template["footnote"],
+            footer_override=editable_template["footer"],
+        )
     if kind == "invoice":
         assert plan is not None
         return render_invoice(plan, interval)

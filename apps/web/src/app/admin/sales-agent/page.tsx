@@ -24,6 +24,7 @@ import { describeApiError } from "../../../lib/api/client";
 import {
   fetchBrandDocumentPreview,
   fetchBrandDocuments,
+  fetchBrandTemplates,
   fetchSalesCampaignPreview,
   fetchSalesCampaigns,
   fetchSalesHealth,
@@ -35,7 +36,9 @@ import {
   setSalesSendingAccount,
   generateSalesContent,
   updateSalesCampaign,
+  updateBrandTemplate,
   type BrandDocuments,
+  type BrandTemplate,
   type SalesCampaign,
   type SalesGenerateResult,
   type SalesHealth,
@@ -114,6 +117,10 @@ export default function SalesAgentPage() {
   const [generating, setGenerating] = useState(false);
   const [genResult, setGenResult] = useState<SalesGenerateResult | null>(null);
   const [brand, setBrand] = useState<BrandDocuments | null>(null);
+  const [brandTemplates, setBrandTemplates] = useState<BrandTemplate[]>([]);
+  const [brandEditing, setBrandEditing] = useState<string | null>(null);
+  const [brandDraft, setBrandDraft] = useState<Pick<BrandTemplate, "body" | "footnote" | "footer"> | null>(null);
+  const [brandSaving, setBrandSaving] = useState(false);
   const [brandKind, setBrandKind] = useState<string | null>(null);
   const [brandHtml, setBrandHtml] = useState("");
   const [brandLoading, setBrandLoading] = useState(false);
@@ -124,7 +131,7 @@ export default function SalesAgentPage() {
     setLoading(true);
     setError("");
     try {
-      const [ov, he, ac, ca, le, ou, dr, bd] = await Promise.all([
+      const [ov, he, ac, ca, le, ou, dr, bd, bt] = await Promise.all([
         fetchSalesOverview(),
         fetchSalesHealth(),
         fetchSalesSendingAccounts(),
@@ -133,6 +140,7 @@ export default function SalesAgentPage() {
         fetchSalesOutreach({ limit: 100 }),
         fetchSalesOutreach({ channel: "linkedin_draft", limit: 50 }),
         fetchBrandDocuments(),
+        fetchBrandTemplates(),
       ]);
       setOverview(ov);
       setHealth(he);
@@ -142,6 +150,7 @@ export default function SalesAgentPage() {
       setOutreach(ou);
       setDrafts(dr);
       setBrand(bd);
+      setBrandTemplates(bt);
     } catch (err) {
       setError(describeApiError(err, "Failed to load the sales agent console."));
     } finally {
@@ -273,6 +282,23 @@ export default function SalesAgentPage() {
     },
     [brandKind, brandPlan, brandInterval],
   );
+
+  const onSaveBrandTemplate = useCallback(async () => {
+    if (!brandEditing || !brandDraft) return;
+    setBrandSaving(true);
+    setError("");
+    try {
+      await updateBrandTemplate(brandEditing, brandDraft);
+      setBrandEditing(null);
+      setBrandDraft(null);
+      await load();
+      await onPreviewBrandDoc(brandEditing, brandPlan, brandInterval);
+    } catch (err) {
+      setError(describeApiError(err, "Could not save the brand template."));
+    } finally {
+      setBrandSaving(false);
+    }
+  }, [brandDraft, brandEditing, brandInterval, brandPlan, load, onPreviewBrandDoc]);
 
   const copyDraft = useCallback(async (id: string, body: string | null) => {
     if (!body) return;
@@ -746,15 +772,53 @@ export default function SalesAgentPage() {
                   <p className="sa-card-title">{d.title}</p>
                   <p className="sa-meta mt-0.5">{d.description}</p>
                 </div>
-                <button
-                  type="button"
-                  disabled={brandLoading}
-                  onClick={() => void onPreviewBrandDoc(d.kind)}
-                  className="sa-btn-gilt ml-auto shrink-0 px-3 py-1 text-xs"
-                >
-                  {brandKind === d.kind ? "Hide preview" : "Preview"}
-                </button>
+                <div className="ml-auto flex shrink-0 gap-2">
+                  {d.kind === "auto_reply" ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const template = brandTemplates.find((t) => t.kind === d.kind);
+                        if (!template) return;
+                        setBrandEditing(brandEditing === d.kind ? null : d.kind);
+                        setBrandDraft({ body: template.body, footnote: template.footnote, footer: template.footer });
+                      }}
+                      className="sa-btn-ghost px-3 py-1 text-xs"
+                    >
+                      {brandEditing === d.kind ? "Cancel edit" : "Edit copy & footer"}
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    disabled={brandLoading}
+                    onClick={() => void onPreviewBrandDoc(d.kind)}
+                    className="sa-btn-gilt px-3 py-1 text-xs"
+                  >
+                    {brandKind === d.kind ? "Hide preview" : "Preview"}
+                  </button>
+                </div>
               </div>
+              {brandEditing === d.kind && brandDraft ? (
+                <div className="mt-3 space-y-3 sa-well p-3">
+                  <p className="text-xs" style={{ color: "var(--fg-2)" }}>
+                    Compliance footer is enforced server-side: it must retain the product identity and an absolute HTTPS unsubscribe URL.
+                  </p>
+                  <label className="block text-xs" style={{ color: "var(--fg-2)" }}>
+                    Template copy
+                    <textarea value={brandDraft.body} onChange={(e) => setBrandDraft({ ...brandDraft, body: e.target.value })} rows={6} className="mt-1 w-full p-2 text-xs" />
+                  </label>
+                  <label className="block text-xs" style={{ color: "var(--fg-2)" }}>
+                    Footnote
+                    <textarea value={brandDraft.footnote} onChange={(e) => setBrandDraft({ ...brandDraft, footnote: e.target.value })} rows={3} className="mt-1 w-full p-2 text-xs" />
+                  </label>
+                  <label className="block text-xs" style={{ color: "var(--fg-2)" }}>
+                    Compliance footer
+                    <textarea value={brandDraft.footer} onChange={(e) => setBrandDraft({ ...brandDraft, footer: e.target.value })} rows={3} className="mt-1 w-full p-2 text-xs" />
+                  </label>
+                  <button type="button" disabled={brandSaving || !brandDraft.body.trim() || !brandDraft.footnote.trim() || !brandDraft.footer.trim()} onClick={() => void onSaveBrandTemplate()} className="sa-btn-primary px-4 py-2 text-sm">
+                    {brandSaving ? "Saving…" : "Save template"}
+                  </button>
+                </div>
+              ) : null}
               {brandKind === d.kind && brandHtml ? (
                 <div
                   className="mt-3 overflow-hidden"
