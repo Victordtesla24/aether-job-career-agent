@@ -398,7 +398,7 @@ const HOP = {
     // (P1-A + B6 + D.524 + B1b + ML-STOPALL-001..004 + interim guards all
     // shift agents.py); anchors unchanged. The provenance re-anchor pass
     // revalidates every citation before the landing gates.
-    evidence: "apps/api/app/routers/agents.py:3881,3913",
+    evidence: "apps/api/app/routers/agents.py:3889,3921",
     discoveryEvidence: "apps/api/app/routers/agents.py:3380",
     anchors: [
       "def _pipeline_core(",

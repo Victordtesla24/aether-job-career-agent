@@ -124,6 +124,9 @@ function DecisionGuidance({ tellsYou, next }: DecisionGuidanceProps) {
     <div
       className="mt-3 grid gap-2 border-t border-white/10 pt-3 text-[11px] leading-[1.45] text-aether-muted-dim sm:grid-cols-2"
       data-testid="analytics-decision-guidance"
+      // Prose census (MP-010): each line is a ≤1-line qualifier attached to
+      // the panel's visual — the caption role, per the census's allowed set.
+      data-prose="caption"
     >
       <p>
         <span className="font-semibold text-aether-muted">What this tells you</span>{" "}
