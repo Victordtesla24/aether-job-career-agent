@@ -175,6 +175,23 @@ def _ensure_sales_tables() -> None:
                 'ADD COLUMN IF NOT EXISTS "usedForSalesAgent" boolean '
                 'NOT NULL DEFAULT false'
             )
+            cur.execute(
+                '''
+                CREATE TABLE IF NOT EXISTS "SalesBrandArtifact" (
+                    "id"          text PRIMARY KEY,
+                    "kind"        text NOT NULL,
+                    "inputHash"   text NOT NULL,
+                    "input"       jsonb NOT NULL,
+                    "content"     text NOT NULL,
+                    "createdById" text NOT NULL,
+                    "createdAt"   timestamptz NOT NULL DEFAULT NOW()
+                )
+                '''
+            )
+            cur.execute(
+                'CREATE UNIQUE INDEX IF NOT EXISTS "SalesBrandArtifact_kind_inputHash_key" '
+                'ON "SalesBrandArtifact" ("kind", "inputHash")'
+            )
         conn.commit()
     _tables_ready = True
 
@@ -188,6 +205,50 @@ class SalesRepository:
 
     def __init__(self) -> None:
         _ensure_sales_tables()
+
+    # ------------------------------------------------------- brand artifacts
+    def get_or_create_brand_artifact(
+        self,
+        *,
+        kind: str,
+        input_hash: str,
+        artifact_input: dict[str, str],
+        content: str,
+        created_by_id: str,
+    ) -> tuple[dict[str, Any], bool]:
+        """Persist a reproducible creative or return its existing content hash.
+
+        The unique index is the concurrency-safe dedupe boundary.  A rendered
+        SVG and its exact normalized source are retained for auditability.
+        """
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    '''
+                    INSERT INTO "SalesBrandArtifact"
+                        ("id","kind","inputHash","input","content","createdById")
+                    VALUES (%s,%s,%s,%s::jsonb,%s,%s)
+                    ON CONFLICT ("kind","inputHash") DO NOTHING
+                    RETURNING *
+                    ''',
+                    (
+                        new_id(), kind, input_hash, json.dumps(artifact_input), content,
+                        created_by_id,
+                    ),
+                )
+                rows = rows_to_dicts(cur)
+                if rows:
+                    conn.commit()
+                    return rows[0], False
+                cur.execute(
+                    'SELECT * FROM "SalesBrandArtifact" '
+                    'WHERE "kind"=%s AND "inputHash"=%s',
+                    (kind, input_hash),
+                )
+                rows = rows_to_dicts(cur)
+            conn.commit()
+        assert rows
+        return rows[0], True
 
     # ------------------------------------------------------------- leads
     def create_lead(

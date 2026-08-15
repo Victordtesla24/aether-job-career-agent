@@ -347,6 +347,7 @@ ROUTES = [
     ("GET", "/admin/sales-agent/brand/documents/invoice/preview"),
     ("GET", "/admin/sales-agent/brand/templates"),
     ("PUT", "/admin/sales-agent/brand/templates/auto_reply"),
+    ("POST", "/admin/sales-agent/brand/artifacts"),
 ]
 
 
@@ -502,6 +503,39 @@ def test_campaign_preview_route_renders_branded_html(client, admin_headers):
         "/admin/sales-agent/campaigns/nope/preview", headers=admin_headers
     )
     assert missing.status_code == 404
+
+
+def test_admin_creates_branded_poster_and_identical_request_reuses_it(
+    client, admin_headers
+):
+    payload = {
+        "title": "Human-approved job search",
+        "message": "Every outbound action waits for your explicit yes.",
+        "cta": "Explore Aether Career Job Agent",
+    }
+    first = client.post(
+        "/admin/sales-agent/brand/artifacts", headers=admin_headers, json=payload
+    )
+    assert first.status_code == 201
+    created = first.json()
+    assert created["reused"] is False
+    assert created["kind"] == "poster"
+    assert created["inputHash"]
+    assert created["svg"].startswith("<svg")
+    # Aether design-system grounding: canonical mark plus its ink/gilt palette.
+    assert "/brand/aether-mark.svg" in created["svg"]
+    assert "#08080A" in created["svg"]
+    assert "#C9A84C" in created["svg"]
+    assert "Aether Career Job Agent" in created["svg"]
+
+    second = client.post(
+        "/admin/sales-agent/brand/artifacts", headers=admin_headers, json=payload
+    )
+    assert second.status_code == 200
+    reused = second.json()
+    assert reused["reused"] is True
+    assert reused["id"] == created["id"]
+    assert reused["inputHash"] == created["inputHash"]
 
 
 class _FakeLLM:
