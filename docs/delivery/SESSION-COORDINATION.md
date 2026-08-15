@@ -717,3 +717,47 @@ later (visual-only exposure, accepted).
 
 **Locks (both sessions):** `/tmp/aether-deploy.lock` build+restart · `/tmp/aether-git.lock` git index
 ops · `/tmp/aether-test.lock` heavy test runs.
+
+
+### ORCH-MP WAVE 0 — RECONCILE & BASELINE — 2026-08-15T18:20Z (session ORCH-MP, market-performance run)
+
+**Session:** ORCH-MP (orchestrator for `aether-admin-sales-agent-execution-prompt.md`, acceptance ledger
+`/home/ubuntu/aether-market-performance.md`). Wave 0 = reconcile + G1 baseline only; Waves A–E follow
+as later claims by this same run.
+
+**Ticket-ID range claimed:** `MP-001+` (work tickets) and `GOV-060 … GOV-079` (governance items).
+Prior ranges GOV-016–022 / GOV-030+ / GOV-040+ remain owned by their original sessions.
+
+**Liveness ruling (GOV-060):** sessions `42a0f0a8` (UI-BRAND / Wave E owner) and the peer Wave C/D
+session (socket 2331) are ruled **TERMINATED**: no `claude` processes exist on this VM for ~7 h; the
+api+web restart window claimed at 11:2xZ (ETA 30–60 min) never executed (`aether-web` ExecMainStart
+is 10:29:50Z, unchanged); their tmux sessions are idle. Consequences:
+- Their claims (restart window, Wave C/D/E ownership) are **released**.
+- Their preserved-but-unlanded work (stash@{0} `orch-preserve-pre-consolidation-2026-08-15`, 46 files,
+  parent a8cb21f8; `patches/u5d4.diff` from the removed `aether-wt-u5d4` worktree) is landed by
+  ORCH-MP **with attribution**, per the shared-tree hazard rule in the execution prompt §0.1.
+- The **EXCLUSIVE wipe-execution claim by 42a0f0a8 is void** (session dead). The owner's flag
+  resolutions recorded in that claim (F1 delete-entirely, F2 keep ProviderCredential, F3 keep
+  SalesSuppressionList only, F4 delete orphan pair, F5 Stripe deferred; NO backups; keep admin+owner
+  logins) remain the authoritative operator decisions and carry forward to whichever session executes
+  Wave E / R5. The wipe manifest itself was restored to the tree this session (GOV-061) after being
+  lost during the 13:41–15:25Z consolidation (it survived only in platform snapshot cb38dbac).
+
+**Files this session will touch (Wave 0):**
+- `docs/delivery/SESSION-COORDINATION.md` (this appendix + closing note)
+- `docs/delivery/PROD-PRISTINE-WIPE-MANIFEST-2026-08-15.md` (restore, byte-exact from cb38dbac)
+- `docs/delivery/ORCH-DELTA-2026-08-15b.md` (new)
+- `uat/reports/evidence/market-perf/wave0/*` (baseline evidence)
+- branch `land/ui-brand-20260815` (stash landing) and branch `feat/u5d4-verification-code-loop`
+  (rebuilt from `patches/u5d4.diff`) — merged/pushed per rulings below.
+
+**Deploy-window protocol (restated, binding on this run):** no service restart outside a window
+claimed here under `flock /tmp/aether-deploy.lock`; builds in the served tree only inside a claimed
+window; re-check `ExecMainStartTimestamp` after every restart; heavy test runs under
+`flock /tmp/aether-test.lock`; git index ops under `flock /tmp/aether-git.lock`.
+**Wave 0 performs NO service restarts and does not touch timers.**
+
+**Git plan (GOV-062):** push the 24-commit local lead on `main` to origin first (durability), then land
+stash@{0} on a branch with gates before merge; `.abacus.donotdelete` hunk excluded (platform-managed);
+the stash's 14 evidence-log deletions are **rejected** (evidence retention wins over foreign cleanup
+intent); the BLOCKER-001/GATE-31 guard in `repositories/admin.py` is diff-verified before merge.
