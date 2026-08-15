@@ -1,0 +1,15 @@
+# Aether operator-alert dispatcher (D-ALERT). Templated unit — each failed
+# service triggers an instance of this via `OnFailure=aether-alert@%n.service`
+# in the matching drop-in under deploy/systemd-dropins/<unit>.d/. `%i` is the
+# failed unit's own name (e.g. "aether-api.service"), passed straight through
+# to ops_alert.sh as $1.
+#
+# Install / test-fire recipe: docs/delivery/OPS-ALERTING.md. Not installed or
+# enabled by this commit — files only, per D-ALERT's "DO NOT enable anything".
+[Unit]
+Description=Aether operator alert e-mail for failed unit %i
+
+[Service]
+Type=oneshot
+User=ubuntu
+ExecStart=/home/ubuntu/github_repos/aether-job-career-agent/scripts/ops_alert.sh %i

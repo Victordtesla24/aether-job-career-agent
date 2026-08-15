@@ -100,9 +100,27 @@ class TestTailorApprovalIsReal:
         ).json()
         assert version["approvalStatus"] == "pending"
 
-        # Approving the gate flips the version to approved (the gate has teeth).
-        resolved = client.post(
+        # U2c (ad0eb388, "enforce the 80% quality floor on tailored resumes and
+        # cover letters") superseded the bare approve-and-it-flips contract this
+        # test used to pin: the bundled canned tailor fixture genuinely fails
+        # the dimension floor (Keyword Match ~48%, Semantic Similarity ~38% —
+        # see the persisted verdict on the approval's ``qualityGate``), and a
+        # below-floor artifact now REQUIRES an explicit human
+        # ``acknowledge_below_floor`` before /approve resolves it (409
+        # otherwise) — see app/routers/approvals.py::_require_below_floor_acknowledgement
+        # and tests/test_u2c_gate_enforcement.py. An approve attempt with no
+        # acknowledgement is refused, leaving the row exactly as it was.
+        refused = client.post(
             f"/approvals/{body['approval_id']}/approve", headers=auth_headers
+        )
+        assert refused.status_code == 409
+
+        # Approving the gate flips the version to approved (the gate has
+        # teeth) once the below-floor state is explicitly acknowledged.
+        resolved = client.post(
+            f"/approvals/{body['approval_id']}/approve",
+            json={"acknowledge_below_floor": True},
+            headers=auth_headers,
         )
         assert resolved.status_code == 200
         assert resolved.json()["status"] == "approved"

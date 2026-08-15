@@ -86,7 +86,15 @@ _PREEXISTING_KEYS = {
 #: and a later page load cannot tell different stories — which is the whole
 #: point of this contract test, hence it belongs in the expected key set
 #: rather than being an "unexpected" leak.
-_NEW_KEYS = {"iterations", "gapKeywords", "tailoringSummary"}
+#:
+#: ``qualityGate`` added by U2c (ad0eb388, "enforce the 80% quality floor on
+#: tailored resumes and cover letters"): the same below-floor verdict object
+#: lifted to the top level of ``TailorRunResult`` so the run card can read it
+#: without unpacking ``tailoringSummary`` — a deliberate, documented addition
+#: (tailor_agent.py's ``TailorRunResult.qualityGate`` docstring), not an
+#: unexpected leak, so it belongs in this expected set exactly like the two
+#: keys above it.
+_NEW_KEYS = {"iterations", "gapKeywords", "tailoringSummary", "qualityGate"}
 
 
 def _make_result(**overrides: Any) -> TailorRunResult:

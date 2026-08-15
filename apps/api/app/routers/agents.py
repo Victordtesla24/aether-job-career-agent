@@ -957,6 +957,7 @@ def _record_run(
     *,
     system_run: bool = False,
     skip_quota: bool = False,
+    parent_run_id: str | None = None,
 ) -> dict[str, Any]:
     """Execute ``fn`` under an AgentRun audit record.
 
@@ -982,6 +983,12 @@ def _record_run(
     stamped ``systemRun: true`` so the exemption is honestly traceable, and the
     quota cooldown block check still runs — a genuinely blocked user should
     never have system ops run either.
+
+    ``parent_run_id`` (B6, ORCH-B1-BLUEPRINT-2026-08-14.md §4.4): the id of the
+    AgentRun that CAUSED this one — set by ``_pipeline_core`` for every step it
+    dispatches, so the agents-console orchestration map can draw a REAL causal
+    edge. ``None`` (the default) is the honest value for a directly-triggered
+    run: it has no parent, and nothing here invents one.
     """
     # Entitlement gate FIRST (GAP-P6-PAYWALL): no active paid subscription -> an
     # honest 402 before any audit row, quota reserve, or LLM call.
@@ -989,7 +996,10 @@ def _record_run(
     # U-AX: idempotent — ``_dispatch`` has normally stamped the policy already;
     # this covers the direct ``_record_run`` callers (the pipeline's supervisor
     # and matcher nodes) so EVERY AgentRun row carries the tier it ran under.
-    params = _with_quality_policy(user_id, params)
+    # ``agent_name`` is already canonical here (every caller passes a real
+    # backend key, never an alias), so it doubles directly as the B1b
+    # directive-resolution key.
+    params = _with_quality_policy(user_id, params, agent_key=agent_name)
     runs = AgentRunRepository()
     audit, provider = _billing_audit(user_id, agent_name)
     if system_run or skip_quota:
@@ -1065,7 +1075,7 @@ def _record_run(
             except Exception:  # noqa: BLE001 — accounting is best-effort
                 pass
 
-    run = runs.start(user_id, agent_name, params)
+    run = runs.start(user_id, agent_name, params, parent_run_id=parent_run_id)
     _persist_billing_audit(runs, run["id"], audit)
     # Reserve + AgentRun row now stand; execution (and refund-on-failure) is the
     # shared block reused verbatim by the async worker (GAP-P7-ASYNC-001 §4.1).
@@ -1115,6 +1125,31 @@ def _execute_reserved_run(
                     BackgroundJobRepository().increment_refunded(_bg)
                 except Exception:  # noqa: BLE001
                     pass
+
+    # ML-STOPALL-001: refuse HERE — the ONE seam every dispatch path converges
+    # on immediately before real work happens (the sync ``_record_run`` caller
+    # has already created this AgentRun row + reservation; the async ARQ
+    # worker's ``_run_single_agent_body`` calls this function DIRECTLY,
+    # bypassing ``_record_run`` entirely) — when the user has paused this
+    # agent (``AgentConfig.enabled=false``, set by the Agents-page per-agent
+    # toggle OR the bulk "Stop All Agents" action). Checking here — rather
+    # than duplicating the check in both ``_record_run`` and the enqueue seam
+    # — means an agent paused AFTER a background job was already enqueued is
+    # still honestly refused the instant it reaches execution, with the check
+    # written exactly once. Finished + refunded exactly like every other
+    # pre-existing refusal below, never a silent run against a config the user
+    # disabled and never a bill for work that never happened.
+    if not _agent_enabled_for_dispatch(user_id, agent_name):
+        message = (
+            f'Agent "{agent_name}" is paused (you disabled it on the Agents '
+            "page). Re-enable it to run."
+        )
+        runs.finish(run_id, "failed", error=message)
+        _refund_once()
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail={"code": "agent_paused", "message": message, "agentKey": agent_name},
+        )
 
     # Resolve the user's chosen model ONCE — used to bind the run AND to cost it
     # against the model that actually served it (GAP-P7-MODEL-CHOICE-001).
@@ -1209,6 +1244,18 @@ def _execute_reserved_run(
             "message": str(exc),
         }
         runs.finish(run_id, "completed", output=honest_output, cost_usd=0.0)
+        # B6xP1A (ORCH-B1-BLUEPRINT-2026-08-14.md §4.4): the AgentRun row
+        # above was created with ``parentRunId`` already set (``_record_run``
+        # threads it through ``runs.start(..., parent_run_id=...)`` before
+        # execution starts), so the no-op run IS correctly parented in the
+        # database. But this handler's re-raise means the caller never gets a
+        # dict back to read a "run_id" off of — ``_pipeline_core`` builds its
+        # own ``tailor_out`` from the caught exception, and without this it
+        # has no way to look the row back up (e.g. via ``GET /agents/runs``)
+        # to confirm that parentage. Carried on the exception instance, same
+        # precedent as ``exc.degradedUsage`` on the FabricationError/
+        # StructuralError branch below.
+        exc.run_id = run_id
         # Refund only when THIS function manages quota (the sync path,
         # manage_quota=True); the async worker performs its own refund via
         # BackgroundJobRepository.refund_single_reservation AFTER this
@@ -2044,6 +2091,37 @@ _RECOMMENDED_FOR_BACKEND: dict[str, str] = {
 }
 
 
+def _agent_enabled_for_dispatch(user_id: str, agent_name: str) -> bool:
+    """Whether ``user_id`` has NOT paused ``agent_name`` (ML-STOPALL-001).
+
+    2026-08-14 rebind: this used to resolve ``agent_name`` through the
+    single-key ``_UI_KEY_FOR_BACKEND`` mapping, which keeps only the LAST UI
+    card per backend. ``fitScorer`` is dispatched by THREE cards
+    (atsOptimization, matchScoring, skillGap;
+    ``_UI_KEY_FOR_BACKEND["fitScorer"] == "skillGap"``), so a user who
+    disabled only ``skillGap`` while leaving atsOptimization/matchScoring
+    running was wrongly refused HERE (inside ``_execute_reserved_run``, the
+    async worker's direct entry point) even though ``_dispatch``'s pre-check
+    — which already used the correct every-card rule — agreed the run should
+    proceed. Delegating to :func:`_agent_paused_by_user` (the interim guard's
+    helper, using ``_ALL_UI_KEYS_FOR_BACKEND``) makes both layers share the
+    ONE rule: a backend is paused only when EVERY UI card that can dispatch
+    it is disabled.
+
+    Absent-row and read-fault semantics are unchanged by this rebind:
+    ``_agent_paused_by_user`` also treats a backend with no matching disabled
+    row as "not paused" (``all(key in disabled for key in ui_keys)`` is
+    vacuously true only when every key IS disabled; an empty ``disabled`` set
+    — no rows, or rows that are all ``enabled`` — leaves it False) and a DB
+    read fault as "not paused" (``except Exception: return False``) —
+    ``not False`` is ``True`` here, the exact same fail-open default this
+    function already returned on a read fault. The two helpers were already
+    in agreement on both edge cases; no reconciliation was needed.
+    """
+    _ensure_agent_config_schema()
+    return not _agent_paused_by_user(user_id, agent_name)
+
+
 def _user_model_override(user_id: str, agent_name: str) -> "str | None":
     """The model this user DELIBERATELY chose for ``agent_name``
     (GAP-P7-MODEL-CHOICE-001), or ``None`` to use the env default.
@@ -2263,7 +2341,16 @@ def _agent_callable(
     if name in ("storyExtractor", "story-extractor"):
         from app.agents.story_extractor import StoryExtractorAgent
 
-        return "storyExtractor", (lambda: StoryExtractorAgent().run(user_id))
+        # B1c (ORCH-B1-BLUEPRINT-2026-08-14.md §4.3): storyExtractor was the
+        # one metered T2 content producer receiving no knobs at all — since
+        # ``_dispatch`` stamps the resolved policy onto the run regardless,
+        # every prior run recorded a ``policyTier`` it never obeyed. Matches
+        # tailor/coverLetter's shape exactly; ``{}`` degrades to today's
+        # shipped defaults.
+        knobs = _policy_knobs(params)
+        return "storyExtractor", (
+            lambda: StoryExtractorAgent().run(user_id, policy_knobs=knobs)
+        )
     if name in ("matcher", "job-matching", "jobMatching"):
         from app.agents.matcher_agent import MatcherAgent
 
@@ -2421,7 +2508,50 @@ _RUNNABLE_BACKENDS = frozenset(
 )
 
 
-def _with_quality_policy(user_id: str, params: dict[str, Any]) -> dict[str, Any]:
+#: Alternate/legacy spellings ``_agent_callable`` accepts for a canonical
+#: backend name (B1b, ORCH-B1-BLUEPRINT-2026-08-14.md §4.2). The directive
+#: seam needs the CANONICAL agent key BEFORE ``_agent_callable`` runs —
+#: ``_dispatch`` resolves the policy first so tailor/coverLetter's knobs are
+#: computed from the ALREADY-amended policy (the U-AX ordering this module
+#: has always relied on), so canonicalizing name->key cannot itself call
+#: ``_agent_callable``. This is a plain lookup table, kept in sync BY HAND
+#: with the ``if name in (...)`` aliases below it — an unrecognized alias
+#: falls through to ``name`` unchanged, which simply resolves zero directives
+#: (the same honest degrade an unset ``agent_key`` already produces), never a
+#: wrong dispatch: ``_agent_callable`` remains the sole source of truth for
+#: WHICH agent actually runs.
+_AGENT_ALIASES: dict[str, str] = {
+    "fit-scorer": "fitScorer",
+    "cover-letter": "coverLetter",
+    "story-extractor": "storyExtractor",
+    "job-matching": "matcher",
+    "jobMatching": "matcher",
+    "email-agent": "emailAgent",
+    "email": "emailAgent",
+    "compliance-agent": "compliance",
+    "salary-intelligence": "salaryIntelligence",
+    "market-trends": "marketTrends",
+    "learning-feedback": "learningFeedback",
+    "company-research": "companyResearch",
+    "interview-prep": "interviewPrep",
+    "recruiter-outreach": "recruiterOutreach",
+    "reference-agent": "reference",
+    "sentiment-analysis": "sentimentAnalysis",
+    "scheduling-agent": "scheduling",
+    "notification-agent": "notification",
+    "submission-agent": "submission",
+}
+
+
+def _canonical_agent_key(name: str) -> str:
+    """Best-effort canonical backend key for a possibly-aliased ``name`` —
+    used ONLY to resolve which agent's directives apply, never for dispatch."""
+    return _AGENT_ALIASES.get(name, name)
+
+
+def _with_quality_policy(
+    user_id: str, params: dict[str, Any], *, agent_key: str | None = None
+) -> dict[str, Any]:
     """The SINGLE rigor-policy enforcement seam (U-AX build spec items 2-3).
 
     Resolves this user's deterministic rigor tier once and merges it into the
@@ -2443,6 +2573,14 @@ def _with_quality_policy(user_id: str, params: dict[str, Any]) -> dict[str, Any]
     residual (import/programming) case by leaving params untouched, which
     persists NULL columns — "no policy recorded" — rather than a fabricated
     tier.
+
+    B1b (ORCH-B1-BLUEPRINT-2026-08-14.md §4.2): after resolving the baseline
+    policy, any ACTIVE ``AgentDirective`` for ``agent_key`` amends it via
+    ``app.services.agent_directives.effective_policy`` — inside the SAME
+    try/except, so a directive-store failure degrades to the baseline policy
+    exactly as a policy-resolution failure does. ``agent_key=None`` resolves
+    NO directives (never "all of them") — the honest degrade for a caller
+    that cannot yet name the agent.
     """
     if isinstance(params.get("qualityPolicy"), dict):
         return params
@@ -2453,6 +2591,19 @@ def _with_quality_policy(user_id: str, params: dict[str, Any]) -> dict[str, Any]
     except Exception:  # noqa: BLE001
         logger.warning("rigor policy unresolved for user %s", user_id, exc_info=True)
         return params
+    if agent_key and agent_directives_enabled():
+        try:
+            from app.repositories.agent_directive import AgentDirectiveRepository
+            from app.services.agent_directives import effective_policy
+
+            directives = AgentDirectiveRepository().list_active(user_id, agent_key)
+            policy = effective_policy(policy, directives)
+        except Exception:  # noqa: BLE001
+            logger.warning(
+                "directive resolution failed for user %s agent %s — running on "
+                "the baseline policy",
+                user_id, agent_key, exc_info=True,
+            )
     return {**params, "qualityPolicy": policy}
 
 
@@ -2472,7 +2623,7 @@ def _policy_knobs(params: dict[str, Any]) -> dict[str, Any]:
 
 def _dispatch(
     user_id: str, name: str, params: dict[str, Any], *, system_run: bool = False,
-    skip_quota: bool = False,
+    skip_quota: bool = False, parent_run_id: str | None = None,
 ) -> dict[str, Any]:
     """Resolve the agent callable (pure) then execute + audit it. ``system_run``
     (ADR-P7-05) is threaded to ``_record_run`` -> ``_require_active_subscription``,
@@ -2481,12 +2632,18 @@ def _dispatch(
 
     ``skip_quota`` is threaded to ``_record_run`` so automated system operations
     (e.g. the board sweep) bypass the user's paid plan-quota reserve/spend-cap
-    gates while still keeping the cooldown block and an honest audit trail."""
-    # INTERIM — superseded by ML-STOPALL-001 at ``_execute_reserved_run``.
-    # A user-stopped agent is refused HERE, before any side effect: no
-    # ``AgentRun`` row, no quota reserve, nothing to refund. The board sweep's
-    # per-job ``except HTTPException`` records the refusal and moves on; API
-    # callers get the coded 409.
+    gates while still keeping the cooldown block and an honest audit trail.
+
+    ``parent_run_id`` (B6) is threaded to ``_record_run`` -> ``AgentRunRepository
+    .start`` unchanged: this function makes no causal claim of its own, it only
+    carries the caller's (``_pipeline_core``'s)."""
+    # ML-STOPALL-001 defense-in-depth: pre-side-effect early refusal for a
+    # user-stopped agent — no ``AgentRun`` row, no quota reserve, nothing to
+    # refund. The COMPLETE guard (covering the async worker's direct
+    # ``_execute_reserved_run`` path, with an honest recorded run row) lives in
+    # ``_execute_reserved_run``; both layers share one semantic via the
+    # every-card key rule. The board sweep's per-job ``except HTTPException``
+    # records the refusal and moves on; API callers get the coded 409.
     if _agent_paused_by_user(user_id, name):
         raise HTTPException(
             status.HTTP_409_CONFLICT,
@@ -2496,11 +2653,18 @@ def _dispatch(
         )
     # U-AX: resolve the rigor tier BEFORE binding the callable, so the agent
     # receives the knobs and the AgentRun row records the very same policy.
-    params = _with_quality_policy(user_id, params)
+    # B1b: the CANONICAL agent key is needed for directive resolution here —
+    # ``name`` may be an alias (e.g. "cover-letter"), and canonicalizing it
+    # cannot itself call ``_agent_callable`` (that would compute tailor/
+    # coverLetter's knobs from the policy BEFORE directives amend it, exactly
+    # the ordering bug this seam exists to prevent) — see ``_canonical_agent_key``.
+    params = _with_quality_policy(
+        user_id, params, agent_key=_canonical_agent_key(name)
+    )
     canonical, fn = _agent_callable(user_id, name, params)
     return _record_run(
         user_id, canonical, params, fn,
-        system_run=system_run, skip_quota=skip_quota,
+        system_run=system_run, skip_quota=skip_quota, parent_run_id=parent_run_id,
     )
 
 
@@ -2578,6 +2742,31 @@ def async_generation_enabled() -> bool:
     ).strip().lower() not in _ASYNC_OFF
 
 
+#: B1b reversibility (ORCH-B1-BLUEPRINT-2026-08-14.md §9.1, ADR-AGI-2's
+#: "Reversibility" clause): the global directive-issuance/application kill
+#: switch. Code default OFF, same convention as ``_ASYNC_OFF`` above.
+_DIRECTIVES_OFF = frozenset({"false", "0", "no", "off", ""})
+
+
+def agent_directives_enabled() -> bool:
+    """Whether B1b directives currently AMEND agent policy.
+
+    Code default OFF; a deployer flips ``AETHER_AGI_DIRECTIVES_ENABLED=true``
+    in ``.env`` to turn amendment on. When OFF, ``_with_quality_policy`` never
+    calls ``effective_policy`` — every run gets the baseline tier policy
+    unchanged — but this does NOT stop the Supervisor's rules stage from
+    evaluating and recording directives (``POST /agents/directives/evaluate``
+    still writes history): ADR-AGI-2's reversibility clause pauses
+    APPLICATION ("agents then run on charter defaults"); history stays
+    readable and displayed the whole time, which is what lets a deployer
+    re-enable amendment later without having lost the audit trail. Read via
+    ``os.environ`` on every call so a hot env change takes effect immediately.
+    """
+    return os.environ.get(
+        "AETHER_AGI_DIRECTIVES_ENABLED", "false"
+    ).strip().lower() not in _DIRECTIVES_OFF
+
+
 def _get_arq_pool():
     """Seam for the ARQ enqueue pool (patched to a FakeArqPool in tests)."""
     from app.workers.queue import get_arq_pool
@@ -2650,8 +2839,11 @@ def _enqueue_single_agent(
     # U-AX: stamp the rigor policy onto the params BEFORE they are persisted to
     # both the AgentRun row and the BackgroundJob payload, so the ARQ worker
     # replays the exact policy this enqueue resolved (never a fresh one that
-    # could differ by the time the job is picked up).
-    params = _with_quality_policy(user_id, params)
+    # could differ by the time the job is picked up). ``agent_key`` here is
+    # already canonical (every caller passes a real backend key, and D.524's
+    # generic-route caller resolves ``canonical`` via ``_agent_callable``
+    # before reaching this function — see ``run_named_agent``).
+    params = _with_quality_policy(user_id, params, agent_key=agent_key)
     runs = AgentRunRepository()
     audit, provider = _billing_audit(user_id, agent_key)
     if system_run:
@@ -3536,6 +3728,14 @@ def run_tailor(
         # dict persisted on the Resume row, so the response and a later reload
         # always agree.
         "tailoringSummary": output.get("tailoringSummary", {}),
+        # U2c (ad0eb388): the 80%-all-dimensions quality-floor verdict for the
+        # SHIPPED version — already computed by TailoringLoop and lifted to
+        # the top level of TailorRunResult "so the run card can read it
+        # without unpacking the summary" (tailor_agent.py), but this
+        # hand-built whitelist previously dropped it, the exact bug class
+        # test_router_whitelist_does_not_silently_drop_new_result_fields
+        # exists to catch. ``None`` iff the gate was never armed for this run.
+        "qualityGate": output.get("qualityGate"),
     }
 
 
@@ -3698,19 +3898,31 @@ def _pipeline_core(
     atomically via ``_record_run``, so the composite's data-dependent metered
     footprint is billed correctly (GAP-P7-ASYNC-001 D6). Shared by BOTH the sync
     handler (``budget_seconds=None`` → default HTTP budget) and the async worker
-    (``budget_seconds`` → the more-generous worker pipeline budget)."""
+    (``budget_seconds`` → the more-generous worker pipeline budget).
+
+    B6 (ORCH-B1-BLUEPRINT-2026-08-14.md §4.4): this is the ONE place in this
+    tree where one run genuinely causes others (B1a's scheduler is a separate,
+    uncommitted worktree — not present here). Every step below is dispatched
+    BY this pipeline invocation, so each one's ``parentRunId`` is the
+    SUPERVISOR run's id — a sibling of the others, not chained to the previous
+    step. That is the real, traceable cause: the supervisor is what decided
+    this sequence would run at all."""
     steps: list[dict[str, Any]] = []
 
     # Supervisor node: plans the run (audit-recorded, defect fix — the card
     # previously showed "Never run" because the pipeline skipped this node).
+    # It is the top of this run's causal chain, so it takes no parent itself.
     sup_out = _record_run(
         user_id, "supervisor", params, lambda: {"plan": list(_PIPELINE_PLAN)}
     )
     steps.append({"agent": "supervisor", "output": sup_out})
+    sup_run_id = sup_out.get("run_id")
 
-    scout_out = _dispatch(user_id, "scout", params)
+    scout_out = _dispatch(user_id, "scout", params, parent_run_id=sup_run_id)
     steps.append({"agent": "scout", "output": scout_out})
-    fit_out = _dispatch(user_id, "fitScorer", {"rescore": False})
+    fit_out = _dispatch(
+        user_id, "fitScorer", {"rescore": False}, parent_run_id=sup_run_id
+    )
     steps.append({"agent": "fitScorer", "output": fit_out})
 
     from app.agents.matcher_agent import MatcherAgent
@@ -3718,7 +3930,10 @@ def _pipeline_core(
     # Matcher node: ranks scored jobs and selects the top match (audit-recorded).
     # Reuses the now first-class MatcherAgent so the pipeline and the standalone
     # /agents/matcher/run trigger share one implementation.
-    match_out = _record_run(user_id, "matcher", {}, lambda: MatcherAgent().run(user_id))
+    match_out = _record_run(
+        user_id, "matcher", {}, lambda: MatcherAgent().run(user_id),
+        parent_run_id=sup_run_id,
+    )
     steps.append({"agent": "matcher", "output": match_out})
 
     top_job_id = match_out.get("top_job_id")
@@ -3741,17 +3956,31 @@ def _pipeline_core(
     with shared_budget(budget_seconds):
         try:
             tailor_out: dict[str, Any] = _dispatch(
-                user_id, "tailor", {"job_id": top_job_id}
+                user_id, "tailor", {"job_id": top_job_id}, parent_run_id=sup_run_id
             )
         except NoChangesApplied as exc:
             # MV-resume-studio-003: the guards rejected every proposed edit, so no
             # tailored version was created and the tailor run was refunded. This
             # must NOT fail the whole pipeline — the cover-letter step draws on the
             # base résumé regardless — so record the honest no-op and continue.
-            tailor_out = {"noChangesApplied": True, "changes": 0, "message": str(exc)}
+            #
+            # B6xP1A: "run_id" is included here too, exactly like every other
+            # step's output — the AgentRun row this no-op finished is already
+            # correctly parented under the supervisor (``_dispatch`` above
+            # passed ``parent_run_id=sup_run_id``); omitting the id from this
+            # branch only would silently make the no-op case unrecoverable
+            # from ``GET /agents/runs``, a dishonest gap the success case
+            # doesn't have.
+            tailor_out = {
+                "noChangesApplied": True, "changes": 0, "message": str(exc),
+                "run_id": getattr(exc, "run_id", None),
+            }
         steps.append({"agent": "tailor", "output": tailor_out})
         try:
-            letter_out = _dispatch(user_id, "coverLetter", {"job_id": top_job_id})
+            letter_out = _dispatch(
+                user_id, "coverLetter", {"job_id": top_job_id},
+                parent_run_id=sup_run_id,
+            )
         except (FabricationError, StructuralError) as exc:
             # GAP-P7-COV-PIPE-001: the cover step's own fabrication/structural
             # guard rejected the draft — an ungrounded term or §10.2 format
@@ -6078,7 +6307,8 @@ def test_run(body: TestRunRequest, current_user: CurrentUser) -> dict[str, Any]:
 # Generic trigger — declared last so specific routes above win.
 @router.post("/{name}/run")
 def run_named_agent(
-    name: str, current_user: CurrentUser, params: dict[str, Any] | None = None
+    name: str, current_user: CurrentUser, response: Response,
+    params: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Trigger any registered agent by name with free-form params (P2-S08).
 
@@ -6090,9 +6320,43 @@ def run_named_agent(
     (``runAgent(AGENT_ROUTE[backend] ?? backend)``,
     apps/web/src/app/dashboard/agents/page.tsx), so the bare 500 was
     customer-reachable, not merely a scripting inconvenience.
+
+    D.524: this was the LAST fully-synchronous run route — probe 5
+    (``uat/reports/evidence/orch-exec/MON-RESIDUALS-EVIDENCE-2026-08-14.md``)
+    measured it carrying ~24% of all ``/run`` traffic (every agent with no
+    dedicated route, plus any dedicated agent's alternate/camelCase alias),
+    the same Cloudflare-524 exposure shape MON-020 already fixed for
+    ``scout`` and GAP-P7-ASYNC-001 already fixed for the dedicated
+    ``tailor``/``cover-letter`` routes. When ``AETHER_ASYNC_GENERATION`` is
+    ON, this mirrors those dedicated routes EXACTLY: the SAME
+    ``_enqueue_single_agent`` background-job machinery, the SAME
+    ``202 {"job_id", "status": "enqueued"}`` envelope — WITHOUT
+    ``singleton=True`` (binding orchestrator ruling OQ-2: unlike ``scout``,
+    the generic route makes no single-run-per-agent claim, so concurrent runs
+    of the same agent are all accepted, exactly like tailor/coverLetter
+    today). When OFF (the default), behaviour is BYTE-IDENTICAL to before
+    this change.
+
+    The agent name is resolved through the SAME pure ``_agent_callable`` seam
+    on both paths, so an unknown agent name or a missing required param (e.g.
+    ``coverLetter``'s ``job_id``) gets the identical honest 404/422 whichever
+    path is taken — resolved BEFORE anything is persisted, reserved, or
+    queued, never discovered only after an async job was already accepted.
     """
+    user_id = current_user["id"]
+    params = params or {}
+    if async_generation_enabled():
+        # Validate/resolve FIRST (same seam _dispatch uses internally) so an
+        # unknown agent (HTTPException 404, raised directly by
+        # _agent_callable) or a missing required param (e.g. HTTPException
+        # 422 from _require_job_id) is refused before anything is enqueued,
+        # reserved or persisted — identical to the synchronous path below.
+        canonical, _ = _agent_callable(user_id, name, params)
+        job_id = _enqueue_single_agent(user_id, canonical, params)
+        response.status_code = status.HTTP_202_ACCEPTED
+        return {"job_id": job_id, "status": "enqueued"}
     try:
-        return _dispatch(current_user["id"], name, params or {})
+        return _dispatch(user_id, name, params)
     except LookupError as exc:
         raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
     except (FabricationError, StructuralError) as exc:

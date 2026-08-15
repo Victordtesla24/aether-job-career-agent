@@ -369,7 +369,15 @@ async def upload_resume(
             # in storyExtraction.error (GAP-P6-RESFIX).
             raise
         except Exception as exc:  # noqa: BLE001 — upload must survive extraction issues
-            extraction = {"error": str(exc)}
+            # B1c (ORCH-B1-BLUEPRINT-2026-08-14.md §3.3 "the missed
+            # surface"): the corrective loop itself never raises a new
+            # exception here (a failed correction is a dropped story with a
+            # recorded reason) — this branch stays reachable only for a
+            # genuine, unexpected extractor failure. Recording the exception
+            # TYPE alongside its message keeps a swallowed failure at least
+            # as diagnosable as the honest verdicts the success path already
+            # surfaces, without changing this response's existing shape.
+            extraction = {"error": str(exc), "errorType": type(exc).__name__}
     return {
         **resume,
         "storyExtraction": extraction,

@@ -6,10 +6,14 @@ fixtures, no in-process dictionaries, no demo personas.
 """
 from __future__ import annotations
 
+import logging
+import threading
+import time
+import zipfile
 from typing import Annotated, Any
 
 from email_validator import EmailNotValidError, validate_email
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, File, HTTPException, Query, UploadFile, status
 from pydantic import AfterValidator, BaseModel, Field
 
 from app.db import (
@@ -20,10 +24,37 @@ from app.db import (
 )
 from app.middleware.auth import CurrentUser
 from app.repositories.career_profile import CAREER_SOURCES, CareerProfileRepository
-from app.services.career_data import refresh_career_data
+from app.services.career_data import (
+    LINKEDIN_EXPORT_FILES,
+    MAX_LINKEDIN_EXPORT_BYTES,
+    ingest_linkedin_export,
+    parse_linkedin_export_zip,
+    refresh_career_data,
+)
 from app.services.offers import create_offer, delete_offer, fetch_offers_payload
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
+
+# MON-002: an expired/revoked Google credential (or any other Google-API-shaped
+# failure — ``GmailError`` and its subclasses ``GmailAuthError``/
+# ``GmailNotConnectedError``) used to be retried on EVERY ``GET
+# /emails/inbox`` poll past the freshness TTL, since a failed sync never
+# stamps ``lastSyncedAt`` (see ``is_email_sync_fresh``). That produced ~50
+# Gmail 403s/hour in production. This process-local negative cache, keyed by
+# userId, makes a request within the window skip the inline sync attempt
+# entirely instead of hammering Gmail with a credential that is known-bad.
+# ``value = (deadline_monotonic, account_ids_in_backoff)`` — mirrors the
+# existing ``_cache: dict[str, tuple[float, ...]]`` TTL-cache idiom in
+# ``app.services.apply_channel_resolver``, INCLUDING its ``threading.Lock()``
+# guard (apply_channel_resolver.py:171-197): ``email_inbox`` is a sync ``def``
+# route, which Starlette dispatches on its threadpool, so two concurrent
+# requests for the same user really can race this check-then-act state.
+# Every read/write below holds ``_gmail_sync_backoff_lock`` — narrowly, never
+# across the Gmail network call itself, only around the dict access.
+_GMAIL_SYNC_BACKOFF_SECONDS = 15 * 60
+_gmail_sync_backoff: dict[str, tuple[float, frozenset[Any]]] = {}
+_gmail_sync_backoff_lock = threading.Lock()
 
 
 def _email_provider_connected(user_id: str) -> bool:
@@ -474,11 +505,25 @@ def email_inbox(
         # Best-effort sync of EVERY connected inbox; a hiccup on one account must
         # never 500 the inbox or block the others.
         from app.services.gmail_service import (
-            GmailAuthError,
-            GmailNotConnectedError,
+            GmailError,
             GmailService,
             is_email_sync_fresh,
         )
+
+        # MON-002: a still-active backoff for this user means at least one
+        # account's credential was PROVEN dead on a recent request — skip the
+        # sync attempt for exactly those accounts instead of re-hammering
+        # Gmail every poll. An expired entry is dropped so the next attempt
+        # below can retry (and clear it on success, or re-arm it on another
+        # failure).
+        backoff_account_ids: frozenset[Any] = frozenset()
+        with _gmail_sync_backoff_lock:
+            backoff_entry = _gmail_sync_backoff.get(uid)
+            if backoff_entry is not None:
+                deadline, backoff_account_ids = backoff_entry
+                if time.monotonic() >= deadline:
+                    _gmail_sync_backoff.pop(uid, None)
+                    backoff_account_ids = frozenset()
 
         for acc in account_rows:
             # W-6 TTL gate: one sync is threads().list() + up to 25
@@ -490,12 +535,49 @@ def email_inbox(
             # retried on the next request rather than being cached as "fresh".
             if is_email_sync_fresh(acc.get("lastSyncedAt")):
                 continue
+            acc_id = acc.get("id")
+            if acc_id in backoff_account_ids:
+                auth_failed_account_ids.add(acc_id)
+                continue
             try:
-                GmailService(uid, account_id=acc.get("id")).sync_threads_to_db()
-            except (GmailAuthError, GmailNotConnectedError):
-                auth_failed_account_ids.add(acc.get("id"))
-            except Exception:  # noqa: BLE001 — a Gmail hiccup must not 500 the inbox
+                GmailService(uid, account_id=acc_id).sync_threads_to_db()
+            except GmailError:
+                # Covers GmailAuthError/GmailNotConnectedError AND the plain
+                # GmailError a real Google 403 ("insufficientPermissions" /
+                # invalid_grant) actually arrives as (gmail_service.py
+                # list_threads wraps every HttpError into GmailError, not
+                # just auth-shaped ones) — this is the exact case that used
+                # to fall through to the silent `except Exception: pass`
+                # below and get retried on every single poll.
+                auth_failed_account_ids.add(acc_id)
+                with _gmail_sync_backoff_lock:
+                    # The log-once decision MUST be made inside the same
+                    # locked section that writes the entry — otherwise two
+                    # concurrent requests can both read "not yet backed off"
+                    # before either writes, and both log.
+                    already_backed_off = uid in _gmail_sync_backoff
+                    _gmail_sync_backoff[uid] = (
+                        time.monotonic() + _GMAIL_SYNC_BACKOFF_SECONDS,
+                        frozenset(auth_failed_account_ids),
+                    )
+                if not already_backed_off:
+                    # One structured warning on ENTERING backoff, not one per
+                    # request — subsequent polls within the window hit the
+                    # `continue` above and never reach this except block.
+                    logger.warning(
+                        "gmail_sync_backoff_entered user_id=%s account_id=%s "
+                        "backoff_seconds=%s",
+                        uid,
+                        acc_id,
+                        _GMAIL_SYNC_BACKOFF_SECONDS,
+                    )
+            except Exception:  # noqa: BLE001 — a non-Gmail hiccup must not 500 the inbox
                 pass
+            else:
+                # A successful sync proves the credential is good again —
+                # clear any backoff this user was previously in.
+                with _gmail_sync_backoff_lock:
+                    _gmail_sync_backoff.pop(uid, None)
 
     # The inbox query reads/joins on the additive Gmail linkage columns plus the
     # additive aiScore column; ensure they exist even for a user who has never
@@ -1343,5 +1425,87 @@ def refresh_career_data_endpoint(
     )
     return {
         "sources": [_shape_source(s, results.get(s)) for s in CAREER_SOURCES],
+        "linkedinNote": _LINKEDIN_NOTE,
+    }
+
+
+#: Basename (lowercased) → canonical export filename, for a single loose .csv.
+_LINKEDIN_CSV_BASENAMES = {name.lower(): name for name in LINKEDIN_EXPORT_FILES}
+
+
+@router.post("/career-data/linkedin-upload")
+async def upload_linkedin_export(
+    current_user: CurrentUser, file: UploadFile = File(...)
+) -> dict[str, Any]:
+    """Ingest LinkedIn's official "Download your data" export (B7).
+
+    Accepts the export **.zip**, or one of its individual CSVs
+    (``Profile.csv``/``Positions.csv``/``Education.csv``/``Skills.csv``)
+    uploaded loose. This is a compliant, upload-only path: nothing here ever
+    fetches linkedin.com or any other network resource — the parsed CSVs are
+    normalized into the same text shape the candidate-paste box produces and
+    handed to the SAME ``ingest_linkedin`` that path uses
+    (``app.services.career_data.ingest_linkedin_export``), so storage,
+    corpus assembly and honest empty/error semantics are inherited, not
+    reimplemented.
+    """
+    # Bounded read: one byte past the cap proves it's oversized without ever
+    # buffering (or persisting) a huge upload whole.
+    data = await file.read(MAX_LINKEDIN_EXPORT_BYTES + 1)
+    if len(data) > MAX_LINKEDIN_EXPORT_BYTES:
+        raise HTTPException(
+            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            f"LinkedIn export is larger than the "
+            f"{MAX_LINKEDIN_EXPORT_BYTES // (1024 * 1024)}MB upload limit.",
+        )
+
+    filename = (file.filename or "").strip()
+    suffix = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    if suffix == "zip":
+        try:
+            csv_texts = parse_linkedin_export_zip(data)
+        except zipfile.BadZipFile:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                "Uploaded file is not a valid zip archive.",
+            ) from None
+        if not csv_texts:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                "Zip archive contained none of the expected LinkedIn export "
+                "files: " + ", ".join(LINKEDIN_EXPORT_FILES) + ".",
+            )
+    elif suffix == "csv":
+        basename = filename.rsplit("/", 1)[-1]
+        canonical = _LINKEDIN_CSV_BASENAMES.get(basename.lower())
+        if canonical is None:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                f"Unrecognized CSV file '{filename}'. Expected one of: "
+                + ", ".join(LINKEDIN_EXPORT_FILES) + ".",
+            )
+        csv_texts = {canonical: data.decode("utf-8", errors="replace")}
+    else:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "Unsupported file type — upload the .zip from LinkedIn's "
+            "'Download your data' export, or one of its CSV files: "
+            + ", ".join(LINKEDIN_EXPORT_FILES) + ".",
+        )
+
+    result = ingest_linkedin_export(csv_texts)
+    repo = CareerProfileRepository()
+    saved = repo.upsert(
+        current_user["id"],
+        "linkedin",
+        status=result["status"],
+        url=result["url"],
+        content=result["content"],
+        summary=result["summary"],
+        error=result["error"],
+    )
+    return {
+        "source": _shape_source("linkedin", saved),
+        "ingestedCounts": result["ingestedCounts"],
         "linkedinNote": _LINKEDIN_NOTE,
     }

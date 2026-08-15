@@ -74,6 +74,7 @@ def ensure_heartbeat_column() -> None:
 _link_columns_ready = False
 _policy_columns_ready = False
 _quality_columns_ready = False
+_parent_columns_ready = False
 
 
 def ensure_agent_run_link_columns() -> None:
@@ -174,6 +175,42 @@ def ensure_agent_run_quality_columns() -> None:
     _quality_columns_ready = True
 
 
+def ensure_agent_run_parent_columns() -> None:
+    """Additive, idempotent DDL for ``AgentRun.parentRunId`` (B6 — causal traces,
+    ORCH-B1-BLUEPRINT-2026-08-14.md §2.3/§4.4).
+
+    Records WHICH run caused this one — e.g. every step ``_pipeline_core``
+    dispatches carries the supervisor run's id, so the agents-console
+    orchestration map can draw a REAL causal edge instead of only the stage-
+    order one. A plain nullable ``text`` column, never an enforced FK (the
+    same audit-row rule ``jobId``/``applicationId`` already follow): a run
+    legitimately has no parent (every user-initiated single run), and a
+    deleted run must never make a historical audit row un-insertable.
+
+    NULL on every pre-existing row is the honest value — no historical run
+    recorded a cause, and none is backfilled: inventing one would fabricate a
+    causal fact that was never observed, exactly what the honesty machinery
+    this column feeds (the orchestration map's causal-edge layer) exists to
+    prevent. Lazy DDL per ADR-TR-1, same pattern as
+    :func:`ensure_agent_run_link_columns`. Documentary mirror:
+    ``apps/api/migrations/0029_agent_run_parent.sql``.
+    """
+    global _parent_columns_ready
+    if _parent_columns_ready:
+        return
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'ALTER TABLE "AgentRun" ADD COLUMN IF NOT EXISTS "parentRunId" text'
+            )
+            cur.execute(
+                'CREATE INDEX IF NOT EXISTS "AgentRun_parentRunId_idx" '
+                'ON "AgentRun" ("parentRunId") WHERE "parentRunId" IS NOT NULL'
+            )
+        conn.commit()
+    _parent_columns_ready = True
+
+
 #: Terminal gate states stamped on ``AgentRun.qualityGateState``.
 GATE_STATE_PASSED = "passed"
 GATE_STATE_BELOW_FLOOR = "below_floor"
@@ -266,6 +303,14 @@ def run_policy_fields(
     and async dispatch paths, so whatever governed the run is exactly what is
     persisted here — never a second, independently recomputed verdict that
     could disagree with the one the agent actually obeyed.
+
+    B1b (ORCH-B1-BLUEPRINT-2026-08-14.md §2.4): ``directives`` is the SIXTH
+    key, added to this otherwise-unchanged five-key whitelist. Without it, an
+    active ``AgentDirective``'s trace (which directive(s) applied, what was
+    clamped, what was rejected — all stamped onto ``policy["directives"]`` by
+    ``app.services.agent_directives.effective_policy``) would be silently
+    dropped on its way to the database: the run would OBEY the directive but
+    record no trace of it, which is the single highest-risk detail in B1b.
     """
     policy = (input_ or {}).get("qualityPolicy")
     if not isinstance(policy, dict):
@@ -277,13 +322,19 @@ def run_policy_fields(
         "knobs": policy.get("knobs"),
         "metrics": policy.get("metrics"),
         "thresholds": policy.get("thresholds"),
+        "directives": policy.get("directives"),
     }
     return (str(tier) if tier else None), snapshot
 
 
 class AgentRunRepository:
     def start(
-        self, user_id: str, agent_name: str, input_: dict[str, Any] | None = None
+        self,
+        user_id: str,
+        agent_name: str,
+        input_: dict[str, Any] | None = None,
+        *,
+        parent_run_id: str | None = None,
     ) -> dict[str, Any]:
         """Open a ``running`` audit row.
 
@@ -293,9 +344,22 @@ class AgentRunRepository:
         see :func:`run_link_fields` / :func:`run_policy_fields`. All four are
         nullable, so a run with no job and no resolved policy stores NULLs
         rather than placeholders.
+
+        ``parent_run_id`` (B6): the id of the AgentRun that CAUSED this one —
+        e.g. the supervisor run a pipeline step was dispatched under. Deliberately
+        a real keyword argument, not a key threaded through ``input_``: the
+        latter is exactly the shape of trap ``run_policy_fields`` already
+        guards against for the policy loop (§2.4 of the B1 blueprint) — a
+        value living only inside a free-form dict can be silently dropped by
+        an intermediate whitelist. Threading it as an explicit parameter means
+        it either reaches this INSERT or the caller gets a ``TypeError``,
+        never a silent NULL. ``None`` (the default) is the honest value for
+        every user-initiated run — it has no parent, and nothing here invents
+        one.
         """
         ensure_agent_run_link_columns()
         ensure_agent_run_policy_columns()
+        ensure_agent_run_parent_columns()
         job_id, application_id = run_link_fields(input_)
         policy_tier, metric_snapshot = run_policy_fields(input_)
         with get_connection() as conn:
@@ -304,15 +368,17 @@ class AgentRunRepository:
                     f'''
                     INSERT INTO "AgentRun"
                         ("id", "userId", "agentName", "status", "input", "startedAt",
-                         "jobId", "applicationId", "policyTier", "metricSnapshot")
+                         "jobId", "applicationId", "policyTier", "metricSnapshot",
+                         "parentRunId")
                     VALUES (%s, %s, %s, 'running'::"AgentRunStatus", %s, NOW(),
-                            %s, %s, %s, %s)
-                    RETURNING {_COLUMNS}
+                            %s, %s, %s, %s, %s)
+                    RETURNING {_COLUMNS}, "parentRunId"
                     ''',
                     (
                         new_id(), user_id, agent_name, json.dumps(input_ or {}),
                         job_id, application_id, policy_tier,
                         json.dumps(metric_snapshot) if metric_snapshot else None,
+                        parent_run_id,
                     ),
                 )
                 rows = rows_to_dicts(cur)
@@ -540,20 +606,30 @@ class AgentRunRepository:
             conn.commit()
 
     def list_recent(self, user_id: str, limit: int = 50) -> list[dict[str, Any]]:
+        """Newest-first runs for the calling user — backs ``GET /agents/runs``,
+        the agents console's "Recent runs" table AND the data
+        ``orchestration-map-model.ts``'s ``resolveNodeState``/the B6 causal-edge
+        layer read. ``parentRunId`` (B6) is explicit here rather than folded
+        into the shared ``_COLUMNS`` projection — the same convention
+        ``last_policy_run_by_agent`` documents: a reader that needs a newer
+        column gets it added to ITS OWN query, so the base projection other
+        callers (``start``/``finish``) depend on never silently widens."""
+        ensure_agent_run_parent_columns()
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    f'SELECT {_COLUMNS} FROM "AgentRun" WHERE "userId" = %s '
-                    'ORDER BY "createdAt" DESC LIMIT %s',
+                    f'SELECT {_COLUMNS}, "parentRunId" FROM "AgentRun" '
+                    'WHERE "userId" = %s ORDER BY "createdAt" DESC LIMIT %s',
                     (user_id, limit),
                 )
                 return rows_to_dicts(cur)
 
     def get_by_id(self, run_id: str, user_id: str) -> dict[str, Any] | None:
+        ensure_agent_run_parent_columns()
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    f'SELECT {_COLUMNS} FROM "AgentRun" '
+                    f'SELECT {_COLUMNS}, "parentRunId" FROM "AgentRun" '
                     'WHERE "id" = %s AND "userId" = %s',
                     (run_id, user_id),
                 )
@@ -585,14 +661,17 @@ class AgentRunRepository:
         upstream blip apart from chronic breakage, which needs the last N runs
         per agent — not just the single latest that ``last_run_by_agent``
         returns. Additive; ``last_run_by_agent`` and its callers are unchanged.
-        Same column set as the other reads, scoped to the caller's own runs.
+        Same column set as the other reads, scoped to the caller's own runs,
+        plus ``parentRunId`` (B6) — this is the window
+        ``GET /agents/orchestration-map`` reads to compute real causal edges.
         """
+        ensure_agent_run_parent_columns()
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     f'''
-                    SELECT {_COLUMNS} FROM (
-                        SELECT {_COLUMNS},
+                    SELECT {_COLUMNS}, "parentRunId" FROM (
+                        SELECT {_COLUMNS}, "parentRunId",
                                ROW_NUMBER() OVER (
                                    PARTITION BY "agentName"
                                    ORDER BY "createdAt" DESC

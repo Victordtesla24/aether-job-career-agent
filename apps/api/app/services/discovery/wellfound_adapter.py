@@ -43,6 +43,15 @@ class WellfoundAdapter(BaseAdapter):
                 # access — a permanent, not-user-actionable "blocked" state, not
                 # a transient error to re-alarm on every sync.
                 raise SourceBlockedError(message) from exc
+            if "404" in str(exc) or "not found" in str(exc).lower():
+                # MON-006: the public role-feed URL itself now 404s on every
+                # attempt (was 403) — the endpoint is gone rather than merely
+                # refusing us, but it is exactly as permanent and
+                # not-user-actionable, so it gets the SAME calm "blocked"
+                # classification instead of alarming every sweep.
+                raise SourceBlockedError(
+                    f"{message} (source endpoint gone (404) — source parked)"
+                ) from exc
             raise AdapterFetchError(message) from exc
         jobs = payload.get("jobs", []) if isinstance(payload, dict) else []
         return {"jobs": jobs}

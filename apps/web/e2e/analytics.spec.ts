@@ -39,7 +39,13 @@ test.describe("Analytics page", () => {
 
     const selector = page.getByTestId("period-selector");
     await expect(selector).toBeVisible();
-    const funnelHeading = page.getByTestId("funnel-chart").getByRole("heading");
+    // Scoped to level 2: the section's own period-scoped heading ("Application
+    // funnel (…)"). `<ChartFrame>` (used by `<FunnelChart>` inside this same
+    // section) always renders its own complementary h3 `chart-title`
+    // ("Volume by stage" — see the comment above the h2 in
+    // dashboard/analytics/page.tsx), so an unqualified `getByRole("heading")`
+    // is a strict-mode violation: 2 headings live inside `funnel-chart`.
+    const funnelHeading = page.getByTestId("funnel-chart").getByRole("heading", { level: 2 });
     await expect(funnelHeading).toContainText(/all/i, { timeout: 20_000 });
 
     await selector.getByRole("button", { name: "30d" }).click();

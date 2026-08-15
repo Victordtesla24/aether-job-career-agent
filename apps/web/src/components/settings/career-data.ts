@@ -1,11 +1,18 @@
 /**
- * Pure helpers for the Settings → Career Data panel (GAP-P4-047 · ADR D-0031).
+ * Pure helpers for the Settings → Career Data panel (GAP-P4-047 · ADR D-0031;
+ * LinkedIn data-export upload B7).
  *
  * The panel lets a user configure the three career-data sources that feed
  * resume tailoring + cover-letter context, then triggers a real ingestion via
  * `POST /workspaces/career-data/refresh`. These helpers derive the editable
  * input state from the persisted server rows and build the refresh payload —
  * kept side-effect-free so they can be unit-tested without a DOM.
+ *
+ * B7 adds a second, compliant LinkedIn input path: uploading LinkedIn's
+ * official "Download your data" export (a .zip of CSVs) via
+ * `POST /workspaces/career-data/linkedin-upload` — never a scrape. The
+ * response shape and its honest post-upload copy live here alongside the
+ * rest of this panel's helpers.
  */
 import type {
   CareerData,
@@ -112,4 +119,71 @@ export function buildRefreshPayload(
     payload.linkedinSummary = inputs.linkedinSummary;
   }
   return payload;
+}
+
+// ---------------------------------------------------------------------------
+// LinkedIn data-export upload (B7) — POST /workspaces/career-data/linkedin-upload
+// ---------------------------------------------------------------------------
+
+/**
+ * Per-section counts the upload endpoint reports — how much of LinkedIn's
+ * export actually ingested, so a partial upload (e.g. only `Positions.csv`)
+ * is described honestly rather than as a flat pass/fail.
+ */
+export interface LinkedinIngestedCounts {
+  profile: number;
+  positions: number;
+  education: number;
+  skills: number;
+}
+
+/** Response of `POST /workspaces/career-data/linkedin-upload`. Fetched with
+ * raw `fetch` + `FormData` in settings-client.tsx, mirroring `/resumes/upload`
+ * (`describeUploadError` from `resume-upload.ts` handles its rejections —
+ * both endpoints share the same `{"detail": "..."}` shape). */
+export interface LinkedinExportUploadResult {
+  source: CareerDataSource;
+  ingestedCounts: LinkedinIngestedCounts;
+  linkedinNote: string;
+}
+
+const INGESTED_SECTION_LABELS: Record<keyof LinkedinIngestedCounts, [singular: string, plural: string]> = {
+  positions: ["position", "positions"],
+  education: ["education entry", "education entries"],
+  skills: ["skill", "skills"],
+  profile: ["profile summary", "profile summaries"],
+};
+
+/** Section order the honest summary lists in — most substantive first. */
+const INGESTED_SECTION_ORDER: (keyof LinkedinIngestedCounts)[] = [
+  "positions",
+  "education",
+  "skills",
+  "profile",
+];
+
+/**
+ * Turn `{positions, education, skills, profile}` into readable prose, e.g.
+ * `"2 positions, 1 education entry, 3 skills"`. Sections that ingested
+ * nothing are omitted rather than listed as zero.
+ */
+export function summarizeIngestedCounts(counts: LinkedinIngestedCounts): string {
+  const parts = INGESTED_SECTION_ORDER.filter((key) => counts[key] > 0).map((key) => {
+    const [singular, plural] = INGESTED_SECTION_LABELS[key];
+    const n = counts[key];
+    return `${n} ${n === 1 ? singular : plural}`;
+  });
+  return parts.length > 0 ? parts.join(", ") : "nothing recognizable";
+}
+
+/**
+ * Honest post-upload notice: what was actually ingested, or — for a partial
+ * export/empty file — the server's real reason, verbatim, never a fabricated
+ * success message.
+ */
+export function buildLinkedinUploadNotice(result: LinkedinExportUploadResult): string {
+  if (result.source.status === "ok") {
+    return `LinkedIn export ingested — ${summarizeIngestedCounts(result.ingestedCounts)}.`;
+  }
+  return result.source.error ?? "The uploaded file contained no usable LinkedIn data.";
 }

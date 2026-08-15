@@ -125,7 +125,9 @@ class TestDispatchRefusal:
 
     def test_enabled_agent_dispatches_normally(self, monkeypatch: Any) -> None:
         monkeypatch.setattr(agents, "_agent_paused_by_user", lambda *_: False)
-        monkeypatch.setattr(agents, "_with_quality_policy", lambda _u, p: p)
+        monkeypatch.setattr(
+            agents, "_with_quality_policy", lambda _u, p, **_k: p
+        )
         monkeypatch.setattr(
             agents, "_agent_callable", lambda _u, n, _p: (n, lambda: None)
         )

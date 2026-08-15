@@ -12,6 +12,7 @@ import {
   pipelineProgressNotice,
   pipelineStartNotice,
   runErrorNotice,
+  stopAllAgentsNotice,
 } from "../../lib/agents-feedback";
 
 describe("pipelineStartNotice", () => {
@@ -369,5 +370,38 @@ describe("missingResumeNotice", () => {
         message: "Every proposed edit was rejected.",
       }),
     ).toBeNull();
+  });
+});
+
+describe("stopAllAgentsNotice", () => {
+  // ML-STOPALL-001: the "Stop All Agents" success notice must now claim
+  // ENFORCED reality ("blocked", not the old inert "on hold") and must
+  // disclose in-flight runs — pausing an agent has no force-kill, so any
+  // run already underway when the user clicked "Stop All" keeps going.
+
+  it("says runs are BLOCKED (not merely 'on hold') with zero in-flight runs", () => {
+    const n = stopAllAgentsNotice(3, 0);
+    expect(n.kind).toBe("success");
+    expect(n.text).toBe("Paused 3 agents. New runs are blocked.");
+    expect(n.text).not.toContain("on hold");
+  });
+
+  it("singularizes the agent count", () => {
+    const n = stopAllAgentsNotice(1, 0);
+    expect(n.text).toBe("Paused 1 agent. New runs are blocked.");
+  });
+
+  it("discloses in-flight runs and the no-force-kill caveat when some are running", () => {
+    const n = stopAllAgentsNotice(4, 2);
+    expect(n.kind).toBe("success");
+    expect(n.text).toContain("Paused 4 agents. New runs are blocked.");
+    expect(n.text).toContain("2 runs already in progress will finish");
+    expect(n.text).toContain("there is no force-kill");
+  });
+
+  it("singularizes a single in-flight run", () => {
+    const n = stopAllAgentsNotice(2, 1);
+    expect(n.text).toContain("1 run already in progress will finish");
+    expect(n.text).not.toContain("1 runs");
   });
 });

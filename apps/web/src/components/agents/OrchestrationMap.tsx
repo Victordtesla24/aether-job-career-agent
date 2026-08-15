@@ -64,9 +64,18 @@
  *     the rest dimmed.
  * These are STRUCTURAL edges — how the system is wired — and they are drawn as
  * such: hairline, dotted, labelled, never coral, and NEVER animated. Motion on
- * this console means one thing (a live run), and a wire is not a run. Run-level
- * causal traces ("this run consumed stories X and Y") need a parent run id the
- * API does not record yet, so they are not drawn, not faked, and not stubbed.
+ * this console means one thing (a live run), and a wire is not a run.
+ *
+ * B6 — REAL CAUSAL PORTS (ORCH-B1-BLUEPRINT-2026-08-14.md §4.4). Run-level
+ * causal traces ("this run started that one") needed a parent run id the API
+ * did not record; it now does (`AgentRun.parentRunId`, stamped by
+ * `_pipeline_core` on every step it dispatches). Fed by a SEPARATE source —
+ * the fetched `runs` prop, read fresh every render via `causalEdges` in
+ * `workflow-linkage.ts` — never the checked-in structural table, and never
+ * mixed into it: a code citation is not proof of a specific run pair. Drawn
+ * as its own chip (a chain glyph, its own ink) on any node with a matching
+ * pair, empty whenever the fetched window holds none — never inferred from
+ * agent name, stage order or timing.
  */
 import dynamic from "next/dynamic";
 import {
@@ -113,10 +122,14 @@ import {
 } from "./orchestration-run-plan";
 import {
   buildLinkageLines,
+  causalEdges,
+  causalPortsFor,
   crossMapLinks,
   linkageSentences,
   neighborhoodOf,
   portsFor,
+  CAUSAL_LEGEND,
+  CAUSAL_STROKE,
   LINKAGE_DASH,
   LINKAGE_LEGEND,
   LINKAGE_STROKE,
@@ -124,6 +137,8 @@ import {
   LINKAGE_STROKE_FOCUS,
   LINKAGE_TOGGLE_LABEL,
   type Box,
+  type CausalEdge,
+  type CausalPort,
   type Clip,
   type CrossMapLink,
   type LinkageRect,
@@ -394,6 +409,12 @@ const PORTS_SHOWN = 2;
 const EMPTY_PORTS: NodePort[] = [];
 const noopPort = (): void => {};
 
+/** B6: same "stable empty" discipline as `EMPTY_PORTS`/`noopPort`, for the
+ *  causal layer — a map with no recorded run pairs re-renders identically to
+ *  before. */
+const EMPTY_CAUSAL_PORTS: CausalPort[] = [];
+const noopCausalPort = (): void => {};
+
 /** The query-string flag that makes an overlay view shareable (`?links=1`). */
 const LINKS_URL_FLAG = "links";
 
@@ -480,6 +501,8 @@ function NodeCard({
   run,
   ports,
   onOpenPort,
+  causalPorts,
+  onOpenCausalPort,
   linkage,
   flash,
 }: {
@@ -492,6 +515,11 @@ function NodeCard({
   /** U-STORY-3a: this node's CROSS-MAP wiring. Empty ⇒ no port renders. */
   ports: NodePort[];
   onOpenPort: (port: NodePort) => void;
+  /** B6: this node's REAL causal wiring — read from recorded run pairs, never
+   *  from stage order. Empty ⇒ nothing renders (honest for every pre-B6 run
+   *  and every run with no fetched parent/child). */
+  causalPorts: CausalPort[];
+  onOpenCausalPort: (port: CausalPort) => void;
   /**
    * Where this node sits relative to the selected node's linkage neighbourhood
    * while the overlay is on — `null` whenever there is nothing to highlight, so
@@ -717,6 +745,47 @@ function NodeCard({
         </ul>
       ) : null}
 
+      {/* ---- B6: REAL causal ports ----
+          One chip per run pair actually recorded via `AgentRun.parentRunId`
+          — "this run started/was started by that one" — a DIFFERENT kind of
+          fact from the structural wires above (which are code wiring, drawn
+          whether or not either agent has ever run) and rendered distinctly:
+          a chain glyph, its own ink (`CAUSAL_STROKE`), never mixed into the
+          ports list above. Empty whenever the fetched runs hold no matching
+          pair — never approximated from stage order or agent name. */}
+      {causalPorts.length > 0 ? (
+        <ul
+          data-testid={`orchestration-causal-ports-${agent.agentKey}`}
+          className="mt-1.5 flex flex-col gap-1"
+        >
+          {causalPorts.map((port) => (
+            <li key={`causal:${port.direction}:${port.edge.id}`}>
+              <button
+                type="button"
+                data-testid={`orchestration-causal-port-${port.direction}-${port.edge.id}`}
+                data-direction={port.direction}
+                title={port.description}
+                aria-label={port.description}
+                onClick={() => onOpenCausalPort(port)}
+                className="ag-port flex w-full items-start gap-1 rounded-md border border-hairline px-1.5 py-1 text-left text-[10px] leading-[1.35] text-aether-muted outline-none transition-colors duration-[var(--dur-fast)] hover:border-hairline-strong hover:text-aether-muted focus-visible:ring-2 focus-visible:ring-aether-coral/70"
+                style={{ borderColor: CAUSAL_STROKE }}
+              >
+                <span aria-hidden="true" className="shrink-0 text-aether-muted-dim">
+                  ⛓
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate">{port.counterpart.name}</span>
+                  <span className="block truncate text-[9px] text-aether-muted-dim">
+                    {port.direction === "out" ? "started" : "started by"} —{" "}
+                    {port.counterpart.mapName}
+                  </span>
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+
       {/* The result of the LAST dispatch of this node, verbatim — it is the
           same `agents-feedback` Notice the console banner shows, so a quota
           wall, a spend cap or an approval gate reads here in the API's own
@@ -791,16 +860,31 @@ interface MapLinkageApi {
   onOpenPort: (port: NodePort) => void;
 }
 
+/**
+ * B6 — everything one map needs to draw its share of the REAL causal wiring.
+ * `null` only when the fetched runs produced no matching pair at all. Kept
+ * separate from `MapLinkageApi`: this is a different KIND of fact (recorded
+ * runs, not checked-in code wiring) and must never be starved by, or
+ * conflated with, the structural table being empty or edited.
+ */
+interface MapCausalApi {
+  /** Every real causal edge in this payload's fetched run window. */
+  edges: CausalEdge[];
+  onOpenCausalPort: (port: CausalPort) => void;
+}
+
 function MapGraph({
   model,
   allowGl,
   runApi,
   linkageApi,
+  causalApi,
 }: {
   model: MapModel;
   allowGl: boolean;
   runApi: MapRunApi | null;
   linkageApi: MapLinkageApi | null;
+  causalApi: MapCausalApi | null;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const stageRefs = useRef<Array<HTMLLIElement | null>>([]);
@@ -1155,6 +1239,12 @@ function MapGraph({
                           onToggleSelect={runApi ? runApi.onToggleSelect : null}
                           ports={linkageApi ? portsFor(key, linkageApi.links) : EMPTY_PORTS}
                           onOpenPort={linkageApi?.onOpenPort ?? noopPort}
+                          causalPorts={
+                            causalApi
+                              ? causalPortsFor(node.agent.backend ?? "", causalApi.edges)
+                              : EMPTY_CAUSAL_PORTS
+                          }
+                          onOpenCausalPort={causalApi?.onOpenCausalPort ?? noopCausalPort}
                           linkage={linkageApi?.highlight[key] ?? null}
                           flash={linkageApi?.flashKey === key}
                           run={
@@ -1323,6 +1413,11 @@ export default function OrchestrationMap({
   const overlayId = `linkage-${useId().replace(/:/g, "")}`;
   const [linksOn, setLinksOn] = useUrlFlag(LINKS_URL_FLAG);
   const links = useMemo(() => crossMapLinks(models), [models]);
+  // ---- B6: REAL causal wiring ----------------------------------------------
+  // Independent of the structural table above: computed straight from the
+  // `runs` the page fetched, on every render, so it can never lag or drift
+  // from what `GET /agents/runs` actually returned.
+  const causal = useMemo(() => causalEdges(runs, models), [runs, models]);
   const [flashKey, setFlashKey] = useState<string | null>(null);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(
@@ -1629,6 +1724,21 @@ export default function OrchestrationMap({
     [links, highlight, flashKey, focusNode],
   );
 
+  // B6: same "jump to the counterpart" behaviour the structural ports use,
+  // reached from an independent data source (recorded run pairs, not the
+  // checked-in linkage table) — so it does not depend on `links` being
+  // non-empty and cannot be starved by the structural table being edited.
+  const causalApi = useMemo<MapCausalApi | null>(
+    () =>
+      causal.length === 0
+        ? null
+        : {
+            edges: causal,
+            onOpenCausalPort: (port: CausalPort) => focusNode(port.counterpart.agentKey),
+          },
+    [causal, focusNode],
+  );
+
   const selectedModel = models.find((m) => m.key === selection.mapKey) ?? null;
   const selectedSet = useMemo(() => new Set(selection.keys), [selection.keys]);
   const selectionPlan = useMemo(
@@ -1678,6 +1788,19 @@ export default function OrchestrationMap({
             {LINKAGE_LEGEND}
           </p>
         </div>
+      ) : null}
+
+      {/* B6: the causal layer's own disclosure — independent of the toggle
+          above (a payload can have real causal pairs with zero cross-map
+          STRUCTURAL wiring, e.g. every step of one pipeline run sharing a
+          single map), so it is never gated on `links.length`. */}
+      {causal.length > 0 ? (
+        <p
+          data-testid="orchestration-causal-legend"
+          className="min-w-0 max-w-[80ch] text-[11px] leading-[1.5] text-aether-muted-dim"
+        >
+          {CAUSAL_LEGEND}
+        </p>
       ) : null}
 
       {models.map((model) => {
@@ -1778,7 +1901,13 @@ export default function OrchestrationMap({
             />
           ) : null}
 
-          <MapGraph model={model} allowGl={allowGl} runApi={runApi} linkageApi={linkageApi} />
+          <MapGraph
+            model={model}
+            allowGl={allowGl}
+            runApi={runApi}
+            linkageApi={linkageApi}
+            causalApi={causalApi}
+          />
 
           {/* The edge layer is decorative (aria-hidden); this states the same
               topology in words so a screen reader loses nothing when the

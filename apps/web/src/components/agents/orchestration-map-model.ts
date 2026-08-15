@@ -30,6 +30,13 @@
  * being drawn. Those edges are STRUCTURAL (how the system is wired) and are
  * rendered as such — dotted, labelled, never coral, never animated. Nothing in
  * this module may ever start inferring them from `stages`.
+ *
+ * A THIRD kind exists since B6: CAUSAL, run-level edges ("this run started
+ * that one"), also NOT derived from this module's `runs`/`resolveNodeState`
+ * — they come from `causalEdges` in `workflow-linkage.ts`, reading
+ * `AgentRun.parentRunId` off the SAME fetched `runs` array this file already
+ * takes, matched against other rows in that same array. Still never inferred
+ * from `stages`, agent name or timing — only from two real ids matching.
  */
 import {
   ageMs,
