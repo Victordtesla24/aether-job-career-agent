@@ -44,14 +44,19 @@ type StageDef = {
  * Canonical 8-stage pipeline, wireframe order (col-*-at09..at24). Colours are
  * on-brand DS semantics (UI-BRAND WB4 / RULINGS.md), not the legacy rainbow:
  *
- *   discovered / evaluating / tailoring — agent-processing stages, the same
- *     sapphire cue (`aether-indigo` #3E5A8C dot, `aether-violet` #8FA8CE
- *     icon-text) across all three, because all three are the scout/fit-scorer
- *     agent working, not the user.
- *   ready (Ready to Apply) — action-pending AND genuinely stalled: every card
- *     here is blocked on either the user's own click-through (assisted
- *     channels) or a re-request after an expired approval, so it takes the
- *     warn-copper `state-warn` (#C8873A) rather than neutral info-blue.
+ *   discovered / evaluating / tailoring — the agent-processing stages. All
+ *     three are the scout/fit-scorer/tailor working rather than the user, but
+ *     they are still three DIFFERENT columns, so each carries its own
+ *     identity from CHART_PALETTE order (R6): sapphire-light #8FA8CE, then
+ *     chart-sky #439FC8, then chart-rose #C16F7B. The old shared
+ *     `aether-indigo` #3E5A8C dot was both indistinguishable across the three
+ *     and only 2.8:1 on the board ground; every value here clears 4.5:1.
+ *   ready (Ready to Apply) — the one column waiting on the USER: every card
+ *     here is blocked on the user's own click-through (assisted channels) or
+ *     a re-request after an expired approval. That is an action prompt, not a
+ *     state, so it takes the gold action accent; `state-warn` copper is
+ *     contractually "stalled / quota pressure" and is reserved for cards that
+ *     genuinely are stalled.
  *   submitted / in-review / interview — the three "waiting on someone else"
  *     stages (employer response, then an interview slot) share `state-info`
  *     (#7C93BE): nothing is blocked or failing, Aether is just watching for a
@@ -65,30 +70,30 @@ export const STAGE_DEFS: readonly StageDef[] = [
   {
     key: "discovered",
     label: "Discovered",
-    dotClass: "bg-aether-indigo",
+    dotClass: "bg-aether-violet",
     icon: "fa-magnifying-glass",
-    iconClass: "text-aether-violet bg-aether-indigo/20",
+    iconClass: "text-aether-violet bg-aether-violet/20",
   },
   {
     key: "evaluating",
     label: "Evaluating",
-    dotClass: "bg-aether-indigo",
+    dotClass: "bg-[#439FC8]",
     icon: "fa-scale-balanced",
-    iconClass: "text-aether-violet bg-aether-indigo/20",
+    iconClass: "text-[#439FC8] bg-[#439FC8]/20",
   },
   {
     key: "tailoring",
     label: "Tailoring",
-    dotClass: "bg-aether-indigo",
+    dotClass: "bg-[#C16F7B]",
     icon: "fa-file-pen",
-    iconClass: "text-aether-violet bg-aether-indigo/20",
+    iconClass: "text-[#C16F7B] bg-[#C16F7B]/20",
   },
   {
     key: "ready",
     label: "Ready to Apply",
-    dotClass: "bg-state-warn",
+    dotClass: "bg-gold",
     icon: "fa-clock",
-    iconClass: "text-state-warn bg-state-warn/20",
+    iconClass: "text-gold bg-gold/20",
   },
   {
     key: "submitted",

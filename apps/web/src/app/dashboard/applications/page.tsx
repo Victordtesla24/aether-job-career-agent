@@ -362,7 +362,7 @@ function CardMeta({
       return card.fit != null ? (
         <div className="mt-2 h-1 rounded-full bg-white/10" aria-hidden="true">
           <div
-            className="h-1 rounded-full bg-aether-indigo"
+            className="h-1 rounded-full bg-aether-violet"
             style={{ width: `${Math.min(card.fit, 100)}%` }}
           />
         </div>

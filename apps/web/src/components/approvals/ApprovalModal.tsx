@@ -452,7 +452,7 @@ export function ApprovalModal({ approval, onClose, onDecide }: ApprovalModalProp
             data-testid="modal-reject-btn"
             onClick={() => void decide("reject")}
             disabled={!pending || busy !== null}
-            className={button({ tone: "danger", size: "md", class: "rounded-xl px-5 py-2.5" })}
+            className={button({ tone: "danger", size: "md", class: "rounded-xs px-5 py-2.5" })}
           >
             {busy === "reject" ? "Rejecting…" : "Reject"}
           </button>
@@ -461,7 +461,7 @@ export function ApprovalModal({ approval, onClose, onDecide }: ApprovalModalProp
             data-testid="modal-edit-btn"
             onClick={() => setEditing((value) => !value)}
             disabled={!pending || busy !== null || details.preview === null}
-            className={button({ tone: "neutral", size: "md", class: "ml-auto rounded-xl px-5 py-2.5" })}
+            className={button({ tone: "neutral", size: "md", class: "ml-auto rounded-xs px-5 py-2.5" })}
           >
             {editing ? "Discard edits" : "Edit & Approve"}
           </button>
@@ -470,7 +470,7 @@ export function ApprovalModal({ approval, onClose, onDecide }: ApprovalModalProp
             data-testid="modal-approve-btn"
             onClick={() => void decide("approve")}
             disabled={!pending || busy !== null || approveBlocked}
-            className={button({ tone: "ok", size: "md", class: "rounded-xl px-6 py-2.5" })}
+            className={button({ tone: "ok", size: "md", class: "rounded-xs px-6 py-2.5" })}
           >
             <i className="fa-solid fa-check mr-2 text-xs" aria-hidden="true" />
             {busy === "approve" ? "Approving…" : approveLabel}
