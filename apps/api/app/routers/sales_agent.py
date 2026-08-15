@@ -230,8 +230,8 @@ def brand_documents(_admin: AdminUser) -> dict[str, Any]:
             {
                 "id": p["id"],
                 "name": p["name"],
-                "priceAudMonthly": p["priceAudMonthly"],
-                "priceAudAnnual": p["priceAudAnnual"],
+                "priceAudMonthly": float(p["priceAudMonthly"] or 0),
+                "priceAudAnnual": float(p["priceAudAnnual"] or 0),
             }
             for p in plans
         ],
