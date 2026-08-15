@@ -394,7 +394,7 @@ export default function AnswerBankClient() {
       {questionnaire ? (
         <section
           data-testid="bank-questionnaire"
-          className="rounded-2xl border border-white/10 bg-white/[0.02] p-5"
+          className="rounded-[14px] border border-white/10 bg-white/[0.02] p-5"
         >
           <header className="mb-3 flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
             <div className="min-w-0">
@@ -486,7 +486,7 @@ export default function AnswerBankClient() {
       ) : null}
 
       {/* ---- The bank -------------------------------------------------- */}
-      <section className="rounded-2xl border border-white/10 bg-white/[0.02] p-5">
+      <section className="rounded-[14px] border border-white/10 bg-white/[0.02] p-5">
         <header className="mb-3 flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
           <div className="min-w-0">
             <p className="mono text-[10px] font-semibold uppercase tracking-[0.08em] text-aether-muted-dim">

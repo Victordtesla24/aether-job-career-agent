@@ -412,14 +412,14 @@ export default function CoverLettersPage() {
               <div key={i} className="elev-1 h-[62px] animate-pulse rounded-xl" />
             ))}
           </div>
-          <div className="elev-1 h-[520px] animate-pulse rounded-2xl" />
+          <div className="elev-1 h-[520px] animate-pulse rounded-[14px]" />
         </div>
       ) : letters.length === 0 ? (
         <div
-          className="elev-1 rounded-2xl p-10 text-center"
+          className="elev-1 rounded-[14px] p-10 text-center"
           data-testid="cover-letters-empty-state"
         >
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl border border-aether-coral/25 bg-aether-coral/[0.12]">
+          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-[10px] border border-aether-coral/25 bg-aether-coral/[0.12]">
             <i className="fa-solid fa-envelope-open-text text-aether-coral" aria-hidden="true" />
           </div>
           <p className="text-[17px] font-semibold">No cover letters yet</p>
@@ -512,7 +512,7 @@ export default function CoverLettersPage() {
           <div className="grid min-w-0 gap-5 2xl:grid-cols-[minmax(0,1fr),300px] 2xl:items-start">
             <div className="min-w-0">
               {selected ? (
-                <article className="elev-1 min-w-0 rounded-2xl p-5" data-testid="letter-detail">
+                <article className="elev-1 min-w-0 rounded-[14px] p-5" data-testid="letter-detail">
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0">
                       <h2 className="text-[15px] font-semibold tracking-[-0.01em]">
@@ -610,7 +610,7 @@ export default function CoverLettersPage() {
                 </article>
               ) : (
                 <div
-                  className="elev-1 flex min-h-[260px] items-center justify-center rounded-2xl p-8 text-center"
+                  className="elev-1 flex min-h-[260px] items-center justify-center rounded-[14px] p-8 text-center"
                   data-testid="letter-none-selected"
                 >
                   <div className="max-w-[44ch]">

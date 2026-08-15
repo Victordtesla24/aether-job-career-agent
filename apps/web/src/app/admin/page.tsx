@@ -52,6 +52,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { AdminPageHeader } from "../../components/admin/admin-shell";
+import { ConfirmPanel, formatAudExact, StatTile } from "../../components/admin/admin-ui";
 import { HealthOverview } from "../../components/admin/health-overview";
 import {
   GrowthFunnelPanel,
@@ -79,8 +80,13 @@ import {
   type AdminExecutiveMetrics,
 } from "../../lib/api/adminMetrics";
 import {
+  fetchAdminBillingSummary,
   fetchAdminUsers,
   fetchAuditLog,
+  fetchHygiene,
+  purgeOrphans,
+  type AdminBillingSummary,
+  type AdminHygiene,
   type AdminUser,
   type AuditEntry,
 } from "../../lib/api/admin";
@@ -134,9 +140,20 @@ export default function AdminExecutiveDashboardPage() {
   const [metrics, setMetrics] = useState<AdminExecutiveMetrics | null>(null);
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [audit, setAudit] = useState<AuditEntry[]>([]);
+  const [billing, setBilling] = useState<AdminBillingSummary | null>(null);
+  const [hygiene, setHygiene] = useState<AdminHygiene | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [usersError, setUsersError] = useState<string | null>(null);
   const [auditError, setAuditError] = useState<string | null>(null);
+  const [billingError, setBillingError] = useState<string | null>(null);
+  const [hygieneError, setHygieneError] = useState<string | null>(null);
+  // Purge-orphans is a real write (unlike the other three reads on this
+  // board), so it gets its own confirm + busy state rather than piggybacking
+  // on the poll.
+  const [purgeOrphansOpen, setPurgeOrphansOpen] = useState(false);
+  const [purgeOrphansBusy, setPurgeOrphansBusy] = useState(false);
+  const [purgeOrphansError, setPurgeOrphansError] = useState<string | null>(null);
+  const [purgeOrphansMessage, setPurgeOrphansMessage] = useState<string | null>(null);
   const [loadedAt, setLoadedAt] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   /** True only until the FIRST attempt resolves — the one moment skeletons are
@@ -154,16 +171,19 @@ export default function AdminExecutiveDashboardPage() {
   const load = useCallback(async () => {
     setRefreshing(true);
     /*
-     * The three reads are independent and are settled independently: a failing
+     * The five reads are independent and are settled independently: a failing
      * audit-log call must not blank the revenue board, and a failing metrics
      * call must not blank the signup strip. Each failure is reported on the
      * surface it belongs to.
      */
-    const [metricsResult, usersResult, auditResult] = await Promise.allSettled([
-      fetchAdminExecutiveMetrics(),
-      fetchAdminUsers({}),
-      fetchAuditLog(RECENT_ACTIONS, 0),
-    ]);
+    const [metricsResult, usersResult, auditResult, billingResult, hygieneResult] =
+      await Promise.allSettled([
+        fetchAdminExecutiveMetrics(),
+        fetchAdminUsers({}),
+        fetchAuditLog(RECENT_ACTIONS, 0),
+        fetchAdminBillingSummary(),
+        fetchHygiene(),
+      ]);
     if (!mounted.current) return;
 
     if (metricsResult.status === "fulfilled") {
@@ -195,9 +215,42 @@ export default function AdminExecutiveDashboardPage() {
       );
     }
 
+    if (billingResult.status === "fulfilled") {
+      setBilling(billingResult.value);
+      setBillingError(null);
+    } else {
+      const e = billingResult.reason;
+      setBillingError(e instanceof Error ? e.message : "unknown error");
+    }
+
+    if (hygieneResult.status === "fulfilled") {
+      setHygiene(hygieneResult.value);
+      setHygieneError(null);
+    } else {
+      const e = hygieneResult.reason;
+      setHygieneError(
+        `The stale-data report could not be loaded: ${e instanceof Error ? e.message : "unknown error"}`,
+      );
+    }
+
     setRefreshing(false);
     setFirstLoad(false);
   }, []);
+
+  const onPurgeOrphans = async () => {
+    setPurgeOrphansBusy(true);
+    setPurgeOrphansError(null);
+    try {
+      await purgeOrphans();
+      setPurgeOrphansOpen(false);
+      setPurgeOrphansMessage("Orphaned billing pairs purged.");
+      await load();
+    } catch (e) {
+      setPurgeOrphansError(e instanceof Error ? e.message : "Could not purge orphaned rows.");
+    } finally {
+      setPurgeOrphansBusy(false);
+    }
+  };
 
   useEffect(() => {
     void load();
@@ -213,6 +266,20 @@ export default function AdminExecutiveDashboardPage() {
   const signups = useMemo(() => buildSignupSeries(metrics), [metrics]);
   const runs = useMemo(() => buildRunSeries(metrics), [metrics]);
   const referrers = useMemo(() => buildReferrers(metrics), [metrics]);
+
+  /**
+   * Signups over the last 7 days, summed from the executive metrics' own
+   * daily series (oldest-first, ending today — `admin_metrics._window_dates`).
+   * `null` when the block itself is absent, which renders as an honest
+   * "Not measured" rather than a fabricated 0.
+   */
+  const signups7d = useMemo(() => {
+    const series = metrics?.signupsByDay?.series;
+    if (!series || series.length === 0) return null;
+    return series
+      .slice(-7)
+      .reduce((sum, day) => sum + (typeof day.count === "number" ? day.count : 0), 0);
+  }, [metrics]);
 
   const showSkeletons = firstLoad && metrics === null;
 
@@ -285,6 +352,171 @@ export default function AdminExecutiveDashboardPage() {
             <LatestSignupsPanel rows={users} error={usersError} />
             <RecentAuditPanel rows={audit} error={auditError} />
           </div>
+
+          {/* ADMIN-MGMT E2 — operator-facing figures the growth board above
+              doesn't carry: revenue-side accounts (billing/summary, not the
+              metrics payload's own admin-exempt revenue block), a 7-day
+              signup count, and the one figure that genuinely is not measured
+              yet (a 24h failed-run rate — `GET /admin/metrics/executive` has
+              no such field; rather than compute a different-shaped number
+              from a different endpoint and call it the same thing, this tile
+              says so). Stale-data counts come from the read-only
+              `GET /admin/hygiene` report and link straight to the screen that
+              acts on each one. */}
+          <section aria-labelledby="admin-ops-heading" data-testid="admin-ops-section">
+            <h2 id="admin-ops-heading" className="type-section mb-2">
+              Operations
+            </h2>
+            <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:col-span-2 xl:grid-cols-4">
+                <StatTile
+                  testId="admin-ops-paying"
+                  label="Paying accounts"
+                  value={billing ? String(billing.paidSubscribers) : "Not measured"}
+                  hint={
+                    billingError
+                      ? `Could not load: ${billingError}`
+                      : billing
+                        ? `${billing.excludedAdminRows} admin + ${billing.excludedDeletedRows} deleted excluded`
+                        : undefined
+                  }
+                  tone={billing ? undefined : "neutral"}
+                />
+                <StatTile
+                  testId="admin-ops-mrr"
+                  label="MRR"
+                  value={billing ? formatAudExact(billing.mrrAud) : "Not measured"}
+                  hint={
+                    billingError
+                      ? `Could not load: ${billingError}`
+                      : billing
+                        ? `${billing.currency}${billing.estimate ? " · estimate" : ""}`
+                        : undefined
+                  }
+                  tone={billing ? undefined : "neutral"}
+                />
+                <StatTile
+                  testId="admin-ops-signups-7d"
+                  label="Signups (7d)"
+                  value={signups7d === null ? "Not measured" : String(signups7d)}
+                  hint={
+                    signups7d === null
+                      ? "GET /admin/metrics/executive did not return a signups series."
+                      : "Last 7 days, from the executive metrics signup series."
+                  }
+                  tone={signups7d === null ? "neutral" : undefined}
+                />
+                <StatTile
+                  testId="admin-ops-failed-run-rate"
+                  label="Failed-run rate (24h)"
+                  value="Not measured"
+                  hint="GET /admin/metrics/executive does not report a 24h-windowed failed-run rate."
+                  tone="neutral"
+                />
+              </div>
+
+              <Panel title="Stale data" testId="admin-ops-stale-data" measured={hygiene != null}>
+                {hygieneError ? (
+                  <p className="type-meta text-aether-amber">{hygieneError}</p>
+                ) : hygiene ? (
+                  <div className="flex flex-col gap-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="type-mono-micro text-aether-muted-dim">Soft-deleted</p>
+                        <p className="mono text-lg font-semibold tabular-nums text-aether-text">
+                          {hygiene.softDeletedUsers.count}
+                        </p>
+                      </div>
+                      <Link
+                        href="/admin/users?view=deleted"
+                        className="type-mono-micro text-aether-indigo hover:underline"
+                      >
+                        View →
+                      </Link>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="type-mono-micro text-aether-muted-dim">
+                          Orphaned billing pairs
+                        </p>
+                        <p className="mono text-lg font-semibold tabular-nums text-aether-text">
+                          {hygiene.orphanedBillingPairs.count}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        data-testid="admin-ops-purge-orphans"
+                        onClick={() => setPurgeOrphansOpen(true)}
+                        disabled={hygiene.orphanedBillingPairs.count === 0}
+                        className="type-mono-micro rounded-md border border-red-500/40 px-2.5 py-1.5 text-red-300 transition-colors hover:bg-red-500/10 disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        Purge orphans
+                      </button>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="type-mono-micro text-aether-muted-dim">Canceled subs</p>
+                        <p className="mono text-lg font-semibold tabular-nums text-aether-text">
+                          {hygiene.canceledSubscriptions.count}
+                        </p>
+                      </div>
+                      <Link
+                        href="/admin/subscriptions?tab=canceled"
+                        className="type-mono-micro text-aether-indigo hover:underline"
+                      >
+                        View →
+                      </Link>
+                    </div>
+
+                    <p className="type-meta text-aether-muted-dim">
+                      {hygiene.neverLoggedIn30d.count} account
+                      {hygiene.neverLoggedIn30d.count === 1 ? "" : "s"} never logged in, 30+ days
+                      old.
+                    </p>
+
+                    {purgeOrphansMessage && !purgeOrphansOpen ? (
+                      <p role="status" className="type-meta text-aether-green">
+                        {purgeOrphansMessage}
+                      </p>
+                    ) : null}
+
+                    {purgeOrphansOpen ? (
+                      <ConfirmPanel
+                        tone="critical"
+                        testId="admin-ops-purge-orphans-panel"
+                        confirmTestId="admin-ops-purge-orphans-confirm"
+                        cancelTestId="admin-ops-purge-orphans-cancel"
+                        title={`Purge ${hygiene.orphanedBillingPairs.count} orphaned billing pair(s)?`}
+                        confirmLabel="Purge orphans"
+                        busy={purgeOrphansBusy}
+                        onConfirm={() => void onPurgeOrphans()}
+                        onCancel={() => {
+                          setPurgeOrphansOpen(false);
+                          setPurgeOrphansError(null);
+                        }}
+                        body={
+                          <>
+                            Deletes ONLY Subscription/UsageQuota rows whose userId has no
+                            matching User row — nothing else. This does not touch Stripe.
+                          </>
+                        }
+                      >
+                        {purgeOrphansError ? (
+                          <p role="alert" className="mt-2 text-sm text-red-300">
+                            {purgeOrphansError}
+                          </p>
+                        ) : null}
+                      </ConfirmPanel>
+                    ) : null}
+                  </div>
+                ) : (
+                  <Skeleton className="h-32" />
+                )}
+              </Panel>
+            </div>
+          </section>
 
           {/* Service health keeps a presence on the landing screen — it is the
               one thing an operator opens /admin to check when something feels

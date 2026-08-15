@@ -380,7 +380,7 @@ export default function PricingPage() {
                   key={plan.id}
                   data-testid={`pricing-tier-${plan.id}`}
                   data-preselected={preselectedPlan === plan.id ? "true" : undefined}
-                  className={`glass flex flex-col rounded-2xl border p-6 ${
+                  className={`glass flex flex-col rounded-[14px] border p-6 ${
                     isCurrentPlan
                       ? "border-aether-green/40"
                       : preselectedPlan === plan.id

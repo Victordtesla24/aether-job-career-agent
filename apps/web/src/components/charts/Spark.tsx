@@ -58,8 +58,8 @@ export interface SparkProps {
   className?: string;
 }
 
-const SERIES = CHART_PALETTE[0]; // c1 coral — the page's one series hue
-const LINE = CHART_PALETTE[1]; // c2 indigo-300, matching <TrendLine>
+const SERIES = CHART_PALETTE[0]; // c1 chart-gold — the page's one series hue
+const LINE = CHART_PALETTE[1]; // c2 chart-sapphire — the overlay against the bars
 const MIN_LINE_POINTS = 3;
 
 function measuredValues(data: readonly ChartDatum[]): number[] {

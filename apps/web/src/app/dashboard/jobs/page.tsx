@@ -1125,7 +1125,7 @@ export default function JobsPage() {
         <section
           data-testid="discovery-target-prompt"
           aria-labelledby="discovery-target-prompt-heading"
-          className="rounded-2xl border border-aether-coral/30 bg-aether-coral/5 p-5"
+          className="rounded-[14px] border border-aether-coral/30 bg-aether-coral/5 p-5"
         >
           <h2 id="discovery-target-prompt-heading" className="text-sm font-semibold">
             What should we search for?
@@ -1235,7 +1235,7 @@ export default function JobsPage() {
         `source-status-list`, `source-status-chip`, `source-status-badge` and
         `source-status-error` all still render, with their tones unchanged.
       */}
-      <div className="band-recessed -mx-4 rounded-2xl px-4 py-3.5 sm:-mx-5 sm:px-5">
+      <div className="band-recessed -mx-4 rounded-[14px] px-4 py-3.5 sm:-mx-5 sm:px-5">
         <div className="grid gap-4 xl:grid-cols-2">
           {/* Source integration bar (jd22–jd28) */}
           <section data-testid="source-bar" aria-label="Connected job boards" className="min-w-0">
@@ -1532,7 +1532,7 @@ export default function JobsPage() {
               <div key={i} className="elev-1 h-[168px] animate-pulse rounded-xl" />
             ))}
           </div>
-          <div className="elev-1 hidden h-[560px] animate-pulse rounded-2xl xl:col-span-7 xl:block 2xl:col-span-8" />
+          <div className="elev-1 hidden h-[560px] animate-pulse rounded-[14px] xl:col-span-7 xl:block 2xl:col-span-8" />
         </div>
       ) : market === "saved" ? (
         <SavedView
@@ -1541,7 +1541,7 @@ export default function JobsPage() {
           onApplyAll={(ids, trigger) => requestBulkApply(ids, trigger)}
         />
       ) : visible.length === 0 ? (
-        <div className="elev-1 rounded-2xl p-10 text-center" data-testid="jobs-empty-state">
+        <div className="elev-1 rounded-[14px] p-10 text-center" data-testid="jobs-empty-state">
           <p className="text-lg font-semibold">No matching jobs</p>
           <p className="mt-1 text-sm text-aether-muted">
             {(jobs ?? []).length > 0
@@ -1822,12 +1822,12 @@ export default function JobsPage() {
               aria-live="polite"
             >
               <div
-                className={`elev-1 job-detail-viewport rounded-2xl p-5 sm:p-6 ${scrollBody()}`}
+                className={`elev-1 job-detail-viewport rounded-[14px] p-5 sm:p-6 ${scrollBody()}`}
               >
                 {/* header */}
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="flex min-w-0 gap-4">
-                    <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/10 text-lg font-bold">
+                    <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[10px] bg-white/10 text-lg font-bold">
                       {initials(selected.company)}
                     </span>
                     <div className="min-w-0">
@@ -1904,7 +1904,7 @@ export default function JobsPage() {
                 </div>
 
                 {/* AI Match Analysis (jd78) */}
-                <section className="relative mt-5 overflow-hidden rounded-2xl border border-aether-indigo/25 bg-aether-indigo/5 p-5" data-testid="match-analysis">
+                <section className="relative mt-5 overflow-hidden rounded-lg border border-aether-indigo/25 bg-aether-indigo/5 p-5" data-testid="match-analysis">
                   <div className="mb-3 flex items-center gap-2">
                     <h3 className="text-sm font-semibold">🧠 AI Match Analysis</h3>
                   </div>
@@ -1932,7 +1932,7 @@ export default function JobsPage() {
                 </section>
 
                 {/* 10-Dimensional Fit Score (jd30) */}
-                <section className="mt-5 rounded-2xl border border-white/10 bg-white/[0.02] p-5" data-testid="fit-score">
+                <section className="mt-5 rounded-lg border border-white/10 bg-white/[0.02] p-5" data-testid="fit-score">
                   <div className="mb-4 flex items-center justify-between">
                     <h3 className="text-sm font-semibold">📡 10-Dimensional Fit Score</h3>
                     <span className="mono text-xs text-aether-muted-dim">hover a dimension for detail</span>
@@ -2003,7 +2003,7 @@ export default function JobsPage() {
                 </section>
 
                 {/* Risk Signals (jd31) */}
-                <section className="mt-5 rounded-2xl border border-aether-yellow/25 bg-white/[0.02] p-5" data-testid="risk-signals">
+                <section className="mt-5 rounded-lg border border-aether-yellow/25 bg-white/[0.02] p-5" data-testid="risk-signals">
                   <div className="mb-3 flex items-center gap-2">
                     <h3 className="text-sm font-semibold">⚠️ Risk Signals</h3>
                     <span className="ml-auto rounded-full bg-aether-yellow/15 px-2 py-0.5 text-[10px] font-semibold text-aether-yellow" data-testid="risk-count">
@@ -2195,7 +2195,7 @@ export default function JobsPage() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="submitGateTitle"
-            className="elev-3 relative w-[480px] max-w-[92vw] rounded-2xl border-aether-coral/35 p-6"
+            className="elev-3 relative w-[480px] max-w-[92vw] rounded-[14px] border-aether-coral/35 p-6"
           >
             <div className="flex items-start gap-3">
               <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-aether-yellow/30 bg-aether-yellow/15 text-aether-yellow">⚠️</span>
@@ -2310,7 +2310,7 @@ export default function JobsPage() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="bulkGateTitle"
-            className="elev-3 relative w-[520px] max-w-[92vw] rounded-2xl border-aether-coral/35 p-6"
+            className="elev-3 relative w-[520px] max-w-[92vw] rounded-[14px] border-aether-coral/35 p-6"
           >
             <div className="flex items-start gap-3">
               <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-aether-yellow/30 bg-aether-yellow/15 text-aether-yellow">⚠️</span>
@@ -2393,8 +2393,8 @@ function SavedView({
 }) {
   if (jobs.length === 0) {
     return (
-      <div className="elev-1 flex flex-col items-center justify-center rounded-2xl py-16 text-center" data-testid="saved-jobs-empty-state">
-        <div className="elev-2 mb-3 flex h-14 w-14 items-center justify-center rounded-2xl text-xl">🔖</div>
+      <div className="elev-1 flex flex-col items-center justify-center rounded-[14px] py-16 text-center" data-testid="saved-jobs-empty-state">
+        <div className="elev-2 mb-3 flex h-14 w-14 items-center justify-center rounded-[10px] text-xl">🔖</div>
         <p className="text-sm font-semibold">No saved jobs yet</p>
         <p className="mt-1 max-w-xs text-xs text-aether-muted-dim">
           Tap the bookmark on any role to save it here and revisit it later.

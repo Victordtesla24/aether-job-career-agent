@@ -47,7 +47,10 @@ export interface TrendLineProps {
   className?: string;
 }
 
-const STROKE = CHART_PALETTE[1]; // c2 indigo-300
+// A trend line carries exactly one series, and R-VIZ gives every single-series
+// chart the first palette step: c1 chart-gold. The later steps are reserved for
+// charts that actually need to tell two measures apart.
+const STROKE = CHART_PALETTE[0]; // c1 chart-gold
 const MIN_POINTS = 3;
 
 interface Run {

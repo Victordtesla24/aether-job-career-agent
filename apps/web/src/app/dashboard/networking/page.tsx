@@ -168,10 +168,10 @@ export default function NetworkingPage() {
       <div className="space-y-4" aria-busy="true" data-testid="networking-skeleton">
         <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
           {[0, 1, 2, 3].map((i) => (
-            <div key={i} className="bg-surface-1 h-24 animate-pulse rounded-2xl border border-white/10" />
+            <div key={i} className="bg-surface-1 h-24 animate-pulse rounded-[14px] border border-white/10" />
           ))}
         </div>
-        <div className="bg-surface-1 h-72 animate-pulse rounded-2xl border border-white/10" />
+        <div className="bg-surface-1 h-72 animate-pulse rounded-[14px] border border-white/10" />
       </div>
     );
   }
@@ -198,7 +198,7 @@ export default function NetworkingPage() {
       </header>
 
       {isEmpty ? (
-        <div className="bg-surface-1 rounded-2xl border border-white/10 p-12 text-center" data-testid="networking-empty-state">
+        <div className="bg-surface-1 rounded-[14px] border border-white/10 p-12 text-center" data-testid="networking-empty-state">
           <p className="text-lg font-semibold">No connections yet</p>
           <p className="mx-auto mt-1 max-w-md text-sm text-aether-muted">
             Start building your recruiter &amp; referral network by adding a contact manually to begin tracking
@@ -301,7 +301,7 @@ export default function NetworkingPage() {
 
             {/* Right column */}
             <div className="min-w-0 space-y-6">
-              <section className="bg-surface-1 rounded-2xl border border-white/10 p-5" data-testid="outreach-queue">
+              <section className="bg-surface-1 rounded-[14px] border border-white/10 p-5" data-testid="outreach-queue">
                 <h2 className="mb-3 text-[15px] font-semibold">Outreach Queue</h2>
                 {data.outreachQueue.length === 0 ? (
                   <p className="text-xs text-aether-muted-dim" data-testid="outreach-queue-empty">
@@ -335,7 +335,7 @@ export default function NetworkingPage() {
                 )}
               </section>
 
-              <section className="bg-surface-1 rounded-2xl border border-white/10 p-5" data-testid="communication-log">
+              <section className="bg-surface-1 rounded-[14px] border border-white/10 p-5" data-testid="communication-log">
                 <h2 className="mb-3 text-[15px] font-semibold">Communication Log</h2>
                 {data.communicationLog.length === 0 ? (
                   <p className="text-xs text-aether-muted-dim" data-testid="communication-log-empty">
@@ -496,7 +496,7 @@ export default function NetworkingPage() {
 
 function Stat({ label, value, accent = "" }: { label: string; value: string; accent?: string }) {
   return (
-    <div className="bg-surface-1 rounded-2xl border border-white/10 p-5">
+    <div className="bg-surface-1 rounded-[14px] border border-white/10 p-5">
       <div className={`mono text-2xl font-bold ${accent}`}>{value}</div>
       <div className="mt-1 text-[11px] uppercase tracking-wide text-aether-muted-dim">{label}</div>
     </div>

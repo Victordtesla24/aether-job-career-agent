@@ -13,7 +13,7 @@ export function VersionsPanel({
   onSelect: (letterId: string) => void;
 }) {
   return (
-    <section className="elev-1 rounded-2xl p-5" data-testid="versions-panel">
+    <section className="elev-1 rounded-[14px] p-5" data-testid="versions-panel">
       <div className="mb-3 flex items-center gap-2">
         <i className="fa-solid fa-clock-rotate-left text-sm text-state-info" aria-hidden="true" />
         <h2 className="text-[13px] font-semibold tracking-[-0.01em]">Versions</h2>

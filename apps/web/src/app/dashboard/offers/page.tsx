@@ -83,7 +83,7 @@ export default function OffersPage() {
     return (
       <div className="grid gap-4 xl:grid-cols-3" aria-busy="true" data-testid="offers-skeleton">
         {[0, 1, 2].map((i) => (
-          <div key={i} className="bg-surface-1 h-72 animate-pulse rounded-2xl border border-white/10" />
+          <div key={i} className="bg-surface-1 h-72 animate-pulse rounded-[14px] border border-white/10" />
         ))}
       </div>
     );

@@ -633,12 +633,12 @@ export default function ApprovalsPage() {
       {approvals === null ? (
         <div className="space-y-3" aria-busy="true">
           {[0, 1, 2].map((i) => (
-            <div key={i} className="elev-1 h-24 animate-pulse rounded-2xl" />
+            <div key={i} className="elev-1 h-24 animate-pulse rounded-[14px]" />
           ))}
         </div>
       ) : approvals.length === 0 ? (
         <div
-          className="elev-1 rounded-2xl p-10 text-center"
+          className="elev-1 rounded-[14px] p-10 text-center"
           data-testid="approvals-empty-state"
         >
           <p className="text-lg font-semibold">Queue clear</p>
@@ -666,7 +666,7 @@ export default function ApprovalsPage() {
               <article
                 key={approval.id}
                 data-testid="approval-card"
-                className={`elev-1 rounded-2xl p-5 transition-colors duration-[--dur-fast] hover:border-hairline-strong ${
+                className={`elev-1 rounded-[14px] p-5 transition-colors duration-[--dur-fast] hover:border-hairline-strong ${
                   expired ? "border-state-danger/25" : ""
                 }`}
               >

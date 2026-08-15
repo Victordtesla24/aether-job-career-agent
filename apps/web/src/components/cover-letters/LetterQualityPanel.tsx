@@ -48,7 +48,7 @@ export function LetterQualityPanel({
 }) {
   return (
     <section
-      className="elev-1 rounded-2xl p-5"
+      className="elev-1 rounded-[14px] p-5"
       data-testid="letter-quality-panel"
     >
       <div className="mb-3 flex items-center gap-2">

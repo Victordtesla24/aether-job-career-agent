@@ -7,10 +7,14 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  deleteSubscriptionRecord,
   fetchAdminSpend,
   fetchAdminUsers,
+  fetchHygiene,
   fetchMe,
   formatUsd,
+  purgeOrphans,
+  purgeUser,
   setSpendCap,
   setSuspended,
   updateAdminSettings,
@@ -54,18 +58,93 @@ describe("Admin API client", () => {
   });
 
   it("fetchAdminUsers encodes filters into the query string", async () => {
-    const fetchMock = mockFetchOnce({ users: [USER_ROW], total: 1, limit: 100, offset: 0 });
+    const fetchMock = mockFetchOnce({
+      users: [USER_ROW],
+      total: 1,
+      limit: 100,
+      offset: 0,
+      counts: { active: 1, suspended: 0, deleted: 0 },
+    });
     const res = await fetchAdminUsers(
       { q: "user@example.com", plan: "pro", suspended: true },
       { token: "tok" },
     );
     expect(res.users[0]!.spendUsd).toBeCloseTo(1.2345);
     expect(res.users[0]!.currency).toBe("USD");
+    expect(res.counts).toEqual({ active: 1, suspended: 0, deleted: 0 });
     const url = String(fetchMock.mock.calls[0]![0]);
     expect(url).toContain("/admin/users?");
     expect(url).toContain("q=user%40example.com");
     expect(url).toContain("plan=pro");
     expect(url).toContain("suspended=true");
+  });
+
+  it("fetchAdminUsers encodes the view param, alongside the legacy suspended filter", async () => {
+    const fetchMock = mockFetchOnce({
+      users: [],
+      total: 0,
+      limit: 100,
+      offset: 0,
+      counts: { active: 0, suspended: 0, deleted: 3 },
+    });
+    const res = await fetchAdminUsers({ view: "deleted" }, { token: "tok" });
+    expect(res.counts.deleted).toBe(3);
+    const url = String(fetchMock.mock.calls[0]![0]);
+    expect(url).toContain("/admin/users?");
+    expect(url).toContain("view=deleted");
+  });
+
+  it("purgeUser POSTs the typed confirmEmail and parses the per-table receipt", async () => {
+    const fetchMock = mockFetchOnce({
+      userId: "u1",
+      purged: true,
+      tables: { AgentRun: 4, Application: 2 },
+      note: "ok",
+    });
+    const res = await purgeUser("u1", "user@example.com", { token: "tok" });
+    expect(res.purged).toBe(true);
+    expect(res.tables).toEqual({ AgentRun: 4, Application: 2 });
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(String(url)).toContain("/admin/users/u1/purge");
+    expect((init as RequestInit).method).toBe("POST");
+    expect(JSON.parse(String((init as RequestInit).body))).toEqual({
+      confirmEmail: "user@example.com",
+    });
+  });
+
+  it("deleteSubscriptionRecord DELETEs the per-user subscription route", async () => {
+    const fetchMock = mockFetchOnce({
+      userId: "u1",
+      deleted: { subscription: 1, usageQuota: 1 },
+    });
+    const res = await deleteSubscriptionRecord("u1", { token: "tok" });
+    expect(res.deleted).toEqual({ subscription: 1, usageQuota: 1 });
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(String(url)).toContain("/admin/users/u1/subscription");
+    expect((init as RequestInit).method).toBe("DELETE");
+  });
+
+  it("fetchHygiene parses the stale-data report", async () => {
+    mockFetchOnce({
+      softDeletedUsers: { count: 2, sample: [{ id: "u1", email: "a@b.co", deletedAt: "2026-08-01T00:00:00Z" }] },
+      orphanedBillingPairs: { count: 1, sample: ["u2"] },
+      canceledSubscriptions: { count: 5 },
+      neverLoggedIn30d: { count: 3 },
+    });
+    const hygiene = await fetchHygiene({ token: "tok" });
+    expect(hygiene.softDeletedUsers.count).toBe(2);
+    expect(hygiene.orphanedBillingPairs.sample).toEqual(["u2"]);
+    expect(hygiene.canceledSubscriptions.count).toBe(5);
+    expect(hygiene.neverLoggedIn30d.count).toBe(3);
+  });
+
+  it("purgeOrphans POSTs confirm:true to the hygiene sweep route", async () => {
+    const fetchMock = mockFetchOnce({ purgedCount: 1 });
+    await purgeOrphans({ token: "tok" });
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(String(url)).toContain("/admin/hygiene/purge-orphans");
+    expect((init as RequestInit).method).toBe("POST");
+    expect(JSON.parse(String((init as RequestInit).body))).toEqual({ confirm: true });
   });
 
   it("setSpendCap POSTs the spendCapUsd body to the per-user route", async () => {

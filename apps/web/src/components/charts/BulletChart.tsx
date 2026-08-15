@@ -95,7 +95,7 @@ export interface BulletChartProps {
   emptyHint?: string;
 }
 
-const SERIES = CHART_PALETTE[0]; // coral
+const SERIES = CHART_PALETTE[0]; // c1 chart-gold
 const MET = STATE.ok;
 
 export function BulletChart({

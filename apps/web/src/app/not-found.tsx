@@ -27,7 +27,7 @@ export default function NotFound() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-aether-bg text-aether-text px-4">
       <div className="w-full max-w-md text-center">
-        <div className="mx-auto mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-aether-coral to-aether-amber shadow-lg shadow-aether-coral/30">
+        <div className="mx-auto mb-6 flex h-14 w-14 items-center justify-center rounded-[10px] bg-gradient-to-br from-aether-coral to-aether-amber shadow-lg shadow-aether-coral/30">
           <i className="fa-solid fa-bolt text-white text-xl" aria-hidden="true" />
         </div>
         <p className="mono text-sm text-aether-muted-dim">404</p>

@@ -130,7 +130,7 @@ export default function SignupPage() {
 
         <form
           onSubmit={handleSubmit}
-          className="glass rounded-2xl border border-white/10 p-8 flex flex-col gap-5"
+          className="glass rounded-[14px] border border-white/10 p-8 flex flex-col gap-5"
           aria-label="Create account"
           noValidate
         >

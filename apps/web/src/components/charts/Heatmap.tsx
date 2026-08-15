@@ -10,7 +10,7 @@
  * it cannot even change the colour of the cells around it (C-2).
  *
  * A measured zero is different and looks different: an empty cell with a
- * hairline edge, never step 1 of the coral ramp (C-1).
+ * hairline edge, never step 1 of the chart-heat gilt ramp (C-1).
  */
 import { ChartFrame } from "./ChartFrame";
 import { formatNumber, heatStep, markKind } from "./geometry";

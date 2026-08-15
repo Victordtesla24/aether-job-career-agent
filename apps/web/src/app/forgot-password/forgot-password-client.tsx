@@ -99,7 +99,7 @@ export default function ForgotPasswordClient({
           </div>
         </div>
 
-        <div className="glass rounded-2xl border border-white/10 p-8 flex flex-col gap-5">
+        <div className="glass rounded-[14px] border border-white/10 p-8 flex flex-col gap-5">
           <div>
             <h1 className="text-lg font-semibold">Reset your password</h1>
             <p className="text-sm text-aether-muted mt-1">

@@ -12,7 +12,7 @@ export function EvidenceTracePanel({
 }) {
   return (
     <section
-      className="elev-1 rounded-2xl border-state-ok/25 p-5"
+      className="elev-1 rounded-[14px] border-state-ok/25 p-5"
       data-testid="evidence-trace-panel"
     >
       <div className="mb-3 flex items-center justify-between gap-2">

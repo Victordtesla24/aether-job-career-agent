@@ -292,15 +292,15 @@ export default function StoryBankPage() {
           {stories === null ? (
             <div className="space-y-3" aria-busy="true" data-testid="stories-loading">
               {[0, 1, 2].map((i) => (
-                <div key={i} className="elev-1 h-40 animate-pulse rounded-2xl" />
+                <div key={i} className="elev-1 h-40 animate-pulse rounded-[14px]" />
               ))}
             </div>
           ) : showEmpty ? (
             <div
-              className="rounded-2xl border border-dashed border-hairline-strong p-10 text-center"
+              className="rounded-[14px] border border-dashed border-hairline-strong p-10 text-center"
               data-testid="stories-empty-state"
             >
-              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl border border-aether-coral/25 bg-aether-coral/[0.12]">
+              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-[10px] border border-aether-coral/25 bg-aether-coral/[0.12]">
                 <i className="fa-solid fa-book-bookmark text-xl text-aether-coral" aria-hidden="true" />
               </div>
               <h3 className="mb-1.5 text-base font-semibold">Your Story Bank is empty</h3>
@@ -337,7 +337,7 @@ export default function StoryBankPage() {
             </div>
           ) : visibleStories.length === 0 ? (
             <div
-              className="rounded-2xl border border-dashed border-hairline-strong p-8 text-center text-sm text-aether-muted"
+              className="rounded-[14px] border border-dashed border-hairline-strong p-8 text-center text-sm text-aether-muted"
               data-testid="stories-filter-empty"
             >
               No stories in <span className="font-semibold text-aether-text">{filter}</span> yet.

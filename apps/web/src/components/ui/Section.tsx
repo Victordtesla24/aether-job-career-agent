@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * S-UI §3.1 — `<Section>`: `elev-1 rounded-2xl p-5` with an eyebrow, a title,
+ * S-UI §3.1 — `<Section>`: `elev-1 rounded-[14px] p-5` with an eyebrow, a title,
  * an action slot and — load-bearing — a RESERVED `footnote` slot.
  *
  * The footnote slot is why this component exists. Sample-window and
@@ -46,7 +46,7 @@ export default function Section({
     <Tag
       data-testid={testId}
       aria-labelledby={labelledById}
-      className={`elev-1 relative overflow-hidden rounded-2xl p-5 ${
+      className={`elev-1 relative overflow-hidden rounded-[14px] p-5 ${
         accent
           ? "before:absolute before:inset-x-0 before:top-0 before:h-px before:bg-gradient-to-r before:from-aether-coral/60 before:via-aether-coral/10 before:to-transparent"
           : ""

@@ -34,9 +34,9 @@ export default function DashboardSectionNotFound({
 
   return (
     <div className="flex flex-col gap-7">
-      <section className="elev-1 rounded-2xl p-8">
+      <section className="elev-1 rounded-[14px] p-8">
         <div className="mb-4 flex items-center gap-4">
-          <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-aether-coral/20 bg-aether-coral/[0.12]">
+          <div className="flex h-12 w-12 items-center justify-center rounded-[10px] border border-aether-coral/20 bg-aether-coral/[0.12]">
             <i className="fa-solid fa-compass text-lg text-aether-coral" aria-hidden="true" />
           </div>
           <div>

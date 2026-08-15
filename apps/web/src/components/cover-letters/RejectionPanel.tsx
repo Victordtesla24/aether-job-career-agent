@@ -31,7 +31,7 @@ export function RejectionPanel({
       aria-live="assertive"
       data-testid="cover-letter-rejection-panel"
       data-guard={rejection.guard}
-      className="elev-1 rounded-2xl border-state-warn/30 bg-state-warn/[0.07] p-5"
+      className="elev-1 rounded-[14px] border-state-warn/30 bg-state-warn/[0.07] p-5"
     >
       <div className="flex items-center gap-2">
         <i className={`${GUARD_ICON[rejection.guard]} text-aether-amber`} aria-hidden="true" />

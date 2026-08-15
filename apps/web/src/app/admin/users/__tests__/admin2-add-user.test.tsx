@@ -46,7 +46,13 @@ import AdminUsersPage from "../page";
 const TEMP_PASSWORD = "Tk7#qLm2Xw9Z";
 
 function emptyList() {
-  return { users: [], total: 0, limit: 100, offset: 0 };
+  return {
+    users: [],
+    total: 0,
+    limit: 100,
+    offset: 0,
+    counts: { active: 0, suspended: 0, deleted: 0 },
+  };
 }
 
 async function renderPage() {
@@ -200,34 +206,78 @@ describe("refusals reach the admin verbatim", () => {
   });
 });
 
-describe("the list shows soft-deleted accounts as deleted", () => {
-  it("flags a deleted row instead of hiding it", async () => {
-    fetchAdminUsersMock.mockResolvedValue({
-      users: [
-        {
-          id: "u-del",
-          email: "gone@example.com",
-          name: "Gone Away",
-          username: null,
-          isAdmin: false,
-          suspended: true,
-          deletedAt: "2026-08-14T00:00:00Z",
-          mustChangePassword: false,
-          plan: "free",
-          subStatus: "canceled",
-          signupAt: "2026-01-01T00:00:00Z",
-          lastLoginAt: null,
-          spendUsd: 0,
-          runCount: 0,
-          currency: "USD",
-        },
-      ],
-      total: 1,
+describe("lifecycle view tabs (ADMIN-MGMT E2)", () => {
+  const deletedRow = {
+    id: "u-del",
+    email: "gone@example.com",
+    name: "Gone Away",
+    username: null,
+    isAdmin: false,
+    suspended: true,
+    deletedAt: "2026-08-14T00:00:00Z",
+    mustChangePassword: false,
+    plan: "free",
+    subStatus: "canceled",
+    signupAt: "2026-01-01T00:00:00Z",
+    lastLoginAt: null,
+    spendUsd: 0,
+    runCount: 0,
+    currency: "USD",
+  };
+
+  function respond(filters: { view?: string } = {}) {
+    if (filters.view === "deleted") {
+      return {
+        users: [deletedRow],
+        total: 1,
+        limit: 100,
+        offset: 0,
+        counts: { active: 0, suspended: 0, deleted: 1 },
+      };
+    }
+    return {
+      users: [],
+      total: 0,
       limit: 100,
       offset: 0,
-    });
+      counts: { active: 0, suspended: 0, deleted: 1 },
+    };
+  }
+
+  beforeEach(() => {
+    fetchAdminUsersMock.mockImplementation((filters: { view?: string } = {}) =>
+      Promise.resolve(respond(filters)),
+    );
+  });
+
+  it("no longer shows a soft-deleted account on the default Active view", async () => {
     render(<AdminUsersPage />);
+    await waitFor(() =>
+      expect(fetchAdminUsersMock).toHaveBeenCalledWith(
+        expect.objectContaining({ view: "active" }),
+        // second call arg is the request options object — not asserted here.
+      ),
+    );
+    expect(screen.queryByTestId("admin-user-row-u-del")).toBeNull();
+    // The Deleted tab's own badge still says it exists — DEFAULT-hidden, not lost.
+    const deletedTab = await screen.findByTestId("admin-users-view-tab-deleted");
+    expect(deletedTab.textContent).toContain("1");
+  });
+
+  it("flags the deleted row, with Restore and Purge, once the Deleted tab is opened", async () => {
+    render(<AdminUsersPage />);
+    await waitFor(() => expect(fetchAdminUsersMock).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByTestId("admin-users-view-tab-deleted"));
+    await waitFor(() =>
+      expect(fetchAdminUsersMock).toHaveBeenCalledWith(
+        expect.objectContaining({ view: "deleted" }),
+      ),
+    );
+
     const row = await screen.findByTestId("admin-user-row-u-del");
     expect(row.textContent).toMatch(/deleted/i);
+    expect(screen.getByTestId("admin-restore-user-u-del")).toBeTruthy();
+    expect(screen.getByTestId("admin-purge-user-u-del")).toBeTruthy();
   });
 });

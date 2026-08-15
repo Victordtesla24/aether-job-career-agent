@@ -322,7 +322,7 @@ export default function DashboardPage() {
       <div className="grid gap-6 xl:grid-cols-12 xl:items-start">
         <div className="flex min-w-0 flex-col gap-6 xl:col-span-7">
           {/* Agent activity feed (agent-feed-s1t2u3) */}
-          <section className="elev-1 rounded-2xl p-6" data-testid="agent-feed">
+          <section className="elev-1 rounded-[14px] p-6" data-testid="agent-feed">
             <div className="mb-3 flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 {/* ML-DASH-002: this feed (and every other widget on this
@@ -449,7 +449,7 @@ export default function DashboardPage() {
           </section>
 
           {/* Today's opportunities (opportunities-v4w5x6) */}
-          <section className="elev-1 rounded-2xl p-6" data-testid="todays-opportunities">
+          <section className="elev-1 rounded-[14px] p-6" data-testid="todays-opportunities">
             <div className="mb-5 flex items-center justify-between">
               <h2 className="text-[15px] font-semibold">Today&apos;s Opportunities</h2>
               <Link href="/dashboard/jobs" className="max-sm:min-h-11 max-sm:px-3 max-sm:inline-flex max-sm:items-center text-xs text-aether-muted transition hover:text-white">
@@ -541,7 +541,7 @@ export default function DashboardPage() {
             draws a zero as a C-1 hairline tick at the origin with the numeral
             in `state-neutral`, and states its own sample window (C-3).
           */}
-          <section className="elev-1 rounded-2xl p-6" data-testid="funnel-widget">
+          <section className="elev-1 rounded-[14px] p-6" data-testid="funnel-widget">
             {funnel.error ? (
               <WidgetError>Couldn&apos;t load the funnel — {funnel.error}</WidgetError>
             ) : funnel.data === null ? (
@@ -583,7 +583,7 @@ export default function DashboardPage() {
           <div className="grid min-w-0 gap-6 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
           {/* Story Bank quick access (story-bank-quick-db10) */}
           <section
-            className="elev-1 min-w-0 rounded-2xl p-6 transition hover:border-aether-indigo/30"
+            className="elev-1 min-w-0 rounded-[14px] p-6 transition hover:border-aether-indigo/30"
             data-testid="story-bank-widget"
           >
             <div className="mb-4 flex items-center justify-between">
@@ -640,7 +640,7 @@ export default function DashboardPage() {
 
           {/* Recruiter CRM summary (crm-summary-db11) */}
           <section
-            className="elev-1 min-w-0 rounded-2xl p-6 transition hover:border-aether-coral/30"
+            className="elev-1 min-w-0 rounded-[14px] p-6 transition hover:border-aether-coral/30"
             data-testid="crm-summary"
           >
             <div className="mb-4 flex items-center justify-between">
@@ -716,7 +716,7 @@ function NeedsApprovalPanel({
 }) {
   return (
           <section
-            className="elev-1 rounded-2xl p-6"
+            className="elev-1 rounded-[14px] p-6"
             data-testid="needs-approval-widget"
           >
             <div className="mb-4 flex items-center gap-2">

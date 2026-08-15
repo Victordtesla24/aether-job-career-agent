@@ -553,19 +553,59 @@ _SPEND_SUBQUERY = (
 )
 
 
+#: ADMIN-MGMT E1 — lifecycle views for ``list_users``. The predicate for each is
+#: written once here so the list filter, the tab counts and the front end can
+#: never disagree about what "deleted" means.
+USER_VIEWS: dict[str, Optional[str]] = {
+    "active": 'u."deletedAt" IS NULL',
+    "suspended": 'u."suspended" = true AND u."deletedAt" IS NULL',
+    "deleted": 'u."deletedAt" IS NOT NULL',
+    "all": None,
+}
+
+
 def list_users(
     *,
     query: Optional[str] = None,
     plan: Optional[str] = None,
     suspended: Optional[bool] = None,
+    view: Optional[str] = None,
     limit: int = 100,
     offset: int = 0,
 ) -> dict[str, Any]:
-    """List users with plan, signup date, last login and LLM spend (USD)."""
+    """List users with plan, signup date, last login and LLM spend (USD).
+
+    ``view`` (ADMIN-MGMT E1) selects a lifecycle slice — ``active`` (the
+    default), ``suspended``, ``deleted`` or ``all``. The default matters: before
+    this change a soft-deleted account stayed mixed into the ordinary list, so
+    an operator reading the user table could not tell "this platform has N
+    customers" from "N customers plus the wreckage of past ones."
+
+    BACKWARD COMPATIBILITY is explicit rather than incidental: when the caller
+    supplies the legacy ``suspended`` boolean and NO ``view``, no lifecycle
+    predicate is applied at all — that call returns exactly the rows it returned
+    before this parameter existed. The ``active`` default only engages for a
+    caller that asked for neither.
+
+    ``counts`` is additive and deliberately NOT scoped to the selected view: it
+    reports every lifecycle bucket under the SAME ``q``/``plan`` search, which is
+    what a tab strip needs (the badge on the tab you are not looking at).
+    """
     _ensure_admin_schema()
     ensure_user_billing_backfill()
     limit = max(1, min(int(limit), 500))
     offset = max(0, int(offset))
+
+    view_key: Optional[str] = None
+    if view is not None:
+        view_key = str(view).strip().lower()
+        if view_key not in USER_VIEWS:
+            raise ValueError(
+                "view must be one of: " + ", ".join(sorted(USER_VIEWS))
+            )
+    elif suspended is None:
+        view_key = "active"
+
     where: list[str] = []
     params: list[Any] = []
     if query:
@@ -583,7 +623,19 @@ def list_users(
     if suspended is not None:
         where.append('u."suspended" = %s')
         params.append(suspended)
+
+    # The search filters (q/plan/suspended) WITHOUT the lifecycle predicate —
+    # this is what the per-bucket counts are computed over.
+    search_where = list(where)
+    search_params = list(params)
+
+    view_predicate = USER_VIEWS.get(view_key or "all")
+    if view_predicate:
+        where.append(view_predicate)
     where_sql = (" WHERE " + " AND ".join(where)) if where else ""
+    search_where_sql = (
+        (" WHERE " + " AND ".join(search_where)) if search_where else ""
+    )
 
     # Shared FROM+JOIN so the COUNT and row-fetch queries can never drift out
     # of sync (ML-admin-001): the `plan` filter references the joined alias
@@ -606,14 +658,36 @@ def list_users(
         ORDER BY u."createdAt" DESC
         LIMIT %s OFFSET %s
     '''
+    counts_sql = f'''
+        SELECT
+          count(*) FILTER (WHERE {USER_VIEWS["active"]})    AS active,
+          count(*) FILTER (WHERE {USER_VIEWS["suspended"]}) AS suspended,
+          count(*) FILTER (WHERE {USER_VIEWS["deleted"]})   AS deleted
+        {from_sql}{search_where_sql}
+    '''
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(f'SELECT count(*) {from_sql}{where_sql}', params)
             total = int(cur.fetchone()[0])
+            cur.execute(counts_sql, search_params)
+            crow = cur.fetchone()
+            counts = {
+                "active": int(crow[0] or 0),
+                "suspended": int(crow[1] or 0),
+                "deleted": int(crow[2] or 0),
+            }
             cur.execute(sql, [*params, limit, offset])
             rows = rows_to_dicts(cur)
     users = [_user_row(r) for r in rows]
-    return {"users": users, "total": total, "limit": limit, "offset": offset}
+    return {
+        "users": users,
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        # Additive (ADMIN-MGMT E1). Existing keys above are untouched.
+        "view": view_key,
+        "counts": counts,
+    }
 
 
 def _user_row(r: dict[str, Any]) -> dict[str, Any]:
@@ -1064,6 +1138,364 @@ def restore_user(cur: Any, user_id: str) -> dict[str, Any]:
     if not rows:
         raise LookupError("user is not deleted")
     return rows[0]
+
+
+# --------------------------------------------------------------------------- #
+# ADMIN-MGMT E1 — HARD purge (the step soft-delete deliberately stops short of)
+#
+# Derived from the 41-table census in
+# ``docs/delivery/PROD-PRISTINE-WIPE-MANIFEST-2026-08-15.md`` §1/§3, with every
+# table's key column re-verified against ``information_schema`` rather than
+# trusted from the document (the live schema has already drifted past that
+# census: ``AgentDirective``/``SalesAgent`` exist in production, ``RunPlan``/
+# ``NotificationDigest`` exist in the test schema).
+#
+# THREE DELIBERATE CHOICES, each of which would be a defect if made silently:
+#
+# 1. EXPLICIT per-table deletes, never FK cascade. ``ADR-PROD-TESTDATA-PURGE``
+#    C3 records cascade-reliance silently orphaning 40 rows on this exact
+#    schema, and 17 of these tables carry NO foreign key to ``User`` at all —
+#    cascade could not reach them even in principle.
+# 2. ORDERED children-before-parents. Only one constraint can actually abort a
+#    statement (``Application_resumeId_fkey`` is ``ON DELETE RESTRICT``), but the
+#    order below is child-first throughout so the transaction never depends on
+#    which constraints happen to be RESTRICT this month.
+# 3. SCHEMA-ADAPTIVE. Each entry declares the columns it needs and is SKIPPED
+#    when the running schema lacks them. A hard delete that crashes half-way
+#    because one lazy-DDL table was never created on this deployment is worse
+#    than one that reports honestly which tables it touched.
+#
+# ``AdminAuditLog`` is NOT in this list — the trail outlives the account, by
+# design. ``SalesLead`` is not deleted either: it is unlinked (see below).
+# --------------------------------------------------------------------------- #
+
+#: ``(table, required_columns, delete_sql)`` — ordered, children first. Every
+#: statement takes exactly one parameter: the target ``userId``.
+PURGE_CASCADE: tuple[tuple[str, tuple[str, ...], str], ...] = (
+    # --- keyed to a parent row rather than to the user directly ---------------
+    (
+        "ApplicationStatusEvent",
+        ("applicationId",),
+        'DELETE FROM "ApplicationStatusEvent" WHERE "applicationId" IN'
+        ' (SELECT "id" FROM "Application" WHERE "userId"=%s)',
+    ),
+    (
+        "JobEmbedding",
+        ("jobId",),
+        'DELETE FROM "JobEmbedding" WHERE "jobId" IN'
+        ' (SELECT "id" FROM "Job" WHERE "userId"=%s)',
+    ),
+    # --- user-keyed children of Application / Job / Contact -------------------
+    ("AnswerBankUsage", ("userId",), 'DELETE FROM "AnswerBankUsage" WHERE "userId"=%s'),
+    ("ApprovalRequest", ("userId",), 'DELETE FROM "ApprovalRequest" WHERE "userId"=%s'),
+    (
+        "InterviewSchedule",
+        ("userId",),
+        'DELETE FROM "InterviewSchedule" WHERE "userId"=%s',
+    ),
+    ("EmailThread", ("userId",), 'DELETE FROM "EmailThread" WHERE "userId"=%s'),
+    ("OutreachTask", ("userId",), 'DELETE FROM "OutreachTask" WHERE "userId"=%s'),
+    ("Offer", ("userId",), 'DELETE FROM "Offer" WHERE "userId"=%s'),
+    ("AgentRun", ("userId",), 'DELETE FROM "AgentRun" WHERE "userId"=%s'),
+    ("BackgroundJob", ("userId",), 'DELETE FROM "BackgroundJob" WHERE "userId"=%s'),
+    # --- Application MUST precede Resume (the one RESTRICT constraint) --------
+    ("Application", ("userId",), 'DELETE FROM "Application" WHERE "userId"=%s'),
+    ("Resume", ("userId",), 'DELETE FROM "Resume" WHERE "userId"=%s'),
+    ("Job", ("userId",), 'DELETE FROM "Job" WHERE "userId"=%s'),
+    ("Contact", ("userId",), 'DELETE FROM "Contact" WHERE "userId"=%s'),
+    # --- standalone user-owned product data -----------------------------------
+    ("AnswerBankItem", ("userId",), 'DELETE FROM "AnswerBankItem" WHERE "userId"=%s'),
+    (
+        "EvidenceCorpusItem",
+        ("userId",),
+        'DELETE FROM "EvidenceCorpusItem" WHERE "userId"=%s',
+    ),
+    ("StoryEntry", ("userId",), 'DELETE FROM "StoryEntry" WHERE "userId"=%s'),
+    ("CareerProfile", ("userId",), 'DELETE FROM "CareerProfile" WHERE "userId"=%s'),
+    ("JobSourceStatus", ("userId",), 'DELETE FROM "JobSourceStatus" WHERE "userId"=%s'),
+    ("AgentConfig", ("userId",), 'DELETE FROM "AgentConfig" WHERE "userId"=%s'),
+    ("AgentProvider", ("userId",), 'DELETE FROM "AgentProvider" WHERE "userId"=%s'),
+    ("AgentQuotaBlock", ("userId",), 'DELETE FROM "AgentQuotaBlock" WHERE "userId"=%s'),
+    ("AgentDirective", ("userId",), 'DELETE FROM "AgentDirective" WHERE "userId"=%s'),
+    ("RunPlan", ("userId",), 'DELETE FROM "RunPlan" WHERE "userId"=%s'),
+    (
+        "NotificationDigest",
+        ("userId",),
+        'DELETE FROM "NotificationDigest" WHERE "userId"=%s',
+    ),
+    # --- connected accounts + credentials (nothing here may outlive the user) --
+    ("GmailAccount", ("userId",), 'DELETE FROM "GmailAccount" WHERE "userId"=%s'),
+    ("GoogleCredential", ("userId",), 'DELETE FROM "GoogleCredential" WHERE "userId"=%s'),
+    (
+        "UserProviderCredential",
+        ("userId",),
+        'DELETE FROM "UserProviderCredential" WHERE "userId"=%s',
+    ),
+    (
+        "AnthropicOAuthState",
+        ("userId",),
+        'DELETE FROM "AnthropicOAuthState" WHERE "userId"=%s',
+    ),
+    (
+        "AnthropicOAuthToken",
+        ("userId",),
+        'DELETE FROM "AnthropicOAuthToken" WHERE "userId"=%s',
+    ),
+    (
+        "PasswordResetToken",
+        ("userId",),
+        'DELETE FROM "PasswordResetToken" WHERE "userId"=%s',
+    ),
+    (
+        "UserEntitlementOverride",
+        ("userId",),
+        'DELETE FROM "UserEntitlementOverride" WHERE "userId"=%s',
+    ),
+    # --- billing spine last: these have NO FK to User, so nothing else moves it -
+    ("UsageQuota", ("userId",), 'DELETE FROM "UsageQuota" WHERE "userId"=%s'),
+    ("Subscription", ("userId",), 'DELETE FROM "Subscription" WHERE "userId"=%s'),
+)
+
+#: Local ``Subscription.status`` values that mean money can still move. A row in
+#: one of these states WITH a ``stripeSubscriptionId`` is a live Stripe object
+#: this VM does not own; deleting the local row would strand it billing forever.
+BILLABLE_SUBSCRIPTION_STATUSES = ("active", "past_due", "trialing")
+
+CANCEL_FIRST_MESSAGE = (
+    "This account still has a live Stripe subscription "
+    "({status}). Cancel the Stripe subscription first "
+    "(POST /api/admin/users/{{id}}/subscription/cancel), then repeat this "
+    "action — deleting the local record would leave Stripe billing a customer "
+    "Aether can no longer see."
+)
+
+
+def _schema_columns(cur: Any) -> dict[str, set[str]]:
+    """``{table: {column, ...}}`` for the schemas on this connection's path.
+
+    The purge is driven off THIS, not off a hardcoded table list: the census the
+    cascade was derived from is already stale (see the module comment above), and
+    a stale list would either crash on a missing table or silently leave a
+    drifted-in table's rows behind. Both failure modes are invisible to the
+    caller; asking the database is not.
+    """
+    cur.execute(
+        "SELECT table_name, column_name FROM information_schema.columns"
+        " WHERE table_schema = ANY(current_schemas(false))"
+    )
+    out: dict[str, set[str]] = {}
+    for table, column in cur.fetchall():
+        out.setdefault(table, set()).add(column)
+    return out
+
+
+def billable_subscription(cur: Any, user_id: str) -> Optional[dict[str, Any]]:
+    """The user's live-billing ``Subscription`` row, or ``None``.
+
+    "Live" means BOTH a ``stripeSubscriptionId`` and a money-moving status: a
+    free-tier row, or a canceled one, or a row that only ever held a Stripe
+    *customer* object (the F5 case in the wipe manifest) carries no billing
+    obligation and must not block an admin from cleaning it up.
+    """
+    cur.execute(
+        'SELECT "id","planId","status","stripeSubscriptionId","stripeCustomerId"'
+        ' FROM "Subscription" WHERE "userId"=%s',
+        (user_id,),
+    )
+    for row in rows_to_dicts(cur):
+        if not row.get("stripeSubscriptionId"):
+            continue
+        if str(row.get("status") or "").strip().lower() in (
+            BILLABLE_SUBSCRIPTION_STATUSES
+        ):
+            return row
+    return None
+
+
+def purge_user_cascade(cur: Any, user_id: str) -> dict[str, int]:
+    """Delete every child row keyed to ``user_id``, on the CALLER'S cursor.
+
+    Returns ``{table: rows_deleted}`` for the tables that exist on this schema —
+    the per-table receipt the audit row and the API response both carry, so
+    "purged" is a countable claim rather than an assertion.
+
+    Does NOT delete the ``User`` row (see :func:`delete_user_row`) and does NOT
+    touch ``AdminAuditLog``.
+    """
+    columns = _schema_columns(cur)
+    counts: dict[str, int] = {}
+    for table, required, sql in PURGE_CASCADE:
+        present = columns.get(table)
+        if not present or not set(required).issubset(present):
+            continue
+        cur.execute(sql, (user_id,))
+        counts[table] = int(cur.rowcount or 0)
+
+    # SalesLead is UNLINKED, never deleted. Its rows carry consent evidence and
+    # unsubscribe/suppression obligations that outlive any account (the wipe
+    # manifest's F3 reasoning) — destroying them to tidy up a user record would
+    # discard exactly the proof those obligations rest on. The ``userId`` link is
+    # a convenience backfill by email match, so dropping it loses nothing.
+    sales_lead = columns.get("SalesLead")
+    if sales_lead and "userId" in sales_lead:
+        cur.execute(
+            'UPDATE "SalesLead" SET "userId"=NULL WHERE "userId"=%s', (user_id,)
+        )
+        counts["SalesLead(unlinked)"] = int(cur.rowcount or 0)
+    return counts
+
+
+def delete_user_row(cur: Any, user_id: str) -> int:
+    """Hard-delete the ``User`` row itself. Returns rows removed (0 or 1)."""
+    cur.execute('DELETE FROM "User" WHERE "id"=%s', (user_id,))
+    return int(cur.rowcount or 0)
+
+
+def delete_billing_records(cur: Any, user_id: str) -> dict[str, int]:
+    """Delete the local ``Subscription`` + ``UsageQuota`` rows for one userId.
+
+    Deliberately keyed on ``userId`` ALONE and never joined to ``User``: the
+    single most useful case is the orphan — a billing pair whose owner was
+    deleted by some earlier process (the manifest's F4). Requiring the user to
+    exist would make this route useless for exactly the mess it exists to clear.
+    """
+    cur.execute('DELETE FROM "Subscription" WHERE "userId"=%s', (user_id,))
+    subscriptions = int(cur.rowcount or 0)
+    cur.execute('DELETE FROM "UsageQuota" WHERE "userId"=%s', (user_id,))
+    quotas = int(cur.rowcount or 0)
+    return {"subscription": subscriptions, "usageQuota": quotas}
+
+
+# --------------------------------------------------------------------------- #
+# ADMIN-MGMT E1 — hygiene report (read-only) + orphan purge
+# --------------------------------------------------------------------------- #
+
+#: Sample size returned alongside each hygiene count. Small on purpose: the
+#: report is a pointer to work, not a data export.
+_HYGIENE_SAMPLE = 10
+
+
+#: ``userId``s holding a ``Subscription``/``UsageQuota`` row with NO ``User`` row.
+#: Neither billing table carries a foreign key to ``User`` (17 tables share that
+#: gap on this schema), so a user deleted by any path that predates
+#: :func:`purge_user_cascade` leaves this pair behind — invisible to every
+#: user-facing screen and still counted by billing reads.
+_ORPHAN_BILLING_FROM = (
+    ' FROM ('
+    '   SELECT "userId", max("createdAt") AS ts FROM ('
+    '     SELECT "userId","createdAt" FROM "Subscription"'
+    '     UNION ALL SELECT "userId","createdAt" FROM "UsageQuota"'
+    "   ) x GROUP BY \"userId\""
+    ' ) b LEFT JOIN "User" u ON u."id" = b."userId"'
+    ' WHERE u."id" IS NULL'
+)
+
+
+def orphan_billing_count(cur: Any) -> int:
+    """How many distinct userIds hold owner-less billing rows."""
+    cur.execute("SELECT count(*)" + _ORPHAN_BILLING_FROM)
+    return int(cur.fetchone()[0])
+
+
+def orphan_billing_sample(cur: Any, limit: int) -> list[str]:
+    """Up to ``limit`` orphaned userIds, MOST RECENT FIRST.
+
+    Ordering is load-bearing rather than cosmetic: on a long-lived database the
+    orphan set can run to tens of thousands of rows accumulated over years, and
+    a sample sorted by id would show the same ancient ten forever while the
+    orphan created this morning — the one an operator is actually looking for —
+    stayed invisible.
+    """
+    cur.execute(
+        'SELECT b."userId"' + _ORPHAN_BILLING_FROM + " ORDER BY b.ts DESC LIMIT %s",
+        (int(limit),),
+    )
+    return [r[0] for r in cur.fetchall()]
+
+
+def hygiene_report() -> dict[str, Any]:
+    """Read-only stale-data report. Counts + small samples, cheap SQL only.
+
+    Writes nothing and recommends nothing implicitly: every class it names has a
+    matching explicit route an admin must choose to call.
+    """
+    _ensure_admin_schema()
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute('SELECT count(*) FROM "User" WHERE "deletedAt" IS NOT NULL')
+            soft_count = int(cur.fetchone()[0])
+            cur.execute(
+                'SELECT "id","email","deletedAt" FROM "User"'
+                ' WHERE "deletedAt" IS NOT NULL'
+                ' ORDER BY "deletedAt" DESC LIMIT %s',
+                (_HYGIENE_SAMPLE,),
+            )
+            soft_sample = [
+                {
+                    "id": r[0],
+                    "email": r[1],
+                    "deletedAt": r[2].isoformat() if r[2] else None,
+                }
+                for r in cur.fetchall()
+            ]
+
+            orphan_count = orphan_billing_count(cur)
+            orphan_sample = orphan_billing_sample(cur, _HYGIENE_SAMPLE)
+
+            cur.execute(
+                'SELECT count(*) FROM "Subscription" WHERE "status"=%s', ("canceled",)
+            )
+            canceled = int(cur.fetchone()[0])
+
+            cur.execute(
+                'SELECT count(*) FROM "User" WHERE "lastLoginAt" IS NULL'
+                ' AND "createdAt" < now() - interval \'30 days\''
+                ' AND "deletedAt" IS NULL'
+            )
+            never_logged_in = int(cur.fetchone()[0])
+
+    return {
+        "softDeletedUsers": {"count": soft_count, "sample": soft_sample},
+        "orphanedBillingPairs": {"count": orphan_count, "sample": orphan_sample},
+        "canceledSubscriptions": {"count": canceled},
+        "neverLoggedIn30d": {"count": never_logged_in},
+    }
+
+
+def purge_orphan_billing(cur: Any) -> dict[str, Any]:
+    """Delete ONLY the owner-less ``Subscription``/``UsageQuota`` rows.
+
+    Scoped by the "no ``User`` row exists" predicate and nothing else — it can
+    never reach a row belonging to a live account, whatever that account's plan,
+    status or Stripe state. Runs on the caller's cursor so the deletion and its
+    audit row commit together.
+    """
+    cur.execute(
+        'DELETE FROM "Subscription" s'
+        ' WHERE NOT EXISTS (SELECT 1 FROM "User" u WHERE u."id" = s."userId")'
+        ' RETURNING s."userId"'
+    )
+    removed: set[str] = {r[0] for r in cur.fetchall()}
+    subscriptions = len(removed)
+    cur.execute(
+        'DELETE FROM "UsageQuota" q'
+        ' WHERE NOT EXISTS (SELECT 1 FROM "User" u WHERE u."id" = q."userId")'
+        ' RETURNING q."userId"'
+    )
+    quota_ids = [r[0] for r in cur.fetchall()]
+    quotas = len(quota_ids)
+    removed.update(quota_ids)
+    # The ids are SAMPLED, not enumerated: this set can run to tens of thousands
+    # on a long-lived database, and neither an HTTP response nor an audit row is
+    # the right place for a bulk export. The counts are exact; the sample is a
+    # handle for eyeballing what went.
+    sample = sorted(removed)[:_HYGIENE_SAMPLE]
+    return {
+        "userIds": sample,
+        "userIdCount": len(removed),
+        "subscription": subscriptions,
+        "usageQuota": quotas,
+    }
 
 
 # --------------------------------------------------------------------------- #
