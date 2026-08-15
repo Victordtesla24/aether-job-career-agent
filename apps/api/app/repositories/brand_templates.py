@@ -25,10 +25,6 @@ def _is_editable_kind(kind: str) -> bool:
     return kind == _EDITABLE_KIND
 
 
-def _editable_kind_error() -> str:
-    return "Only auto_reply supports persistent body, footnote, and footer overrides."
-
-
 _ADVISORY_LOCK = 7420240730
 _ready = False
 
