@@ -1,0 +1,12 @@
+# Fires the sales agent every 30 minutes, offset to :15/:45 so it does not
+# contend with aether-discovery.timer (:00/:30) for DB connections/LLM budget.
+[Unit]
+Description=Run the Aether Sales Agent every 30 minutes
+
+[Timer]
+OnCalendar=*-*-* *:15/30
+Persistent=true
+RandomizedDelaySec=60
+
+[Install]
+WantedBy=timers.target
