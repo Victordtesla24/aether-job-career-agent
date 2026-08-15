@@ -26,8 +26,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../../../../lib/api/client";
 
 vi.mock("next/link", () => ({
-  default: ({ href, children }: { href: string; children: React.ReactNode }) => (
-    <a href={String(href)}>{children}</a>
+  // `...rest` is passed through so a `data-testid` on a <Link> reaches the DOM
+  // the way it does in the real component.
+  default: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => (
+    <a href={String(href)} {...rest}>
+      {children}
+    </a>
   ),
 }));
 
@@ -216,5 +220,24 @@ describe("status toggle IS the delete", () => {
     expect(within(row).getByRole("link", { name: /report/i }).getAttribute("href")).toBe(
       "/admin/sales-agents/agent-1",
     );
+  });
+});
+
+/**
+ * REFIX ROUND 1. This page carries a cross-link to `/admin/sales-agent`
+ * (singular) so neither sales surface is lost. FE-2 described that page as an
+ * external, Google-Sheet-driven process with no backend here — true of the
+ * placeholder it was written against, false the moment `origin/main@382f0c2`
+ * replaced it with the native in-app Sales AI Agent (real Gmail sends behind a
+ * shadow/LIVE switch). The cross-link must describe the destination as it is.
+ */
+describe("the cross-link to the singular sales-agent page", () => {
+  it("points at /admin/sales-agent and describes it as the native in-app agent", async () => {
+    await renderPage();
+    const link = screen.getByTestId("admin-sales-agents-native-link");
+    expect(link.getAttribute("href")).toBe("/admin/sales-agent");
+    const copy = (link.parentElement?.textContent ?? "").toLowerCase();
+    expect(copy).toMatch(/in-app|native/);
+    expect(copy).not.toMatch(/external|google sheet|google-sheet|outside this app/);
   });
 });

@@ -23,6 +23,11 @@ export interface AdminNavItem {
   pending?: boolean;
   /** REQUIRED when `pending`. Rendered as the row's title attribute. */
   pendingReason?: string;
+  /**
+   * One line saying which system this section is, for rows whose label alone
+   * cannot separate them from a neighbour. Rendered as the link's title.
+   */
+  hint?: string;
 }
 
 /**
@@ -43,14 +48,29 @@ export interface AdminNavItem {
  * FE-2 flipped PROMOS the same way: `app/admin/promos/page.tsx` now exists, so
  * the entry is a real link.
  *
- * TWO DIFFERENT THINGS WERE COLLIDING ON "SALES AGENTS". The BE-2 reseller
- * surface (referral codes, attributed signups, commission reports) lives at
- * `/admin/sales-agents`; the older `/admin/sales-agent` (singular) is a
- * read-only window onto the EXTERNAL growth engine — a Google-Sheet-driven
- * outreach process that runs outside this app and has no backend here. They are
- * unrelated systems with unrelated sources of truth, so each keeps its route and
- * carries the name that describes it. `admin-nav.test.tsx` pins the order, both
- * hrefs, and that nothing already reachable became unreachable.
+ * TWO DIFFERENT SALES SYSTEMS LIVE IN THIS CONSOLE, and the nav must not blur
+ * them. `/admin/sales-agents` (plural) is the ADMIN-2.0 BE-2 RESELLER surface:
+ * human resellers, referral codes, attributed signups, commission reports. It
+ * moves no money and sends no mail. `/admin/sales-agent` (singular) is the
+ * NATIVE SALES AI AGENT console: an in-app autonomous outreach agent with its
+ * own tables, a 30-minute systemd timer, an admin "Run now", and real Gmail
+ * sends gated by a shadow/LIVE switch. Unrelated systems, unrelated sources of
+ * truth — so each keeps its own route, its own name, and a `hint` saying which
+ * one it is, because "Sales agents" and "Sales AI agent" are not
+ * self-disambiguating on adjacent rows.
+ *
+ * REFIX ROUND 1 — WHY THAT WORDING CHANGED. Until `origin/main@382f0c2`, the
+ * singular route was a placeholder and this file called it "Growth engine", a
+ * "read-only window onto the EXTERNAL growth engine ... that has no backend
+ * here". `382f0c2` replaced that placeholder with the native agent described
+ * above, which made the label and the description false — an admin nav calling
+ * a live outbound-email console an inert external window is precisely the kind
+ * of fabricated claim this programme forbids. Both are corrected here as part
+ * of merging that commit, rather than carried forward.
+ *
+ * `admin-nav.test.tsx` pins the order, both hrefs, both labels, the presence of
+ * both hints, that the singular entry is never again described as external, and
+ * that nothing already reachable became unreachable.
  */
 export const ADMIN_NAV: readonly AdminNavItem[] = [
   { href: "/admin", label: "Dashboard" },
@@ -63,8 +83,16 @@ export const ADMIN_NAV: readonly AdminNavItem[] = [
     pendingReason:
       "The platform-wide billing screen is not built yet. Its API (GET /admin/billing/summary) is live, and per-user billing truth is on each user's detail page; this screen ships in a later ADMIN-2.0 slice.",
   },
-  { href: "/admin/sales-agents", label: "Sales agents" },
-  { href: "/admin/sales-agent", label: "Growth engine" },
+  {
+    href: "/admin/sales-agents",
+    label: "Sales agents",
+    hint: "Human resellers: referral codes, attributed signups and commission reports. Reporting only — it pays nobody.",
+  },
+  {
+    href: "/admin/sales-agent",
+    label: "Sales AI agent",
+    hint: "The native in-app outreach agent: campaigns, leads, outreach log and LinkedIn drafts. It sends real email whenever it is not in shadow mode.",
+  },
   { href: "/admin/promos", label: "Promos" },
   { href: "/admin/spend", label: "Spend" },
   { href: "/admin/health", label: "Health" },
@@ -126,6 +154,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
               <Link
                 key={item.href}
                 href={item.href}
+                title={item.hint}
                 onClick={() => setMobileNavOpen(false)}
                 className={`rounded-md px-3 py-2 text-sm transition-colors ${
                   isActive(pathname, item.href)

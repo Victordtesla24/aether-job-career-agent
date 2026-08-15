@@ -22,10 +22,16 @@
  * own — a "conversion rate" computed client-side over three accounts would be a
  * precise-looking reading of nothing.
  *
- * NOT TO BE CONFUSED WITH /admin/sales-agent (singular), which is a read-only
- * window onto the external growth engine — a Google-Sheet-driven outreach
- * process that runs outside this app entirely. Different system, different
- * source of truth; linked below so neither is lost.
+ * NOT TO BE CONFUSED WITH /admin/sales-agent (singular), which since
+ * `origin/main@382f0c2` is the NATIVE in-app Sales AI Agent console — an
+ * autonomous outreach agent with its own campaigns, leads and outreach log that
+ * sends real email whenever it is not in shadow mode. Different system,
+ * different source of truth, and the one that can actually contact a stranger;
+ * linked below so neither is lost. (Before `382f0c2` that route was a
+ * placeholder for an external, Google-Sheet-driven process with no backend in
+ * this repo, which is how FE-2 originally described it here. That description
+ * stopped being true when the native agent landed, so it is corrected rather
+ * than carried forward.)
  */
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -389,11 +395,17 @@ export default function AdminSalesAgentsPage() {
       </div>
 
       <p className="type-meta mt-4">
-        Looking for the external outreach process instead?{" "}
-        <Link href="/admin/sales-agent" className="text-aether-coral hover:underline">
-          Growth engine
+        Looking for the autonomous outreach agent instead?{" "}
+        <Link
+          href="/admin/sales-agent"
+          data-testid="admin-sales-agents-native-link"
+          className="text-aether-coral hover:underline"
+        >
+          Sales AI agent
         </Link>{" "}
-        — a separate, Google-Sheet-driven system that runs outside this app.
+        — the native in-app agent that works campaigns and leads, and sends real
+        email whenever it is not in shadow mode. A separate system from the
+        resellers on this page.
       </p>
     </div>
   );

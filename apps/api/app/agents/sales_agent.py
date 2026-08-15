@@ -46,7 +46,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
-from app.db import get_connection
+from app.db import ensure_user_lifecycle_columns, get_connection
 from app.repositories.agent_run import AgentRunRepository
 from app.repositories.sales import (
     DuplicateSendError,
@@ -495,7 +495,23 @@ class SalesAgent:
           the current period start (genuinely near the Free cap).
         * ``reengagement`` — account older than 14 days with no agent run in
           the last 14 days.
+
+        DELETED ACCOUNTS ARE NOT CANDIDATES. ADMIN-2.0 added ``User.deletedAt``,
+        a SOFT delete — a hard delete is impossible because eight child tables
+        cascade off ``User.id``, so the row stays behind after an admin deletes
+        the account. Without the filter below this sweep would keep selecting
+        that row and, in LIVE mode, send a real marketing email to someone the
+        operator believes is gone. The column post-dates this agent, so
+        ``ensure_user_lifecycle_columns()`` runs first per its own contract
+        (lazy DDL, ADR-TR-1 — a timer-triggered run can reach this line before
+        any /admin request has ever touched the column in this worker).
+
+        ``suspended`` is deliberately NOT filtered here — see
+        ``tests/test_admin2_sales_coexistence.py`` for why that gap is
+        pre-existing on ``origin/main`` and is reported rather than widened
+        into from this branch.
         """
+        ensure_user_lifecycle_columns()
         sql = '''
             SELECT u."id", u."email", u."name",
                    COALESCE(s."currentPeriodStart", NOW() - interval '30 days')
@@ -512,6 +528,7 @@ class SalesAgent:
             LEFT JOIN "AgentRun" r ON r."userId" = u."id"
             WHERE LOWER(p."name") = 'free'
               AND u."email" IS NOT NULL
+              AND u."deletedAt" IS NULL
             GROUP BY u."id", u."email", u."name", s."currentPeriodStart",
                      u."createdAt"
         '''
