@@ -390,6 +390,9 @@ describe("U5 manualStepLabel", () => {
     expect(manualStepLabel("no_confirmation")).toBe(
       "Aether submitted the form but the site did not confirm it",
     );
+    expect(manualStepLabel("verification_code_email")).toBe(
+      "The employer emailed a verification code to finish this application",
+    );
   });
 
   it("de-slugifies an unknown reason instead of hiding it behind a vague label", () => {

@@ -259,6 +259,10 @@ const MANUAL_STEP_LABELS: Readonly<Record<string, string>> = {
   no_automatable_channel: "No automatic submission path exists for this posting yet",
   submit_control_not_found: "Aether filled the form but could not find its submit button",
   no_confirmation: "Aether submitted the form but the site did not confirm it",
+  // U5d-4: the site held the application for a code it emailed, and Aether
+  // could not read that code out of the user's own connected Gmail. The detail
+  // recorded alongside says which employer and which address to look in.
+  verification_code_email: "The employer emailed a verification code to finish this application",
   // ORCHESTRATOR RULING U5-F3: an ASSISTED channel is not a failure — the
   // artifacts are done and only the click is the user's.
   assisted_manual_submit: "Ready to submit — this platform needs your click",
