@@ -158,30 +158,42 @@ def test_admin_can_list_and_update_catalog_plan_prices_with_an_audit_row(client)
     assert starter["priceAudMonthly"] == 19.0
     assert starter["priceAudAnnual"] == 179.0
 
-    changed = client.put(
-        "/admin/plans/starter/pricing",
-        json={"priceAudMonthly": 21.5, "priceAudAnnual": 199.0},
-        headers=admin_headers,
-    )
-    assert changed.status_code == 200, changed.text
-    assert changed.json() == {
-        "id": "starter",
-        "name": "Starter",
-        "priceAudMonthly": 21.5,
-        "priceAudAnnual": 199.0,
-        "currency": "AUD",
-    }
+    # MP-013: the Plan catalog is process-global state (seeded once per worker,
+    # NOT truncated between tests), so this mutation must be restored or every
+    # later test that prices against the live catalog (e.g. the billing-summary
+    # MRR arithmetic) inherits 21.5/199.0 instead of the ratified 19/179.
+    try:
+        changed = client.put(
+            "/admin/plans/starter/pricing",
+            json={"priceAudMonthly": 21.5, "priceAudAnnual": 199.0},
+            headers=admin_headers,
+        )
+        assert changed.status_code == 200, changed.text
+        assert changed.json() == {
+            "id": "starter",
+            "name": "Starter",
+            "priceAudMonthly": 21.5,
+            "priceAudAnnual": 199.0,
+            "currency": "AUD",
+        }
 
-    reloaded = client.get("/admin/plans", headers=admin_headers)
-    starter = next(plan for plan in reloaded.json()["plans"] if plan["id"] == "starter")
-    assert starter["priceAudMonthly"] == 21.5
-    assert starter["priceAudAnnual"] == 199.0
+        reloaded = client.get("/admin/plans", headers=admin_headers)
+        starter = next(plan for plan in reloaded.json()["plans"] if plan["id"] == "starter")
+        assert starter["priceAudMonthly"] == 21.5
+        assert starter["priceAudAnnual"] == 199.0
 
-    audit = _audit_rows("starter")
-    row = next(entry for entry in audit if entry["action"] == "update_plan_pricing")
-    assert row["actor"] == admin_id
-    assert row["detail"]["before"] == {"priceAudMonthly": 19.0, "priceAudAnnual": 179.0}
-    assert row["detail"]["after"] == {"priceAudMonthly": 21.5, "priceAudAnnual": 199.0}
+        audit = _audit_rows("starter")
+        row = next(entry for entry in audit if entry["action"] == "update_plan_pricing")
+        assert row["actor"] == admin_id
+        assert row["detail"]["before"] == {"priceAudMonthly": 19.0, "priceAudAnnual": 179.0}
+        assert row["detail"]["after"] == {"priceAudMonthly": 21.5, "priceAudAnnual": 199.0}
+    finally:
+        restored = client.put(
+            "/admin/plans/starter/pricing",
+            json={"priceAudMonthly": 19.0, "priceAudAnnual": 179.0},
+            headers=admin_headers,
+        )
+        assert restored.status_code == 200, restored.text
 
 
 @pytest.mark.parametrize(

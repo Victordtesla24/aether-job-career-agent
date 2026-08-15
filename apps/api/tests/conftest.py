@@ -316,6 +316,12 @@ _TABLES_TO_CLEAN = (
     # tests keeps the signup-enabled default (true) isolated per test. Append-only
     # AdminAuditLog is deliberately NOT truncated (tests filter by actor id).
     '"AdminSetting"',
+    # MP-012: created lazily by SalesRepository, but MUST be truncated when it
+    # exists — the poster create/reuse contract asserts the FIRST identical
+    # POST inserts (201). A row persisted from a previous run turns that first
+    # POST into a reuse (200). The existence filter below already skips it
+    # while the table has not been created yet.
+    '"SalesBrandArtifact"',
     # '"OutreachTask"',  # created lazily; may not exist yet
     # '"InterviewSchedule"',  # created lazily; may not exist yet
 )
