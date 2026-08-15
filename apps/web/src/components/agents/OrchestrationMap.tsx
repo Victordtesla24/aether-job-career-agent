@@ -1085,7 +1085,7 @@ function MapGraph({
                   fill="none"
                   stroke={
                     e.state === "active"
-                      ? "#FF6B35"
+                      ? "#C9A84C"
                       : e.state === "planned"
                         ? "rgba(255,255,255,0.07)"
                         : "rgba(255,255,255,0.13)"
@@ -1099,7 +1099,7 @@ function MapGraph({
                     run — and the global prefers-reduced-motion block freezes it
                     for a viewer who asked for stillness. */}
                 {e.state === "active" ? (
-                  <circle r="3.5" fill="#FF6B35">
+                  <circle r="3.5" fill="#C9A84C">
                     <animateMotion dur="2.2s" repeatCount="indefinite" path={edgePath(e)} />
                   </circle>
                 ) : null}

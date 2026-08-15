@@ -993,7 +993,7 @@ export default function SettingsClient({
                     value={agentConfig.matchThreshold}
                     data-testid="threshold-slider"
                     onChange={(e) => setAgentConfig((c) => ({ ...c, matchThreshold: Number(e.target.value) }))}
-                    className="w-full accent-[#FF6B35]"
+                    className="w-full accent-[#C9A84C]"
                     aria-label="Match threshold"
                   />
                   {/* INERT-CONFIG-001: persisted but not yet read by any

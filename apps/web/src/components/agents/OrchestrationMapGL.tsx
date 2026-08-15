@@ -35,7 +35,7 @@ const PARTICLE_PERIOD_S = 2.2; // matches the SVG fallback's animateMotion dur
 const CURVE_SAMPLES = 48;
 
 const COLOR = {
-  active: new THREE.Color("#FF6B35"),
+  active: new THREE.Color("#C9A84C"),
   idle: new THREE.Color("#8B8BA3"),
   planned: new THREE.Color("#5A5A6E"),
   // S-UI aesthetics slice: a live node's aura is CORAL, matching the map's own
@@ -43,7 +43,7 @@ const COLOR = {
   // DOM node's live dot and its CSS bloom. It was green, so the GPU layer and
   // the DOM layer disagreed on the colour of the single most important state
   // on the page. Presentation only — nothing decides WHICH nodes are live here.
-  live: new THREE.Color("#FF6B35"),
+  live: new THREE.Color("#C9A84C"),
 } as const;
 
 export interface GlEdge {

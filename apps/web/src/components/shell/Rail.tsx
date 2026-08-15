@@ -227,12 +227,14 @@ export function Rail({
           collapsed ? "flex-col items-center" : "items-center px-2"
         }`}
       >
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-aether-coral to-aether-amber">
-          <i className="fa-solid fa-bolt text-[13px] text-white" aria-hidden="true" />
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-gold to-gold-dark">
+          <i className="fa-solid fa-bolt text-[13px] text-[#0a0a0a]" aria-hidden="true" />
         </div>
         {collapsed ? null : (
           <div className="min-w-0 flex-1">
-            <div className="truncate text-[14px] font-semibold leading-none">Aether</div>
+            <div className="truncate font-display text-[15px] font-semibold uppercase leading-none tracking-[0.08em]">
+              Aether
+            </div>
             <div className="type-meta mt-1 truncate">Career Agent</div>
           </div>
         )}

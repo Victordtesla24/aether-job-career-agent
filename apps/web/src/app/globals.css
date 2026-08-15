@@ -2,12 +2,99 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ==========================================================================
+   AETHER CAREER DESIGN SYSTEM — obsidian & gilt.
+   Self-hosted brand faces (apps/web/public/fonts/ab), served same-origin so
+   builds never require network access. AB Marquee = display (all-caps stencil);
+   AB Sans = body/UI. JetBrains Mono (the data face) is loaded via <link>.
+   ========================================================================== */
+@font-face {
+  font-family: "AB Sans";
+  src: url("/fonts/ab/AB-Sans-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "AB Sans";
+  src: url("/fonts/ab/AB-Sans-Medium.ttf") format("truetype");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "AB Sans";
+  src: url("/fonts/ab/AB-Sans-Bold.ttf") format("truetype");
+  font-weight: 600 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "AB Marquee";
+  src: url("/fonts/ab/AB-Marquee-Medium.ttf") format("truetype");
+  font-weight: 400 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "AB Marquee";
+  src: url("/fonts/ab/AB-Marquee-Bold.ttf") format("truetype");
+  font-weight: 600 900;
+  font-style: normal;
+  font-display: swap;
+}
+
 /*
  * Global shell styling. Values are lifted directly from the approved wireframe
  * at design/screens/dashboard.html to keep the implementation faithful.
  */
 :root {
   color-scheme: dark;
+
+  /* ── Aether Career Design System semantic tokens (obsidian & gilt).
+     Exposed globally so any page can reference var(--gold), var(--surface-card)
+     etc. Mirrors ~/aether_design_system/tokens/colors.css. ── */
+  --ink-0: #08080a;
+  --ink-1: #0f0f12;
+  --ink-2: #16161a;
+  --ink-3: #1e1e23;
+  --ink-4: #26262c;
+  --gold: #c9a84c;
+  --gold-light: #d4b65c;
+  --gold-pale: #e8d5a3;
+  --gold-dark: #b0923f;
+  --gold-muted: rgba(201, 168, 76, 0.08);
+  --gold-border: rgba(201, 168, 76, 0.2);
+  --gold-border-strong: rgba(201, 168, 76, 0.45);
+  --gold-glow: rgba(201, 168, 76, 0.3);
+  --sapphire: #3e5a8c;
+  --sapphire-light: #8fa8ce;
+  --burgundy: #722f37;
+  --burgundy-light: #b9707a;
+  --fg-1: #f5f1e8;
+  --fg-2: rgba(245, 241, 232, 0.62);
+  --fg-3: rgba(245, 241, 232, 0.46);
+  --fg-4: rgba(245, 241, 232, 0.34);
+  --state-ok: #6faf8d;
+  --state-warn: #c8873a;
+  --state-danger: #b9544b;
+  --state-info: #7c93be;
+  --state-neutral: #8c8a82;
+  --state-degraded: #a08cb4;
+  --surface-page: var(--ink-0);
+  --surface-card: var(--ink-1);
+  --surface-raised: var(--ink-2);
+  --surface-hover: var(--ink-3);
+  --surface-well: var(--ink-4);
+  --text-primary: var(--fg-1);
+  --text-secondary: var(--fg-2);
+  --text-muted: var(--fg-3);
+  --accent: var(--gold);
+  --accent-on: #0a0a0a;
+  --link: var(--gold);
+  --focus-ring: var(--gold);
+  --font-display: "AB Marquee", "Playfair Display", Georgia, serif;
+  --font-body: "AB Sans", "DM Sans", system-ui, sans-serif;
 
   /* S-UI §2.1/§2.7 — the elevated token set. ADDITIVE: nothing below
      re-points an existing class, so every page that has not migrated yet
@@ -52,19 +139,19 @@
 }
 
 body {
-  font-family: "Inter", system-ui, sans-serif;
-  background-color: #0a0a0f;
-  color: #f4f4f8;
+  font-family: "AB Sans", "Inter", system-ui, sans-serif;
+  background-color: #08080a;
+  color: #f5f1e8;
   background-image:
-    radial-gradient(1200px 600px at 80% -10%, rgba(79, 70, 229, 0.1), transparent 60%),
-    radial-gradient(1000px 500px at -5% 10%, rgba(255, 107, 53, 0.08), transparent 55%),
-    /* VIGNETTE. Linear (#08090a) and Raycast (#07080a) both read as deep
-       rather than flat because their ground is not one uniform value — it
-       falls off toward the frame, so the content column is the lit part of
-       the picture. Layered ABOVE the base ramp and BELOW the two brand
+    /* Gilt bloom at top-left, royal-sapphire counterweight at top-right —
+       the obsidian & gilt atmosphere (was coral + electric indigo). */
+    radial-gradient(1000px 500px at 88% -10%, rgba(62, 90, 140, 0.14), transparent 62%),
+    radial-gradient(1100px 560px at -5% 6%, rgba(201, 168, 76, 0.1), transparent 58%),
+    /* VIGNETTE — the ground falls off toward the frame so the content column
+       is the lit part of the picture. Above the base ramp, below the brand
        radials, so it deepens the ground without muddying the hue. */
-      radial-gradient(125% 95% at 50% 38%, transparent 42%, rgba(0, 0, 0, 0.45) 100%),
-    linear-gradient(180deg, #0a0a0f 0%, #12121c 100%);
+      radial-gradient(125% 95% at 50% 38%, transparent 42%, rgba(0, 0, 0, 0.5) 100%),
+    linear-gradient(180deg, #08080a 0%, #0f0f12 100%);
   background-attachment: fixed;
   min-height: 100vh;
 }
@@ -92,13 +179,13 @@ body {
 
 @keyframes pulse-ring {
   0% {
-    box-shadow: 0 0 0 0 rgba(255, 107, 53, 0.35);
+    box-shadow: 0 0 0 0 rgba(201, 168, 76, 0.35);
   }
   70% {
-    box-shadow: 0 0 0 8px rgba(255, 107, 53, 0);
+    box-shadow: 0 0 0 8px rgba(201, 168, 76, 0);
   }
   100% {
-    box-shadow: 0 0 0 0 rgba(255, 107, 53, 0);
+    box-shadow: 0 0 0 0 rgba(201, 168, 76, 0);
   }
 }
 
@@ -130,18 +217,18 @@ body {
 
 /*
  * Accessibility overrides (Phase 4, fix iteration 2).
- * DEF-053: solid coral fills get dark text (white on #FF6B35 is 2.84:1; #1A1A22 is 6.1:1).
+ * DEF-053: solid gilt fills get dark text (--accent-on #0A0A0A on gold).
  * DEF-051: muted caption token lightened in tailwind.config.ts (#8B8BA3 = 5.8:1).
- * Violet caption text lightened to #A78BFA (7C3AED on dark bg is 3.45:1).
+ * Sapphire-light caption text stays readable on obsidian (#8FA8CE).
  */
 .bg-aether-coral {
-  color: #1a1a22 !important;
+  color: #0a0a0a !important;
 }
 .bg-aether-coral * {
   color: inherit !important;
 }
 .text-aether-violet {
-  color: #a78bfa !important;
+  color: #8fa8ce !important;
 }
 
 /*
@@ -171,7 +258,7 @@ body {
     min-width: 44px;
     height: 44px;
     flex-shrink: 0;
-    accent-color: #ff6b35;
+    accent-color: #c9a84c;
   }
   /* DEF-020 (+W-E): guard against stray horizontal overflow on small
      screens — user-generated content (email bodies, long unbroken strings)
@@ -216,10 +303,24 @@ body {
 /* §2.2 — typography roles. Numerals are a typeface, not text (Rule D-γ):
    every numeric role below carries `tabular-nums`. */
 .type-page {
+  /* Aether DS: page titles are the display face, ALL CAPS, positive tracking. */
+  font-family: var(--font-display);
   font-size: 22px;
   line-height: 1.2;
   font-weight: 600;
-  letter-spacing: -0.02em;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.type-display {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.type-card-title {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 600;
 }
 .type-page-sub {
   font-size: 13px;
@@ -255,13 +356,13 @@ body {
  */
 @keyframes pulse-ok-ring {
   0% {
-    box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.4);
+    box-shadow: 0 0 0 0 rgba(111, 175, 141, 0.4);
   }
   70% {
-    box-shadow: 0 0 0 6px rgba(52, 211, 153, 0);
+    box-shadow: 0 0 0 6px rgba(111, 175, 141, 0);
   }
   100% {
-    box-shadow: 0 0 0 0 rgba(52, 211, 153, 0);
+    box-shadow: 0 0 0 0 rgba(111, 175, 141, 0);
   }
 }
 .pulse-ok {
@@ -348,10 +449,10 @@ body {
   z-index: 0;
   pointer-events: none;
   background:
-    radial-gradient(30% 40% at 19% 55%, rgba(255, 107, 53, 0.34), transparent 62%),
-    radial-gradient(80% 86% at 13% 58%, rgba(255, 107, 53, 0.09), transparent 74%),
-    radial-gradient(26% 34% at 42% 33%, rgba(251, 191, 36, 0.17), transparent 66%),
-    radial-gradient(46% 58% at 88% 38%, rgba(139, 92, 246, 0.2), transparent 70%);
+    radial-gradient(30% 40% at 19% 55%, rgba(201, 168, 76, 0.34), transparent 62%),
+    radial-gradient(80% 86% at 13% 58%, rgba(201, 168, 76, 0.09), transparent 74%),
+    radial-gradient(26% 34% at 42% 33%, rgba(232, 213, 163, 0.16), transparent 66%),
+    radial-gradient(46% 58% at 88% 38%, rgba(62, 90, 140, 0.22), transparent 70%);
   filter: blur(26px);
 }
 /*
@@ -372,8 +473,8 @@ body {
   pointer-events: none;
   background: linear-gradient(
     90deg,
-    rgba(255, 138, 92, 0.34) 0%,
-    rgba(251, 191, 36, 0.16) 34%,
+    rgba(201, 168, 76, 0.34) 0%,
+    rgba(232, 213, 163, 0.16) 34%,
     rgba(255, 255, 255, 0.05) 62%,
     transparent 100%
   );
@@ -389,7 +490,7 @@ body {
  * `@supports not` keeps the text visible if a browser lacks background-clip.
  */
 .text-gradient-brand {
-  background-image: linear-gradient(96deg, #ff8a5c 0%, #ff6b35 42%, #fbbf24 100%);
+  background-image: linear-gradient(96deg, #b0923f 0%, #c9a84c 42%, #e8d5a3 100%);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -397,8 +498,8 @@ body {
 }
 @supports not ((background-clip: text) or (-webkit-background-clip: text)) {
   .text-gradient-brand {
-    color: #ff8a5c;
-    -webkit-text-fill-color: #ff8a5c;
+    color: #d4b65c;
+    -webkit-text-fill-color: #d4b65c;
   }
 }
 
@@ -444,6 +545,6 @@ body {
  */
 .glow-live {
   box-shadow:
-    0 0 0 1px rgba(52, 211, 153, 0.35),
-    0 0 12px 0 rgba(52, 211, 153, 0.45);
+    0 0 0 1px rgba(111, 175, 141, 0.35),
+    0 0 12px 0 rgba(111, 175, 141, 0.45);
 }

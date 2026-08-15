@@ -282,7 +282,7 @@ function ItemRow({
         </ul>
       ) : null}
 
-      {error ? <p className="mt-1.5 text-[10px] text-aether-coral">{error}</p> : null}
+      {error ? <p className="mt-1.5 text-[10px] text-red-300">{error}</p> : null}
     </li>
   );
 }
@@ -514,7 +514,7 @@ export default function AnswerBankClient() {
         </header>
 
         {error ? (
-          <p data-testid="bank-error" className="text-[12px] text-aether-coral">
+          <p data-testid="bank-error" className="text-[12px] text-red-300">
             {error}
           </p>
         ) : loading ? (

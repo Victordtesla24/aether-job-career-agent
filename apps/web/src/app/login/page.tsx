@@ -87,7 +87,7 @@ export default function LoginPage() {
     <main className="min-h-screen flex items-center justify-center bg-aether-bg px-4">
       <div className="w-full max-w-md">
         <div className="flex items-center justify-center gap-3 mb-8">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-aether-indigo to-aether-violet flex items-center justify-center text-lg font-bold">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-gold to-gold-dark flex items-center justify-center text-lg font-bold text-[#0a0a0a]">
             A
           </div>
           <div>
@@ -138,7 +138,7 @@ export default function LoginPage() {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm placeholder:text-aether-muted-dim focus:outline-none focus:border-aether-indigo/50 transition"
+              className="bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm placeholder:text-aether-muted-dim focus:outline-none focus:border-gold/60 transition"
             />
           </div>
 
@@ -152,7 +152,7 @@ export default function LoginPage() {
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm placeholder:text-aether-muted-dim focus:outline-none focus:border-aether-indigo/50 transition"
+              className="bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm placeholder:text-aether-muted-dim focus:outline-none focus:border-gold/60 transition"
             />
             <div className="text-right">
               <Link
@@ -165,7 +165,7 @@ export default function LoginPage() {
           </div>
 
           {error ? (
-            <p role="alert" data-testid="login-error" className="text-sm text-aether-coral">
+            <p role="alert" data-testid="login-error" className="text-sm text-red-300">
               {error}
             </p>
           ) : null}
@@ -173,7 +173,7 @@ export default function LoginPage() {
           <button
             type="submit"
             disabled={submitting}
-            className="mt-1 rounded-xl bg-gradient-to-r from-aether-indigo to-aether-violet py-2.5 text-sm font-semibold hover:opacity-90 transition disabled:opacity-50"
+            className="mt-1 rounded-xl bg-gradient-to-r from-gold to-gold-dark py-2.5 text-sm font-semibold text-[#0a0a0a] hover:opacity-90 transition disabled:opacity-50"
           >
             {submitting ? "Signing in…" : "Sign in"}
           </button>

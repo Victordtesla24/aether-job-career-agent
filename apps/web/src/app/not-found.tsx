@@ -45,7 +45,7 @@ export default function NotFound() {
           */}
           <Link
             href="/"
-            className="rounded-xl bg-gradient-to-r from-aether-indigo to-aether-violet px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90"
+            className="rounded-xl bg-gradient-to-r from-gold to-gold-dark px-4 py-2 text-sm font-semibold text-[#0a0a0a] transition hover:opacity-90"
           >
             Go home
           </Link>

@@ -233,7 +233,7 @@ export default function PricingPage() {
       <div className="mx-auto max-w-6xl">
         <header className="mb-10 text-center">
           <div className="mb-4 flex items-center justify-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-aether-indigo to-aether-violet text-lg font-bold">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-gold to-gold-dark text-lg font-bold text-[#0a0a0a]">
               A
             </div>
             <span className="text-xl font-semibold tracking-tight">Aether</span>
@@ -265,7 +265,7 @@ export default function PricingPage() {
                 onClick={() => setInterval(opt)}
                 className={`rounded-lg px-4 py-1.5 font-medium transition ${
                   interval === opt
-                    ? "bg-gradient-to-r from-aether-indigo to-aether-violet text-white"
+                    ? "bg-gradient-to-r from-gold to-gold-dark text-[#0a0a0a]"
                     : "text-aether-muted hover:text-white"
                 }`}
               >
@@ -279,13 +279,13 @@ export default function PricingPage() {
         </header>
 
         {loadError ? (
-          <p role="alert" data-testid="pricing-error" className="text-center text-sm text-aether-coral">
+          <p role="alert" data-testid="pricing-error" className="text-center text-sm text-red-300">
             {loadError}
           </p>
         ) : null}
 
         {checkoutError ? (
-          <p role="alert" data-testid="checkout-error" className="mb-6 text-center text-sm text-aether-coral">
+          <p role="alert" data-testid="checkout-error" className="mb-6 text-center text-sm text-red-300">
             {checkoutError}
           </p>
         ) : null}
@@ -384,7 +384,7 @@ export default function PricingPage() {
                     isCurrentPlan
                       ? "border-aether-green/40"
                       : preselectedPlan === plan.id
-                        ? "border-aether-indigo/60 ring-2 ring-aether-indigo/40"
+                        ? "border-gold/60 ring-2 ring-gold/40"
                         : "border-white/10"
                   }`}
                 >
@@ -465,7 +465,7 @@ export default function PricingPage() {
                       data-testid={`subscribe-${plan.id}`}
                       onClick={() => handleSubscribe(plan)}
                       disabled={submitting === plan.id}
-                      className="mt-6 rounded-xl bg-gradient-to-r from-aether-indigo to-aether-violet py-2.5 text-sm font-semibold transition hover:opacity-90 disabled:opacity-50"
+                      className="mt-6 rounded-xl bg-gradient-to-r from-gold to-gold-dark py-2.5 text-sm font-semibold text-[#0a0a0a] transition hover:opacity-90 disabled:opacity-50"
                     >
                       {submitting === plan.id
                         ? "Starting checkout…"

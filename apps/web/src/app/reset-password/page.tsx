@@ -60,7 +60,7 @@ export default function ResetPasswordPage() {
     <main className="min-h-screen flex items-center justify-center bg-aether-bg px-4">
       <div className="w-full max-w-md">
         <div className="flex items-center justify-center gap-3 mb-8">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-aether-indigo to-aether-violet flex items-center justify-center text-lg font-bold">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-gold to-gold-dark flex items-center justify-center text-lg font-bold text-[#0a0a0a]">
             A
           </div>
           <div>
@@ -75,7 +75,7 @@ export default function ResetPasswordPage() {
           </div>
 
           {!tokenChecked ? null : !token ? (
-            <p role="alert" data-testid="reset-password-missing-token" className="text-sm text-aether-coral leading-relaxed">
+            <p role="alert" data-testid="reset-password-missing-token" className="text-sm text-red-300 leading-relaxed">
               This reset link is missing its token.{" "}
               <Link href="/forgot-password" className="text-aether-indigo hover:underline">
                 Request a new one
@@ -89,7 +89,7 @@ export default function ResetPasswordPage() {
               </p>
               <Link
                 href="/login"
-                className="rounded-xl bg-gradient-to-r from-aether-indigo to-aether-violet py-2.5 text-sm font-semibold text-center hover:opacity-90 transition"
+                className="rounded-xl bg-gradient-to-r from-gold to-gold-dark py-2.5 text-sm font-semibold text-[#0a0a0a] text-center hover:opacity-90 transition"
               >
                 Go to sign in
               </Link>
@@ -106,7 +106,7 @@ export default function ResetPasswordPage() {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm placeholder:text-aether-muted-dim focus:outline-none focus:border-aether-indigo/50 transition"
+                  className="bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm placeholder:text-aether-muted-dim focus:outline-none focus:border-gold/60 transition"
                 />
               </div>
 
@@ -120,12 +120,12 @@ export default function ResetPasswordPage() {
                   required
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm placeholder:text-aether-muted-dim focus:outline-none focus:border-aether-indigo/50 transition"
+                  className="bg-white/5 border border-white/10 rounded-xl px-4 py-2.5 text-sm placeholder:text-aether-muted-dim focus:outline-none focus:border-gold/60 transition"
                 />
               </div>
 
               {state.status === "error" ? (
-                <p role="alert" data-testid="reset-password-error" className="text-sm text-aether-coral">
+                <p role="alert" data-testid="reset-password-error" className="text-sm text-red-300">
                   {state.message}
                 </p>
               ) : null}
@@ -133,7 +133,7 @@ export default function ResetPasswordPage() {
               <button
                 type="submit"
                 disabled={state.status === "submitting"}
-                className="mt-1 rounded-xl bg-gradient-to-r from-aether-indigo to-aether-violet py-2.5 text-sm font-semibold hover:opacity-90 transition disabled:opacity-50"
+                className="mt-1 rounded-xl bg-gradient-to-r from-gold to-gold-dark py-2.5 text-sm font-semibold text-[#0a0a0a] hover:opacity-90 transition disabled:opacity-50"
               >
                 {state.status === "submitting" ? "Resetting…" : "Reset password"}
               </button>
