@@ -73,7 +73,11 @@ Stop-All 9h spend bleed (inert-field class; permanent enforcement above).
   (same 10 spec files, clean build, isolated port): **21/23 fail identically on main** —
   pre-existing spec-locator drift on S-UI/analytics-reworked surfaces + the REAL mobile-overflow
   findings (already owned as 9c6a2ba6/S-UI-B4; independently confirmed by the beauty sweep).
-  2/23 branch-only → *(fix outcome: [E2E-FIX-SLOT])*. Also surfaced this run: the e2e harness's
+  2/23 branch-only → BOTH FIXED and double-verified (strict-safe funnel-heading locator; the
+  baseline sweep's missing-SCREEN-MATRIX guard, mirroring its siblings' WF-e2e-matrix-001
+  pattern). Honesty caveat: the fixer's code archaeology found the underlying code byte-identical
+  to main, so "branch-only" likely reflects run-environment variance rather than a branch diff —
+  the fixes are correct regardless and follow established patterns. Also surfaced this run: the e2e harness's
   server script never runs the suite (playwright self-manages it) — the gate recipe is
   `pnpm exec playwright test`, recorded here for the next operator; and heavy suites are the
   OOM sacrifice during concurrent deploys (serialize behind deploy windows).
