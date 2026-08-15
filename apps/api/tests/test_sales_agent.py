@@ -13,10 +13,10 @@ Covers, against the REAL test database (no mocked SQL):
 * lifecycle rate limit reads the log;
 * API surface is AdminUser-gated: anonymous 401, non-admin 403, admin 200.
 
-Gmail is a fake injected via the agent's ``gmail_factory`` seam. The LLM runs
-in replay mode with no sales fixtures, so personalization falls back to the
-deterministic template substitution — asserted explicitly (that fallback is
-part of the honesty contract, not an accident).
+Gmail is a fake injected via the agent's ``gmail_factory`` seam. The pipeline
+tests inject an always-unavailable LLM stub, so personalization falls back to
+the deterministic template substitution — asserted explicitly (that fallback
+is part of the honesty contract, not an accident).
 """
 from __future__ import annotations
 
@@ -34,6 +34,7 @@ from app.repositories.sales import (
     DuplicateSendError,
     SalesRepository,
 )
+from app.services.llm_client import LLMUnavailableError
 
 
 def _email(prefix: str) -> str:
@@ -105,9 +106,23 @@ def sales_env(monkeypatch, admin_headers):
     return admin_headers
 
 
+class _UnavailableLLM:
+    """LLM stub that is always down — forces the deterministic template
+    fallback the pipeline tests assert. Injecting it (instead of relying on
+    "replay mode has no sales fixtures") keeps these tests honest even when a
+    captured ``sales_reply`` fixture happens to exist on disk."""
+
+    def complete(self, *args, **kwargs):  # noqa: ANN002, ANN003
+        raise LLMUnavailableError("test stub: LLM intentionally unavailable")
+
+
 def _agent_with(repo: SalesRepository, fake: FakeGmail, monkeypatch) -> SalesAgent:
     """Agent wired to the fake Gmail and one fake flagged sending account."""
-    agent = SalesAgent(repo=repo, gmail_factory=lambda uid, aid: fake)
+    agent = SalesAgent(
+        repo=repo,
+        gmail_factory=lambda uid, aid: fake,
+        llm=_UnavailableLLM(),  # type: ignore[arg-type]
+    )
     monkeypatch.setattr(
         repo,
         "sales_sending_accounts",
@@ -222,7 +237,7 @@ def test_inbound_interest_to_dry_run_pipeline(repo, sales_env, monkeypatch):
     # Server-side compliance footer (Spam Act): identity + unsubscribe.
     assert "Aether Career Agent" in body
     assert "unsubscribe" in body.lower()
-    # Replay mode has no sales fixtures → honest template fallback, personalized.
+    # LLM stub is unavailable → honest template fallback, personalized.
     assert "Pat" in body
     assert "{{name}}" not in body
 
