@@ -35,15 +35,10 @@ export interface AdminNavItem {
  * Dashboard, Users, Subscriptions, Billing, Sales agents, Promos, Spend,
  * Health, Audit log, Settings. Money and accounts first, operations after.
  *
- * WHY ONE ENTRY IS STILL MARKED `pending` INSTEAD OF LINKED. BE-1 landed
- * `GET /admin/billing/summary`, but the platform-wide billing SCREEN behind
- * this entry does not exist in this tree — there is no
- * `app/admin/billing/page.tsx` on any branch. (FE-2 built the PER-USER billing
- * panel, which lives on the user detail page, not here.) Linking anyway would
- * hand the owner a 404 dressed as a working section, which is exactly the kind
- * of fake-completeness this programme forbids. So it holds its place in the
- * stated order, renders as visibly disabled with the reason on hover, and
- * becomes a link by deleting one flag when the screen lands.
+ * R2.2 adds `/admin/billing`: a catalog editor for the local AUD prices used
+ * for future checkout. It is intentionally not a subscriber-management screen:
+ * updating a catalog price does not mutate immutable Stripe Prices or reprice
+ * existing subscriptions, so the Billing entry is now a real route.
  *
  * FE-2 flipped PROMOS the same way: `app/admin/promos/page.tsx` now exists, so
  * the entry is a real link.
@@ -76,13 +71,7 @@ export const ADMIN_NAV: readonly AdminNavItem[] = [
   { href: "/admin", label: "Dashboard" },
   { href: "/admin/users", label: "Users" },
   { href: "/admin/subscriptions", label: "Subscriptions" },
-  {
-    href: "/admin/billing",
-    label: "Billing",
-    pending: true,
-    pendingReason:
-      "The platform-wide billing screen is not built yet. Its API (GET /admin/billing/summary) is live, and per-user billing truth is on each user's detail page; this screen ships in a later ADMIN-2.0 slice.",
-  },
+  { href: "/admin/billing", label: "Billing" },
   {
     href: "/admin/sales-agents",
     label: "Sales agents",

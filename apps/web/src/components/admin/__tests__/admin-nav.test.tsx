@@ -92,13 +92,10 @@ describe("ADMIN_NAV", () => {
     }
   });
 
-  it("marks the one entry whose screen is still not built, with a reason", () => {
+  it("links Billing now that its catalog editor exists", () => {
     const billing = ADMIN_NAV.find((i) => i.label === "Billing");
-    expect(billing?.pending).toBe(true);
-    expect(billing?.pendingReason?.length ?? 0).toBeGreaterThan(0);
-    for (const item of ADMIN_NAV.filter((i) => i.label !== "Billing")) {
-      expect(item.pending).toBeFalsy();
-    }
+    expect(billing?.href).toBe("/admin/billing");
+    expect(billing?.pending).toBeFalsy();
   });
 
   it("points Sales agents at the reseller surface, not the AI-agent page", () => {
@@ -121,7 +118,7 @@ describe("ADMIN_NAV", () => {
 });
 
 describe("<AdminShell>", () => {
-  it("renders a real link for every built section and NO link for a pending one", () => {
+  it("renders a real link for every built section", () => {
     render(
       <AdminShell>
         <p>child</p>
@@ -141,10 +138,9 @@ describe("<AdminShell>", () => {
     expect(screen.getByRole("link", { name: "Promos" }).getAttribute("href")).toBe(
       "/admin/promos",
     );
-    expect(screen.queryByRole("link", { name: "Billing" })).toBeNull();
-    const billing = screen.getByTestId("admin-nav-pending-/admin/billing");
-    expect(billing.getAttribute("aria-disabled")).toBe("true");
-    expect(billing.getAttribute("title")?.length ?? 0).toBeGreaterThan(0);
+    expect(screen.getByRole("link", { name: "Billing" }).getAttribute("href")).toBe(
+      "/admin/billing",
+    );
   });
 
   it("still renders its children", () => {

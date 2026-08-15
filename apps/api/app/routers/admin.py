@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 import secrets
 import time
 from datetime import datetime, timezone
@@ -1402,6 +1403,114 @@ async def admin_reconcile_local_billing(
         "stripeChecked": stripe_checked,
         "stripeMutated": False,
     }
+
+
+class PlanPricingRequest(BaseModel):
+    priceAudMonthly: Optional[float] = Field(default=None, ge=0)
+    priceAudAnnual: Optional[float] = Field(default=None, ge=0)
+
+
+def _catalog_plan(plan: dict[str, Any]) -> dict[str, Any]:
+    """The catalog editor's public shape; Stripe ids are references, not writes."""
+    return {
+        "id": plan["id"],
+        "name": plan["name"],
+        "priceAudMonthly": float(plan["priceAudMonthly"]),
+        "priceAudAnnual": (
+            float(plan["priceAudAnnual"]) if plan["priceAudAnnual"] is not None else None
+        ),
+        "stripeProductId": plan.get("stripeProductId"),
+        "stripePriceIdMonthly": plan.get("stripePriceIdMonthly"),
+        "stripePriceIdAnnual": plan.get("stripePriceIdAnnual"),
+        "active": bool(plan["active"]),
+    }
+
+
+@router.get("/plans")
+def admin_list_plans(_admin: AdminUser) -> dict[str, Any]:
+    """All local catalog plans; this route makes no Stripe call."""
+    return {"plans": [_catalog_plan(plan) for plan in PlanRepository().list_all()]}
+
+
+@router.put("/plans/{plan_id}/pricing")
+async def admin_update_plan_pricing(
+    admin: AdminUser, plan_id: str, request: Request
+) -> dict[str, Any]:
+    """Change catalog prices for future checkout only; never reprice subscribers.
+
+    Stripe Price objects are immutable and existing subscriptions retain their
+    current Stripe Price. We deliberately keep the locally configured Stripe ids
+    as metadata: changing catalog amounts requires the operator's existing
+    Stripe-price setup workflow before a new checkout can use new IDs.
+    """
+    body = await _parse_json_object(request)
+    if any(
+        isinstance(body.get(field), bool) for field in ("priceAudMonthly", "priceAudAnnual")
+    ):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Prices must be numbers.")
+    try:
+        pricing = PlanPricingRequest.model_validate(body)
+    except ValidationError as exc:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            jsonable_encoder(redact_validation_errors(exc.errors())),
+        ) from exc
+    if pricing.priceAudMonthly is None and pricing.priceAudAnnual is None:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "Provide priceAudMonthly or priceAudAnnual.",
+        )
+    values = (pricing.priceAudMonthly, pricing.priceAudAnnual)
+    if any(value is not None and not math.isfinite(value) for value in values):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Prices must be finite numbers.")
+
+    _ensure_billing_tables()
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT "id","name","priceAudMonthly","priceAudAnnual" '
+                'FROM "Plan" WHERE "id"=%s FOR UPDATE',
+                (plan_id,),
+            )
+            columns = ("id", "name", "priceAudMonthly", "priceAudAnnual")
+            rows = [dict(zip(columns, row)) for row in cur.fetchall()]
+            if not rows:
+                raise HTTPException(status.HTTP_404_NOT_FOUND, "Plan not found")
+            plan = rows[0]
+            before = {
+                "priceAudMonthly": float(plan["priceAudMonthly"]),
+                "priceAudAnnual": (
+                    float(plan["priceAudAnnual"]) if plan["priceAudAnnual"] is not None else None
+                ),
+            }
+            after = {
+                "priceAudMonthly": (
+                    pricing.priceAudMonthly
+                    if pricing.priceAudMonthly is not None
+                    else before["priceAudMonthly"]
+                ),
+                "priceAudAnnual": (
+                    pricing.priceAudAnnual
+                    if pricing.priceAudAnnual is not None
+                    else before["priceAudAnnual"]
+                ),
+            }
+            cur.execute(
+                'UPDATE "Plan" SET "priceAudMonthly"=%s,"priceAudAnnual"=%s,'
+                '"updatedAt"=now() WHERE "id"=%s',
+                (after["priceAudMonthly"], after["priceAudAnnual"], plan_id),
+            )
+            admin_repo.write_audit(
+                admin["id"],
+                "update_plan_pricing",
+                target_type="plan",
+                target_id=plan_id,
+                detail={"before": before, "after": after, "stripeMetadataChanged": False},
+                ip=_client_ip(request),
+                cur=cur,
+            )
+        conn.commit()
+    return {"id": plan_id, "name": plan["name"], **after, "currency": "AUD"}
 
 
 @router.get("/billing/summary")

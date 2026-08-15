@@ -373,6 +373,14 @@ class PlanRepository:
                 rows = rows_to_dicts(cur)
         return rows[0] if rows else None
 
+    def list_all(self) -> list[dict[str, Any]]:
+        """Every catalog row for the admin editor, including inactive plans."""
+        _ensure_billing_tables()
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(f'SELECT {self._COLS} FROM "Plan" ORDER BY "sortOrder"')
+                return rows_to_dicts(cur)
+
     def set_stripe_ids(
         self,
         plan_id: str,
