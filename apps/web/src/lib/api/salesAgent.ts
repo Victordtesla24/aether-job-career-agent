@@ -101,6 +101,125 @@ export async function updateSalesCampaign(
   );
 }
 
+// ---------------------------------------------------------- branded preview
+export const SalesCampaignPreviewSchema = z.object({
+  campaignId: z.string(),
+  name: z.string(),
+  sampleName: z.string(),
+  html: z.string(),
+});
+export type SalesCampaignPreview = z.infer<typeof SalesCampaignPreviewSchema>;
+
+export async function fetchSalesCampaignPreview(
+  id: string,
+  options: RequestOptions = {},
+): Promise<SalesCampaignPreview> {
+  return SalesCampaignPreviewSchema.parse(
+    await apiRequest<unknown>(`/admin/sales-agent/campaigns/${id}/preview`, options),
+  );
+}
+
+// ---------------------------------------------------------------- generate
+export const SalesGenerateResultSchema = z
+  .object({
+    ran: z.boolean(),
+    reason: z.string().optional(),
+    model: z.string().optional(),
+    modelSource: z.string().optional(),
+    campaignsCreated: z
+      .array(
+        z.object({
+          id: z.string(),
+          name: z.string(),
+          type: z.string(),
+          active: z.boolean(),
+          note: z.string().optional(),
+        }),
+      )
+      .optional()
+      .default([]),
+    campaignsSkipped: z.array(z.string()).optional().default([]),
+    linkedinDrafts: z.number().optional(),
+    errors: z.array(z.string()).optional().default([]),
+  })
+  .passthrough();
+export type SalesGenerateResult = z.infer<typeof SalesGenerateResultSchema>;
+
+export async function generateSalesContent(
+  options: RequestOptions = {},
+): Promise<SalesGenerateResult> {
+  return SalesGenerateResultSchema.parse(
+    await apiRequest<unknown>("/admin/sales-agent/generate", {
+      ...options,
+      method: "POST",
+    }),
+  );
+}
+
+// ----------------------------------------------------------- brand documents
+export const BrandDocumentKindSchema = z.object({
+  kind: z.string(),
+  title: z.string(),
+  description: z.string(),
+  needsPlan: z.boolean(),
+});
+export type BrandDocumentKind = z.infer<typeof BrandDocumentKindSchema>;
+
+export const BrandAssetSchema = z.object({
+  name: z.string(),
+  path: z.string(),
+  description: z.string(),
+});
+export type BrandAsset = z.infer<typeof BrandAssetSchema>;
+
+export const BrandDocumentsSchema = z.object({
+  documents: z.array(BrandDocumentKindSchema),
+  plans: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string(),
+      priceAudMonthly: z.number(),
+      priceAudAnnual: z.number().nullable(),
+    }),
+  ),
+  assets: z.array(BrandAssetSchema),
+});
+export type BrandDocuments = z.infer<typeof BrandDocumentsSchema>;
+
+export async function fetchBrandDocuments(
+  options: RequestOptions = {},
+): Promise<BrandDocuments> {
+  return BrandDocumentsSchema.parse(
+    await apiRequest<unknown>("/admin/sales-agent/brand/documents", options),
+  );
+}
+
+export const BrandDocumentPreviewSchema = z.object({
+  kind: z.string(),
+  title: z.string(),
+  planId: z.string().nullable(),
+  interval: z.string().nullable(),
+  html: z.string(),
+});
+export type BrandDocumentPreview = z.infer<typeof BrandDocumentPreviewSchema>;
+
+export async function fetchBrandDocumentPreview(
+  kind: string,
+  params: { plan?: string; interval?: string } = {},
+  options: RequestOptions = {},
+): Promise<BrandDocumentPreview> {
+  const qs = new URLSearchParams();
+  if (params.plan) qs.set("plan", params.plan);
+  if (params.interval) qs.set("interval", params.interval);
+  const suffix = qs.toString() ? `?${qs.toString()}` : "";
+  return BrandDocumentPreviewSchema.parse(
+    await apiRequest<unknown>(
+      `/admin/sales-agent/brand/documents/${kind}/preview${suffix}`,
+      options,
+    ),
+  );
+}
+
 // ------------------------------------------------------------ outreach log
 export const SalesOutreachSchema = z.object({
   id: z.string(),

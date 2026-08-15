@@ -1,0 +1,336 @@
+/*
+ * /admin/sales-agent — Aether Career Design System skin.
+ *
+ * SCOPED restyle: every rule lives under `.aether-ds-scope` so the design
+ * system applies to the Sales Agent console ONLY — the rest of the admin
+ * portal keeps its existing shell styles. Tokens mirror
+ * ~/aether_design_system/tokens/{colors,typography,spacing}.css.
+ *
+ * Fonts are self-hosted from apps/web/public/fonts/ab (TTF), served
+ * same-origin. `font-display: swap` keeps text visible while they load;
+ * the fallback stacks are the same ones the DS ships.
+ */
+
+@font-face {
+  font-family: "AB Sans";
+  src: url("/fonts/ab/AB-Sans-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "AB Sans";
+  src: url("/fonts/ab/AB-Sans-Medium.ttf") format("truetype");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "AB Sans";
+  src: url("/fonts/ab/AB-Sans-Bold.ttf") format("truetype");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "AB Marquee";
+  src: url("/fonts/ab/AB-Marquee-Medium.ttf") format("truetype");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "AB Marquee";
+  src: url("/fonts/ab/AB-Marquee-Bold.ttf") format("truetype");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+.aether-ds-scope {
+  /* Grounds */
+  --ink-0: #08080a;
+  --ink-1: #0f0f12;
+  --ink-2: #16161a;
+  --ink-3: #1e1e23;
+  --ink-4: #26262c;
+  /* Gilt */
+  --gold: #c9a84c;
+  --gold-light: #d4b65c;
+  --gold-pale: #e8d5a3;
+  --gold-dark: #b0923f;
+  --gold-muted: rgba(201, 168, 76, 0.08);
+  --gold-border: rgba(201, 168, 76, 0.2);
+  --gold-border-strong: rgba(201, 168, 76, 0.45);
+  /* Royal accents (sapphire = agent-intelligence cue) */
+  --sapphire: #3e5a8c;
+  --sapphire-light: #8fa8ce;
+  --burgundy: #722f37;
+  --burgundy-light: #b9707a;
+  /* Text — warm parchment, never pure white */
+  --fg-1: #f5f1e8;
+  --fg-2: rgba(245, 241, 232, 0.62);
+  --fg-3: rgba(245, 241, 232, 0.46);
+  --fg-4: rgba(245, 241, 232, 0.34);
+  /* Hairlines */
+  --hairline: rgba(255, 255, 255, 0.07);
+  --hairline-strong: rgba(255, 255, 255, 0.13);
+  /* State — gold is brand, NEVER a state; warn is copper, not gold */
+  --state-ok: #6faf8d;
+  --state-warn: #c8873a;
+  --state-danger: #b9544b;
+  --state-info: #7c93be;
+  --state-neutral: #8c8a82;
+  /* Type */
+  --font-display: "AB Marquee", "Playfair Display", Georgia, serif;
+  --font-body: "AB Sans", "DM Sans", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  /* Radii — xs is the sharp brand nod on buttons/chips/badges */
+  --radius-xs: 2px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 10px;
+  --radius-2xl: 14px;
+
+  font-family: var(--font-body);
+  color: var(--fg-1);
+}
+
+/* ---- header: the page's ONE gilded gesture (shared AdminPageHeader output
+   is styled from outside — the component itself is untouched) ---- */
+.aether-ds-scope .sa-header h1 {
+  font-family: var(--font-display);
+  font-size: 1.375rem;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  background: linear-gradient(
+    96deg,
+    var(--gold-dark) 0%,
+    var(--gold) 38%,
+    var(--gold-pale) 62%,
+    var(--gold) 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: var(--gold);
+}
+.aether-ds-scope .sa-header p {
+  color: var(--fg-2);
+  font-size: 0.8125rem;
+}
+
+/* ---- surfaces ---- */
+.aether-ds-scope .sa-card {
+  background: var(--ink-1);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-2xl);
+}
+.aether-ds-scope .sa-card-gilt {
+  background: var(--ink-1);
+  border: 1px solid var(--gold-border);
+  border-radius: var(--radius-2xl);
+}
+.aether-ds-scope .sa-well {
+  background: var(--ink-0);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-lg);
+}
+
+/* ---- type roles ---- */
+.aether-ds-scope .sa-eyebrow {
+  font-size: 0.625rem;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+.aether-ds-scope .sa-card-title {
+  font-family: var(--font-display);
+  font-size: 0.9375rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fg-1);
+}
+.aether-ds-scope .sa-figure {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 1.75rem;
+  font-weight: 500;
+  color: var(--fg-1);
+  line-height: 1.2;
+}
+.aether-ds-scope .sa-meta {
+  font-size: 0.6875rem;
+  color: var(--fg-3);
+}
+
+/* ---- buttons (radius-xs = sharp brand nod) ---- */
+.aether-ds-scope .sa-btn-primary {
+  border-radius: var(--radius-xs);
+  background: var(--gold);
+  color: var(--ink-0);
+  font-weight: 500;
+  border: 1px solid var(--gold-dark);
+  transition: background 120ms ease;
+}
+.aether-ds-scope .sa-btn-primary:hover:not(:disabled) {
+  background: var(--gold-light);
+}
+.aether-ds-scope .sa-btn-primary:disabled {
+  opacity: 0.5;
+}
+.aether-ds-scope .sa-btn-ghost {
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--fg-2);
+  border: 1px solid var(--hairline-strong);
+  transition: border-color 120ms ease, color 120ms ease;
+}
+.aether-ds-scope .sa-btn-ghost:hover:not(:disabled) {
+  border-color: var(--gold-border-strong);
+  color: var(--fg-1);
+}
+.aether-ds-scope .sa-btn-gilt {
+  border-radius: var(--radius-xs);
+  background: var(--gold-muted);
+  color: var(--gold);
+  border: 1px solid var(--gold-border);
+  transition: border-color 120ms ease;
+}
+.aether-ds-scope .sa-btn-gilt:hover:not(:disabled) {
+  border-color: var(--gold-border-strong);
+}
+.aether-ds-scope .sa-btn-gilt:disabled,
+.aether-ds-scope .sa-btn-ghost:disabled,
+.aether-ds-scope .sa-btn-sapphire:disabled {
+  opacity: 0.5;
+}
+/* Sapphire = the agent-intelligence cue (agent-written content actions) */
+.aether-ds-scope .sa-btn-sapphire {
+  border-radius: var(--radius-xs);
+  background: rgba(62, 90, 140, 0.18);
+  color: var(--sapphire-light);
+  border: 1px solid rgba(62, 90, 140, 0.55);
+  transition: background 120ms ease;
+}
+.aether-ds-scope .sa-btn-sapphire:hover:not(:disabled) {
+  background: rgba(62, 90, 140, 0.3);
+}
+
+/* ---- tabs ---- */
+.aether-ds-scope .sa-tab {
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--hairline);
+  background: var(--ink-1);
+  color: var(--fg-2);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  transition: color 120ms ease, border-color 120ms ease;
+}
+.aether-ds-scope .sa-tab:hover {
+  color: var(--fg-1);
+  border-color: var(--gold-border);
+}
+.aether-ds-scope .sa-tab-active {
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--gold-dark);
+  background: var(--gold);
+  color: var(--ink-0);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+/* ---- badges / state chips (radius-xs; no-data is NEVER ok-green) ---- */
+.aether-ds-scope .sa-badge {
+  display: inline-block;
+  border-radius: var(--radius-xs);
+  padding: 2px 8px;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+}
+.aether-ds-scope .sa-badge-ok {
+  background: rgba(111, 175, 141, 0.14);
+  color: var(--state-ok);
+}
+.aether-ds-scope .sa-badge-info {
+  background: rgba(124, 147, 190, 0.14);
+  color: var(--state-info);
+}
+.aether-ds-scope .sa-badge-sapphire {
+  background: rgba(62, 90, 140, 0.2);
+  color: var(--sapphire-light);
+}
+.aether-ds-scope .sa-badge-warn {
+  background: rgba(200, 135, 58, 0.14);
+  color: var(--state-warn);
+}
+.aether-ds-scope .sa-badge-danger {
+  background: rgba(185, 84, 75, 0.16);
+  color: #d98a83;
+}
+.aether-ds-scope .sa-badge-neutral {
+  background: rgba(140, 138, 130, 0.14);
+  color: var(--state-neutral);
+}
+
+/* ---- tables ---- */
+.aether-ds-scope .sa-table-wrap {
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-xl);
+  overflow-x: auto;
+  background: var(--ink-1);
+}
+.aether-ds-scope .sa-table thead {
+  background: var(--ink-2);
+}
+.aether-ds-scope .sa-table th {
+  font-size: 0.625rem;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--fg-3);
+  text-align: left;
+}
+.aether-ds-scope .sa-table tbody tr {
+  border-top: 1px solid var(--hairline);
+}
+.aether-ds-scope .sa-table tbody tr:hover {
+  background: var(--ink-3);
+}
+
+/* ---- misc ---- */
+.aether-ds-scope pre {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.aether-ds-scope select {
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--hairline-strong);
+  background: var(--ink-2);
+  color: var(--fg-1);
+}
+.aether-ds-scope textarea {
+  border-radius: var(--radius-md);
+  border: 1px solid var(--hairline-strong);
+  background: var(--ink-0);
+  color: var(--fg-1);
+  font-family: var(--font-mono);
+}
+.aether-ds-scope textarea:focus,
+.aether-ds-scope select:focus {
+  outline: none;
+  border-color: var(--gold-border-strong);
+}
+.aether-ds-scope .sa-alarm {
+  border: 1px solid rgba(185, 84, 75, 0.5);
+  background: rgba(185, 84, 75, 0.12);
+  border-radius: var(--radius-xl);
+  color: #d98a83;
+}
+.aether-ds-scope .sa-hairline-top {
+  border-top: 1px solid var(--hairline);
+}

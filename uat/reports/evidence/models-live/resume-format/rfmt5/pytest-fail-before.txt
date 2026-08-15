@@ -1,0 +1,223 @@
+# RFMT-5 FAIL-BEFORE — final test file vs UNMODIFIED origin/main @ d4d2c63
+# (this branch's app/ changes stashed; tests/ present)
+# Command: flock /tmp/aether-pytest.lock scripts/run-tests.sh \
+#            tests/test_rfmt5_outbound_preserved_format.py -q -p no:randomly
+# ANSI colour stripped; fixture bearer tokens redacted (throwaway aether_test users).
+
+[run-tests.sh] DATABASE_URL(_TEST) pinned to schema=aether_test — safe to proceed.
+FFFF....F                                                                [100%]
+=================================== FAILURES ===================================
+__ test_in_process_handlers_behave_as_if_fastapi_resolved_every_query_default __
+
+client = <starlette.testclient.TestClient object at 0x7fdad5f52cf0>
+auth_headers = {'Authorization': '<redacted>'}
+test_user_id = 'cc13c5390f65492ebcf016ae5'
+
+    def test_in_process_handlers_behave_as_if_fastapi_resolved_every_query_default(
+        client, auth_headers, test_user_id
+    ):
+        """The generic pin: no ``Query``-object truthiness may alter an outbound send.
+    
+        Both handlers that produce an employer-facing attachment are called with no
+        keyword arguments (exactly as ``services/email_attachments.py`` calls them)
+        and again with every ``Query`` default resolved to its literal value. The
+        two documents must be identical. This fails for ANY defaulted parameter that
+        reaches an unguarded truthiness check — ``branded`` today, whatever is added
+        tomorrow.
+        """
+        from app.routers.cover_letters import export_cover_letter_pdf
+        from app.routers.resumes import download_resume
+    
+        child, _uid, me = _outbound_resume(client, auth_headers)
+        letter_id = _seed_letter(test_user_id, child["id"])
+    
+        probes = [
+            (download_resume, (child["id"], me)),
+            (export_cover_letter_pdf, (letter_id, me)),
+        ]
+    
+        defaulted = 0
+        for handler, args in probes:
+            resolved = _resolved_query_defaults(handler)
+            defaulted += len(resolved)
+            implicit = handler(*args)
+            explicit = handler(*args, **resolved)
+>           assert _pdf_text(bytes(implicit.body)) == _pdf_text(bytes(explicit.body)), (
+                f"{handler.__name__} called in-process produced a DIFFERENT document "
+                f"from the same call with {sorted(resolved)} resolved — a Query "
+                "object's truthiness is deciding what an employer receives"
+            )
+E           AssertionError: download_resume called in-process produced a DIFFERENT document from the same call with ['branded', 'diff'] resolved — a Query object's truthiness is deciding what an employer receives
+E           assert 'VIKRAM DESHP...arity by 15%.' == 'VIKRAM DESHP...arity by 15%.'
+E             
+E             - VIKRAM DESHPANDE Senior Technical Program/Delivery Manager & AI Solutions Architect CONTACT INFO sarkar.vikram@gmail.com +61 433 224 556 Melbourne, VIC, Australia linkedin.com/in/vikramd-profile github.com/Victordtesla24 EDUCATION Master of Computer Science Monash University 2010 Melbourne Bachelor of Engineering Computer Science University of Melbourne 2007 Melbourne SKILLS CAREER OBJECTIVE 15+ year Senior Technical Leader and Certified Scrum Master (CSM) specializing in end-to-end program delivery, enterprise transformation, and architecting AI/ML-driven so...
+E             
+E             ...Full output truncated (2 lines hidden), use '-vv' to show
+
+tests/test_rfmt5_outbound_preserved_format.py:214: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+WARNING: AETHER_DISCOVERY_FIXTURE_DIR is set — job-board discovery adapters will serve canned HTTP fixtures instead of making live calls. This is expected in development/tests only; it must never be used in production (§REC-05).
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+WARNING: AETHER_DISCOVERY_FIXTURE_DIR is set — job-board discovery adapters will serve canned HTTP fixtures instead of making live calls. This is expected in development/tests only; it must never be used in production (§REC-05).
+_____ test_outbound_resume_attachment_is_the_preserved_render_not_branded ______
+
+client = <starlette.testclient.TestClient object at 0x7fdab0051040>
+auth_headers = {'Authorization': '<redacted>'}
+
+    def test_outbound_resume_attachment_is_the_preserved_render_not_branded(
+        client, auth_headers
+    ):
+        """``resolve_email_attachments`` feeds EVERY employer-facing résumé.
+    
+        Gmail reply/send (``routers/approvals.py``), application email submission
+        (``services/application_submission.py``) and the company-website auto-submit
+        (``workers/apply_sweep.py``) all take their bytes from here.
+        """
+        from app.routers.resumes import _render_resume
+        from app.services.email_attachments import resolve_email_attachments
+    
+        child, uid, me = _outbound_resume(client, auth_headers)
+    
+        attachments = resolve_email_attachments(me, resume_id=child["id"])
+        assert len(attachments) == 1, attachments
+        filename, data, mimetype = attachments[0]
+    
+        preserved = _render_resume(child["id"], uid, branded=False, highlight=False)
+        branded = _render_resume(child["id"], uid, branded=True, highlight=False)
+    
+        # Not vacuous: the two renders really are different documents.
+        assert _pdf_text(preserved.content) != _pdf_text(branded.content), (
+            "fixture sanity: the branded template must differ from the preserved render"
+        )
+    
+        assert preserved.fidelity.method == "pdf-in-place-splice", preserved.fidelity.method
+>       assert _pdf_fingerprint(data) == _pdf_fingerprint(preserved.content), (
+            "the résumé sent to an employer must be the preserved render — same "
+            "pages, same geometry, same words, same marks"
+        )
+E       AssertionError: the résumé sent to an employer must be the preserved render — same pages, same geometry, same words, same marks
+E       assert ((612.0, 792....by 15%.', 3),) == ((612.0, 792....by 15%.', 22))
+E         
+E         At index 0 diff: (612.0, 792.0, 'VIKRAM DESHPANDE Agile Delivery Leadership: Lead end-to-end delivery for the Agile Kookaburras squad — one of eight squads on the Payday Super reform program (NTP & Distribution UI capabilities) — owning sprint cadence, PI Planning (PI 47–48), capacity management, and executive status reporting. AI/ML Strategy & Solutions (2022 - 2025): Led the technical delivery of AI solutions, including real-time WebSocket telemetry servers for 10k+ device concurrency, improving user response ti...
+E         
+E         ...Full output truncated (3 lines hidden), use '-vv' to show
+
+tests/test_rfmt5_outbound_preserved_format.py:262: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+WARNING: AETHER_DISCOVERY_FIXTURE_DIR is set — job-board discovery adapters will serve canned HTTP fixtures instead of making live calls. This is expected in development/tests only; it must never be used in production (§REC-05).
+____________ test_auto_apply_portal_upload_is_the_preserved_render _____________
+
+client = <starlette.testclient.TestClient object at 0x7fda99495bb0>
+auth_headers = {'Authorization': '<redacted>'}
+
+    def test_auto_apply_portal_upload_is_the_preserved_render(client, auth_headers):
+        """The company-website auto-submit uploads the same preserved document."""
+        from app.routers.resumes import _render_resume
+        from app.workers.apply_sweep import _render_resume_pdf
+    
+        child, uid, _me = _outbound_resume(client, auth_headers)
+    
+        uploaded = _render_resume_pdf(uid, {"resumeId": child["id"]})
+        preserved = _render_resume(child["id"], uid, branded=False, highlight=False)
+        branded = _render_resume(child["id"], uid, branded=True, highlight=False)
+    
+>       assert _pdf_fingerprint(uploaded) == _pdf_fingerprint(preserved.content), (
+            "the file uploaded to the employer's portal must be the preserved render"
+        )
+E       AssertionError: the file uploaded to the employer's portal must be the preserved render
+E       assert ((612.0, 792....by 15%.', 3),) == ((612.0, 792....by 15%.', 22))
+E         
+E         At index 0 diff: (612.0, 792.0, 'VIKRAM DESHPANDE Agile Delivery Leadership: Lead end-to-end delivery for the Agile Kookaburras squad — one of eight squads on the Payday Super reform program (NTP & Distribution UI capabilities) — owning sprint cadence, PI Planning (PI 47–48), capacity management, and executive status reporting. AI/ML Strategy & Solutions (2022 - 2025): Led the technical delivery of AI solutions, including real-time WebSocket telemetry servers for 10k+ device concurrency, improving user response ti...
+E         
+E         ...Full output truncated (3 lines hidden), use '-vv' to show
+
+tests/test_rfmt5_outbound_preserved_format.py:290: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+WARNING: AETHER_DISCOVERY_FIXTURE_DIR is set — job-board discovery adapters will serve canned HTTP fixtures instead of making live calls. This is expected in development/tests only; it must never be used in production (§REC-05).
+_________ test_portal_upload_is_named_for_the_document_it_actually_is __________
+
+client = <starlette.testclient.TestClient object at 0x7fda9456d700>
+auth_headers = {'Authorization': '<redacted>'}
+
+    def test_portal_upload_is_named_for_the_document_it_actually_is(client, auth_headers):
+        """A preserved ``.docx`` must never reach an employer's portal named ``.pdf``.
+    
+        The branded template was always a PDF, so while the defect was live the
+        hard-coded ``.pdf`` name happened to be right. A preserved render is
+        whatever the user uploaded, so the name now follows the bytes.
+        """
+        from app.routers.resumes import _render_resume
+>       from app.services.apply_executor import _resume_suffix
+E       ImportError: cannot import name '_resume_suffix' from 'app.services.apply_executor' (/home/ubuntu/github_repos/aether-wt-rfmt5/apps/api/app/services/apply_executor.py)
+
+tests/test_rfmt5_outbound_preserved_format.py:306: ImportError
+---------------------------- Captured stderr setup -----------------------------
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+WARNING: AETHER_DISCOVERY_FIXTURE_DIR is set — job-board discovery adapters will serve canned HTTP fixtures instead of making live calls. This is expected in development/tests only; it must never be used in production (§REC-05).
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+------------------------------ Captured log setup ------------------------------
+WARNING  huggingface_hub.utils._http:_http.py:951 Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+____________ test_in_process_download_reports_the_preserved_method _____________
+
+client = <starlette.testclient.TestClient object at 0x7fda8f0ee690>
+auth_headers = {'Authorization': '<redacted>'}
+
+    def test_in_process_download_reports_the_preserved_method(client, auth_headers):
+        """The header an operator reads off an outbound render names the real branch."""
+        from app.routers.resumes import download_resume
+    
+        child, _uid, me = _outbound_resume(client, auth_headers)
+    
+        response = download_resume(child["id"], me)
+>       assert response.headers["X-Aether-Format-Method"] == "pdf-in-place-splice", (
+            "an in-process download reported "
+            f"{response.headers['X-Aether-Format-Method']!r} — the Query object's "
+            "truthiness sent it down the branded-opt-in branch"
+        )
+E       AssertionError: an in-process download reported 'branded-optin' — the Query object's truthiness sent it down the branded-opt-in branch
+E       assert 'branded-optin' == 'pdf-in-place-splice'
+E         
+E         - pdf-in-place-splice
+E         + branded-optin
+
+tests/test_rfmt5_outbound_preserved_format.py:415: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+WARNING: AETHER_DISCOVERY_FIXTURE_DIR is set — job-board discovery adapters will serve canned HTTP fixtures instead of making live calls. This is expected in development/tests only; it must never be used in production (§REC-05).
+
+Loading weights:   0%|          | 0/103 [00:00<?, ?it/s]
+Loading weights: 100%|██████████| 103/103 [00:00<00:00, 7423.29it/s]
+------------------------------ Captured log setup ------------------------------
+WARNING  app.services.ats_engine:ats_engine.py:1210 ATS semantic scoring active path=local (HF_TOKEN=<absent>)
+----------------------------- Captured stderr call -----------------------------
+
+Loading weights:   0%|          | 0/103 [00:00<?, ?it/s]
+Loading weights: 100%|██████████| 103/103 [00:00<00:00, 39015.02it/s]
+=============================== warnings summary ===============================
+tests/test_rfmt5_outbound_preserved_format.py::test_in_process_handlers_behave_as_if_fastapi_resolved_every_query_default
+  /opt/abacus-python/lib/python3.12/site-packages/passlib/utils/__init__.py:854: DeprecationWarning: 'crypt' is deprecated and slated for removal in Python 3.13
+    from crypt import crypt as _crypt
+
+tests/test_rfmt5_outbound_preserved_format.py::test_in_process_handlers_behave_as_if_fastapi_resolved_every_query_default
+tests/test_rfmt5_outbound_preserved_format.py::test_in_process_handlers_behave_as_if_fastapi_resolved_every_query_default
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+tests/test_rfmt5_outbound_preserved_format.py::test_in_process_handlers_behave_as_if_fastapi_resolved_every_query_default
+tests/test_rfmt5_outbound_preserved_format.py::test_in_process_handlers_behave_as_if_fastapi_resolved_every_query_default
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+tests/test_rfmt5_outbound_preserved_format.py::test_in_process_handlers_behave_as_if_fastapi_resolved_every_query_default
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_rfmt5_outbound_preserved_format.py::test_in_process_handlers_behave_as_if_fastapi_resolved_every_query_default - AssertionError: download_resume called in-process produced a DIFFERENT docu...
+FAILED tests/test_rfmt5_outbound_preserved_format.py::test_outbound_resume_attachment_is_the_preserved_render_not_branded - AssertionError: the résumé sent to an employer must be the preserved render...
+FAILED tests/test_rfmt5_outbound_preserved_format.py::test_auto_apply_portal_upload_is_the_preserved_render - AssertionError: the file uploaded to the employer's portal must be the pres...
+FAILED tests/test_rfmt5_outbound_preserved_format.py::test_portal_upload_is_named_for_the_document_it_actually_is - ImportError: cannot import name '_resume_suffix' from 'app.services.apply_e...
+FAILED tests/test_rfmt5_outbound_preserved_format.py::test_in_process_download_reports_the_preserved_method - AssertionError: an in-process download reported 'branded-optin' — the Query...
+5 failed, 4 passed, 6 warnings in 17.46s
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute

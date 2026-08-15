@@ -1025,6 +1025,34 @@ def _fill_value(page: Any, field: dict[str, Any], value: Any, documents: dict[st
     return False
 
 
+def _resume_suffix(data: bytes) -> str:
+    """Name the uploaded résumé for what it ACTUALLY is (RFMT-5).
+
+    Every outbound résumé is now the user's PRESERVED document, which is
+    whatever they uploaded: a spliced PDF, a natively rewritten ``.docx``, or a
+    ``.txt``. Until RFMT-5 the in-process render always came back as the Aether
+    branded template — always a PDF — so this file could be named ``.pdf``
+    unconditionally. It no longer can: handing an employer's portal a Word
+    document called ``resume.pdf`` is a file they cannot open.
+
+    Sniffed from the bytes themselves (the format's own magic number), never
+    from a caller's label, so the name on disk cannot disagree with the content.
+    Empty bytes — the "no résumé on this application" case, which the sweep
+    already handles upstream — keep the historical ``.pdf`` name.
+    """
+    if data.startswith(b"%PDF-"):
+        return ".pdf"
+    if data.startswith(b"PK\x03\x04"):  # OOXML (.docx) is a ZIP package
+        return ".docx"
+    if data:
+        try:
+            data.decode("utf-8")
+        except UnicodeDecodeError:
+            return ".pdf"
+        return ".txt"
+    return ".pdf"
+
+
 def playwright_form_submitter(
     *,
     application_id: str,
@@ -1058,7 +1086,9 @@ def playwright_form_submitter(
 
     documents: dict[str, str] = {}
     temp_dir = tempfile.mkdtemp(prefix="aether-apply-")
-    resume_path = Path(temp_dir) / f"resume-{application_id[:8]}.pdf"
+    resume_path = Path(temp_dir) / (
+        f"resume-{application_id[:8]}{_resume_suffix(resume_pdf_bytes)}"
+    )
     resume_path.write_bytes(resume_pdf_bytes or b"")
     documents[RESUME_DOCUMENT] = str(resume_path)
     cover_path = Path(temp_dir) / f"cover-letter-{application_id[:8]}.txt"

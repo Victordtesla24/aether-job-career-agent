@@ -783,12 +783,26 @@ class GmailService:
         body: str,
         in_reply_to: str | None = None,
         attachments: list[tuple[str, bytes, str]] | None = None,
+        html_body: str | None = None,
     ) -> str:
+        """Build the base64url raw message. When ``html_body`` is given, the
+        text ``body`` and the HTML are wrapped in ``multipart/alternative``
+        (plain part FIRST per RFC 2046 — least-faithful to most-faithful), so
+        text-only clients still get the full compliance-footed plain body."""
         msg: Any
+
+        def _content_part() -> Any:
+            if html_body:
+                alt = MIMEMultipart("alternative")
+                alt.attach(MIMEText(body, "plain", "utf-8"))
+                alt.attach(MIMEText(html_body, "html", "utf-8"))
+                return alt
+            return MIMEText(body, "plain", "utf-8")
+
         if attachments:
             msg = MIMEMultipart()
-            msg.attach(MIMEText(body, "plain", "utf-8"))
-            total = len(body.encode("utf-8"))
+            msg.attach(_content_part())
+            total = len(body.encode("utf-8")) + len((html_body or "").encode("utf-8"))
             for filename, content, mimetype in attachments:
                 total += len(content)
                 if total > _MAX_MESSAGE_BYTES:
@@ -806,7 +820,7 @@ class GmailService:
                 )
                 msg.attach(part)
         else:
-            msg = MIMEText(body, "plain", "utf-8")
+            msg = _content_part()
         msg["To"] = to
         msg["Subject"] = subject
         if in_reply_to:
@@ -822,10 +836,15 @@ class GmailService:
         in_reply_to: str | None = None,
         thread_id: str | None = None,
         attachments: list[tuple[str, bytes, str]] | None = None,
+        html_body: str | None = None,
     ) -> dict[str, Any]:
         """Send an email; returns ``{"id", "threadId"}``. Raises
-        :class:`GmailNotConnectedError` when the account is not connected."""
-        raw = self._raw_message(to, subject, body, in_reply_to, attachments)
+        :class:`GmailNotConnectedError` when the account is not connected.
+        ``html_body`` (optional, additive) sends multipart/alternative with
+        the plain-text ``body`` preserved as the first alternative."""
+        raw = self._raw_message(
+            to, subject, body, in_reply_to, attachments, html_body=html_body
+        )
         message: dict[str, Any] = {"raw": raw}
         if thread_id:
             message["threadId"] = thread_id

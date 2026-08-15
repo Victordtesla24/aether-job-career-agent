@@ -1,0 +1,72 @@
+# PRE-EXISTING RED — proof it is NOT caused by feat/rfmt5-outbound-format
+# Run with this branch's app/ changes STASHED, i.e. unmodified origin/main @ d4d2c63,
+# in isolation (no other test file in the session).
+# Command: flock /tmp/aether-pytest.lock scripts/run-tests.sh \
+#            tests/test_mv_resume_studio.py -q -p no:randomly
+# Result: 1 failed, 10 passed — TestTailorApprovalIsReal::
+#         test_tailored_version_is_pending_until_approved (assert 409 == 200)
+# ANSI colour stripped; fixture bearer tokens redacted.
+
+[run-tests.sh] DATABASE_URL(_TEST) pinned to schema=aether_test — safe to proceed.
+.F.........                                                              [100%]
+=================================== FAILURES ===================================
+___ TestTailorApprovalIsReal.test_tailored_version_is_pending_until_approved ___
+
+self = <test_mv_resume_studio.TestTailorApprovalIsReal object at 0x7f98ae79a0f0>
+client = <starlette.testclient.TestClient object at 0x7f9895c4a510>
+auth_headers = {'Authorization': '<redacted>'}
+
+    def test_tailored_version_is_pending_until_approved(self, client, auth_headers):
+        job = _seed_job(client, auth_headers)
+        body = _run_tailor(client, auth_headers, job)
+    
+        version = client.get(
+            f"/resumes/{body['resume_id']}", headers=auth_headers
+        ).json()
+        assert version["approvalStatus"] == "pending"
+    
+        # Approving the gate flips the version to approved (the gate has teeth).
+        resolved = client.post(
+            f"/approvals/{body['approval_id']}/approve", headers=auth_headers
+        )
+>       assert resolved.status_code == 200
+E       assert 409 == 200
+E        +  where 409 = <Response [409 Conflict]>.status_code
+
+tests/test_mv_resume_studio.py:107: AssertionError
+---------------------------- Captured stderr setup -----------------------------
+WARNING: AETHER_LLM_MODE=replay — serving canned LLM fixtures, not live model output. This is expected in development/tests only; it must never be used in production (§REC-04).
+WARNING: AETHER_DISCOVERY_FIXTURE_DIR is set — job-board discovery adapters will serve canned HTTP fixtures instead of making live calls. This is expected in development/tests only; it must never be used in production (§REC-05).
+----------------------------- Captured stderr call -----------------------------
+
+Loading weights:   0%|          | 0/103 [00:00<?, ?it/s]
+Loading weights: 100%|██████████| 103/103 [00:00<00:00, 13781.21it/s]
+
+Loading weights:   0%|          | 0/103 [00:00<?, ?it/s]
+Loading weights: 100%|██████████| 103/103 [00:00<00:00, 26814.80it/s]
+
+Loading weights:   0%|          | 0/103 [00:00<?, ?it/s]
+Loading weights: 100%|██████████| 103/103 [00:00<00:00, 17507.43it/s]
+------------------------------ Captured log call -------------------------------
+WARNING  app.services.ats_engine:ats_engine.py:1210 ATS semantic scoring active path=local (HF_TOKEN=<absent>)
+=============================== warnings summary ===============================
+../../../../../../opt/abacus-python/lib/python3.12/site-packages/passlib/utils/__init__.py:854
+  /opt/abacus-python/lib/python3.12/site-packages/passlib/utils/__init__.py:854: DeprecationWarning: 'crypt' is deprecated and slated for removal in Python 3.13
+    from crypt import crypt as _crypt
+
+tests/test_mv_resume_studio.py::TestTailorApprovalIsReal::test_tailor_run_opens_a_pending_approval
+tests/test_mv_resume_studio.py::TestTailorApprovalIsReal::test_tailor_run_opens_a_pending_approval
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+tests/test_mv_resume_studio.py::TestTailorApprovalIsReal::test_tailor_run_opens_a_pending_approval
+tests/test_mv_resume_studio.py::TestTailorApprovalIsReal::test_tailor_run_opens_a_pending_approval
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+tests/test_mv_resume_studio.py::TestTailorApprovalIsReal::test_tailor_run_opens_a_pending_approval
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_mv_resume_studio.py::TestTailorApprovalIsReal::test_tailored_version_is_pending_until_approved - assert 409 == 200
+1 failed, 10 passed, 6 warnings in 127.65s (0:02:07)
+sys:1: DeprecationWarning: builtin type swigvarlink has no __module__ attribute
