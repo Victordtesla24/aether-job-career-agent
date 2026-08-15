@@ -13,6 +13,8 @@ honest ``error``.
 """
 from __future__ import annotations
 
+import uuid
+
 import pytest
 
 from app.agents import scout_agent as scout_module
@@ -39,8 +41,25 @@ class _BrokenAdapter:
 
 
 def _run_scout(client, auth_headers, monkeypatch, adapter_cls) -> dict:
+    # Isolation: ``JobSourceStatus`` is deliberately absent from conftest's
+    # ``_TABLES_TO_CLEAN`` — it is additive, carries no FK to ``User``, and
+    # ``JobSourceStatusRepository.latest_block`` reads the newest row for a
+    # source SERVER-WIDE (across every user, every test run, every worktree
+    # sharing this ``aether_test`` schema) by design (see
+    # tests/test_critical4_source_block_backoff.py's ``source`` fixture).
+    # These mock adapters used to claim the REAL adapter names
+    # ("wellfound"/"greenhouse"), so this test collided with whatever the
+    # ACTUAL wellfound/greenhouse adapters last recorded — observed in
+    # practice as a stale ``blocked`` row (MON-006's genuine 404 "source
+    # parked" classification) that short-circuited ``ScoutAgent.run`` before
+    # this test's own mock ``fetch()`` was ever called, so the assertions
+    # below saw MON-006's stored error text instead of the mock's. A unique
+    # source name per invocation (mirroring CRITICAL-4's own convention)
+    # guarantees this test only ever observes ITS OWN mock's classification.
+    unique_source = f"{adapter_cls.source}-{uuid.uuid4().hex[:12]}"
+    monkeypatch.setattr(adapter_cls, "source", unique_source)
     monkeypatch.setattr(
-        scout_module, "ADAPTERS", {adapter_cls.source: adapter_cls}
+        scout_module, "ADAPTERS", {unique_source: adapter_cls}
     )
     from conftest import seed_own_resume
 
@@ -51,7 +70,7 @@ def _run_scout(client, auth_headers, monkeypatch, adapter_cls) -> dict:
     user_id = decode_access_token(token)["userId"]
     result = ScoutAgent().run(user_id, query="engineer", location="Melbourne")
     per_source = {s["source"]: s for s in result.per_source}
-    return {"result": result, "src": per_source[adapter_cls.source]}
+    return {"result": result, "src": per_source[unique_source]}
 
 
 class TestBlockedClassification:
