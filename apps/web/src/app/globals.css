@@ -94,7 +94,7 @@
   --link: var(--gold);
   --focus-ring: var(--gold);
   --font-display: "AB Marquee", "Playfair Display", Georgia, serif;
-  --font-body: "AB Sans", "DM Sans", system-ui, sans-serif;
+  --font-body: "AB Sans", "DM Sans", "Helvetica Neue", sans-serif;
 
   /* S-UI §2.1/§2.7 — the elevated token set. ADDITIVE: nothing below
      re-points an existing class, so every page that has not migrated yet
@@ -139,7 +139,7 @@
 }
 
 body {
-  font-family: "AB Sans", "DM Sans", "Helvetica Neue", sans-serif;
+  font-family: var(--font-body);
   background-color: #08080a;
   color: #f5f1e8;
   background-image:
@@ -219,6 +219,10 @@ body {
  * Accessibility overrides (Phase 4, fix iteration 2).
  * DEF-053: solid gilt fills get dark text (--accent-on #0A0A0A on gold).
  * DEF-051: muted caption token uses the parchment ladder (--fg-2/--fg-3 warm-white alphas).
+ * .type-section (10px) and .type-meta (11px) use --fg-2 rgba(245,241,232,.62)
+ * (6.74–6.99:1 vs ink-0/1/2), not --fg-3 rgba(245,241,232,.46) (4.24–4.28:1,
+ * below WCAG AA 4.5:1 for these small-text roles). --fg-3 stays the DS token
+ * for non-text/decorative use.
  * Sapphire-light caption text stays readable on obsidian (#8FA8CE).
  */
 .bg-aether-coral {
@@ -333,12 +337,12 @@ body {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.1em;
-  color: rgba(245, 241, 232, 0.46);
+  color: rgba(245, 241, 232, 0.62);
 }
 .type-meta {
   font-size: 11px;
   line-height: 1.5;
-  color: rgba(245, 241, 232, 0.46);
+  color: rgba(245, 241, 232, 0.62);
 }
 .type-mono-micro {
   font-family: "JetBrains Mono", ui-monospace, monospace;

@@ -86,7 +86,7 @@ const config: Config = {
       fontFamily: {
         // AB Sans is the body/UI face; AB Marquee (all-caps stencil) is the
         // display face for page/card titles. JetBrains Mono is the data face.
-        sans: ["'AB Sans'", "Inter", "system-ui", "sans-serif"],
+        sans: ["'AB Sans'", "'DM Sans'", "'Helvetica Neue'", "sans-serif"],
         display: ["'AB Marquee'", "'Playfair Display'", "Georgia", "serif"],
         mono: ["'JetBrains Mono'", "ui-monospace", "monospace"],
       },
