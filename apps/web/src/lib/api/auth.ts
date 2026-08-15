@@ -29,6 +29,15 @@ interface RegisterInput {
   email: string;
   password: string;
   name?: string;
+  /**
+   * ADMIN-2.0 BE-2: a sales agent's referral code, from a `/signup?ref=CODE`
+   * landing link. The API accepts it as a body field (or query param) and
+   * attributes the signup AFTER the account is committed, swallowing any
+   * failure there — the account is the user's, a referral credit is the
+   * operator's bookkeeping, and one must never cost the other. Omitted
+   * entirely when the visitor arrived without a code.
+   */
+  ref?: string;
 }
 
 interface RegisterResult {

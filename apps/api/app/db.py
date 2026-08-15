@@ -1865,3 +1865,65 @@ def ensure_application_manual_step_question_column() -> None:
             )
         conn.commit()
     _application_manual_step_question_column_ready = True
+
+
+#: Guard so the additive ADMIN-2.0 user-lifecycle columns are only ensured once
+#: per worker process (see ``ensure_user_lifecycle_columns``).
+_user_lifecycle_columns_ready = False
+
+
+def ensure_user_lifecycle_columns() -> None:
+    """Idempotently add the additive ADMIN-2.0 lifecycle columns to ``User``.
+
+    * ``deletedAt`` (timestamptz, NULL) — the SOFT-delete stamp behind
+      ``DELETE /admin/users/{id}``. A hard delete is not an option here: every
+      child table (Job, Resume, Application, AgentRun, Contact, EmailThread,
+      StoryEntry, ...) cascades from ``User.id``, so a real delete would destroy
+      the work the account produced AND orphan the Stripe/billing history that
+      still references the customer. NULL for every pre-existing row means
+      "live", so nothing changes for anyone until an admin actually deletes.
+    * ``mustChangePassword`` (boolean NOT NULL DEFAULT false) — set when an admin
+      CREATES an account with a generated temporary password, cleared by
+      ``UserRepository.set_password`` when the user (or an admin) sets a real
+      one. The default is ``false``, so every existing account is unaffected.
+
+    ``ADD COLUMN ... NOT NULL DEFAULT false`` is a metadata-only change on
+    PostgreSQL (a constant default is not rewritten across existing rows), so it
+    is fast and safe on the production ``User`` table. Additive only — no DROP,
+    no rename, no ALTER TYPE. Lazy DDL per ADR-TR-1 (there is no migration
+    runner); the documentary mirror lives in
+    ``apps/api/migrations/0029_admin2.sql``. A transaction-scoped advisory lock
+    serialises concurrent first-hit callers so the DDL cannot race, and
+    ``TRUNCATE`` never drops columns, so the process-wide latch survives the
+    test-suite teardown.
+
+    MUST be called by every path that reads or writes either column, before the
+    statement that names it.
+    """
+    global _user_lifecycle_columns_ready
+    if _user_lifecycle_columns_ready:
+        return
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            # Lock-free fast path: skip the ACCESS EXCLUSIVE ALTER once both
+            # columns exist (production / warm test schema).
+            cur.execute(
+                "SELECT count(*) FROM information_schema.columns"
+                " WHERE table_name = 'User'"
+                " AND table_schema = ANY(current_schemas(false))"
+                " AND column_name IN ('deletedAt', 'mustChangePassword')"
+            )
+            row = cur.fetchone()
+            if row and row[0] == 2:
+                _user_lifecycle_columns_ready = True
+                return
+            cur.execute("SELECT pg_advisory_xact_lock(%s)", (7420260810,))
+            cur.execute(
+                'ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "deletedAt" timestamptz'
+            )
+            cur.execute(
+                'ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "mustChangePassword"'
+                " boolean NOT NULL DEFAULT false"
+            )
+        conn.commit()
+    _user_lifecycle_columns_ready = True
