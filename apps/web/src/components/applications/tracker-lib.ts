@@ -40,63 +40,83 @@ type StageDef = {
   iconClass: string;
 };
 
-/** Canonical 8-stage pipeline, wireframe order and colours (col-*-at09..at24). */
+/**
+ * Canonical 8-stage pipeline, wireframe order (col-*-at09..at24). Colours are
+ * on-brand DS semantics (UI-BRAND WB4 / RULINGS.md), not the legacy rainbow:
+ *
+ *   discovered / evaluating / tailoring — agent-processing stages, the same
+ *     sapphire cue (`aether-indigo` #3E5A8C dot, `aether-violet` #8FA8CE
+ *     icon-text) across all three, because all three are the scout/fit-scorer
+ *     agent working, not the user.
+ *   ready (Ready to Apply) — action-pending AND genuinely stalled: every card
+ *     here is blocked on either the user's own click-through (assisted
+ *     channels) or a re-request after an expired approval, so it takes the
+ *     warn-copper `state-warn` (#C8873A) rather than neutral info-blue.
+ *   submitted / in-review / interview — the three "waiting on someone else"
+ *     stages (employer response, then an interview slot) share `state-info`
+ *     (#7C93BE): nothing is blocked or failing, Aether is just watching for a
+ *     reply.
+ *   offer — `state-ok` (#6FAF8D): the one unambiguous success state.
+ *
+ * (No stage here maps to rejected/failed — those live in the separate
+ * "Closed" strip, not a board column.)
+ */
 export const STAGE_DEFS: readonly StageDef[] = [
   {
     key: "discovered",
     label: "Discovered",
-    dotClass: "bg-[#4F46E5]",
+    dotClass: "bg-aether-indigo",
     icon: "fa-magnifying-glass",
-    iconClass: "text-[#818CF8] bg-[#4F46E5]/20",
+    iconClass: "text-aether-violet bg-aether-indigo/20",
   },
   {
     key: "evaluating",
     label: "Evaluating",
-    dotClass: "bg-[#818CF8]",
+    dotClass: "bg-aether-indigo",
     icon: "fa-scale-balanced",
-    iconClass: "text-[#818CF8] bg-[#818CF8]/20",
+    iconClass: "text-aether-violet bg-aether-indigo/20",
   },
   {
     key: "tailoring",
     label: "Tailoring",
-    dotClass: "bg-[#FF6B35]",
+    dotClass: "bg-aether-indigo",
     icon: "fa-file-pen",
-    iconClass: "text-[#FF6B35] bg-[#FF6B35]/20",
+    iconClass: "text-aether-violet bg-aether-indigo/20",
   },
   {
     key: "ready",
     label: "Ready to Apply",
-    dotClass: "bg-[#F59E0B]",
+    dotClass: "bg-state-warn",
     icon: "fa-clock",
-    iconClass: "text-[#F59E0B] bg-[#F59E0B]/20",
+    iconClass: "text-state-warn bg-state-warn/20",
   },
   {
     key: "submitted",
     label: "Submitted",
-    dotClass: "bg-[#60A5FA]",
+    dotClass: "bg-state-info",
     icon: "fa-check",
-    iconClass: "text-[#60A5FA] bg-[#60A5FA]/20",
+    iconClass: "text-state-info bg-state-info/20",
   },
   {
     key: "in-review",
     label: "In Review",
-    dotClass: "bg-[#A78BFA]",
+    dotClass: "bg-state-info",
     icon: "fa-eye",
-    iconClass: "text-[#A78BFA] bg-[#A78BFA]/20",
+    iconClass: "text-state-info bg-state-info/20",
   },
   {
     key: "interview",
     label: "Interview",
-    dotClass: "bg-[#F59E0B]",
+    dotClass: "bg-state-info",
     icon: "fa-comments",
-    iconClass: "text-[#F59E0B] bg-[#F59E0B]/20",
+    iconClass: "text-state-info bg-state-info/20",
   },
   {
     key: "offer",
     label: "Offer",
-    dotClass: "bg-[#34D399]",
+    dotClass: "bg-state-ok",
     icon: "fa-award",
-    iconClass: "text-[#34D399] bg-[#34D399]/20",
+    iconClass: "text-state-ok bg-state-ok/20",
   },
 ] as const;
 

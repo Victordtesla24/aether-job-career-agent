@@ -229,7 +229,7 @@ function MoveMenu({
         <div
           role="menu"
           aria-label={`Move ${card.title} to stage`}
-          className="absolute bottom-full left-0 z-20 mb-1 w-44 rounded-xl border border-white/10 bg-[#16161f] p-1 shadow-xl"
+          className="absolute bottom-full left-0 z-20 mb-1 w-44 rounded-xl border border-white/10 bg-surface-2 p-1 shadow-xl"
         >
           {targets.map((key) => (
             <button
@@ -362,7 +362,7 @@ function CardMeta({
       return card.fit != null ? (
         <div className="mt-2 h-1 rounded-full bg-white/10" aria-hidden="true">
           <div
-            className="h-1 rounded-full bg-[#818CF8]"
+            className="h-1 rounded-full bg-aether-indigo"
             style={{ width: `${Math.min(card.fit, 100)}%` }}
           />
         </div>
@@ -437,7 +437,7 @@ function CardMeta({
           {meta.followUpSentAt ? (
             <div className="mt-2 flex items-center gap-1.5 text-[10px] text-aether-green">
               <i className="fa-solid fa-clock text-[9px]" aria-hidden="true" />
-              Follow-up sent ✓
+              Follow-up sent <i className="fa-solid fa-check text-[9px]" aria-hidden="true" />
             </div>
           ) : null}
         </>
@@ -475,7 +475,7 @@ function CardLink({ stageKey }: { stageKey: StageKey }) {
       <Link
         href="/dashboard/email"
         onClick={(e) => e.stopPropagation()}
-        className="mt-2 inline-flex items-center gap-1 rounded text-[10px] text-[#818CF8] transition hover:text-white"
+        className="mt-2 inline-flex items-center gap-1 rounded text-[10px] text-aether-violet transition hover:text-white"
       >
         <i className="fa-solid fa-envelope text-[9px]" aria-hidden="true" />
         View Email Thread
@@ -488,7 +488,7 @@ function CardLink({ stageKey }: { stageKey: StageKey }) {
       <Link
         href="/dashboard/networking"
         onClick={(e) => e.stopPropagation()}
-        className="mt-2 inline-flex items-center gap-1 rounded text-[10px] text-[#818CF8] transition hover:text-white"
+        className="mt-2 inline-flex items-center gap-1 rounded text-[10px] text-aether-violet transition hover:text-white"
       >
         <i className="fa-solid fa-address-book text-[9px]" aria-hidden="true" />
         View in CRM
@@ -1391,7 +1391,7 @@ export default function ApplicationsPage() {
       ) : view === "sankey" ? (
         <section data-testid="sankey-view">
           <div className="flex items-center gap-2.5">
-            <i className="fa-solid fa-diagram-project text-sm text-[#818CF8]" aria-hidden="true" />
+            <i className="fa-solid fa-diagram-project text-sm text-aether-violet" aria-hidden="true" />
             <h2 className="text-[15px] font-semibold">Sankey Flow</h2>
             <span className="text-[11px] text-aether-muted-dim">
               application flow &amp; drop-off across stages
@@ -1504,7 +1504,7 @@ export default function ApplicationsPage() {
                       target="_blank"
                       rel="noopener noreferrer"
                       onClick={(e) => e.stopPropagation()}
-                      className="mt-2 inline-flex items-center gap-1 rounded text-[10px] text-[#818CF8] transition hover:text-white"
+                      className="mt-2 inline-flex items-center gap-1 rounded text-[10px] text-aether-violet transition hover:text-white"
                     >
                       View listing <i className="fa-solid fa-arrow-right text-[8px]" aria-hidden="true" />
                     </a>
@@ -1561,7 +1561,7 @@ export default function ApplicationsPage() {
           >
             <div className="flex items-start gap-3">
               <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-red-500/30 bg-red-500/15 text-red-400">
-                ⚠️
+                <i className="fa-solid fa-triangle-exclamation" aria-hidden="true" />
               </span>
               <div className="flex-1">
                 <h3 id="clearGateTitle" className="text-base font-semibold leading-snug">
@@ -1569,12 +1569,12 @@ export default function ApplicationsPage() {
                 </h3>
                 <p className="mt-1 text-[12px] text-aether-muted">
                   This will <span className="font-semibold text-red-300">archive</span>{" "}
-                  <span className="text-[#C7C7D6]">ALL</span> jobs still sitting in the
+                  <span className="text-aether-muted">ALL</span> jobs still sitting in the
                   agent-driven pipeline columns — Discovered, Evaluating and Tailoring.
                   Archived jobs are soft-deleted (recoverable in the history view), not
                   destroyed. Your applications, the Ready-to-Apply through Offer columns,
                   and closed items (rejected / withdrawn) are{" "}
-                  <span className="text-[#C7C7D6]">left untouched</span>.
+                  <span className="text-aether-muted">left untouched</span>.
                 </p>
               </div>
               <button
@@ -1583,7 +1583,7 @@ export default function ApplicationsPage() {
                 aria-label="Close"
                 className="text-aether-muted transition hover:text-white"
               >
-                ✕
+                <i className="fa-solid fa-xmark" aria-hidden="true" />
               </button>
             </div>
 
@@ -1593,7 +1593,7 @@ export default function ApplicationsPage() {
                 data-testid="clear-pipeline-success"
                 role="status"
               >
-                ✓ Archived {clearResult.archived} pipeline job
+                <i className="fa-solid fa-check text-[9px]" aria-hidden="true" /> Archived {clearResult.archived} pipeline job
                 {clearResult.archived === 1 ? "" : "s"}. The Discovered,
                 Evaluating and Tailoring columns are now empty — applications
                 and closed items were left untouched.
@@ -1616,7 +1616,13 @@ export default function ApplicationsPage() {
                   disabled={clearSubmitting}
                   className="flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2.5 text-[13px] font-semibold hover:opacity-90 disabled:opacity-50"
                 >
-                  {clearSubmitting ? "Clearing…" : "✕ Yes, Archive Pipeline Jobs"}
+                  {clearSubmitting ? (
+                    "Clearing…"
+                  ) : (
+                    <>
+                      <i className="fa-solid fa-xmark" aria-hidden="true" /> Yes, Archive Pipeline Jobs
+                    </>
+                  )}
                 </button>
               </div>
             )}

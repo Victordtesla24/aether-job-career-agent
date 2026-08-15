@@ -43,8 +43,8 @@ import {
 
 const TONE: Record<string, string> = {
   submitted: "border-aether-green/40 text-aether-green",
-  ready: "border-[#818CF8]/50 text-[#818CF8]",
-  submitting: "border-[#818CF8]/50 text-[#818CF8]",
+  ready: "border-aether-violet/50 text-aether-violet",
+  submitting: "border-aether-violet/50 text-aether-violet",
   needs_your_click: "border-aether-yellow/40 text-aether-yellow",
   manual_step: "border-aether-coral/40 text-aether-coral",
   expired_reconfirm: "border-aether-coral/40 text-aether-coral",
@@ -129,7 +129,7 @@ export default function SubmissionControl({
             e.stopPropagation();
             void submit();
           }}
-          className="mt-1 rounded border border-white/15 px-2 py-0.5 text-[10px] text-aether-muted transition hover:border-white/30 hover:text-white"
+          className="mt-1 rounded border border-white/15 px-2 py-0.5 text-[10px] text-aether-muted transition hover:border-white/30 hover:text-aether-text"
         >
           Try again
         </button>
@@ -185,7 +185,7 @@ export default function SubmissionControl({
             target="_blank"
             rel="noopener noreferrer"
             onClick={(e) => e.stopPropagation()}
-            className="mt-1.5 inline-flex items-center gap-1 text-[10px] text-aether-muted-dim transition hover:text-white"
+            className="mt-1.5 inline-flex items-center gap-1 text-[10px] text-aether-muted-dim transition hover:text-aether-text"
           >
             or open the posting and apply there
             <i className="fa-solid fa-arrow-up-right-from-square text-[8px]" aria-hidden="true" />
@@ -207,7 +207,7 @@ export default function SubmissionControl({
               e.stopPropagation();
               void submit();
             }}
-            className={`rounded-md border px-2 py-0.5 text-[10px] transition hover:text-white ${tone}`}
+            className={`rounded-md border px-2 py-0.5 text-[10px] transition hover:text-aether-text ${tone}`}
           >
             {control.label}
           </button>
@@ -220,7 +220,7 @@ export default function SubmissionControl({
             target="_blank"
             rel="noopener noreferrer"
             onClick={(e) => e.stopPropagation()}
-            className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] transition hover:text-white ${tone}`}
+            className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] transition hover:text-aether-text ${tone}`}
           >
             {control.label}
             <i className="fa-solid fa-arrow-up-right-from-square text-[8px]" aria-hidden="true" />
@@ -239,7 +239,7 @@ export default function SubmissionControl({
               e.stopPropagation();
               onReconfirm?.();
             }}
-            className={`rounded-md border px-2 py-0.5 text-[10px] transition hover:text-white ${tone}`}
+            className={`rounded-md border px-2 py-0.5 text-[10px] transition hover:text-aether-text ${tone}`}
           >
             {control.label}
           </button>
@@ -250,7 +250,7 @@ export default function SubmissionControl({
             data-testid="submission-control-fix"
             href={control.href}
             onClick={(e) => e.stopPropagation()}
-            className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] transition hover:text-white ${tone}`}
+            className={`inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] transition hover:text-aether-text ${tone}`}
           >
             {control.label}
             <i className="fa-solid fa-arrow-right text-[8px]" aria-hidden="true" />

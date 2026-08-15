@@ -55,8 +55,8 @@ function reuseNote(question: CardQuestion): string {
 }
 
 const FIELD_CLASS =
-  "mt-1 w-full rounded-md border border-white/15 bg-black/30 px-2 py-1.5 text-[11px] text-white " +
-  "placeholder:text-aether-muted-dim focus:border-[#818CF8]/60 focus:outline-none";
+  "mt-1 w-full rounded-md border border-white/15 bg-black/30 px-2 py-1.5 text-[11px] text-aether-text " +
+  "placeholder:text-aether-muted-dim focus:border-aether-coral/60 focus:outline-none";
 
 export default function AnswerQuestionForm({
   applicationId,
@@ -121,7 +121,7 @@ export default function AnswerQuestionForm({
         <div key={question.name}>
           <label
             htmlFor={`answer-${applicationId}-${question.name}`}
-            className="block text-[11px] leading-snug text-white"
+            className="block text-[11px] leading-snug text-aether-text"
           >
             {question.label}
           </label>
@@ -185,7 +185,7 @@ export default function AnswerQuestionForm({
             e.stopPropagation();
             void save();
           }}
-          className="rounded-md border border-[#818CF8]/50 px-2 py-0.5 text-[10px] text-[#818CF8] transition hover:text-white disabled:opacity-50"
+          className="rounded-md border border-aether-violet/50 px-2 py-0.5 text-[10px] text-aether-violet transition hover:text-aether-text disabled:opacity-50"
         >
           {saving ? "Saving…" : "Save answer"}
         </button>

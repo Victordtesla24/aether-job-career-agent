@@ -222,14 +222,14 @@ export function ApprovalModal({ approval, onClose, onDecide }: ApprovalModalProp
         aria-labelledby={titleId}
         tabIndex={-1}
         data-testid="approval-modal"
-        className="elev-3 flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-3xl outline-none sm:max-h-[85dvh] sm:w-[560px] sm:rounded-3xl"
+        className="elev-3 flex max-h-[92dvh] w-full flex-col overflow-hidden rounded-t-[14px] outline-none sm:max-h-[85dvh] sm:w-[560px] sm:rounded-[14px]"
       >
         {/* Header */}
         <div className="border-b border-hairline px-5 pb-5 pt-6 sm:px-7 sm:pt-7">
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-center gap-3">
               <div
-                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-state-warn/25 bg-state-warn/15"
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[10px] border border-state-warn/25 bg-state-warn/15"
                 aria-hidden="true"
               >
                 <i className="fa-solid fa-shield-halved text-state-warn" />
@@ -291,10 +291,10 @@ export function ApprovalModal({ approval, onClose, onDecide }: ApprovalModalProp
                 aria-hidden="true"
               />
               <div className="mb-2 flex items-center gap-2">
-                <i className="fa-solid fa-brain text-xs text-[#818CF8]" aria-hidden="true" />
+                <i className="fa-solid fa-brain text-xs text-aether-violet" aria-hidden="true" />
                 <span className="text-xs font-semibold">Why approval is needed</span>
               </div>
-              <p data-testid="modal-why" className="text-xs leading-relaxed text-[#C8C8DC]">
+              <p data-testid="modal-why" className="text-xs leading-relaxed text-aether-muted">
                 {details.why}
               </p>
             </div>
@@ -342,7 +342,7 @@ export function ApprovalModal({ approval, onClose, onDecide }: ApprovalModalProp
                 <span className="text-[11px] font-medium uppercase tracking-wide text-aether-muted-dim">
                   {previewLabel(approval)}
                 </span>
-                <span className="text-[10px] text-[#818CF8]">
+                <span className="text-[10px] text-aether-violet">
                   {editing ? "editing" : "preview"}
                 </span>
               </div>
@@ -484,7 +484,7 @@ export function ApprovalModal({ approval, onClose, onDecide }: ApprovalModalProp
             data-testid="modal-approve-btn-mobile"
             onClick={() => void decide("approve")}
             disabled={!pending || busy !== null || approveBlocked}
-            className={button({ tone: "ok", size: "md", class: "w-full rounded-2xl py-3.5" })}
+            className={button({ tone: "ok", size: "md", class: "w-full rounded-xs py-3.5" })}
           >
             <i className="fa-solid fa-check mr-2 text-xs" aria-hidden="true" />
             {busy === "approve" ? "Approving…" : editing ? "Approve with edits" : "Approve & Submit"}
@@ -495,7 +495,7 @@ export function ApprovalModal({ approval, onClose, onDecide }: ApprovalModalProp
               data-testid="modal-edit-btn-mobile"
               onClick={() => setEditing((value) => !value)}
               disabled={!pending || busy !== null || details.preview === null}
-              className={button({ tone: "neutral", size: "md", class: "min-h-[44px] flex-1 rounded-2xl py-3" })}
+              className={button({ tone: "neutral", size: "md", class: "min-h-[44px] flex-1 rounded-xs py-3" })}
             >
               {editing ? "Discard edits" : "Edit"}
             </button>
@@ -504,7 +504,7 @@ export function ApprovalModal({ approval, onClose, onDecide }: ApprovalModalProp
               data-testid="modal-reject-btn-mobile"
               onClick={() => void decide("reject")}
               disabled={!pending || busy !== null}
-              className={button({ tone: "danger", size: "md", class: "min-h-[44px] flex-1 rounded-2xl py-3" })}
+              className={button({ tone: "danger", size: "md", class: "min-h-[44px] flex-1 rounded-xs py-3" })}
             >
               {busy === "reject" ? "Rejecting…" : "Reject"}
             </button>
