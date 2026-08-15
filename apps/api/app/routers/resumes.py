@@ -1164,6 +1164,29 @@ def _diff_requested(value: Any) -> bool:
     return value is True
 
 
+def _branded_requested(value: Any) -> bool:
+    """Resolve the ``branded`` option safely for IN-PROCESS handler calls (RFMT-5).
+
+    Exactly the same hazard as :func:`_diff_requested`, on the parameter that
+    decides which DOCUMENT an employer opens. ``download_resume`` is called
+    directly — not over HTTP — by every outbound path in the product
+    (``services/email_attachments.py`` for the approval-gated Gmail send and the
+    application email submission; ``workers/apply_sweep.py`` for the
+    company-website auto-submit). FastAPI resolves ``Query`` defaults only for a
+    real request, so on those calls ``branded`` arrives as the ``Query`` object
+    itself, which is TRUTHY: a plain ``if branded:`` took the EXPLICIT-OPT-IN
+    branch and shipped the single-column Aether template to the employer,
+    stamped ``branded-optin`` — a claim that the user had asked to be re-styled,
+    which they had not.
+
+    So only a genuine ``True`` — a request that actually asked to be re-styled
+    (``?branded=true``) — counts. Anything else (the unresolved default,
+    ``?branded=false``, ``None``) is the format-preserving render of the user's
+    own document.
+    """
+    return value is True
+
+
 @router.get("/{resume_id}/fidelity")
 def resume_fidelity(
     resume_id: str,
@@ -1183,7 +1206,10 @@ def resume_fidelity(
     rather than claiming an outcome.
     """
     rendered = _render_resume(
-        resume_id, current_user["id"], branded=branded, highlight=_diff_requested(diff)
+        resume_id,
+        current_user["id"],
+        branded=_branded_requested(branded),
+        highlight=_diff_requested(diff),
     )
     return {
         "resume_id": resume_id,
@@ -1248,7 +1274,10 @@ def download_resume(
     changed; the Download button does not, and never should.
     """
     rendered = _render_resume(
-        resume_id, current_user["id"], branded=branded, highlight=_diff_requested(diff)
+        resume_id,
+        current_user["id"],
+        branded=_branded_requested(branded),
+        highlight=_diff_requested(diff),
     )
     return Response(
         content=rendered.content,
