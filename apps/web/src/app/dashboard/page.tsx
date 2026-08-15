@@ -269,10 +269,10 @@ export default function DashboardPage() {
         <div
           role="status"
           aria-live="polite"
-          className={`fixed right-6 top-20 z-50 animate-fade-in rounded-xl border px-5 py-3 text-sm font-medium shadow-lg backdrop-blur-md transition-all ${
+          className={`fixed right-6 top-20 z-50 animate-fade-in rounded-[10px] border bg-surface-2 px-5 py-3 text-sm font-medium shadow-lg transition-all ${
             toast.kind === "success"
-              ? "border-aether-green/40 bg-aether-green/15 text-aether-green"
-              : "border-red-500/40 bg-red-500/15 text-red-300"
+              ? "border-aether-green/40 text-aether-green"
+              : "border-red-500/40 text-red-300"
           }`}
         >
           {toast.message}

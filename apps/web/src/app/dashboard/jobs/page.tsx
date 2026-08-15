@@ -1040,7 +1040,7 @@ export default function JobsPage() {
           role="status"
           aria-live="polite"
           data-testid="jobs-toast"
-          className="fixed right-6 top-20 z-50 rounded-xl border border-aether-green/40 bg-aether-green/15 px-5 py-3 text-sm font-medium text-aether-green shadow-lg backdrop-blur-md"
+          className="fixed right-6 top-20 z-50 rounded-[10px] border border-aether-green/40 bg-surface-2 px-5 py-3 text-sm font-medium text-aether-green shadow-lg"
         >
           ✓ {applyToast}
         </div>

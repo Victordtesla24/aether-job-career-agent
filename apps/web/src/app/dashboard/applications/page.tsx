@@ -1557,7 +1557,7 @@ export default function ApplicationsPage() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="clearGateTitle"
-            className="elev-3 relative w-[520px] max-w-[92vw] rounded-2xl border-state-danger/40 p-6"
+            className="elev-3 relative w-[520px] max-w-[92vw] rounded-[14px] border-state-danger/40 p-6"
           >
             <div className="flex items-start gap-3">
               <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-red-500/30 bg-red-500/15 text-red-400">

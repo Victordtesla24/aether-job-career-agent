@@ -578,7 +578,7 @@ export default function EmailCenterPage() {
     return (
       <div className="grid gap-4 xl:grid-cols-3" aria-busy="true" data-testid="email-skeleton">
         {[0, 1, 2].map((i) => (
-          <div key={i} className="glass h-96 animate-pulse rounded-2xl border border-white/10" />
+          <div key={i} className="bg-surface-1 h-96 animate-pulse rounded-2xl border border-white/10" />
         ))}
       </div>
     );
@@ -657,7 +657,7 @@ export default function EmailCenterPage() {
       </header>
 
       {/* Inboxes — one entry per connected Gmail account, plus a unified view */}
-      <div className="glass rounded-2xl border border-white/10 p-3" data-testid="email-accounts">
+      <div className="bg-surface-1 rounded-2xl border border-white/10 p-3" data-testid="email-accounts">
         <div className="mb-2 flex items-center justify-between gap-2">
           <span className="text-xs uppercase tracking-wide text-aether-muted-dim">Inboxes</span>
         </div>
@@ -991,7 +991,7 @@ export default function EmailCenterPage() {
 
       <div className="grid gap-5 xl:grid-cols-4">
         {/* Smart Inbox */}
-        <section className="glass min-w-0 rounded-2xl border border-white/10 p-4 xl:col-span-1" data-testid="smart-inbox">
+        <section className="bg-surface-1 min-w-0 rounded-2xl border border-white/10 p-4 xl:col-span-1" data-testid="smart-inbox">
           <h2 className="mb-3 text-[15px] font-semibold">Smart Inbox</h2>
           <div className="mb-3 flex flex-wrap gap-1.5">
             {CATEGORIES.map((c) => (
@@ -1068,7 +1068,7 @@ export default function EmailCenterPage() {
         <section className="min-w-0 space-y-4 xl:col-span-2" data-testid="email-detail">
           {selected ? (
             <>
-              <div className="glass rounded-2xl border border-white/10 p-5">
+              <div className="bg-surface-1 rounded-2xl border border-white/10 p-5">
                 <div className="mb-3 flex items-start justify-between gap-3">
                   <div>
                     <h2 className="text-[15px] font-semibold">{selected.subject}</h2>
@@ -1230,7 +1230,7 @@ export default function EmailCenterPage() {
               {/* Draft reply — generated ON DEMAND by the real emailAgent; once a
                   draft exists the (honest) send confirmation gate is reachable. */}
               {(drafts[selected.id] ?? "").length > 0 ? (
-                <div className="glass rounded-2xl border border-white/10 p-5" data-testid="draft-reply">
+                <div className="bg-surface-1 rounded-2xl border border-white/10 p-5" data-testid="draft-reply">
                   <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                     <h3 className="text-[15px] font-semibold">AI Draft Reply</h3>
                     <span className="rounded-md border border-aether-violet/25 bg-aether-violet/10 px-2 py-0.5 text-[10px] text-aether-violet">
@@ -1282,7 +1282,7 @@ export default function EmailCenterPage() {
                   ) : null}
                 </div>
               ) : (
-                <div className="glass rounded-2xl border border-white/10 p-5" data-testid="draft-reply-empty">
+                <div className="bg-surface-1 rounded-2xl border border-white/10 p-5" data-testid="draft-reply-empty">
                   <h3 className="text-[15px] font-semibold">AI Draft Reply</h3>
                   <p className="mt-1 text-sm text-aether-muted-dim">
                     Generate a resume-grounded, fabrication-guarded reply you can review, edit
@@ -1307,7 +1307,7 @@ export default function EmailCenterPage() {
               )}
             </>
           ) : (
-            <p className="glass rounded-2xl border border-white/10 p-8 text-center text-sm text-aether-muted-dim">
+            <p className="bg-surface-1 rounded-2xl border border-white/10 p-8 text-center text-sm text-aether-muted-dim">
               Select an email to view details.
             </p>
           )}
@@ -1315,7 +1315,7 @@ export default function EmailCenterPage() {
 
         {/* Right rail */}
         <div className="min-w-0 space-y-4 xl:col-span-1">
-          <section className="glass rounded-2xl border border-white/10 p-5" data-testid="followups">
+          <section className="bg-surface-1 rounded-2xl border border-white/10 p-5" data-testid="followups">
             <h2 className="mb-3 text-[15px] font-semibold">Automated Follow-Ups</h2>
             {inbox.followUps.length === 0 ? (
               <p className="text-xs text-aether-muted-dim">
@@ -1338,7 +1338,7 @@ export default function EmailCenterPage() {
             </div>
           </section>
 
-          <section className="glass rounded-2xl border border-white/10 p-5" data-testid="email-stats">
+          <section className="bg-surface-1 rounded-2xl border border-white/10 p-5" data-testid="email-stats">
             <h2 className="mb-3 text-[15px] font-semibold">This Week&apos;s Email Stats</h2>
             <div className="grid grid-cols-2 gap-2.5">
               <MiniStat label="Received" value={String(inbox.stats.received)} />
@@ -1351,7 +1351,7 @@ export default function EmailCenterPage() {
           </section>
 
           {inbox.recruiterProfile ? (
-            <section className="glass rounded-2xl border border-white/10 p-5" data-testid="recruiter-profile">
+            <section className="bg-surface-1 rounded-2xl border border-white/10 p-5" data-testid="recruiter-profile">
               <h2 className="mb-2 text-[15px] font-semibold">Recruiter Profile</h2>
               <p className="text-sm font-semibold">{inbox.recruiterProfile.name}</p>
               <p className="text-xs text-aether-muted">{inbox.recruiterProfile.role}</p>
@@ -1370,7 +1370,7 @@ export default function EmailCenterPage() {
           aria-modal="true"
           aria-label="Confirm send"
         >
-          <div className="glass w-full max-w-lg rounded-2xl border border-white/15 bg-[#12121C] p-6" data-testid="send-gate-modal">
+          <div className="w-full max-w-lg rounded-[14px] border border-white/15 bg-surface-2 p-6" data-testid="send-gate-modal">
             <div className="mb-3 flex items-center gap-2">
               <i className="fa-solid fa-shield-halved text-aether-amber" aria-hidden="true" />
               <h2 className="text-lg font-semibold">Confirm before sending</h2>
@@ -1413,7 +1413,7 @@ export default function EmailCenterPage() {
           aria-modal="true"
           aria-label="Compose email"
         >
-          <div className="glass w-full max-w-lg rounded-2xl border border-white/15 bg-[#12121C] p-6" data-testid="compose-modal">
+          <div className="w-full max-w-lg rounded-[14px] border border-white/15 bg-surface-2 p-6" data-testid="compose-modal">
             <div className="mb-4 flex items-center gap-2">
               <i className="fa-solid fa-pen-to-square text-aether-coral" aria-hidden="true" />
               <h2 className="text-lg font-semibold">Compose Draft</h2>

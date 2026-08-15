@@ -362,7 +362,7 @@ export default function InterviewCenterPage() {
 
       {atInterviewStage ? (
         <section
-          className="glass rounded-2xl border border-white/10 p-5"
+          className="bg-surface-1 rounded-2xl border border-white/10 p-5"
           data-testid="interview-prep-panel"
         >
           <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
@@ -401,7 +401,7 @@ export default function InterviewCenterPage() {
 
           {prepLoading && prep === null ? (
             <div
-              className="glass h-24 animate-pulse rounded-xl border border-white/10"
+              className="bg-surface-1 h-24 animate-pulse rounded-xl border border-white/10"
               aria-busy="true"
               data-testid="interview-prep-loading"
             />
@@ -544,7 +544,7 @@ export default function InterviewCenterPage() {
 
       {creating ? (
         <section
-          className="glass rounded-2xl border border-aether-coral/30 p-5"
+          className="bg-surface-1 rounded-2xl border border-aether-coral/30 p-5"
           data-testid="schedule-interview-panel"
         >
           <div className="mb-4 flex items-center justify-between">
@@ -731,12 +731,12 @@ export default function InterviewCenterPage() {
       {interviews === null ? (
         <div className="space-y-4" aria-busy="true" data-testid="interviews-loading">
           {[0, 1].map((i) => (
-            <div key={i} className="glass h-32 animate-pulse rounded-2xl border border-white/10" />
+            <div key={i} className="bg-surface-1 h-32 animate-pulse rounded-2xl border border-white/10" />
           ))}
         </div>
       ) : interviews.length === 0 ? (
         <div
-          className="glass rounded-2xl border border-white/10 p-8 text-center"
+          className="bg-surface-1 rounded-2xl border border-white/10 p-8 text-center"
           data-testid="interviews-empty-state"
         >
           <i className="fa-solid fa-calendar-check text-3xl text-aether-muted-dim" aria-hidden="true" />
@@ -763,7 +763,7 @@ export default function InterviewCenterPage() {
               <article
                 key={iv.id}
                 data-testid="interview-card"
-                className="glass rounded-2xl border border-white/10 p-5"
+                className="bg-surface-1 rounded-2xl border border-white/10 p-5"
               >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
