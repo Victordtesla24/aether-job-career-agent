@@ -137,6 +137,29 @@ describe("Analytics period selector (MV-analytics-004)", () => {
     expect(roi.textContent?.toLowerCase()).toMatch(/all time/);
   });
 
+  it("provides compact, data-grounded decision guidance for conversion, ATS distribution, and Agent ROI", async () => {
+    render(<AnalyticsPage />);
+
+    const conversion = await screen.findByTestId("interview-conversion-rate");
+    const ats = screen.getByTestId("ats-distribution");
+    const roi = screen.getByTestId("agent-roi");
+
+    [conversion, ats, roi].forEach((panel) => {
+      expect(panel.textContent).toContain("What this tells you");
+      expect(panel.textContent).toContain("What to do next");
+    });
+  });
+
+  it("keeps decision guidance free of unsupported numerical promises", async () => {
+    render(<AnalyticsPage />);
+
+    const guidance = await screen.findAllByTestId("analytics-decision-guidance");
+    expect(guidance).toHaveLength(3);
+    guidance.forEach((item) => {
+      expect(item.textContent).not.toMatch(/\b\d+(?:\.\d+)?%|\$\d+(?:\.\d+)?|\b\d+\s*(?:days?|weeks?|months?)\b/i);
+    });
+  });
+
   it("the all-stages application count still states the window it was counted over, and still distinguishes itself from the funnel's submitted-only stage (review rework, MV-analytics-004/005)", async () => {
     render(<AnalyticsPage />);
 

@@ -111,6 +111,32 @@ const TAB_ITEMS: ReadonlyArray<{ value: AnalyticsTab; label: string; icon: strin
 
 const money = (usd: number) => `$${usd.toFixed(2)}`;
 
+type DecisionGuidanceProps = {
+  tellsYou: string;
+  next: string;
+};
+
+/** Compact, reusable decision context for measured Analytics panels.
+ * Guidance names what the panel's existing data can establish and directs the
+ * reader to a related review action without predicting an outcome. */
+function DecisionGuidance({ tellsYou, next }: DecisionGuidanceProps) {
+  return (
+    <div
+      className="mt-3 grid gap-2 border-t border-white/10 pt-3 text-[11px] leading-[1.45] text-aether-muted-dim sm:grid-cols-2"
+      data-testid="analytics-decision-guidance"
+    >
+      <p>
+        <span className="font-semibold text-aether-muted">What this tells you</span>{" "}
+        {tellsYou}
+      </p>
+      <p>
+        <span className="font-semibold text-aether-muted">What to do next</span>{" "}
+        {next}
+      </p>
+    </div>
+  );
+}
+
 /**
  * ROUND 3 / F3 — the two rows the Agent ROI panel draws, and the ONLY content
  * that panel still owns.
@@ -603,6 +629,10 @@ export default function AnalyticsPage() {
                   conversion.interview_conversion_rate * 1.15,
                 )}
               />
+              <DecisionGuidance
+                tellsYou="This shows the share of submitted applications that reached an interview in the displayed reporting window."
+                next="Review the funnel and the Agent Performance Policy above before changing outreach or application materials."
+              />
             </div>
             {/* U-AX item 1/2 — the gap, and what the policy is DOING about it,
                 as the ONE-LINE caption attached to the chart above.
@@ -691,7 +721,8 @@ export default function AnalyticsPage() {
           {ats === null ? (
             <div className="h-40 animate-pulse rounded-lg bg-white/5" aria-busy="true" />
           ) : (
-            /*
+            <>
+            {/*
              * On the chart kit — three defects closed at once:
              *  - `Math.max(2, …)` drew a 2px VIOLET bar for an empty bucket, so
              *    "no résumés scored 0-19" looked like "a couple did" (C-1/X-8);
@@ -699,7 +730,7 @@ export default function AnalyticsPage() {
              *    printed as the single value "0" (X-9);
              *  - there were no gridlines and no y-axis at all, which is the
              *    reference pack's rule-5 violation the audit filed by name.
-             */
+             */}
             <Histogram
               title="ATS score distribution"
               windowLabel={`all time — ${ats.total} scored ${ats.total === 1 ? "job" : "jobs"}, not affected by the period selector`}
@@ -713,6 +744,11 @@ export default function AnalyticsPage() {
                 />
               }
             />
+            <DecisionGuidance
+              tellsYou="This shows how scored jobs are spread across ATS fit-score bands; it is not filtered by the reporting period."
+              next="Open the roles in weaker bands and compare their job descriptions with the resume before prioritizing them."
+            />
+            </>
           )}
         </section>
 
@@ -810,6 +846,10 @@ export default function AnalyticsPage() {
                    The old tile's wording ("Average wall-clock time per agent
                    run") was hover-only — this states it on the face. */
                 footnote={`Runs average ${(roi.avg_duration_ms / 1000).toFixed(1)}s of wall-clock time.`}
+              />
+              <DecisionGuidance
+                tellsYou="This relates all-time agent spend to submitted applications and interviews only when the windows are comparable."
+                next="Use the cost rows with the funnel when deciding where to focus agent effort; do not compare unavailable ratios."
               />
             </div>
           )}
