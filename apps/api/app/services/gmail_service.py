@@ -725,6 +725,9 @@ class GmailService:
                 headers.append(
                     {
                         "id": msg.get("id"),
+                        # Additive (sales agent): the thread id is needed for
+                        # reply threading + the DB send-idempotency gate.
+                        "threadId": msg.get("threadId"),
                         "from": _header(raw, "From"),
                         "subject": _header(raw, "Subject"),
                         "date": _header(raw, "Date"),
@@ -756,6 +759,8 @@ class GmailService:
         text, html = _decode_bodies(payload)
         return {
             "id": msg.get("id"),
+            # Additive (sales agent): thread id for reply threading/idempotency.
+            "threadId": msg.get("threadId"),
             "from": _header(raw, "From"),
             "subject": _header(raw, "Subject"),
             "date": _header(raw, "Date"),
