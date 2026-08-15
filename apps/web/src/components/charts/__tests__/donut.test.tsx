@@ -84,7 +84,7 @@ describe("legend", () => {
     });
   });
 
-  it("never gives a measured source the neutral swatch reserved for 'not measured'", () => {
+  it("gives every grouped source the reserved CHART_OTHER overflow tone", () => {
     const root = renderChart(
       <Donut title="Source mix" windowLabel="1,000 jobs found" segments={SEGMENTS} />,
     );
@@ -94,11 +94,42 @@ describe("legend", () => {
     const other = root.querySelector(
       '[data-segment="Other"] [data-testid="legend-swatch"]',
     ) as HTMLElement;
-    // Lever is grouped into Other, but it is still a MEASURED source: it wears
-    // Other's colour. state-neutral means "no data" (Rule D-1) and must never
-    // land on a source that returned 12 jobs.
-    expect(lever.style.backgroundColor).not.toBe("rgb(140, 138, 130)");
+    // R-VIZ (2026-08-15, validated) pins the overflow/"Other" bucket to
+    // CHART_OTHER #8C8A82 — the one tone reserved for "this arc is a bucket",
+    // never a fifth hue. Rule D-1 ("neutral is never a measured value") is
+    // satisfied by the MARK, not the hue: Lever keeps its own legend row and
+    // its real count of 12, and only an UNMEASURED source gets the hollow
+    // swatch + "—" treatment asserted in the C-2 cases below.
+    expect(lever.style.backgroundColor).toBe("rgb(140, 138, 130)");
     expect(lever.style.backgroundColor).toBe(other.style.backgroundColor);
+  });
+
+  it("never shows a fifth hue: a 5th large slice folds into Other, not CHART_PALETTE[0]", () => {
+    const root = renderChart(
+      <Donut
+        title="Source mix"
+        windowLabel="1,000 jobs found"
+        segments={[
+          { label: "Adzuna", value: 300 },
+          { label: "SmartRecruiters", value: 250 },
+          { label: "Greenhouse", value: 200 },
+          { label: "Lever", value: 150 },
+          { label: "Workable", value: 100 },
+        ]}
+      />,
+    );
+    const swatch = (label: string) =>
+      (
+        root.querySelector(
+          `[data-segment="${label}"] [data-testid="legend-swatch"]`,
+        ) as HTMLElement
+      ).style.backgroundColor;
+    // The 5th large source must NOT repeat the first palette step.
+    expect(swatch("Workable")).not.toBe(swatch("Adzuna"));
+    expect(swatch("Workable")).toBe("rgb(140, 138, 130)");
+    expect(swatch("Other")).toBe("rgb(140, 138, 130)");
+    // Four coloured arcs + the Other bucket.
+    expect(root.querySelectorAll("[data-arc]")).toHaveLength(5);
   });
 
   it("shows the absolute count next to every percentage", () => {

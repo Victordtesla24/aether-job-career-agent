@@ -28,7 +28,7 @@ import { ChartFrame } from "./ChartFrame";
 import { NOT_MEASURED, formatNumber, formatPercent } from "./geometry";
 import { useChartMotion } from "./motion";
 import { EmptyPlot } from "./primitives";
-import { CHART_PALETTE, STATE, SURFACE } from "./tokens";
+import { CHART_OTHER, CHART_PALETTE, STATE, SURFACE } from "./tokens";
 import type { ChartDatum } from "./types";
 
 export interface DonutSegment {
@@ -220,17 +220,27 @@ export function Donut({
   const small = positives.filter((s) => (s.value / (total || 1)) * 100 < groupBelowPercent);
   const large = positives.filter((s) => (s.value / (total || 1)) * 100 >= groupBelowPercent);
 
-  const arcs: RenderedArc[] = large.map((segment, index) => ({
+  // R-VIZ: a chart never shows a fifth hue. The palette is walked in fixed
+  // order and NEVER cycled — a 5th large slice would otherwise repeat
+  // CHART_PALETTE[0] and two differently-labelled arcs would render in the
+  // same colour. Anything past the top four folds into "Other" alongside the
+  // sub-threshold slivers, and "Other" is always CHART_OTHER — the one
+  // reserved overflow tone, not the next palette step.
+  const primary = large.slice(0, CHART_PALETTE.length);
+  const overflow = large.slice(CHART_PALETTE.length);
+  const otherMembers = [...overflow, ...small];
+
+  const arcs: RenderedArc[] = primary.map((segment, index) => ({
     label: segment.label,
     value: segment.value,
-    colour: CHART_PALETTE[index % CHART_PALETTE.length],
+    colour: CHART_PALETTE[index],
   }));
-  if (small.length > 0) {
+  if (otherMembers.length > 0) {
     arcs.push({
       label: "Other",
-      value: small.reduce((sum, s) => sum + s.value, 0),
-      colour: CHART_PALETTE[(large.length + 1) % CHART_PALETTE.length],
-      members: small,
+      value: otherMembers.reduce((sum, s) => sum + s.value, 0),
+      colour: CHART_OTHER,
+      members: otherMembers,
     });
   }
 
@@ -249,10 +259,14 @@ export function Donut({
         segments.length > 0 ? (
           <ul className="flex flex-col gap-1">
             {segments.map((segment) => {
-              const grouped = small.some((s) => s.label === segment.label);
+              const grouped = otherMembers.some((s) => s.label === segment.label);
               // A grouped source is still MEASURED, so it wears the colour of
-              // the arc it was folded into. state-neutral means "no data"
-              // (Rule D-1) and may never land on a source that returned jobs.
+              // the arc it was folded into — CHART_OTHER, the overflow tone
+              // R-VIZ reserves for the "Other" bucket. Rule D-1's "neutral is
+              // never a measured value" is honoured by the MARK, not the hue:
+              // a grouped source keeps its real count and its own legend row,
+              // while a genuinely unmeasured source renders "—" with a hollow
+              // swatch and a zero renders as a zero (see below).
               const colour =
                 arcs.find((a) => a.label === segment.label)?.colour ??
                 (grouped ? arcs[arcs.length - 1]?.colour : undefined);
@@ -267,7 +281,9 @@ export function Donut({
                     unmeasured
                       ? `not measured — ${segment.note ?? nullMeaning ?? "reason not provided"}`
                       : grouped
-                        ? `grouped into Other (below ${groupBelowPercent}%)`
+                        ? small.some((s) => s.label === segment.label)
+                          ? `grouped into Other (below ${groupBelowPercent}%)`
+                          : "grouped into Other"
                         : undefined
                   }
                   className="flex items-center gap-2 text-[12px]"
@@ -304,11 +320,11 @@ export function Donut({
                 </li>
               );
             })}
-            {small.length > 0 ? (
+            {otherMembers.length > 0 ? (
               <li
                 data-testid="legend-row"
                 data-segment="Other"
-                title={`Other = ${small.map((s) => s.label).join(", ")}`}
+                title={`Other = ${otherMembers.map((s) => s.label).join(", ")}`}
                 className="flex items-center gap-2 text-[12px]"
               >
                 <span
@@ -318,7 +334,9 @@ export function Donut({
                   style={{ backgroundColor: arcs[arcs.length - 1]?.colour }}
                 />
                 <span className="flex-1 truncate text-aether-muted">
-                  {`Other (${small.length} ${small.length === 1 ? "source" : "sources"} below ${groupBelowPercent}%)`}
+                  {overflow.length > 0
+                    ? `Other (${otherMembers.length} ${otherMembers.length === 1 ? "source" : "sources"})`
+                    : `Other (${small.length} ${small.length === 1 ? "source" : "sources"} below ${groupBelowPercent}%)`}
                 </span>
                 <span className="w-16 text-right font-mono text-[12px] tabular-nums">
                   {formatNumber(arcs[arcs.length - 1]?.value ?? 0)}
