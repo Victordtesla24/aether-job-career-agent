@@ -710,7 +710,16 @@ def test_brand_template_editor_persists_copy_footnote_and_audit(client, admin_he
 
 
 def test_brand_template_editor_rejects_empty_or_non_compliant_footer(client, admin_headers):
-    for footer in ("", "   ", "Aether Career Job Agent — Operated by Vikram Sarkar"):
+    for footer in (
+        "",
+        "   ",
+        "Aether Career Job Agent — Operated by Vikram Sarkar",
+        "Aether Career Job Agent\nReply unsubscribe to opt out.",
+        "Aether Career Job Agent\nhttps://example.test/preferences",
+        "Aether Career Job Agent\nhttp://example.test/unsubscribe",
+        "Aether Career Job Agent\n/unsubscribe",
+        "Aether Job Agent\nhttps://example.test/unsubscribe",
+    ):
         response = client.put(
             "/admin/sales-agent/brand/templates/auto_reply",
             headers=admin_headers,
@@ -721,3 +730,68 @@ def test_brand_template_editor_rejects_empty_or_non_compliant_footer(client, adm
             },
         )
         assert response.status_code == 422
+
+
+def test_brand_template_editor_requires_exact_identity_and_https_unsubscribe_url(
+    client, admin_headers
+):
+    response = client.put(
+        "/admin/sales-agent/brand/templates/auto_reply",
+        headers=admin_headers,
+        json={
+            "body": "Hello {{name}},",
+            "footnote": "A footnote.",
+            "footer": (
+                "Aether Career Job Agent — Operated by Vikram Sarkar\n"
+                "https://example.test/unsubscribe"
+            ),
+        },
+    )
+    assert response.status_code == 200, response.text
+
+
+def test_brand_template_editor_rejects_plan_backed_document_overrides(
+    client, admin_headers
+):
+    response = client.put(
+        "/admin/sales-agent/brand/templates/invoice",
+        headers=admin_headers,
+        json={
+            "body": "Incorrect static invoice copy",
+            "footnote": "Incorrect static footnote.",
+            "footer": (
+                "Aether Career Job Agent — Operated by Vikram Sarkar\n"
+                "https://example.test/unsubscribe"
+            ),
+        },
+    )
+    assert response.status_code == 422
+    assert "auto_reply" in response.json()["detail"]
+
+    preview = client.get(
+        "/admin/sales-agent/brand/documents/invoice/preview?plan=starter&interval=monthly",
+        headers=admin_headers,
+    )
+    assert preview.status_code == 200, preview.text
+    assert "A$19.00" in preview.json()["html"]
+    assert "Incorrect static invoice copy" not in preview.json()["html"]
+
+
+def test_render_document_uses_persisted_auto_reply_override():
+    from app.services.brand_documents import render_document
+
+    html = render_document(
+        "auto_reply",
+        editable_template={
+            "body": "Hello {{name}},\nThanks for contacting us.",
+            "footnote": "Support replies are reviewed in Melbourne time.",
+            "footer": (
+                "Aether Career Job Agent — Operated by Vikram Sarkar\n"
+                "https://example.test/unsubscribe"
+            ),
+        },
+    )
+    assert "Thanks for contacting us." in html
+    assert "Support replies are reviewed in Melbourne time." in html
+    assert "https://example.test/unsubscribe" in html
+    assert 'href="https://example.test/unsubscribe"' in html

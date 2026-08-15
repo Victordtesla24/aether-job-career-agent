@@ -773,18 +773,20 @@ export default function SalesAgentPage() {
                   <p className="sa-meta mt-0.5">{d.description}</p>
                 </div>
                 <div className="ml-auto flex shrink-0 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const template = brandTemplates.find((t) => t.kind === d.kind);
-                      if (!template) return;
-                      setBrandEditing(brandEditing === d.kind ? null : d.kind);
-                      setBrandDraft({ body: template.body, footnote: template.footnote, footer: template.footer });
-                    }}
-                    className="sa-btn-ghost px-3 py-1 text-xs"
-                  >
-                    {brandEditing === d.kind ? "Cancel edit" : "Edit copy & footer"}
-                  </button>
+                  {d.kind === "auto_reply" ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const template = brandTemplates.find((t) => t.kind === d.kind);
+                        if (!template) return;
+                        setBrandEditing(brandEditing === d.kind ? null : d.kind);
+                        setBrandDraft({ body: template.body, footnote: template.footnote, footer: template.footer });
+                      }}
+                      className="sa-btn-ghost px-3 py-1 text-xs"
+                    >
+                      {brandEditing === d.kind ? "Cancel edit" : "Edit copy & footer"}
+                    </button>
+                  ) : null}
                   <button
                     type="button"
                     disabled={brandLoading}
@@ -798,7 +800,7 @@ export default function SalesAgentPage() {
               {brandEditing === d.kind && brandDraft ? (
                 <div className="mt-3 space-y-3 sa-well p-3">
                   <p className="text-xs" style={{ color: "var(--fg-2)" }}>
-                    Compliance footer is enforced server-side: it must retain the product identity and an unsubscribe instruction.
+                    Compliance footer is enforced server-side: it must retain the product identity and an absolute HTTPS unsubscribe URL.
                   </p>
                   <label className="block text-xs" style={{ color: "var(--fg-2)" }}>
                     Template copy

@@ -232,9 +232,7 @@ def list_brand_templates(_admin: AdminUser) -> dict[str, Any]:
 def update_brand_template(
     kind: str, payload: BrandTemplateUpdate, admin: AdminUser
 ) -> dict[str, Any]:
-    """Persist editable branded copy and audit it atomically.  The repository
-    refuses a footer without product identity and an unsubscribe instruction;
-    UI validation is never the compliance boundary."""
+    """Persist only the auto-reply override and audit it atomically."""
     from app.repositories.admin import _ensure_admin_schema, write_audit
     from app.repositories.brand_templates import BrandTemplateRepository
 

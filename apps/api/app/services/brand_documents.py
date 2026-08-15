@@ -24,6 +24,7 @@ Grounding rules (STRICT — mirrors the sales agent's honesty contract):
 from __future__ import annotations
 
 import html as _html
+import re
 from typing import Any, Optional
 
 from app.repositories.billing import gst_breakdown
@@ -34,6 +35,10 @@ from app.services.sales_branding import BRAND, brand_logo_url
 BUSINESS_NAME = "Aether Career Job Agent"
 BUSINESS_OPERATOR = "Operated by Vikram Sarkar"
 BUSINESS_URL = "https://5cb5f0620.abacusai.cloud"
+_UNSUBSCRIBE_URL = re.compile(
+    r"https://[^\s<>\"']+/[^\s<>\"，。]*unsubscribe[^\s<>\"，。]*",
+    re.IGNORECASE,
+)
 
 #: Registry of document kinds this module can render. ``needsPlan`` documents
 #: are rendered against a LIVE Plan catalog row; the others are plan-free.
@@ -107,6 +112,17 @@ def _plan_price(plan: dict[str, Any], interval: str) -> tuple[float, str]:
     return float(plan.get("priceAudMonthly") or 0), "per month"
 
 
+def _render_footer_override(footer: str) -> str:
+    """Escape editable footer text while preserving a clickable opt-out URL."""
+    escaped = _esc(footer).replace("\n", "<br>")
+
+    def link(match: re.Match[str]) -> str:
+        url = match.group(0)
+        return f'<a href="{url}" style="color:{BRAND["goldAccessible"]};">{url}</a>'
+
+    return _UNSUBSCRIBE_URL.sub(link, escaped)
+
+
 def _chrome(
     title: str, inner_html: str, footnote: str, footer_override: Optional[str] = None
 ) -> str:
@@ -115,9 +131,14 @@ def _chrome(
     g = BRAND
     title_html = _esc(title)
     footer_html = (
-        _esc(footer_override).replace("\n", "<br>")
+        _render_footer_override(footer_override)
         if footer_override is not None
-        else f'{BUSINESS_NAME} — {BUSINESS_OPERATOR}<br>\n           <a href="{BUSINESS_URL}" style="color:{g["goldAccessible"]};\n              text-decoration:none;">{BUSINESS_URL}</a>'
+        else (
+            f'{BUSINESS_NAME} — {BUSINESS_OPERATOR}<br>\n'
+            f'           <a href="{BUSINESS_URL}" '
+            f'style="color:{g["goldAccessible"]};\n'
+            f'              text-decoration:none;">{BUSINESS_URL}</a>'
+        )
     )
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -386,6 +407,8 @@ def render_document(
     if DOCUMENT_KINDS[kind]["needsPlan"] and plan is None:
         raise ValueError(f"Document kind '{kind}' requires a plan row.")
     if editable_template is not None:
+        if kind != "auto_reply":
+            raise ValueError("Only auto_reply supports persistent template overrides.")
         body = _esc(editable_template["body"]).replace("\n", "<br>")
         inner = _para(body)
         return _chrome(

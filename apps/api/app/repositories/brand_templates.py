@@ -6,10 +6,28 @@ project intentionally has no migration runner.
 """
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from app.db import get_connection, new_id, rows_to_dicts
 from app.services.brand_documents import DOCUMENT_KINDS
+
+_EDITABLE_KIND = "auto_reply"
+# Absolute HTTPS endpoint that visibly carries the unsubscribe action. This is
+# deliberately stricter than an instruction word: an admin can preserve the
+# ratified identity while still providing a working opt-out destination.
+_UNSUBSCRIBE_URL = re.compile(
+    r"https://[^\s<>\"']+/[^\s<>\"']*unsubscribe[^\s<>\"']*", re.IGNORECASE
+)
+
+
+def _is_editable_kind(kind: str) -> bool:
+    return kind == _EDITABLE_KIND
+
+
+def _editable_kind_error() -> str:
+    return "Only auto_reply supports persistent body, footnote, and footer overrides."
+
 
 _ADVISORY_LOCK = 7420240730
 _ready = False
@@ -45,7 +63,10 @@ def default_template(kind: str) -> dict[str, str]:
     title = DOCUMENT_KINDS[kind]["title"]
     return {
         "body": f"{title}\n\n{{{{name}}}}",
-        "footnote": "Merge fields are filled from the relevant customer or billing record at issue time.",
+        "footnote": (
+            "Merge fields are filled from the relevant customer or billing record "
+            "at issue time."
+        ),
         "footer": (
             "Aether Career Job Agent — Operated by Vikram Sarkar\n"
             "https://5cb5f0620.abacusai.cloud/unsubscribe"
@@ -54,8 +75,10 @@ def default_template(kind: str) -> dict[str, str]:
 
 
 def _valid_footer(footer: str) -> bool:
-    normalized = (footer or "").strip().lower()
-    return bool(normalized) and "aether career job agent" in normalized and "unsubscribe" in normalized
+    normalized = (footer or "").strip()
+    return bool(normalized) and "Aether Career Job Agent" in normalized and bool(
+        _UNSUBSCRIBE_URL.search(normalized)
+    )
 
 
 class BrandTemplateRepository:
@@ -85,19 +108,31 @@ class BrandTemplateRepository:
     def get_stored(self, kind: str) -> dict[str, Any] | None:
         if kind not in DOCUMENT_KINDS:
             raise KeyError(kind)
+        if not _is_editable_kind(kind):
+            return None
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute('SELECT * FROM "BrandDocumentTemplate" WHERE "kind"=%s', (kind,))
                 rows = rows_to_dicts(cur)
         return rows[0] if rows else None
 
-    def update(self, kind: str, *, body: str, footnote: str, footer: str, cur: Any) -> dict[str, Any]:
+    def update(
+        self, kind: str, *, body: str, footnote: str, footer: str, cur: Any
+    ) -> dict[str, Any]:
         if kind not in DOCUMENT_KINDS:
             raise KeyError(kind)
+        if not _is_editable_kind(kind):
+            raise ValueError(
+                "Only auto_reply supports persistent body, footnote, and footer "
+                "overrides."
+            )
         if not body.strip() or not footnote.strip():
             raise ValueError("body and footnote must not be empty")
         if not _valid_footer(footer):
-            raise ValueError("footer must retain Aether Career Job Agent identity and an unsubscribe instruction")
+            raise ValueError(
+                "footer must retain exact Aether Career Job Agent identity and an "
+                "absolute HTTPS unsubscribe URL"
+            )
         cur.execute(
             '''
             INSERT INTO "BrandDocumentTemplate" ("id","kind","body","footnote","footer")
