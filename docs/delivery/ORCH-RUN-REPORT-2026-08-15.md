@@ -85,7 +85,21 @@ Stop-All 9h spend bleed (inert-field class; permanent enforcement above).
 - **Cross-session integration proofs**: P1-A × my-lane batch 359/360→fixed→214/214;
   Stop-All × P1-A 217/217; Option-A re-sanity post-ADMIN-2.0-era merges 171/171 incl. the
   peer's sales/combobox suites.
-- Deploy + prod verify: [DEPLOY-SLOT]
+- **Deploy + prod verify (2026-08-15 ~08:46Z)**: landed as `origin/main@8a20d031` (86 commits);
+  built in the served tree, §0.4 gate PASS (BUILD_ID Wt2JYKW2), coordinated api→web→worker
+  restart, health 3/3 (nginx-api / next-rewrite / public root all 200), all services active,
+  worker restarted clean (140 jobs complete ◆ 0 failed on shutdown), api log clean.
+  Activated in-window: `aether-email-agent.timer` (B5 — armed, first fire 10:03Z) and the
+  OnFailure→email alert drop-ins on all 5 units (D-ALERT). **LIVE ENFORCEMENT PROOF**:
+  `POST /agents/scout/run` with the owner's agents still stopped → HTTP 409
+  `agent_paused: scout is stopped by the user's agent controls…` — the permanent Stop-All
+  guard is live at the chokepoint, worker running under it.
+
+**U6 CLOSE**: full suites green (with every deviation attributed and fixed or ownership-routed),
+cumulative cross-model adversarial reviews on every ticket (implementer ≠ verifier throughout,
+2 verifier REJECTs remediated), independent cross-session integration proofs, and this deployed,
+live-verified landing. §9.1/§9.2 (paid walkthrough, dress rehearsal) remain operator-gated and
+are now staged to run on the post-wipe pristine app.
 
 ## 4. Cost notes (§2.3)
 
