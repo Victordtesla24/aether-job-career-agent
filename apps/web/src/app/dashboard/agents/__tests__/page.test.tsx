@@ -194,7 +194,7 @@ describe("NF-final-closure-002: honest no-résumé refusal surfacing (agents con
     expect(notice.className).not.toContain("aether-green");
   });
 
-  it("pipeline ('Run All') refusal: renders the honest message, never 'Pipeline complete'", async () => {
+  it("pipeline ('Run pipeline') refusal: renders the honest message, never 'Pipeline complete'", async () => {
     setupDefaultMocks();
     runPipeline.mockResolvedValue({
       resume_id: null,
