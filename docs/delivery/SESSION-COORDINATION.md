@@ -595,3 +595,100 @@ brand-new tailoring run fired live during this verification, both ship `pdf-in-p
 `preserved:true` / the baseline's own two-column layout with ~0 pixel diff outside the reworded text —
 proven twice, independently, against production, not inferred from the branch's own claims. Evidence:
 `uat/reports/evidence/market-perf/resume-format/refix/qa-independent/` and `.../refix/verify/`.
+
+## 2026-08-15 02:3xZ — REQUEST to the GROWTH/HERMES lane (from 9c6a2ba6)
+Please move sales-agent/rebrand WIP OFF the served main checkout into a worktree/branch — direct WIP on the deploy target blocked three merges tonight. Your aa98708 + the ab-logo removal checkpoint (740eeab9) are preserved on local main; uncommitted files untouched. — 9c6a2ba6
+
+## ADMIN-2.0 LAND + LIVE VERIFY — session 9c6a2ba6 (QA), 2026-08-15T05:1x-05:3xZ
+
+Landed `feat/admin-2-0` (executive dashboard, add-user, billing-truth panel, sales agents/referral
+attribution, promos) at `98a44ca5` through to `61abdaa7` on `main`, then live-verified every surface on
+production with real actions, money-safe throughout.
+
+- **LAND**: merged `origin/main` twice as it moved during the session (624902e1 U5d combobox fix,
+  01589cc3 approvals execute-outcome fix — neither touches admin surface, 0 conflicts with admin2's own
+  diff). Targeted gates on the merge commit: 268/268 pytest (`test_admin2_*.py` ×5 + `test_auth.py` +
+  4 auth/billing regression files) + 157/157 vitest (11 admin files) + eslint 0 warnings + tsc 0 errors.
+  CI caught one REAL pre-existing red from the merged U5d commit (`ruff E501` in `apply_executor.py`,
+  not admin2's own code) — fixed mechanically, re-verified, CI green both jobs on `main @ f7f632c4`.
+  Migrations `0029_admin2.sql`/`0030_sales_agents.sql` are documentation mirrors (ADR-TR-1 lazy-DDL
+  pattern) — `information_schema` probe found every column/table/index already present in prod BEFORE
+  this session touched it (not documented anywhere I could find — flagging honestly, not claiming I
+  applied a fresh migration) and unchanged (idempotent) after.
+- **SHARED-CHECKOUT HAZARD (again — see the 02:3x request above)**: the served main checkout still had
+  live, uncommitted GROWTH/HERMES rebrand work (local-only commit `b29e111d` + several untracked
+  files) at deploy time, including a REAL line-level overlap with admin2 on `signup/page.tsx` (referral
+  attribution vs. brand-mark visuals — same file, different regions). Resolved with a real `git merge`
+  (not force/reset/checkout, all forbidden) that auto-resolved cleanly; verified both features coexist in
+  the merged file. That merge commit was used ONLY to build+deploy locally and was **never pushed** —
+  `b29e111d` remains exactly as unpublished as it was before this session, so the GROWTH/HERMES lane's own
+  gates and push are still theirs to run. Please move that WIP off the served checkout — this is the
+  fourth session tonight it's blocked a deploy.
+- **DEPLOY**: `pnpm build` (41/41 pages incl. every `/admin/*` route) → `verify-web-build.sh` PASS →
+  restarted all 3 services under `/tmp/aether-deploy.lock`, OOM `-500` re-armed on the 3 new PIDs,
+  `BUILD_ID Q99XMVHiiTffoFk-bEZLp` confirmed served publicly (not a stale cache). 3/3 health 200/200/200.
+
+**LIVE VERIFY (real owner login via the production `/login` form + `/api/auth/login`, never a minted
+bypass; money-safe throughout — no live charge, subscription, refund or payout anywhere in this run)**:
+
+(a) **Executive dashboard**: real figures, honestly empty where data is thin — `A$0.00` MRR, "1 local row
+    looks paid but has no Stripe subscription behind it" (the known owner stale-row issue, surfaced
+    honestly on the dashboard itself), signup→paid shows `—` with "the API reads a rate from 20 or
+    more," GST-exclusion disclosure. Auto-refresh EMPIRICALLY confirmed (2× `/admin/metrics/executive`
+    calls ~29.86s apart, matching the page's own "auto-refreshes every 30s" text). 0 console/page/network
+    errors. Screenshots 1600/834/390 at `uat/reports/evidence/market-perf/admin2/a-dashboard/`.
+(b) **QA user lifecycle**: created `qa+admin2-1786771173@example.com` via `POST /admin/users` (temp
+    password shown once), logged in with it once (credential proven live). Custom-price →
+    honest 409 ("no live Stripe subscription to reprice — use an entitlement override instead").
+    Entitlement override (`kind=comp, planId=pro`) → `entitled:true, source:override` confirmed via
+    fresh `GET`. Delete: wrong `confirmEmail` → 422 (deleted nothing); correct `confirmEmail` → soft
+    delete, `suspended:true`. **Owner-delete refused**: `DELETE /admin/users/{ownerId}` with the owner's
+    OWN correct email still 409s ("Aether refuses to delete or suspend an administrator") — the
+    server-side guard holds even against a technically-valid confirmation.
+(c) **Sales agents**: created `QA-TEST-1786771233`, registered a throwaway via
+    `/auth/register` with `?ref=`/body `ref`, attribution landed (`attributedSignups: 1` on the agent).
+    Commission report: honestly `$0` (`netPaidAud:0.0, commissionAud:0.0, insufficientData:true,
+    gstRegistered:false, reportOnly:true, payoutPerformed:false`). Deactivated the agent
+    (`status:inactive`). Deleted the throwaway user via the same typed-confirm flow.
+(d) **Promos — a REAL bug found and fixed live**: the first live coupon attempt failed with a genuine
+    production defect: `create_promotion_code()` sent a flat `coupon=` kwarg to
+    `stripe.PromotionCode.create`, which the current Stripe API version REJECTS (`400 Received unknown
+    parameter: coupon`) — it now requires a nested `promotion={"type":"coupon","coupon":<id>}` shape.
+    The existing unit tests mock `create_promotion_code` itself, so this never surfaced until it hit live
+    Stripe. Root-caused, fixed (`stripe_gateway.py`: nested shape + `expand=["promotion.coupon"]` /
+    `["data.promotion.coupon"]` so the read side resolves the coupon instead of silently returning
+    `couponId/percentOff/duration: null`), added 2 regression tests that patch `_stripe()` with a fake
+    SDK one level below the wrapper functions (asserts the exact kwargs shape, never touches live
+    Stripe) — 48/48 `test_admin2_billing.py` green. The orphaned live Coupon from the failed first
+    attempt was found (`stripe.Coupon.list`) and deleted directly. Committed (`61abdaa7`), CI green,
+    redeployed (`aether-api` only — backend-only change), 3/3 health after a brief warm-up 502.
+    Re-verified end-to-end through the real HTTP admin API this time: created `QA-ADMIN2-1786771819`
+    (10% once), confirmed it lists with real `couponId`/`percentOff`/`duration` (no longer null),
+    deactivated via the app route, then deleted the underlying Coupon directly via Stripe — no usable
+    artifact left in either mode (test or, since this is LIVE mode, real).
+(e) **Owner billing panel**: `GET /admin/users/{ownerId}/billing` and the live `/admin/users/{ownerId}`
+    page both show the local-vs-Stripe mismatch honestly (`hasMismatch:true`, "the local row shows a
+    paid, billable plan but Stripe has no live subscription for this customer") side by side with a
+    "Reconcile local row" button — present, screenshotted, **not clicked** (left for the owner's call,
+    per the prompt). 0 console errors.
+(f) **Audit log**: every action from (b)-(d) present with matching target ids — `create_user`,
+    `clear_entitlement_override`/`set_entitlement_override`, `delete_user` ×2, `create_sales_agent`,
+    `update_sales_agent`, `create_promo`, `deactivate_promo`. Final `api.log` sweep since the LAST
+    restart (05:30:02Z, PID 126939): **zero** new ERROR lines (the one real ERROR in this whole run was
+    the bug in (d), before the fix — confirmed gone after redeploy). Final health 3/3 active, 200/200.
+
+**VERIFIED-CLOSED** (QA authority, this session): ADMIN-2.0 executive dashboard, user lifecycle
+(create/price/entitlement/delete), sales-agent referral attribution + commission reporting, live Stripe
+promo lifecycle (after a real live-only defect was caught, fixed, and re-verified), and the owner
+billing-truth panel — all proven against production with real actions and real Stripe/DB state, not
+inferred from the branch's own claims. Evidence: `uat/reports/evidence/market-perf/admin2/`.
+
+### ORCH-EXEC LANDING + DEPLOY WINDOW — 2026-08-15T09:0xZ (CLAIMED)
+
+Landing orch/exec-20260814 (86 commits: B6, D.524, B1b, B1c, ML-STOPALL-001..004 permanent
+enforcement, MON-002/006/008, B5 timer, D-ALERT, D-QDEPTH, B7 upload, SHELL-DEL, bulk-approve,
+inherited-red fixes incl. the U2c qualityGate silent-drop, e2e spec fixes, docs/ledgers).
+Gates: backend 4011P+75/75 post-fix · vitest 100% · build gate PASS ×2 · e2e attributed+fixed ·
+provenance 58/58 · cross-session proofs 217/217+214/214+171/171+167/167. Deploy leg follows
+immediately: build → §0.4 gate → restart api/web/worker → health 3/3 → B5 timer + OnFailure
+alert-unit activation → prod verify. Worker returns under PERMANENT Stop-All enforcement.
