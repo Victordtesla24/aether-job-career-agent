@@ -304,7 +304,7 @@ export default function MarketPulse() {
           <span className="type-mono-micro text-aether-muted-dim">could not load</span>
         </div>
         <div
-          className="elev-1 rounded-2xl border-l-2 border-l-aether-coral p-5"
+          className="elev-1 rounded-[14px] border-l-2 border-l-aether-coral p-5"
           role="alert"
           aria-live="polite"
         >
@@ -368,7 +368,7 @@ export default function MarketPulse() {
             lands (the CLS lesson from the analytics summary strip). */}
         <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
           {[0, 1, 2, 3].map((i) => (
-            <div key={i} className="elev-1 rounded-2xl p-4">
+            <div key={i} className="elev-1 rounded-[14px] p-4">
               <div className="h-2.5 w-20 animate-pulse rounded bg-white/10" />
               <div className="mt-3 h-9 w-full animate-pulse rounded bg-white/5" />
             </div>
@@ -376,7 +376,7 @@ export default function MarketPulse() {
         </div>
         <div className="grid gap-4 xl:grid-cols-3">
           {["Jobs by source", "Top skills in demand", "Market vs you"].map((label) => (
-            <div key={label} className="elev-1 rounded-2xl p-5">
+            <div key={label} className="elev-1 rounded-[14px] p-5">
               <p className="type-section">{label}</p>
               <div className="mt-4 h-32 animate-pulse rounded-xl bg-white/5" />
               <p data-prose="status" className="type-meta mt-3">Loading…</p>
@@ -422,7 +422,7 @@ export default function MarketPulse() {
             : isUp
               ? "text-aether-green"
               : "text-aether-coral";
-          const strokeColor = !isPercent ? "#8A8A9E" : isUp ? "#34D399" : "#FF6B35";
+          const strokeColor = !isPercent ? "#8C8A82" : isUp ? "#6FAF8D" : "#B9544B";
           const tooltipCopy =
             t.deltaKind === "new"
               ? `${t.label}: no prior completed period to compare — this is new activity.`
@@ -431,7 +431,7 @@ export default function MarketPulse() {
                 : `${t.label}: percentage change vs. the prior period (this week's still-in-progress data isn't counted yet).`;
           const { completeRuns, partial } = sparkSegments(t.series);
           return (
-            <div key={t.label} className="elev-1 rounded-2xl p-4" data-testid="trend-indicator-tile">
+            <div key={t.label} className="elev-1 rounded-[14px] p-4" data-testid="trend-indicator-tile">
               <div className="flex items-center justify-between">
                 <span className="text-[11px] text-aether-muted-dim">{t.label}</span>
                 <MetricTooltip
@@ -475,7 +475,7 @@ export default function MarketPulse() {
 
       <div className="grid gap-4 xl:grid-cols-3">
         {/* Jobs by source donut */}
-        <div className="elev-1 rounded-2xl p-5" data-testid="sources-donut">
+        <div className="elev-1 rounded-[14px] p-5" data-testid="sources-donut">
           <h3 className="mb-4 type-section">
             Jobs by Source
           </h3>
@@ -494,10 +494,19 @@ export default function MarketPulse() {
                   strokeDashoffset={s.dashoffset}
                 />
               ))}
-              <text x="50" y="46" textAnchor="middle" transform="rotate(90 50 50)" className="fill-white" fontSize="16" fontWeight="700">
+              <text
+                x="50"
+                y="46"
+                textAnchor="middle"
+                transform="rotate(90 50 50)"
+                className="font-mono tabular-nums"
+                fill="#F5F1E8"
+                fontSize="16"
+                fontWeight="700"
+              >
                 {data.sourcesTotal}
               </text>
-              <text x="50" y="60" textAnchor="middle" transform="rotate(90 50 50)" className="fill-white/40" fontSize="7">
+              <text x="50" y="60" textAnchor="middle" transform="rotate(90 50 50)" fill="rgba(245,241,232,0.46)" fontSize="7">
                 {data.sourcesLabel}
               </text>
             </svg>
@@ -514,7 +523,7 @@ export default function MarketPulse() {
         </div>
 
         {/* Top skills */}
-        <div className="elev-1 rounded-2xl p-5" data-testid="top-skills">
+        <div className="elev-1 rounded-[14px] p-5" data-testid="top-skills">
           <h3 className="mb-4 type-section">
             Top Skills in Demand
           </h3>
@@ -557,7 +566,7 @@ export default function MarketPulse() {
          * `score` / `value` are `number | null`, so a not-measured signal is a
          * compile error to render as a number — it takes the "not measured"
          * branch, matching LetterQualityPanel and the Resume Studio panels. */}
-        <div className="elev-1 rounded-2xl p-5" data-testid="probability-score">
+        <div className="elev-1 rounded-[14px] p-5" data-testid="probability-score">
           <h3 className="mb-3 flex items-center gap-1.5 type-section">
             <MetricTooltip label={prob.label} value="" tooltip={prob.methodology} />
           </h3>
@@ -581,7 +590,7 @@ export default function MarketPulse() {
                   cy="50"
                   r="42"
                   fill="none"
-                  stroke="#34D399"
+                  stroke="#6FAF8D"
                   strokeWidth="10"
                   strokeLinecap="round"
                   strokeDasharray={`${(score / 100) * ringC} ${ringC}`}
@@ -671,7 +680,7 @@ export default function MarketPulse() {
       */}
       <div className="space-y-4">
         {/* Market vs you — the band's headline row. */}
-        <div className="elev-1 rounded-2xl p-5" data-testid="market-vs-you">
+        <div className="elev-1 rounded-[14px] p-5" data-testid="market-vs-you">
           <h3 className="mb-4 type-section">
             Market vs. Your Performance
           </h3>
@@ -819,7 +828,7 @@ export default function MarketPulse() {
           aria-controls="market-activity-detail"
           onClick={() => setActivityOpen((open) => !open)}
           data-testid="market-activity-toggle"
-          className="elev-1 flex w-full items-center justify-between gap-4 rounded-2xl px-5 py-3.5 text-left transition-colors duration-[--dur-fast] hover:bg-white/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-aether-coral/60"
+          className="elev-1 flex w-full items-center justify-between gap-4 rounded-[14px] px-5 py-3.5 text-left transition-colors duration-[--dur-fast] hover:bg-white/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-aether-coral/60"
         >
           <span className="min-w-0">
             <span className="block type-section">Activity detail</span>
@@ -851,7 +860,7 @@ export default function MarketPulse() {
         >
           <div className="grid gap-4 sm:grid-cols-2 sm:items-start xl:grid-cols-3">
         {/* Activity heatmap */}
-        <div className="elev-1 rounded-2xl p-5" data-testid="activity-heatmap">
+        <div className="elev-1 rounded-[14px] p-5" data-testid="activity-heatmap">
           <h3 className="mb-1 type-section">
             Weekly Activity
           </h3>
@@ -884,7 +893,7 @@ export default function MarketPulse() {
         </div>
 
         {/* Employer activity */}
-        <div className="elev-1 rounded-2xl p-5" data-testid="employer-activity">
+        <div className="elev-1 rounded-[14px] p-5" data-testid="employer-activity">
           <h3 className="mb-4 type-section">
             Employer Hiring Activity
           </h3>
@@ -912,7 +921,7 @@ export default function MarketPulse() {
             to the panel width, so width is the thing it actually needs. It
             takes the full row at the 2-up measure (where it would otherwise
             sit alone in a half-width cell) and its own third at the 3-up. */}
-        <div className="elev-1 rounded-2xl p-5 sm:col-span-2 xl:col-span-1" data-testid="recruiter-trends">
+        <div className="elev-1 rounded-[14px] p-5 sm:col-span-2 xl:col-span-1" data-testid="recruiter-trends">
           <h3 className="mb-4 type-section">
             Recruiter Activity
           </h3>
@@ -935,7 +944,7 @@ export default function MarketPulse() {
                     key={i}
                     points={points}
                     fill="none"
-                    stroke="#818CF8"
+                    stroke="#8FA8CE"
                     strokeWidth="2"
                     strokeLinecap="round"
                   />
@@ -944,7 +953,7 @@ export default function MarketPulse() {
                   <polyline
                     points={partial}
                     fill="none"
-                    stroke="#818CF8"
+                    stroke="#8FA8CE"
                     strokeWidth="2"
                     strokeLinecap="round"
                     strokeOpacity="0.35"

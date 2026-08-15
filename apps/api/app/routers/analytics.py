@@ -562,17 +562,20 @@ def agent_policy_cohorts(current_user: CurrentUser) -> dict[str, Any]:
 # --------------------------------------------------------------------------
 
 #: Brand colours for known job sources; unknown sources cycle the palette.
+#: R-VIZ: fixed CHART_PALETTE order (gold/sapphire/rose/sky) for the top 4,
+#: every source beyond that — named or unmapped — shares the Other/neutral
+#: tone rather than taking a 5th hue.
 _SOURCE_COLORS = {
-    "linkedin": "#4F46E5",
-    "seek": "#FF6B35",
-    "indeed": "#34D399",
-    "glassdoor": "#0CAA41",
-    "angellist": "#FBBF24",
-    "wellfound": "#FBBF24",
-    "company": "#7C3AED",
-    "referral": "#F59E0B",
+    "linkedin": "#AE8E32",
+    "seek": "#4F74B5",
+    "indeed": "#C16F7B",
+    "glassdoor": "#439FC8",
+    "angellist": "#8C8A82",
+    "wellfound": "#8C8A82",
+    "company": "#8C8A82",
+    "referral": "#8C8A82",
 }
-_PALETTE = ["#4F46E5", "#FF6B35", "#34D399", "#7C3AED", "#FBBF24", "#F59E0B"]
+_PALETTE = ["#AE8E32", "#4F74B5", "#C16F7B", "#439FC8", "#8C8A82", "#8C8A82"]
 
 #: Whether the PROBABILITY model has any market evidence to reason from. It has
 #: none — no factor below is computed from anything outside this user's own
