@@ -88,18 +88,37 @@ export const AdminUserSchema = z.object({
 });
 export type AdminUser = z.infer<typeof AdminUserSchema>;
 
+/**
+ * ADMIN-MGMT: the same rows sliced by lifecycle state, computed server-side
+ * over the WHOLE table (not the current page) so a tab's badge is honest even
+ * when the list itself is filtered by search/plan too.
+ */
+export const AdminUserCountsSchema = z.object({
+  active: z.number(),
+  suspended: z.number(),
+  deleted: z.number(),
+});
+export type AdminUserCounts = z.infer<typeof AdminUserCountsSchema>;
+
 const AdminUserListSchema = z.object({
   users: z.array(AdminUserSchema),
   total: z.number(),
   limit: z.number(),
   offset: z.number(),
+  counts: AdminUserCountsSchema,
 });
 type AdminUserList = z.infer<typeof AdminUserListSchema>;
+
+/** `active` = not suspended, not deleted (the honest default — a deleted
+ *  account no longer clutters the list an operator opens by default). */
+export type AdminUserView = "active" | "suspended" | "deleted" | "all";
 
 export interface UserFilters {
   q?: string;
   plan?: string;
+  /** Legacy filter — still honoured exactly as before when provided. */
   suspended?: boolean;
+  view?: AdminUserView;
 }
 
 export async function fetchAdminUsers(
@@ -110,6 +129,7 @@ export async function fetchAdminUsers(
   if (filters.q) params.set("q", filters.q);
   if (filters.plan) params.set("plan", filters.plan);
   if (typeof filters.suspended === "boolean") params.set("suspended", String(filters.suspended));
+  if (filters.view) params.set("view", filters.view);
   const qs = params.toString();
   return AdminUserListSchema.parse(
     await apiRequest<unknown>(`/admin/users${qs ? `?${qs}` : ""}`, options),
@@ -367,6 +387,116 @@ export async function restoreAdminUser(
   );
 }
 
+// --------------------------------------------------------------------------- //
+// Hard deletion & orphan cleanup (ADMIN-MGMT E1/E2) — step TWO after a soft
+// delete, and cleanup for billing rows a soft delete never reaches.
+// --------------------------------------------------------------------------- //
+
+const PurgeUserSchema = z.object({
+  userId: z.string(),
+  purged: z.literal(true),
+  /** Per-child-table deleted row counts — the API's own receipt. */
+  tables: z.record(z.number()),
+  note: z.string().optional().default(""),
+});
+export type PurgeUserResult = z.infer<typeof PurgeUserSchema>;
+
+/**
+ * HARD-deletes an account and every row keyed to it, in one transaction.
+ * `confirmEmail` must match the target's own address (the server re-checks
+ * and 422s a mismatch — nothing is written on that path). The server also
+ * refuses with an honest 409 when: the account is not ALREADY soft-deleted
+ * ("purge is step two"); it is a protected admin/owner identity; or its
+ * Subscription still carries a billable Stripe state. Surface those messages
+ * verbatim — they are instructions, not failures to paraphrase.
+ *
+ * `AdminAuditLog` rows for this user are deliberately KEPT — the trail
+ * survives the account it describes.
+ */
+export async function purgeUser(
+  userId: string,
+  confirmEmail: string,
+  options: RequestOptions = {},
+): Promise<PurgeUserResult> {
+  return PurgeUserSchema.parse(
+    await apiRequest<unknown>(`/admin/users/${encodeURIComponent(userId)}/purge`, {
+      ...options,
+      method: "POST",
+      body: { confirmEmail },
+    }),
+  );
+}
+
+const DeleteSubscriptionRecordSchema = z.object({
+  userId: z.string(),
+  deleted: z.object({
+    subscription: z.number(),
+    usageQuota: z.number(),
+  }),
+});
+export type DeleteSubscriptionRecordResult = z.infer<typeof DeleteSubscriptionRecordSchema>;
+
+/**
+ * Deletes the local Subscription + UsageQuota rows for a `userId` — including
+ * an ORPHAN pair whose `User` row is already gone (this is the route that
+ * cleans up a single one of those by id; `purgeOrphans` below sweeps the
+ * whole class). Refused with the same honest 409 as `purgeUser` while the row
+ * is billable-live: cancel the Stripe subscription first.
+ */
+export async function deleteSubscriptionRecord(
+  userId: string,
+  options: RequestOptions = {},
+): Promise<DeleteSubscriptionRecordResult> {
+  return DeleteSubscriptionRecordSchema.parse(
+    await apiRequest<unknown>(`/admin/users/${encodeURIComponent(userId)}/subscription`, {
+      ...options,
+      method: "DELETE",
+    }),
+  );
+}
+
+const HygieneSampleUserSchema = z.object({
+  id: z.string(),
+  email: z.string().nullable().optional().default(null),
+  deletedAt: z.string().nullable().optional().default(null),
+});
+
+const HygieneSchema = z.object({
+  softDeletedUsers: z.object({
+    count: z.number(),
+    sample: z.array(HygieneSampleUserSchema).optional().default([]),
+  }),
+  orphanedBillingPairs: z.object({
+    count: z.number(),
+    sample: z.array(z.string()).optional().default([]),
+  }),
+  canceledSubscriptions: z.object({ count: z.number() }),
+  neverLoggedIn30d: z.object({ count: z.number() }),
+});
+export type AdminHygiene = z.infer<typeof HygieneSchema>;
+
+/** Read-only stale-data report. Cheap SQL only — no writes, safe to poll. */
+export async function fetchHygiene(options: RequestOptions = {}): Promise<AdminHygiene> {
+  return HygieneSchema.parse(await apiRequest<unknown>("/admin/hygiene", options));
+}
+
+/**
+ * Deletes ONLY the orphaned-billing-pairs class `fetchHygiene` reports
+ * (Subscription/UsageQuota rows whose userId has no User row) — nothing else.
+ * The success body beyond an OK response is not pinned by the fixed contract,
+ * so this resolves to whatever the server sends and callers should
+ * re-`fetchHygiene` to see the effect rather than trust a shape here.
+ */
+export async function purgeOrphans(
+  options: RequestOptions = {},
+): Promise<Record<string, unknown>> {
+  const res = await apiRequest<Record<string, unknown> | null>(
+    "/admin/hygiene/purge-orphans",
+    { ...options, method: "POST", body: { confirm: true } },
+  );
+  return res ?? {};
+}
+
 export async function setSpendCap(
   userId: string,
   spendCapUsd: number,
@@ -413,6 +543,46 @@ export type AdminSpend = z.infer<typeof AdminSpendSchema>;
 
 export async function fetchAdminSpend(options: RequestOptions = {}): Promise<AdminSpend> {
   return AdminSpendSchema.parse(await apiRequest<unknown>("/admin/spend", options));
+}
+
+// --------------------------------------------------------------------------- //
+// Billing summary (revenue — AUD, distinct from LLM spend above, which is USD)
+// --------------------------------------------------------------------------- //
+
+export const AdminBillingSummarySchema = z.object({
+  currency: z.string(),
+  asOf: z.string().nullable().optional().default(null),
+  source: z.string().optional().default(""),
+  estimate: z.boolean().optional().default(true),
+  gstRegistered: z.boolean().optional().default(false),
+  mrrAud: z.number(),
+  arrAud: z.number(),
+  paidSubscribers: z.number(),
+  customPricedCount: z.number().optional().default(0),
+  unbackedPaidRows: z.number().optional().default(0),
+  excludedAdminRows: z.number().optional().default(0),
+  excludedDeletedRows: z.number().optional().default(0),
+  byPlan: z
+    .array(
+      z.object({
+        planId: z.string(),
+        name: z.string().nullable().optional().default(null),
+        count: z.number(),
+        mrrAud: z.number(),
+      }),
+    )
+    .optional()
+    .default([]),
+  byStatus: z.record(z.number()).optional().default({}),
+});
+export type AdminBillingSummary = z.infer<typeof AdminBillingSummarySchema>;
+
+export async function fetchAdminBillingSummary(
+  options: RequestOptions = {},
+): Promise<AdminBillingSummary> {
+  return AdminBillingSummarySchema.parse(
+    await apiRequest<unknown>("/admin/billing/summary", options),
+  );
 }
 
 // --------------------------------------------------------------------------- //

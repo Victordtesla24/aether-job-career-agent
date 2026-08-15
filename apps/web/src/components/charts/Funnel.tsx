@@ -148,17 +148,17 @@ export function Funnel({
                         width: barPercent(length),
                         /*
                          * ONE HUE PER MARK (discrete-accents rule, B1
-                         * re-review §2). The fill used to run coral → violet
-                         * across its own length, which made the widest bar
+                         * re-review §2). The fill used to run two hues across
+                         * its own length, which made the widest bar
                          * ("Jobs found") the single place on either flagship
                          * screen where the identity's two hues are BLENDED
                          * into one mark instead of used as separate accents —
                          * decorative where everything else is restrained, and
                          * worse, a colour change along an axis that encodes
-                         * nothing: a reader is entitled to ask what the violet
+                         * nothing: a reader is entitled to ask what the far
                          * end means, and the answer was "nothing".
                          *
-                         * Now: coral only. The variation left is luminance
+                         * Now: c1 chart-gold only. The variation left is luminance
                          * within that one hue (top edge brighter), which is
                          * the same depth device the elevation ladder uses and
                          * makes no claim of its own.

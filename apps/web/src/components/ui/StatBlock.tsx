@@ -95,7 +95,7 @@ export default function StatBlock({
   return (
     <div
       data-testid={testId}
-      className={`elev-1 group relative overflow-hidden rounded-2xl p-5 transition-colors duration-[--dur] hover:border-white/[0.14] ${className}`}
+      className={`elev-1 group relative overflow-hidden rounded-[14px] p-5 transition-colors duration-[--dur] hover:border-white/[0.14] ${className}`}
     >
       {/*
         The label is a DIRECT child of the root, and the delta chip is

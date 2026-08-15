@@ -13,7 +13,7 @@ export function VoiceDnaPanel({
   onFormalityChange: (value: number) => void;
 }) {
   return (
-    <section className="elev-1 rounded-2xl p-5" data-testid="voice-dna-panel">
+    <section className="elev-1 rounded-[14px] p-5" data-testid="voice-dna-panel">
       <div className="mb-4 flex items-center gap-2">
         <i className="fa-solid fa-sliders text-sm text-state-info" aria-hidden="true" />
         <h2 className="text-[13px] font-semibold tracking-[-0.01em]">Voice DNA</h2>

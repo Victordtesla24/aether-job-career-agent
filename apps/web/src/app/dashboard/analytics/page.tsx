@@ -469,7 +469,7 @@ export default function AnalyticsPage() {
         overlapping things about the same five stages.
       */}
       <div className="grid gap-6 xl:grid-cols-12 xl:items-start">
-      <section className="elev-1 rounded-2xl p-5 xl:col-span-7" data-testid="funnel-chart">
+      <section className="elev-1 rounded-[14px] p-5 xl:col-span-7" data-testid="funnel-chart">
         {/*
           The PERIOD-scoped heading lives here, on the section, and the chart
           carries a complementary title ("Volume by stage") rather than
@@ -514,7 +514,7 @@ export default function AnalyticsPage() {
         )}
       </section>
 
-      <section className="elev-1 rounded-2xl p-5 xl:col-span-5" data-testid="conversion-rates">
+      <section className="elev-1 rounded-[14px] p-5 xl:col-span-5" data-testid="conversion-rates">
         <h2 className="type-section">Stage conversion ({period})</h2>
         {conversion === null ? (
           <div className="mt-4 h-24 animate-pulse rounded-lg bg-white/5" aria-busy="true" />
@@ -667,7 +667,7 @@ export default function AnalyticsPage() {
       */}
       <div className="grid gap-6 xl:grid-cols-12 xl:items-start">
         <section
-          className={`elev-1 rounded-2xl p-5 ${policy ? "xl:col-span-7" : "xl:col-span-12"}`}
+          className={`elev-1 rounded-[14px] p-5 ${policy ? "xl:col-span-7" : "xl:col-span-12"}`}
           data-testid="ats-distribution"
         >
           {/*
@@ -777,7 +777,7 @@ export default function AnalyticsPage() {
             spend and agent runs are the executive band's spend tile, above,
             and this panel now draws only what is its own. `roiCostRows` (top
             of file) carries the honesty rules the tile captions carried. */}
-        <section className="elev-1 rounded-2xl p-5" data-testid="agent-roi">
+        <section className="elev-1 rounded-[14px] p-5" data-testid="agent-roi">
           <h2 className="type-section flex items-center gap-1.5">
             Agent ROI
             {/* No period support server-side (MV-analytics-004) — honest

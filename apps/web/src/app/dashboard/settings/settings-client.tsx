@@ -503,7 +503,7 @@ export default function SettingsClient({
     return (
       <div className="space-y-4" aria-busy="true" data-testid="settings-skeleton">
         {[0, 1].map((i) => (
-          <div key={i} className="bg-surface-1 h-56 animate-pulse rounded-2xl border border-white/10" />
+          <div key={i} className="bg-surface-1 h-56 animate-pulse rounded-[14px] border border-white/10" />
         ))}
       </div>
     );
@@ -608,7 +608,7 @@ export default function SettingsClient({
           actually needs neutralising. */}
       <div className="grid min-w-0 gap-6 xl:grid-cols-4">
         {/* Subnav */}
-        <nav className="bg-surface-1 h-fit rounded-2xl border border-white/10 p-2 xl:col-span-1" aria-label="Settings sections">
+        <nav className="bg-surface-1 h-fit rounded-[14px] border border-white/10 p-2 xl:col-span-1" aria-label="Settings sections">
           {SECTIONS.map((s) => (
             <button
               key={s.id}
@@ -637,10 +637,10 @@ export default function SettingsClient({
             the text instead of merely being ready to. */}
         <div className="min-w-0 space-y-6 xl:col-span-3">
           {active === "profile" && (
-            <section className="bg-surface-1 rounded-2xl border border-white/10 p-5" data-testid="settings-profile">
+            <section className="bg-surface-1 rounded-[14px] border border-white/10 p-5" data-testid="settings-profile">
               <h2 className="mb-4 text-[15px] font-semibold">Profile</h2>
               <div className="mb-5 flex items-center gap-4">
-                <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-aether-violet/20 text-lg font-bold text-aether-violet">
+                <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-[10px] bg-aether-violet/20 text-lg font-bold text-aether-violet">
                   {avatarInitials || "?"}
                 </span>
                 {/* min-w-0 + overflow-hidden (ML-settings-001 / ML-adv-003):
@@ -710,7 +710,7 @@ export default function SettingsClient({
               invented here. */}
           {active === "privacy" && (
             <section
-              className="bg-surface-1 rounded-2xl border border-white/10 p-5"
+              className="bg-surface-1 rounded-[14px] border border-white/10 p-5"
               data-testid="settings-privacy"
               aria-labelledby="privacy-heading"
             >
@@ -758,7 +758,7 @@ export default function SettingsClient({
 
           {(active === "resume" || active === "portfolio" || active === "profile") && (
             <div className="space-y-6">
-              <section className="bg-surface-1 rounded-2xl border border-white/10 p-5" data-testid="settings-resume">
+              <section className="bg-surface-1 rounded-[14px] border border-white/10 p-5" data-testid="settings-resume">
                 <h2 className="mb-3 text-[15px] font-semibold">Resume Management</h2>
                 <div className="flex items-center justify-between rounded-xl border border-aether-green/25 bg-aether-green/5 p-3">
                   <div className="flex items-center gap-2.5">
@@ -861,7 +861,7 @@ export default function SettingsClient({
               </section>
 
               <section
-                className="bg-surface-1 rounded-2xl border border-white/10 p-5"
+                className="bg-surface-1 rounded-[14px] border border-white/10 p-5"
                 data-testid="settings-portfolio"
                 aria-labelledby="career-data-heading"
               >
@@ -1036,7 +1036,7 @@ export default function SettingsClient({
           )}
 
           {(active === "agents" || active === "profile") && (
-            <section className="bg-surface-1 rounded-2xl border border-white/10 p-5" data-testid="settings-agents">
+            <section className="bg-surface-1 rounded-[14px] border border-white/10 p-5" data-testid="settings-agents">
               <h2 className="mb-4 text-[15px] font-semibold">Agent Configuration</h2>
               <div className="space-y-4">
                 <div>
@@ -1106,7 +1106,7 @@ export default function SettingsClient({
           )}
 
           {active === "notifications" && (
-            <section className="bg-surface-1 rounded-2xl border border-white/10 p-5" data-testid="settings-notifications">
+            <section className="bg-surface-1 rounded-[14px] border border-white/10 p-5" data-testid="settings-notifications">
               <h2 className="mb-4 text-[15px] font-semibold">Notifications</h2>
               {/* GOLD-MASTER-V2 §4/G-B+G-O: per-category notification
                   PREFERENCES (approval-request pushes, status-change pushes,
@@ -1141,7 +1141,7 @@ export default function SettingsClient({
 
           {(active === "integrations" || active === "profile") && (
             <>
-              <section className="bg-surface-1 rounded-2xl border border-white/10 p-5" data-testid="settings-integrations">
+              <section className="bg-surface-1 rounded-[14px] border border-white/10 p-5" data-testid="settings-integrations">
                 <div className="mb-4 flex items-center justify-between">
                   <h2 className="text-[15px] font-semibold">Job Board Integrations</h2>
                   <button
@@ -1197,7 +1197,7 @@ export default function SettingsClient({
                 </p>
               </section>
 
-              <section className="bg-surface-1 rounded-2xl border border-white/10 p-5" data-testid="settings-accounts">
+              <section className="bg-surface-1 rounded-[14px] border border-white/10 p-5" data-testid="settings-accounts">
                 <h2 className="mb-3 text-[15px] font-semibold">Connected Accounts &amp; API Keys</h2>
                 <div className="space-y-2.5">
                   {data.connectedAccounts.map((a) => (
@@ -1222,7 +1222,7 @@ export default function SettingsClient({
           )}
 
           {(active === "billing" || active === "profile") && (
-            <section className="bg-surface-1 rounded-2xl border border-white/10 p-5" data-testid="settings-billing">
+            <section className="bg-surface-1 rounded-[14px] border border-white/10 p-5" data-testid="settings-billing">
               <h2 className="mb-4 text-[15px] font-semibold">Billing &amp; Subscription</h2>
 
               {billingError ? (

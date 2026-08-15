@@ -980,7 +980,7 @@ export default function ApplicationsPage() {
       {detail ? (
         <aside
           data-testid="application-detail-panel"
-          className="elev-1 rounded-2xl border-aether-violet/40 p-5"
+          className="elev-1 rounded-[14px] border-aether-violet/40 p-5"
         >
           <div className="flex items-start justify-between gap-3">
             <div>
@@ -1167,7 +1167,7 @@ export default function ApplicationsPage() {
       {apps === null ? (
         <div className="grid gap-4 md:grid-cols-4" aria-busy="true" data-testid="board-skeleton">
           {[0, 1, 2, 3].map((i) => (
-            <div key={i} className="elev-1 h-64 animate-pulse rounded-2xl" />
+            <div key={i} className="elev-1 h-64 animate-pulse rounded-[14px]" />
           ))}
         </div>
       ) : view === "board" ? (
@@ -1188,7 +1188,7 @@ export default function ApplicationsPage() {
                   key={stage.key}
                   data-testid={`kanban-column-${stage.key}`}
                   aria-label={`${stage.label} stage, ${stage.cards.length} cards`}
-                  className="flex w-[268px] shrink-0 flex-col rounded-2xl border border-hairline bg-white/[0.012]"
+                  className="flex w-[268px] shrink-0 flex-col rounded-[14px] border border-hairline bg-white/[0.012]"
                   onDragOver={(e) => {
                     e.preventDefault();
                     e.dataTransfer.dropEffect = "move";
@@ -1369,7 +1369,7 @@ export default function ApplicationsPage() {
             </div>
           </div>
           {closed.length > 0 ? (
-            <section className="elev-1 rounded-2xl p-4" data-testid="closed-strip">
+            <section className="elev-1 rounded-[14px] p-4" data-testid="closed-strip">
               <h2 className="mb-2 text-xs font-semibold uppercase tracking-wide text-aether-muted-dim">
                 Closed ({closed.length})
               </h2>
@@ -1419,13 +1419,13 @@ export default function ApplicationsPage() {
             </div>
           ) : (
             <div
-              className="elev-1 mt-4 h-72 animate-pulse rounded-2xl"
+              className="elev-1 mt-4 h-72 animate-pulse rounded-[14px]"
               aria-busy="true"
             />
           )}
         </section>
       ) : view === "applied" ? (
-        <section className="elev-1 rounded-2xl p-5" data-testid="applied-view">
+        <section className="elev-1 rounded-[14px] p-5" data-testid="applied-view">
           <div className="flex items-center gap-2.5 mb-4">
             <i className="fa-solid fa-check-circle text-sm text-aether-green" aria-hidden="true" />
             <h2 className="text-[15px] font-semibold">Applied Jobs</h2>
@@ -1435,7 +1435,7 @@ export default function ApplicationsPage() {
           </div>
           {appliedApps === null ? (
             <div
-              className="elev-1 h-48 animate-pulse rounded-2xl"
+              className="elev-1 h-48 animate-pulse rounded-[14px]"
               aria-busy="true"
             />
           ) : appliedError ? (
@@ -1518,7 +1518,7 @@ export default function ApplicationsPage() {
           )}
         </section>
       ) : (
-        <section className="elev-1 rounded-2xl p-5" data-testid="timeline-view">
+        <section className="elev-1 rounded-[14px] p-5" data-testid="timeline-view">
           <h2 className="mb-4 text-[15px] font-semibold">Timeline</h2>
           {(apps ?? []).length === 0 ? (
             <p className="text-sm text-aether-muted-dim">No applications yet.</p>

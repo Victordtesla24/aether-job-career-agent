@@ -89,13 +89,30 @@ def admin_list_users(
     q: Optional[str] = Query(default=None),
     plan: Optional[str] = Query(default=None),
     suspended: Optional[bool] = Query(default=None),
+    view: Optional[str] = Query(default=None),
     limit: int = Query(default=100, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
 ) -> dict[str, Any]:
-    """List users with plan, signup date, last login and LLM spend (USD)."""
-    return admin_repo.list_users(
-        query=q, plan=plan, suspended=suspended, limit=limit, offset=offset
-    )
+    """List users with plan, signup date, last login and LLM spend (USD).
+
+    ``view=active|suspended|deleted|all`` (ADMIN-MGMT E1) selects a lifecycle
+    slice; ``active`` is the default so the ordinary user table stops mixing
+    soft-deleted accounts in with live customers. The legacy ``suspended``
+    boolean is unchanged and, when supplied without ``view``, still returns
+    exactly the rows it always did. The response gains ``counts`` (every
+    lifecycle bucket under the same search) additively — no existing key moves.
+    """
+    try:
+        return admin_repo.list_users(
+            query=q,
+            plan=plan,
+            suspended=suspended,
+            view=view,
+            limit=limit,
+            offset=offset,
+        )
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
 
 
 @router.get("/users/{user_id}")
@@ -962,6 +979,249 @@ async def admin_restore_user(
             if suspended
             else "Restored."
         ),
+    }
+
+
+# --------------------------------------------------------------------------- #
+# ADMIN-MGMT E1 — hard purge, billing-record deletion, hygiene
+#
+# Owner mandate: an admin has FULL management power over real accounts, and a
+# deleted or stale record must be removable FOR REAL. Soft delete (above) is
+# step one and stays reversible; everything below is step two and is not.
+#
+# The purge route is the one place in this codebase that destroys a customer's
+# work irrecoverably, so it is gated four ways — typed email confirmation, the
+# protected-account guard, a mandatory prior soft delete, and a live-Stripe
+# check — and every guard writes NOTHING before refusing.
+# --------------------------------------------------------------------------- #
+
+
+@router.post("/users/{user_id}/purge")
+async def admin_purge_user(
+    admin: AdminUser, user_id: str, request: Request
+) -> dict[str, Any]:
+    """HARD-delete an account and ALL of its data. Irreversible.
+
+    Body ``{"confirmEmail": "<the target's email>"}``.
+
+    WHY THIS EXISTS ALONGSIDE THE SOFT DELETE: soft delete preserves the work
+    and the billing history, which is right for "this person is leaving" and
+    wrong for "this record must not exist" — an erasure request, a test persona,
+    a duplicate. Before this route the only honest answer to the latter was
+    manual SQL against production. Now it is an audited, guarded, single
+    transaction.
+
+    GUARDS — each refuses with an honest status and writes nothing:
+
+    * ``422`` the typed ``confirmEmail`` does not match the target.
+    * ``409`` the account is protected (an admin, or the §14.7 owner identity).
+    * ``409`` the account has not been soft-deleted yet. Purge is deliberately
+      step TWO: making destruction reachable in one call from a user list is how
+      the wrong row gets destroyed.
+    * ``409`` the local ``Subscription`` still names a live Stripe subscription.
+      Deleting the local row would strand Stripe billing a customer this
+      platform can no longer see, so the Stripe-side cancel must happen first.
+
+    CASCADE: one transaction, every child row keyed to this user across the
+    census in ``PROD-PRISTINE-WIPE-MANIFEST-2026-08-15.md`` §1, children before
+    parents, explicit deletes (never FK cascade — 17 of these tables have no
+    foreign key to ``User`` at all). ``AdminAuditLog`` rows are KEPT: the trail
+    of what an admin did outlives the account it was done to, and the ``purge``
+    row itself carries the per-table counts, so the audit log can still answer
+    "what was destroyed here" after the data is gone.
+    """
+    body = await _parse_json_object(request)
+    admin_repo._ensure_admin_schema()
+    ensure_user_lifecycle_columns()
+    ensure_password_reset_columns()
+
+    target = admin_repo.account_guard_context(user_id)
+    if target is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
+
+    confirm = body.get("confirmEmail")
+    if (
+        not isinstance(confirm, str)
+        or not confirm.strip()
+        or confirm.strip().lower() != str(target.get("email") or "").strip().lower()
+    ):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "confirmEmail must match the target account's email address exactly.",
+        )
+
+    protected = admin_repo.protected_account_reason(target)
+    if protected:
+        raise HTTPException(status.HTTP_409_CONFLICT, protected)
+
+    if target.get("deletedAt") is None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Soft-delete the account first — purge is step two. "
+            "DELETE /api/admin/users/{id} makes this account inactive and "
+            "reversible; purge then destroys it permanently.",
+        )
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            # Read the billing guard on the SAME cursor as the deletes, so the
+            # decision and the destruction cannot straddle a concurrent change.
+            live = admin_repo.billable_subscription(cur, user_id)
+            if live:
+                raise HTTPException(
+                    status.HTTP_409_CONFLICT,
+                    admin_repo.CANCEL_FIRST_MESSAGE.format(
+                        status=live.get("status") or "live"
+                    ),
+                )
+            tables = admin_repo.purge_user_cascade(cur, user_id)
+            removed = admin_repo.delete_user_row(cur, user_id)
+            if removed != 1:  # lost a race with a concurrent purge
+                raise HTTPException(
+                    status.HTTP_409_CONFLICT, "This account no longer exists."
+                )
+            tables["User"] = removed
+            admin_repo.write_audit(
+                admin["id"],
+                "purge_user",
+                target_type="user",
+                target_id=user_id,
+                detail={
+                    "mode": "hard",
+                    "email": target.get("email"),
+                    "tables": tables,
+                },
+                ip=_client_ip(request),
+                cur=cur,
+            )
+        conn.commit()
+
+    return {
+        "userId": user_id,
+        "purged": True,
+        "tables": tables,
+        "note": (
+            "Hard delete: the account and every row keyed to it are gone and "
+            "cannot be restored. Its AdminAuditLog entries were kept on "
+            "purpose — including this purge, with the per-table counts above."
+        ),
+    }
+
+
+@router.delete("/users/{user_id}/subscription")
+async def admin_delete_subscription_record(
+    admin: AdminUser, user_id: str, request: Request
+) -> dict[str, Any]:
+    """Delete the LOCAL ``Subscription`` + ``UsageQuota`` rows for a userId.
+
+    This is record cleanup, NOT a cancellation: it removes Aether's own billing
+    rows and talks to Stripe not at all. Cancelling a real subscription is
+    ``POST .../subscription/cancel``, which routes through the billing service.
+
+    Refuses with ``409`` while the local row names a LIVE Stripe subscription —
+    deleting it then would leave Stripe charging a customer no admin screen can
+    still see. A free-tier row, a canceled row, or a row holding only a Stripe
+    *customer* object carries no such obligation and is removable.
+
+    Works when the ``User`` row is already gone: keyed on ``userId`` alone, so
+    the orphaned pairs that pre-date the purge route above are cleanable
+    one-by-one here (or in bulk via ``POST /admin/hygiene/purge-orphans``).
+    """
+    await _parse_json_object(request)
+    admin_repo._ensure_admin_schema()
+    # Read OUTSIDE the write transaction: the cur paths inside must not open a
+    # second connection (the ADMIN-FULL rule this router already follows).
+    user_row_exists = admin_repo.user_exists(user_id)
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            live = admin_repo.billable_subscription(cur, user_id)
+            if live:
+                raise HTTPException(
+                    status.HTTP_409_CONFLICT,
+                    admin_repo.CANCEL_FIRST_MESSAGE.format(
+                        status=live.get("status") or "live"
+                    ),
+                )
+            deleted = admin_repo.delete_billing_records(cur, user_id)
+            admin_repo.write_audit(
+                admin["id"],
+                "delete_subscription_record",
+                target_type="user",
+                target_id=user_id,
+                detail={
+                    "deleted": deleted,
+                    # Truthful about which case this was — orphan cleanup reads
+                    # very differently from removing a live account's billing.
+                    "userRowExists": user_row_exists,
+                },
+                ip=_client_ip(request),
+                cur=cur,
+            )
+        conn.commit()
+
+    return {"userId": user_id, "deleted": deleted}
+
+
+@router.get("/hygiene")
+def admin_hygiene(_admin: AdminUser) -> dict[str, Any]:
+    """Read-only stale-data report. Writes nothing, deletes nothing.
+
+    Four classes an operator otherwise has to go looking for in SQL: accounts
+    sitting soft-deleted, billing rows whose owner no longer exists, canceled
+    subscriptions, and accounts that never logged in after 30 days. Counts plus
+    a small sample — a pointer to work, not a data export.
+    """
+    return admin_repo.hygiene_report()
+
+
+@router.post("/hygiene/purge-orphans")
+async def admin_purge_orphans(admin: AdminUser, request: Request) -> dict[str, Any]:
+    """Delete ONLY the orphaned billing pairs. Body ``{"confirm": true}``.
+
+    Narrow on purpose: the sole predicate is "no ``User`` row exists for this
+    userId", so this can never reach a live account's billing however stale it
+    looks. The other three classes in the hygiene report have no bulk button —
+    a soft-deleted account is a person's data, and disposing of it stays a
+    per-account, email-confirmed decision (``POST .../purge``).
+    """
+    body = await _parse_json_object(request)
+    if body.get("confirm") is not True:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            'Pass {"confirm": true} to delete the orphaned billing rows.',
+        )
+    admin_repo._ensure_admin_schema()
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            result = admin_repo.purge_orphan_billing(cur)
+            admin_repo.write_audit(
+                admin["id"],
+                "purge_orphans",
+                target_type="billing",
+                target_id=None,
+                detail={
+                    "subscription": result["subscription"],
+                    "usageQuota": result["usageQuota"],
+                    "userIdCount": result["userIdCount"],
+                    # A SAMPLE, named as one. The orphan set can be very large;
+                    # an audit row is not a bulk export.
+                    "userIdSample": result["userIds"],
+                },
+                ip=_client_ip(request),
+                cur=cur,
+            )
+        conn.commit()
+
+    return {
+        "purged": True,
+        "userIdCount": result["userIdCount"],
+        "userIdSample": result["userIds"],
+        "deleted": {
+            "subscription": result["subscription"],
+            "usageQuota": result["usageQuota"],
+        },
     }
 
 
