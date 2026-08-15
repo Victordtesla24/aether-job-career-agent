@@ -42,6 +42,8 @@ from app.middleware.auth import (
 from app.redaction import redact_validation_errors
 from app.repositories import admin as admin_repo
 from app.repositories import admin_billing as admin_billing_repo
+from app.repositories import admin_metrics as admin_metrics_repo
+from app.repositories import sales_agents as sales_agents_repo
 from app.repositories.billing import (
     PlanRepository,
     _ensure_billing_tables,
@@ -1600,3 +1602,244 @@ def admin_deactivate_promo(
         "promotionCodeId": result.get("id") or promotion_code_id,
         "active": bool(result.get("active", False)),
     }
+
+
+# --------------------------------------------------------------------------- #
+# ADMIN-2.0 BE-2 — sales agents (referral codes, attribution, commission)
+#
+# A sales agent is a human reseller with a referral code. There is deliberately
+# NO delete route: a distributed code lives on in links and in the attribution
+# history of every account it brought in, so "remove" means deactivate — the
+# code stops attributing and the earned history stays readable.
+# --------------------------------------------------------------------------- #
+
+
+def _clean_agent_name(raw: Any) -> str:
+    if not isinstance(raw, str) or not raw.strip():
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY, "name is required."
+        )
+    return raw.strip()
+
+
+def _clean_optional_text(raw: Any, field: str) -> Optional[str]:
+    if raw is None:
+        return None
+    if not isinstance(raw, str):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY, f"{field} must be a string."
+        )
+    return raw.strip() or None
+
+
+def _clean_commission_pct(raw: Any) -> float:
+    """0..100 inclusive, as a real number.
+
+    ``bool`` is rejected explicitly: ``True`` is an ``int`` in Python and would
+    silently become a 1% commission.
+    """
+    if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "commissionPct must be a number between 0 and 100.",
+        )
+    value = float(raw)
+    if value < 0 or value > 100:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "commissionPct must be between 0 and 100.",
+        )
+    return value
+
+
+def _clean_agent_status(raw: Any) -> str:
+    if not isinstance(raw, str) or raw.strip().lower() not in (
+        sales_agents_repo.SALES_AGENT_STATUSES
+    ):
+        allowed = " | ".join(sales_agents_repo.SALES_AGENT_STATUSES)
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            f"status must be one of: {allowed}. There is no delete: an agent "
+            "whose code is already in circulation is deactivated, never erased.",
+        )
+    return raw.strip().lower()
+
+
+@router.get("/sales-agents")
+def admin_list_sales_agents(
+    _admin: AdminUser,
+    status_filter: Optional[str] = Query(default=None, alias="status"),
+) -> dict[str, Any]:
+    """Sales agents with their REAL attributed signup / conversion counts."""
+    cleaned = _clean_agent_status(status_filter) if status_filter else None
+    return sales_agents_repo.list_agents(status=cleaned)
+
+
+@router.post("/sales-agents", status_code=status.HTTP_201_CREATED)
+async def admin_create_sales_agent(admin: AdminUser, request: Request) -> dict[str, Any]:
+    """Register a sales agent and mint (or accept) their referral code.
+
+    Body ``{"name", "email"?, "referralCode"?, "commissionPct"?, "notes"?}``.
+    An omitted code is generated with ``secrets`` — a guessable referral code is
+    an attribution somebody else can claim. Codes are stored uppercase, so
+    ``?ref=jane-2026`` and ``?ref=JANE-2026`` are the same agent.
+
+    The agent row and its ``AdminAuditLog`` entry are written on ONE cursor in
+    ONE transaction, so an agent can never exist unaudited.
+    """
+    body = await _parse_json_object(request)
+    name = _clean_agent_name(body.get("name"))
+    email = _clean_optional_text(body.get("email"), "email")
+    notes = _clean_optional_text(body.get("notes"), "notes")
+    commission_pct = _clean_commission_pct(body.get("commissionPct", 0))
+
+    raw_code = body.get("referralCode")
+    if raw_code is None:
+        referral_code = sales_agents_repo.allocate_referral_code(name)
+    else:
+        try:
+            referral_code = sales_agents_repo.normalize_referral_code(raw_code)
+        except sales_agents_repo.InvalidReferralCodeError as exc:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)
+            ) from exc
+
+    # Every lazy-DDL side effect happens OUTSIDE the transaction.
+    admin_repo._ensure_admin_schema()
+    sales_agents_repo.ensure_sales_agent_schema()
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            try:
+                created = sales_agents_repo.create_agent(
+                    cur,
+                    name=name,
+                    email=email,
+                    referral_code=referral_code,
+                    commission_pct=commission_pct,
+                    notes=notes,
+                    actor_user_id=admin["id"],
+                )
+            except sales_agents_repo.DuplicateReferralCodeError as exc:
+                raise HTTPException(
+                    status.HTTP_409_CONFLICT,
+                    f"Referral code '{referral_code}' is already in use.",
+                ) from exc
+            admin_repo.write_audit(
+                admin["id"],
+                "create_sales_agent",
+                target_type="sales_agent",
+                target_id=created["id"],
+                detail={
+                    "name": name,
+                    "email": email,
+                    "referralCode": referral_code,
+                    "commissionPct": commission_pct,
+                },
+                ip=_client_ip(request),
+                cur=cur,
+            )
+        conn.commit()
+    return sales_agents_repo._agent_view(created, {"signups": 0, "converted": 0})
+
+
+@router.patch("/sales-agents/{agent_id}")
+async def admin_update_sales_agent(
+    admin: AdminUser, agent_id: str, request: Request
+) -> dict[str, Any]:
+    """Update an agent — including ``status: "inactive"``, which IS the delete.
+
+    ``referralCode`` is immutable: the code is already printed on links the
+    agent has handed out, and rewriting it would silently break every one of
+    them while orphaning nothing (attribution stores the agent id, not the
+    code). Mint a second agent instead if a new code is wanted.
+    """
+    body = await _parse_json_object(request)
+    if "referralCode" in body:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "referralCode cannot be changed: the code is already in circulation "
+            "on links this agent has distributed. Create a new agent instead.",
+        )
+
+    changes: dict[str, Any] = {}
+    if "name" in body:
+        changes["name"] = _clean_agent_name(body.get("name"))
+    if "email" in body:
+        changes["email"] = _clean_optional_text(body.get("email"), "email")
+    if "notes" in body:
+        changes["notes"] = _clean_optional_text(body.get("notes"), "notes")
+    if "commissionPct" in body:
+        changes["commissionPct"] = _clean_commission_pct(body.get("commissionPct"))
+    if "status" in body:
+        changes["status"] = _clean_agent_status(body.get("status"))
+    if not changes:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "No updatable field supplied (name, email, notes, commissionPct, status).",
+        )
+
+    admin_repo._ensure_admin_schema()
+    sales_agents_repo.ensure_sales_agent_schema()
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            try:
+                updated = sales_agents_repo.update_agent(cur, agent_id, changes)
+            except sales_agents_repo.SalesAgentNotFoundError as exc:
+                raise HTTPException(
+                    status.HTTP_404_NOT_FOUND, "Sales agent not found"
+                ) from exc
+            admin_repo.write_audit(
+                admin["id"],
+                "update_sales_agent",
+                target_type="sales_agent",
+                target_id=agent_id,
+                detail={"changed": changes},
+                ip=_client_ip(request),
+                cur=cur,
+            )
+            # Same cursor: the counts the caller gets back are the ones that
+            # hold in the transaction it just committed, and the response shape
+            # matches the list route's exactly (no field that appears on one
+            # and vanishes on the other).
+            counts = sales_agents_repo.attribution_counts(cur)
+        conn.commit()
+    return sales_agents_repo._agent_view(updated, counts.get(agent_id, {}))
+
+
+@router.get("/sales-agents/{agent_id}/report")
+def admin_sales_agent_report(_admin: AdminUser, agent_id: str) -> dict[str, Any]:
+    """Commission report — REPORT ONLY.
+
+    Attributed accounts, what they REALLY paid (from the signature-verified
+    Stripe webhook payloads recorded locally, net of real refunds) and
+    ``commissionPct`` x that. It writes nothing, moves no money, creates no
+    Stripe object and schedules no payout: paying an agent stays a deliberate
+    act performed outside the product.
+    """
+    try:
+        return sales_agents_repo.commission_report(agent_id)
+    except sales_agents_repo.SalesAgentNotFoundError as exc:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND, "Sales agent not found"
+        ) from exc
+
+
+# --------------------------------------------------------------------------- #
+# ADMIN-2.0 BE-2 — executive metrics (the one read the dashboard polls)
+# --------------------------------------------------------------------------- #
+
+
+@router.get("/metrics/executive")
+def admin_executive_metrics(_admin: AdminUser) -> dict[str, Any]:
+    """Every figure the executive dashboard renders, from one consistent read.
+
+    Read-only. MRR / paid count / plan mix, signups per day, the
+    signup->run->submission->paid funnel, LLM cost (USD) beside revenue (AUD)
+    with NO exchange rate applied, run volume per day, and top referrers.
+    Each block carries its own ``sampleSize`` + ``insufficientData`` so a figure
+    drawn from three rows is labelled as such instead of being rendered as a
+    confident trend.
+    """
+    return admin_metrics_repo.executive_metrics()
