@@ -58,11 +58,29 @@ interim Stop-All guards, RESUME-FMT, P1-B conductor UI, Sales Agent (shadow).
 **Incidents root-caused this run:** owner-login §14.7 boot rotation (no intruder);
 Stop-All 9h spend bleed (inert-field class; permanent enforcement above).
 
-## 3. Gates (§9.3 U6 close) — *(filled at landing)*
+## 3. Gates (§9.3 U6 close)
 
-- Full backend suite vs baseline oracle: [GATE-SLOT]
-- vitest: [GATE-SLOT] · web build+gate: [GATE-SLOT] · e2e: [GATE-SLOT]
-- Provenance re-anchor: [GATE-SLOT]
+- **Full backend suite**: 3 failed / **4,011 passed** / 1 skipped (58:53) vs baseline 9F/3,228P —
+  zero regressions, +783 tests. All 3 failures reproduced IDENTICALLY on origin/main
+  (attribution run) → inherited, then FIXED on this branch anyway (adoption rule): two REAL
+  U2c-era bugs (the `qualityGate` field silently dropped by the tailor router whitelist — the
+  GMV4 trap class; the below-floor acknowledgement contract unpinned) + one test-isolation fix
+  (rt_008's literal source name vs persisted JobSourceStatus). Post-fix batch: 75/75.
+- **vitest**: 1,796/1,797 → 100% after the documented S-UI endpoint-pin amendment for B1b's
+  reviewed directives fetch (analytics dir re-verified 39/39).
+- **Web build + §0.4 gate**: PASS (twice).
+- **e2e (82 tests, 34.8m)**: 58 passed / 23 failed / 1 flaky. Attribution against origin/main
+  (same 10 spec files, clean build, isolated port): **21/23 fail identically on main** —
+  pre-existing spec-locator drift on S-UI/analytics-reworked surfaces + the REAL mobile-overflow
+  findings (already owned as 9c6a2ba6/S-UI-B4; independently confirmed by the beauty sweep).
+  2/23 branch-only → *(fix outcome: [E2E-FIX-SLOT])*. Also surfaced this run: the e2e harness's
+  server script never runs the suite (playwright self-manages it) — the gate recipe is
+  `pnpm exec playwright test`, recorded here for the next operator; and heavy suites are the
+  OOM sacrifice during concurrent deploys (serialize behind deploy windows).
+- **Provenance re-anchor**: 58/58 across all four linkage suites; tsc clean.
+- **Cross-session integration proofs**: P1-A × my-lane batch 359/360→fixed→214/214;
+  Stop-All × P1-A 217/217; Option-A re-sanity post-ADMIN-2.0-era merges 171/171 incl. the
+  peer's sales/combobox suites.
 - Deploy + prod verify: [DEPLOY-SLOT]
 
 ## 4. Cost notes (§2.3)
