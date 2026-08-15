@@ -1,0 +1,2 @@
+$ mypy app/ --ignore-missing-imports   (2026-08-15T00:57:34Z)
+[1m[32mSuccess: no issues found in 163 source files(B[m

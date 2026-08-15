@@ -683,8 +683,14 @@ def _render_resume_pdf(user_id: str, application: dict[str, Any]) -> bytes:
     """This application's OWN tailored résumé, through the real download path.
 
     ``resolve_email_attachments`` is the same in-process call the W-SUB email
-    path uses, which is itself the same handler behind the user's own Download
-    button — so the employer receives byte-identically what the user can see.
+    path uses, which renders through the same authority as the user's own
+    Download button — so the employer receives byte-identically what the user
+    can see: their PRESERVED document, never the Aether branded template
+    (RFMT-5) and never diff-marked (RFMT-2).
+
+    The bytes are not necessarily a PDF — a preserved render is whatever the
+    user uploaded — so the executor names the uploaded file from the bytes
+    themselves (``apply_executor._resume_suffix``) rather than assuming one.
     """
     from app.services.email_attachments import resolve_email_attachments
 
