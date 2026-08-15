@@ -97,7 +97,7 @@ const config: Config = {
         "gilt-glow": "0 0 20px rgba(201,168,76,0.28)",
       },
       animation: {
-        "fade-in": "fadeIn 0.3s ease-out",
+        "fade-in": "fadeIn 0.3s cubic-bezier(0.25,1,0.5,1)",
       },
       keyframes: {
         fadeIn: {

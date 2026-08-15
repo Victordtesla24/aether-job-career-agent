@@ -101,7 +101,7 @@
      renders byte-identically. */
   --hairline: rgba(255, 255, 255, 0.07);
   --hairline-strong: rgba(255, 255, 255, 0.13);
-  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --ease: cubic-bezier(0.25, 1, 0.5, 1);
   --dur-fast: 120ms;
   --dur: 180ms;
   --dur-slow: 260ms;
@@ -131,7 +131,7 @@
 }
 
 .elev-3 {
-  background: #16161f;
+  background: #16161a;
   border: 1px solid var(--hairline-strong);
   box-shadow: 0 16px 40px -12px rgba(0, 0, 0, 0.75);
   backdrop-filter: blur(20px);
@@ -139,7 +139,7 @@
 }
 
 body {
-  font-family: "AB Sans", "Inter", system-ui, sans-serif;
+  font-family: "AB Sans", "DM Sans", "Helvetica Neue", sans-serif;
   background-color: #08080a;
   color: #f5f1e8;
   background-image:
@@ -218,7 +218,7 @@ body {
 /*
  * Accessibility overrides (Phase 4, fix iteration 2).
  * DEF-053: solid gilt fills get dark text (--accent-on #0A0A0A on gold).
- * DEF-051: muted caption token lightened in tailwind.config.ts (#8B8BA3 = 5.8:1).
+ * DEF-051: muted caption token uses the parchment ladder (--fg-2/--fg-3 warm-white alphas).
  * Sapphire-light caption text stays readable on obsidian (#8FA8CE).
  */
 .bg-aether-coral {
@@ -294,8 +294,8 @@ body {
  * indicator, never by a bounding box or a separate surface).
  */
 .chrome-blur {
-  background: rgba(10, 10, 15, 0.72);
-  background: color-mix(in srgb, #0a0a0f 72%, transparent);
+  background: rgba(8, 8, 10, 0.72);
+  background: color-mix(in srgb, #08080a 72%, transparent);
   backdrop-filter: blur(24px) saturate(140%);
   -webkit-backdrop-filter: blur(24px) saturate(140%);
 }
@@ -325,7 +325,7 @@ body {
 .type-page-sub {
   font-size: 13px;
   line-height: 1.5;
-  color: #a0a0b8;
+  color: rgba(245, 241, 232, 0.62);
 }
 .type-section {
   font-size: 10px;
@@ -333,12 +333,12 @@ body {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.1em;
-  color: #8b8ba3;
+  color: rgba(245, 241, 232, 0.46);
 }
 .type-meta {
   font-size: 11px;
   line-height: 1.5;
-  color: #8b8ba3;
+  color: rgba(245, 241, 232, 0.46);
 }
 .type-mono-micro {
   font-family: "JetBrains Mono", ui-monospace, monospace;
@@ -396,7 +396,7 @@ body {
 
 /*
  * The hero glow. A wide, very low-alpha coral radial bloom behind the first
- * band, so the top of the page has DEPTH instead of being a flat #0A0A0F
+ * band, so the top of the page has DEPTH instead of being a flat #08080A
  * expanse. It sits behind content (`z-index:0` + `isolate` on the parent) and
  * is `pointer-events:none`, so it can never intercept a click.
  */
@@ -547,4 +547,34 @@ body {
   box-shadow:
     0 0 0 1px rgba(111, 175, 141, 0.35),
     0 0 12px 0 rgba(111, 175, 141, 0.45);
+}
+
+/*
+ * R7 — DS gold scrollbar + selection (readme.md §"scrollbar + selection").
+ * Gold gradient thumb on a transparent track, thin; selection is a warm
+ * gold wash with parchment text. Scoped globally via html/*.
+ */
+::selection {
+  background: rgba(201, 168, 76, 0.3);
+  color: #fdf8f1;
+}
+html {
+  scrollbar-width: thin;
+  scrollbar-color: #c9a84c transparent;
+}
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background-image: linear-gradient(180deg, #c9a84c, #b0923f);
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background-image: linear-gradient(180deg, #d4b65c, #c9a84c);
 }

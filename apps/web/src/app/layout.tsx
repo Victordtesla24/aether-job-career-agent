@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -7,10 +7,15 @@ export const metadata: Metadata = {
     "Aether Career Agent autonomously discovers roles, tailors your resume, and manages applications end to end.",
 };
 
+export const viewport: Viewport = {
+  themeColor: "#08080A",
+};
+
 /**
- * Root layout. Inter / JetBrains Mono and Font Awesome are pulled in via <link>
- * tags (not next/font) so builds never require network access — this keeps CI
- * and offline builds deterministic.
+ * Root layout. AB Sans / AB Marquee are self-hosted (loaded via the DS
+ * stylesheet), while JetBrains Mono and Font Awesome are pulled in via
+ * <link> tags (not next/font) so builds never require network access —
+ * this keeps CI and offline builds deterministic.
  */
 export default function RootLayout({
   children,
@@ -27,7 +32,7 @@ export default function RootLayout({
           crossOrigin="anonymous"
         />
         <link
-          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap"
+          href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap"
           rel="stylesheet"
         />
         <link
