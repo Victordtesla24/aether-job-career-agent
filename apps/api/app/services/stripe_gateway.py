@@ -513,7 +513,14 @@ def create_coupon(
 
 
 def _promotion_code_summary(pc: Any) -> dict[str, Any]:
-    coupon = _field(pc, "coupon")
+    # Stripe's PromotionCode object nests the coupon under `.promotion.coupon`
+    # (the `type: "coupon"` / `promotion` shape) — there is no top-level
+    # `.coupon` field on the current API version. Reading the old top-level
+    # field silently returned None for every listed code (LIVE-VERIFY ADMIN-2.0
+    # VERIFY(d) caught this: the create call below hit the same shape mismatch
+    # as a hard Stripe 400, which is what actually surfaced it).
+    promotion = _field(pc, "promotion")
+    coupon = _field(promotion, "coupon") if promotion is not None else None
     return {
         "id": _field(pc, "id"),
         "code": _field(pc, "code"),
@@ -539,13 +546,24 @@ def create_promotion_code(
 ) -> dict[str, Any]:
     """Create the customer-facing PromotionCode for a Coupon. Charges nobody."""
     stripe = _stripe()
-    kwargs: dict[str, Any] = {"coupon": coupon_id}
+    # Stripe SDK v13 / current API version: PromotionCode.create takes a
+    # nested `promotion={"type": "coupon", "coupon": <id>}`, not a top-level
+    # `coupon=` kwarg. The flat shape is REJECTED server-side with "Received
+    # unknown parameter: coupon" — reproduced live in ADMIN-2.0 VERIFY(d)
+    # (the existing unit tests mock this function itself, so they never
+    # exercised the real `stripe.PromotionCode.create` call shape).
+    kwargs: dict[str, Any] = {"promotion": {"type": "coupon", "coupon": coupon_id}}
     if code:
         kwargs["code"] = code
     if max_redemptions is not None:
         kwargs["max_redemptions"] = int(max_redemptions)
     if expires_at is not None:
         kwargs["expires_at"] = int(expires_at)
+    # `promotion.coupon` is an ExpandableField — without expansion Stripe
+    # returns just the coupon's id string, so percentOff/amountOff/duration
+    # would silently read as None. Expand it so the response this function
+    # returns is immediately useful without a second round trip.
+    kwargs["expand"] = ["promotion.coupon"]
     pc = stripe.PromotionCode.create(**kwargs)
     return _promotion_code_summary(pc)
 
@@ -553,7 +571,10 @@ def create_promotion_code(
 def list_promotion_codes(limit: int = 50) -> list[dict[str, Any]]:
     """Existing promotion codes (Stripe is the source of truth, not our DB)."""
     stripe = _stripe()
-    result = stripe.PromotionCode.list(limit=limit)
+    # Same expansion as create_promotion_code — list items are ExpandableFields
+    # too, and the "data." prefix is required for expanding fields nested
+    # inside a list response's items.
+    result = stripe.PromotionCode.list(limit=limit, expand=["data.promotion.coupon"])
     return [_promotion_code_summary(pc) for pc in (_field(result, "data") or [])]
 
 
