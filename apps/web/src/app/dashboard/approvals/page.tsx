@@ -302,9 +302,29 @@ export default function ApprovalsPage() {
   const retrySend = async (approval: Approval) => {
     setBusy(approval.id);
     try {
-      await executeApproval(approval.id);
+      // Read the execute outcome instead of discarding it: a site submission
+      // legitimately answers 200 with `transmitted: false` (manual_step /
+      // no_confirmation / unproven), and swallowing that body rendered the
+      // click as NOTHING — the owner-reported "nothing is happening" defect
+      // (2026-08-15, Easygo). An honest non-transmitting outcome is surfaced
+      // with the server's own reason, never silence.
+      const result = await executeApproval(approval.id);
       await load();
-      setListError(null);
+      if (result && result.transmitted === false) {
+        const why =
+          result.detail ??
+          result.reason ??
+          "the submission stopped before anything was sent";
+        setListError(
+          `Not sent — ${why}${
+            result.status === "manual_step"
+              ? " Open this application on the Applications page to resolve it."
+              : ""
+          }`,
+        );
+      } else {
+        setListError(null);
+      }
     } catch (e) {
       await load();
       setListError(
