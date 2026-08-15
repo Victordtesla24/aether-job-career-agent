@@ -206,6 +206,58 @@ def generate_content(_admin: AdminUser) -> dict[str, Any]:
         ) from exc
 
 
+# ------------------------------------------------ persistent brand editor
+class BrandTemplateUpdate(BaseModel):
+    body: str = Field(min_length=1, max_length=20000)
+    footnote: str = Field(min_length=1, max_length=4000)
+    footer: str = Field(min_length=1, max_length=4000)
+
+
+@router.get("/brand/templates")
+def list_brand_templates(_admin: AdminUser) -> dict[str, Any]:
+    from app.repositories.brand_templates import BrandTemplateRepository
+
+    return {"templates": BrandTemplateRepository().list_templates()}
+
+
+@router.put("/brand/templates/{kind}")
+def update_brand_template(
+    kind: str, payload: BrandTemplateUpdate, admin: AdminUser
+) -> dict[str, Any]:
+    """Persist editable branded copy and audit it atomically.  The repository
+    refuses a footer without product identity and an unsubscribe instruction;
+    UI validation is never the compliance boundary."""
+    from app.repositories.admin import _ensure_admin_schema, write_audit
+    from app.repositories.brand_templates import BrandTemplateRepository
+
+    repo = BrandTemplateRepository()
+    _ensure_admin_schema()
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                row = repo.update(
+                    kind,
+                    body=payload.body,
+                    footnote=payload.footnote,
+                    footer=payload.footer,
+                    cur=cur,
+                )
+                write_audit(
+                    admin["id"],
+                    "brand_template.updated",
+                    target_type="brand_template",
+                    target_id=kind,
+                    detail={"kind": kind, "fields": ["body", "footnote", "footer"]},
+                    cur=cur,
+                )
+            conn.commit()
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail="Unknown document kind.") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return row
+
+
 # ----------------------------------------------------------- brand documents
 @router.get("/brand/documents")
 def brand_documents(_admin: AdminUser) -> dict[str, Any]:
@@ -262,6 +314,7 @@ def brand_document_preview(
     render against the LIVE Plan catalog row (real prices + gst_breakdown);
     customer fields render as explicit merge fields — nothing is fabricated."""
     from app.repositories.billing import PlanRepository
+    from app.repositories.brand_templates import BrandTemplateRepository
     from app.services.brand_documents import DOCUMENT_KINDS, render_document
 
     if kind not in DOCUMENT_KINDS:
@@ -280,7 +333,12 @@ def brand_document_preview(
         "title": DOCUMENT_KINDS[kind]["title"],
         "planId": plan_row["id"] if plan_row else None,
         "interval": interval if plan_row else None,
-        "html": render_document(kind, plan_row, interval),
+        "html": render_document(
+            kind,
+            plan_row,
+            interval,
+            editable_template=BrandTemplateRepository().get_stored(kind),
+        ),
     }
 
 

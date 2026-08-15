@@ -345,6 +345,8 @@ ROUTES = [
     ("GET", "/admin/sales-agent/campaigns/some-id/preview"),
     ("GET", "/admin/sales-agent/brand/documents"),
     ("GET", "/admin/sales-agent/brand/documents/invoice/preview"),
+    ("GET", "/admin/sales-agent/brand/templates"),
+    ("PUT", "/admin/sales-agent/brand/templates/auto_reply"),
 ]
 
 
@@ -620,3 +622,68 @@ def test_brand_document_preview_rejects_unknown_kind_and_plan(
         "/admin/sales-agent/brand/documents/invoice/preview?interval=weekly",
         headers=admin_headers,
     ).status_code == 422
+
+
+# ----------------------------------------------------- persistent brand editor
+def test_brand_template_editor_persists_copy_footnote_and_audit(client, admin_headers):
+    listed = client.get("/admin/sales-agent/brand/templates", headers=admin_headers)
+    assert listed.status_code == 200
+    original = next(t for t in listed.json()["templates"] if t["kind"] == "auto_reply")
+    assert original["body"]
+    assert original["footer"]
+
+    updated = client.put(
+        "/admin/sales-agent/brand/templates/auto_reply",
+        headers=admin_headers,
+        json={
+            "body": "Hello {{name}},\n\nThanks for contacting us.",
+            "footnote": "Support replies are reviewed in Melbourne time.",
+            "footer": "Aether Career Job Agent — Operated by Vikram Sarkar\nhttps://example.test/unsubscribe",
+        },
+    )
+    assert updated.status_code == 200
+    data = updated.json()
+    assert data["body"].startswith("Hello {{name}}")
+    assert data["footnote"] == "Support replies are reviewed in Melbourne time."
+    assert "unsubscribe" in data["footer"].lower()
+    assert data["updatedAt"]
+
+    persisted = client.get("/admin/sales-agent/brand/templates", headers=admin_headers)
+    saved = next(t for t in persisted.json()["templates"] if t["kind"] == "auto_reply")
+    assert saved["body"] == data["body"]
+    assert saved["footnote"] == data["footnote"]
+
+    preview = client.get(
+        "/admin/sales-agent/brand/documents/auto_reply/preview", headers=admin_headers
+    )
+    assert preview.status_code == 200
+    html = preview.json()["html"]
+    assert "Thanks for contacting us." in html
+    assert "Support replies are reviewed in Melbourne time." in html
+    assert "https://example.test/unsubscribe" in html
+
+    from app.db import get_connection
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT "action", "targetType", "targetId" FROM "AdminAuditLog" '
+                'WHERE "targetType"=%s AND "targetId"=%s ORDER BY "createdAt" DESC LIMIT 1',
+                ("brand_template", "auto_reply"),
+            )
+            audit = cur.fetchone()
+    assert audit == ("brand_template.updated", "brand_template", "auto_reply")
+
+
+def test_brand_template_editor_rejects_empty_or_non_compliant_footer(client, admin_headers):
+    for footer in ("", "   ", "Aether Career Job Agent — Operated by Vikram Sarkar"):
+        response = client.put(
+            "/admin/sales-agent/brand/templates/auto_reply",
+            headers=admin_headers,
+            json={
+                "body": "Hello {{name}},",
+                "footnote": "A footnote.",
+                "footer": footer,
+            },
+        )
+        assert response.status_code == 422
