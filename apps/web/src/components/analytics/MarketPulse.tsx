@@ -417,11 +417,13 @@ export default function MarketPulse() {
           // a neutral badge, matched by tooltip copy that states the real
           // reason instead of the generic "percentage change" claim.
           const isPercent = t.deltaKind === "percent";
+          // R1: gold is never a state. A falling delta is the danger tone, so
+          // the numeral agrees with the #B9544B stroke drawn right below it.
           const badgeClass = !isPercent
             ? "text-aether-muted-dim"
             : isUp
               ? "text-aether-green"
-              : "text-aether-coral";
+              : "text-state-danger";
           const strokeColor = !isPercent ? "#8C8A82" : isUp ? "#6FAF8D" : "#B9544B";
           const tooltipCopy =
             t.deltaKind === "new"
@@ -595,7 +597,16 @@ export default function MarketPulse() {
                   strokeLinecap="round"
                   strokeDasharray={`${(score / 100) * ringC} ${ringC}`}
                 />
-                <text x="50" y="55" textAnchor="middle" transform="rotate(90 50 50)" className="fill-white" fontSize="20" fontWeight="700">
+                <text
+                  x="50"
+                  y="55"
+                  textAnchor="middle"
+                  transform="rotate(90 50 50)"
+                  className="font-mono tabular-nums"
+                  fill="#F5F1E8"
+                  fontSize="20"
+                  fontWeight="700"
+                >
                   {score}%
                 </text>
               </svg>
@@ -755,7 +766,7 @@ export default function MarketPulse() {
                     )}
                   </div>
                   {c.you === null ? (
-                    <p className="mt-1.5 text-[10px] text-aether-coral">—</p>
+                    <p className="mt-1.5 text-[10px] text-state-neutral">—</p>
                   ) : (
                     <div className="mt-1.5 flex items-center gap-2">
                       <ComparisonMark
@@ -764,7 +775,10 @@ export default function MarketPulse() {
                         colour={CHART_PALETTE[0]}
                         title={`You: ${formatMarketValue(c.you, c.unit)}`}
                       />
-                      <span className="mono shrink-0 text-[10px] text-aether-coral">
+                      <span
+                        className="mono shrink-0 text-[10px] tabular-nums"
+                        style={{ color: CHART_PALETTE[0] }}
+                      >
                         you {formatMarketValue(c.you, c.unit)}
                       </span>
                     </div>
@@ -980,7 +994,7 @@ export default function MarketPulse() {
                 ? "text-aether-muted-dim"
                 : r.direction === "up"
                   ? "text-aether-green"
-                  : "text-aether-coral";
+                  : "text-state-danger";
               return (
                 <div key={r.label} className="flex items-center justify-between text-xs">
                   <span className="text-aether-muted">{r.label}</span>

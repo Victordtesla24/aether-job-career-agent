@@ -348,8 +348,9 @@ describe("MarketPulse trend indicator tooltip honesty (MON-016)", () => {
     // literally says "vs. the prior period" — it must match the TRUE
     // last-COMPLETE-vs-prior-COMPLETE direction, not a comparison that
     // treats the in-progress current week as if it were finished.
+    // R1: gold is never a state, so a falling delta wears the danger tone.
     expect((wrapper as HTMLElement).className).toContain(
-      trueDirection === "up" ? "text-aether-green" : "text-aether-coral"
+      trueDirection === "up" ? "text-aether-green" : "text-state-danger"
     );
   });
 });
@@ -550,7 +551,9 @@ describe("MarketPulse recruiter-trends sparkline + badge honesty (MUST-FIX-1, AX
 
     const card = await screen.findByTestId("recruiter-trends");
     const badge = within(card).getByText("2.0 · -50%");
-    expect(badge.className).toContain("text-aether-coral");
+    expect(badge.className).toContain("text-state-danger");
     expect(badge.className).not.toContain("text-aether-green");
+    // R1: gold is a brand colour, never a state.
+    expect(badge.className).not.toContain("text-aether-coral");
   });
 });
