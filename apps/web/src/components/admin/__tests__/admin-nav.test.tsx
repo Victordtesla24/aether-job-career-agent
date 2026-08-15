@@ -2,19 +2,26 @@
 /**
  * ADMIN-2.0 FE-1 — the admin nav after the dashboard rebuild.
  *
- * RED-first: the reordered nav does not exist yet.
- *
  * The brief fixes the section order (Dashboard, Users, Subscriptions, Billing,
  * Sales agents, Promos, Spend, Health, Audit log, Settings) and requires that
  * nothing already reachable becomes unreachable.
  *
- * BILLING AND PROMOS DO NOT HAVE PAGES IN THIS TREE YET (BE-1 shipped
- * `/admin/billing/summary` and `/admin/promos` on the API; the screens are a
- * later FE slice). A nav that links to them anyway would hand the owner two
- * 404s, so the two entries render as declared-but-not-yet-built rows: present
- * in the stated order, visibly disabled, and carrying the reason. When the
- * screens land, the entry flips one flag. What is NOT acceptable — and is
- * pinned below — is a live-looking link to a route that does not exist.
+ * FE-2 UPDATE — TWO ENTRIES CHANGED, AND BOTH FOR A STATED REASON.
+ *
+ * 1. PROMOS IS NOW A REAL LINK. FE-1 left it deliberately disabled because the
+ *    screen did not exist; FE-2 built `/admin/promos`, so the flag flips, which
+ *    is the exact migration FE-1's own note above described. BILLING stays
+ *    pending: FE-2 built the PER-USER billing panel (on the user detail page),
+ *    not the platform-wide billing screen behind this entry.
+ *
+ * 2. "SALES AGENTS" NOW POINTS AT `/admin/sales-agents` (plural), the BE-2
+ *    reseller surface — referral codes, attributed counts, commission reports.
+ *    The pre-existing `/admin/sales-agent` (singular) is a DIFFERENT thing: a
+ *    read-only window onto the external growth engine (a Google-Sheet-driven
+ *    outreach process that runs outside this app). Two unrelated features had
+ *    collided on one label, so the older page keeps its route — nothing
+ *    reachable becomes unreachable, as pinned below — under the name that
+ *    actually describes it.
  */
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -44,6 +51,10 @@ describe("ADMIN_NAV", () => {
       "Subscriptions",
       "Billing",
       "Sales agents",
+      // Adjacent to Sales agents because a reader looking for "the growth
+      // stuff" will look here — but named apart, because it is a different
+      // system with a different source of truth.
+      "Growth engine",
       "Promos",
       "Spend",
       "Health",
@@ -58,6 +69,8 @@ describe("ADMIN_NAV", () => {
       "/admin",
       "/admin/users",
       "/admin/subscriptions",
+      // The external growth-engine page FE-1 linked as "Sales agents" — still
+      // reachable, now under its own name.
       "/admin/sales-agent",
       "/admin/spend",
       "/admin/health",
@@ -68,15 +81,18 @@ describe("ADMIN_NAV", () => {
     }
   });
 
-  it("marks the two entries whose screens are not built yet, with a reason", () => {
-    for (const label of ["Billing", "Promos"]) {
-      const item = ADMIN_NAV.find((i) => i.label === label);
-      expect(item?.pending).toBe(true);
-      expect(item?.pendingReason?.length ?? 0).toBeGreaterThan(0);
-    }
-    for (const item of ADMIN_NAV.filter((i) => !["Billing", "Promos"].includes(i.label))) {
+  it("marks the one entry whose screen is still not built, with a reason", () => {
+    const billing = ADMIN_NAV.find((i) => i.label === "Billing");
+    expect(billing?.pending).toBe(true);
+    expect(billing?.pendingReason?.length ?? 0).toBeGreaterThan(0);
+    for (const item of ADMIN_NAV.filter((i) => i.label !== "Billing")) {
       expect(item.pending).toBeFalsy();
     }
+  });
+
+  it("points Sales agents at the reseller surface, not the growth-engine page", () => {
+    expect(ADMIN_NAV.find((i) => i.label === "Sales agents")?.href).toBe("/admin/sales-agents");
+    expect(ADMIN_NAV.find((i) => i.label === "Growth engine")?.href).toBe("/admin/sales-agent");
   });
 });
 
@@ -89,10 +105,15 @@ describe("<AdminShell>", () => {
     );
     expect(screen.getByRole("link", { name: "Dashboard" }).getAttribute("href")).toBe("/admin");
     expect(screen.getByRole("link", { name: "Sales agents" }).getAttribute("href")).toBe(
+      "/admin/sales-agents",
+    );
+    expect(screen.getByRole("link", { name: "Growth engine" }).getAttribute("href")).toBe(
       "/admin/sales-agent",
     );
+    expect(screen.getByRole("link", { name: "Promos" }).getAttribute("href")).toBe(
+      "/admin/promos",
+    );
     expect(screen.queryByRole("link", { name: "Billing" })).toBeNull();
-    expect(screen.queryByRole("link", { name: "Promos" })).toBeNull();
     const billing = screen.getByTestId("admin-nav-pending-/admin/billing");
     expect(billing.getAttribute("aria-disabled")).toBe("true");
     expect(billing.getAttribute("title")?.length ?? 0).toBeGreaterThan(0);

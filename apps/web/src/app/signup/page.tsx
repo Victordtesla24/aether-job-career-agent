@@ -10,6 +10,19 @@
  * auto-login call unexpectedly fails (the account is real either way — it
  * was just created), we fall back to /login with a success flash rather
  * than stranding the user on a dead-end error.
+ *
+ * REFERRAL ATTRIBUTION (ADMIN-2.0 BE-2). A sales agent's link is
+ * `/signup?ref=CODE`; the code rides along with the registration this page was
+ * already making, and the API attributes the signup after the account is
+ * committed. Two properties matter and are pinned by
+ * `__tests__/auth/signup-referral.test.tsx`:
+ *
+ *   * ATTRIBUTION IS NEVER A GATE. There is no pre-flight check that the code
+ *     exists, and no second request that could fail: an unknown or mistyped
+ *     code costs the visitor nothing, because the account is theirs and the
+ *     referral credit is the operator's bookkeeping.
+ *   * ABSENCE IS ABSENCE. Arriving without a code (or with a blank one) sends
+ *     no `ref` field at all, rather than an empty attribution.
  */
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -32,6 +45,15 @@ export default function SignupPage() {
       router.replace("/dashboard");
     }
   }, [router]);
+  // Read client-side only, like /login's own query handling — no Suspense
+  // boundary needed for a static page, unlike `useSearchParams`.
+  const [referralCode, setReferralCode] = useState<string | null>(null);
+  useEffect(() => {
+    const raw = new URLSearchParams(window.location.search).get("ref");
+    const code = (raw ?? "").trim();
+    // A blank `?ref=` is no referral, not an empty one.
+    setReferralCode(code ? code : null);
+  }, []);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -56,7 +78,12 @@ export default function SignupPage() {
 
     setSubmitting(true);
     try {
-      await registerAccount({ email, password, name: name.trim() || undefined });
+      await registerAccount({
+        email,
+        password,
+        name: name.trim() || undefined,
+        ...(referralCode ? { ref: referralCode } : {}),
+      });
 
       // Auto-login with the same credentials, then go straight to the
       // dashboard. The account now exists regardless of what happens next.
@@ -112,6 +139,15 @@ export default function SignupPage() {
             <p className="text-sm text-aether-muted mt-1">
               Set up your own agent workspace.
             </p>
+            {referralCode ? (
+              <p
+                data-testid="signup-referral-note"
+                className="mt-2 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-aether-muted"
+              >
+                Referral code <span className="mono text-aether-text">{referralCode}</span> will
+                be recorded with your signup. It does not change your price or your plan.
+              </p>
+            ) : null}
           </div>
 
           <div className="flex flex-col gap-1.5 text-[13px] font-medium">

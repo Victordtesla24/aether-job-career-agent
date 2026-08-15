@@ -71,6 +71,13 @@ export const AdminUserSchema = z.object({
   username: z.string().nullable().optional().default(null),
   isAdmin: z.boolean(),
   suspended: z.boolean(),
+  // ADMIN-2.0: soft-delete state is admin-only truth. A deleted account is
+  // still LISTED (its jobs, applications, runs and audit history survive) and
+  // visibly flagged — hiding the row would look identical to a hard delete
+  // that never happened. Optional-with-default so an older payload still parses.
+  deletedAt: z.string().nullable().optional().default(null),
+  /** True while the account is still on a password an admin generated for it. */
+  mustChangePassword: z.boolean().optional().default(false),
   plan: z.string().nullable(),
   subStatus: z.string().nullable(),
   signupAt: z.string().nullable(),
@@ -261,6 +268,102 @@ export async function fetchAdminUser(
 ): Promise<AdminUserDetail> {
   return AdminUserDetailSchema.parse(
     await apiRequest<unknown>(`/admin/users/${encodeURIComponent(userId)}`, options),
+  );
+}
+
+// --------------------------------------------------------------------------- //
+// Account lifecycle (ADMIN-2.0 BE-1)
+// --------------------------------------------------------------------------- //
+
+const CreatedUserSchema = z.object({
+  userId: z.string(),
+  email: z.string(),
+  name: z.string().nullable(),
+  /**
+   * The generated temporary password. Returned EXACTLY ONCE by
+   * `POST /admin/users` — the API hashes it, never stores the plaintext, never
+   * writes it to the audit row, and exposes no route that can read it back. A
+   * caller that drops this value has lost it for good; the only remedy is
+   * `setUserPassword`. Never log it, never persist it, never put it in a URL.
+   */
+  tempPassword: z.string(),
+  mustChangePassword: z.boolean(),
+  createdAt: z.string().nullable(),
+});
+export type CreatedUser = z.infer<typeof CreatedUserSchema>;
+
+/**
+ * Create an account on a user's behalf. An admin-created account is an ORDINARY
+ * account: `isAdmin` is not settable through this route at any cost, so a single
+ * compromised admin session cannot mint a second operator in one call.
+ */
+export async function createAdminUser(
+  body: { email: string; name?: string },
+  options: RequestOptions = {},
+): Promise<CreatedUser> {
+  return CreatedUserSchema.parse(
+    await apiRequest<unknown>("/admin/users", { ...options, method: "POST", body }),
+  );
+}
+
+const DeleteUserSchema = z.object({
+  userId: z.string(),
+  deleted: z.boolean(),
+  mode: z.string(),
+  deletedAt: z.string().nullable(),
+  suspended: z.boolean(),
+  note: z.string().optional().default(""),
+});
+
+/**
+ * SOFT-delete an account. `confirmEmail` must match the target's own address —
+ * the backend re-checks it and 422s a mismatch, so a mis-routed id cannot
+ * delete the wrong person.
+ *
+ * Soft, not hard, and the caller must not describe it otherwise: every child
+ * table cascades from `User.id`, so the account is stamped `deletedAt` AND
+ * suspended (the enforcement every authenticated route already honours) while
+ * its work and billing/audit history are preserved. `restoreAdminUser` reverses
+ * it. An admin account or the §14.7 owner is refused server-side with a 409.
+ */
+export async function deleteAdminUser(
+  userId: string,
+  confirmEmail: string,
+  options: RequestOptions = {},
+): Promise<z.infer<typeof DeleteUserSchema>> {
+  return DeleteUserSchema.parse(
+    await apiRequest<unknown>(`/admin/users/${encodeURIComponent(userId)}`, {
+      ...options,
+      method: "DELETE",
+      body: { confirmEmail },
+    }),
+  );
+}
+
+const RestoreUserSchema = z.object({
+  userId: z.string(),
+  deleted: z.boolean(),
+  deletedAt: z.string().nullable(),
+  suspended: z.boolean(),
+  note: z.string().optional().default(""),
+});
+
+/**
+ * Reverse a soft delete. Deliberately does NOT lift the suspension — restoring
+ * the record and handing the account its access back are two decisions, and
+ * silently un-suspending would also erase a suspension that predated the
+ * delete. The response reports the surviving `suspended` flag; render it.
+ */
+export async function restoreAdminUser(
+  userId: string,
+  options: RequestOptions = {},
+): Promise<z.infer<typeof RestoreUserSchema>> {
+  return RestoreUserSchema.parse(
+    await apiRequest<unknown>(`/admin/users/${encodeURIComponent(userId)}/restore`, {
+      ...options,
+      method: "POST",
+      body: {},
+    }),
   );
 }
 

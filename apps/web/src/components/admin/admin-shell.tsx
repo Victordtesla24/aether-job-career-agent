@@ -26,21 +26,31 @@ export interface AdminNavItem {
 }
 
 /**
- * ADMIN-2.0 FE-1 — the admin sections, in the order the brief fixes:
+ * ADMIN-2.0 — the admin sections, in the order the brief fixes:
  * Dashboard, Users, Subscriptions, Billing, Sales agents, Promos, Spend,
  * Health, Audit log, Settings. Money and accounts first, operations after.
  *
- * WHY TWO ENTRIES ARE MARKED `pending` INSTEAD OF LINKED. BE-1 has already
- * landed the API for both (`GET /admin/billing/summary`, and the
- * `GET/POST/DELETE /admin/promos` trio), but their SCREENS belong to a later
- * frontend slice and do not exist in this tree — there is no
- * `app/admin/billing/page.tsx` and no `app/admin/promos/page.tsx` on any
- * branch. Linking to them anyway would hand the owner two 404s dressed as
- * working sections, which is exactly the kind of fake-completeness this
- * programme forbids. So they hold their place in the stated order, render as
- * visibly disabled with the reason on hover, and become links by deleting one
- * flag when the screens land. `admin-nav.test.tsx` pins both halves of that:
- * the order, and the absence of a live link to a route that does not exist.
+ * WHY ONE ENTRY IS STILL MARKED `pending` INSTEAD OF LINKED. BE-1 landed
+ * `GET /admin/billing/summary`, but the platform-wide billing SCREEN behind
+ * this entry does not exist in this tree — there is no
+ * `app/admin/billing/page.tsx` on any branch. (FE-2 built the PER-USER billing
+ * panel, which lives on the user detail page, not here.) Linking anyway would
+ * hand the owner a 404 dressed as a working section, which is exactly the kind
+ * of fake-completeness this programme forbids. So it holds its place in the
+ * stated order, renders as visibly disabled with the reason on hover, and
+ * becomes a link by deleting one flag when the screen lands.
+ *
+ * FE-2 flipped PROMOS the same way: `app/admin/promos/page.tsx` now exists, so
+ * the entry is a real link.
+ *
+ * TWO DIFFERENT THINGS WERE COLLIDING ON "SALES AGENTS". The BE-2 reseller
+ * surface (referral codes, attributed signups, commission reports) lives at
+ * `/admin/sales-agents`; the older `/admin/sales-agent` (singular) is a
+ * read-only window onto the EXTERNAL growth engine — a Google-Sheet-driven
+ * outreach process that runs outside this app and has no backend here. They are
+ * unrelated systems with unrelated sources of truth, so each keeps its route and
+ * carries the name that describes it. `admin-nav.test.tsx` pins the order, both
+ * hrefs, and that nothing already reachable became unreachable.
  */
 export const ADMIN_NAV: readonly AdminNavItem[] = [
   { href: "/admin", label: "Dashboard" },
@@ -51,16 +61,11 @@ export const ADMIN_NAV: readonly AdminNavItem[] = [
     label: "Billing",
     pending: true,
     pendingReason:
-      "The billing screen is not built yet. Its API (GET /admin/billing/summary) is live; the screen ships in a later ADMIN-2.0 slice.",
+      "The platform-wide billing screen is not built yet. Its API (GET /admin/billing/summary) is live, and per-user billing truth is on each user's detail page; this screen ships in a later ADMIN-2.0 slice.",
   },
-  { href: "/admin/sales-agent", label: "Sales agents" },
-  {
-    href: "/admin/promos",
-    label: "Promos",
-    pending: true,
-    pendingReason:
-      "The promotions screen is not built yet. Its API (GET/POST/DELETE /admin/promos) is live; the screen ships in a later ADMIN-2.0 slice.",
-  },
+  { href: "/admin/sales-agents", label: "Sales agents" },
+  { href: "/admin/sales-agent", label: "Growth engine" },
+  { href: "/admin/promos", label: "Promos" },
   { href: "/admin/spend", label: "Spend" },
   { href: "/admin/health", label: "Health" },
   { href: "/admin/audit-log", label: "Audit log" },
