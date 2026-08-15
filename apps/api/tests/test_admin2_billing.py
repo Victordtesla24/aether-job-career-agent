@@ -738,3 +738,106 @@ def test_promo_routes_are_503_when_stripe_is_not_configured(
         ).status_code
         == 503
     )
+
+
+# --------------------------------------------------------------------------- #
+# (e-1) PROMOS — stripe_gateway's OWN Stripe-call shape (regression: ADMIN-2.0
+# LIVE VERIFY caught that this file's higher-level tests above mock
+# ``gw.create_promotion_code``/``gw.list_promotion_codes`` themselves, so they
+# never exercised the actual ``stripe.PromotionCode.create``/``.list`` request
+# shape. Live Stripe (SDK v13 / current API version) rejects a top-level
+# ``coupon=`` kwarg outright ("Received unknown parameter: coupon") and nests
+# it under ``promotion={"type": "coupon", "coupon": <id>}`` instead; the read
+# side moved the same way (``PromotionCode.coupon`` -> ``.promotion.coupon``).
+# These tests patch ``gw._stripe`` with a minimal fake SDK — one level BELOW
+# the wrapper functions — so they fail if the shape regresses again, without
+# ever reaching the live Stripe SDK (money-safe, same as every other test in
+# this file).
+# --------------------------------------------------------------------------- #
+
+
+class _FakeStripeObject:
+    """Minimal stand-in for a Stripe SDK object: dict-like AND attribute-like
+    access, matching how ``stripe_gateway._field`` reads real SDK objects."""
+
+    def __init__(self, **kwargs):
+        self.__dict__.update(kwargs)
+
+    def get(self, key, default=None):  # pragma: no cover — dict-path parity
+        return self.__dict__.get(key, default)
+
+
+class _FakePromotionCodeResource:
+    def __init__(self, calls):
+        self._calls = calls
+
+    def create(self, **kwargs):
+        self._calls["create"].append(kwargs)
+        promo = kwargs.get("promotion") or {}
+        return _FakePromotionCodeResource._object(promo.get("coupon"), kwargs)
+
+    def list(self, **kwargs):
+        self._calls["list"].append(kwargs)
+        return _FakeStripeObject(
+            data=[_FakePromotionCodeResource._object("coupon_live_1", {"code": "LIVE1"})]
+        )
+
+    @staticmethod
+    def _object(coupon_id, kwargs):
+        coupon_obj = (
+            _FakeStripeObject(id=coupon_id, percent_off=15.0, amount_off=None, duration="once")
+            if coupon_id
+            else None
+        )
+        return _FakeStripeObject(
+            id="promo_live_1",
+            code=kwargs.get("code") or "AUTO1",
+            active=True,
+            promotion=_FakeStripeObject(type="coupon", coupon=coupon_obj),
+            times_redeemed=0,
+            max_redemptions=kwargs.get("max_redemptions"),
+            expires_at=None,
+        )
+
+
+def test_create_promotion_code_sends_the_nested_promotion_shape_to_stripe(
+    monkeypatch,
+):
+    """The exact defect live verification caught: a flat ``coupon=`` kwarg is
+    REJECTED by the real Stripe API. Assert the nested shape is what actually
+    goes out, and that the coupon fields expanded in the response round-trip
+    back out correctly (``couponId``/``percentOff``/``duration`` — not None)."""
+    import app.services.stripe_gateway as gw
+
+    calls = {"create": [], "list": []}
+    fake = _FakeStripeObject(PromotionCode=_FakePromotionCodeResource(calls))
+    monkeypatch.setattr(gw, "_stripe", lambda: fake)
+
+    result = gw.create_promotion_code(coupon_id="coupon_live_1", code="LAUNCH20")
+
+    sent = calls["create"][0]
+    assert "coupon" not in sent, "must NOT send the old flat coupon= kwarg"
+    assert sent["promotion"] == {"type": "coupon", "coupon": "coupon_live_1"}
+    assert sent["expand"] == ["promotion.coupon"], (
+        "must expand promotion.coupon or couponId/percentOff/duration silently "
+        "come back None (an ExpandableField collapses to a bare id string)"
+    )
+    assert result["couponId"] == "coupon_live_1"
+    assert result["percentOff"] == 15.0
+    assert result["duration"] == "once"
+
+
+def test_list_promotion_codes_expands_and_reads_the_nested_coupon(monkeypatch):
+    import app.services.stripe_gateway as gw
+
+    calls = {"create": [], "list": []}
+    fake = _FakeStripeObject(PromotionCode=_FakePromotionCodeResource(calls))
+    monkeypatch.setattr(gw, "_stripe", lambda: fake)
+
+    result = gw.list_promotion_codes(limit=5)
+
+    sent = calls["list"][0]
+    assert sent["expand"] == ["data.promotion.coupon"]
+    assert len(result) == 1
+    assert result[0]["couponId"] == "coupon_live_1"
+    assert result[0]["percentOff"] == 15.0
