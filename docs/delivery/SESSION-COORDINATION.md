@@ -761,3 +761,12 @@ window; re-check `ExecMainStartTimestamp` after every restart; heavy test runs u
 stash@{0} on a branch with gates before merge; `.abacus.donotdelete` hunk excluded (platform-managed);
 the stash's 14 evidence-log deletions are **rejected** (evidence retention wins over foreign cleanup
 intent); the BLOCKER-001/GATE-31 guard in `repositories/admin.py` is diff-verified before merge.
+
+---
+
+## DEPLOY WINDOW CLAIM — 2026-08-15T22:39Z (Wave A / R2, orchestration session 2026-08-15b)
+
+**Claimed by:** Wave A orchestrator (same session as Wave 0 above). **Lock:** `flock /tmp/aether-deploy.lock` held for the duration.
+**Scope:** promote reconciled `main@8fcc6870` (Wave-0 consolidation + MP-010..013 + MP-020 audit logging) to production per DEPLOYMENT-RUNBOOK.md "Complete Deploy Recipe": pnpm install → build in served tree `apps/web` (clean env, §0.4) → `scripts/verify-web-build.sh` gate → coordinated restart api→web→worker → ExecMainStartTimestamp re-check → health + prod verify + adversarial review.
+**Pre-conditions verified:** working tree clean (all Wave A work committed & pushed 8fcc6870); no foreign uncommitted work in shipped files; heavy test suites finished (pytest/vitest/e2e logs closed); `aether-sales-agent.timer` next fire :45 — restarts will complete well before or after; auto-deploy timer inactive.
+**Window released:** see closing note below (appended after prod verify).
