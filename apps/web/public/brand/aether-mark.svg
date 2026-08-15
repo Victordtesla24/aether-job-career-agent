@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="240" height="240" viewBox="0 0 240 240" role="img" aria-label="Aether Career Job Agent mark">
+  <!-- Aether Career Job Agent — monogram mark. Design-system tokens:
+       black #0A0A0A, gold gradient 135deg #B0923F → #C9A84C → #D4B65C. -->
+  <defs>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#B0923F"/>
+      <stop offset="0.5" stop-color="#C9A84C"/>
+      <stop offset="1" stop-color="#D4B65C"/>
+    </linearGradient>
+  </defs>
+  <rect width="240" height="240" fill="#0A0A0A"/>
+  <circle cx="120" cy="120" r="92" fill="none" stroke="url(#gold)" stroke-width="3"/>
+  <circle cx="120" cy="120" r="82" fill="none" stroke="rgba(201,168,76,0.25)" stroke-width="1"/>
+  <!-- A monogram -->
+  <path d="M120 62 L162 170 L146 170 L136.5 144 L103.5 144 L94 170 L78 170 Z M120 96 L109 128 L131 128 Z"
+        fill="url(#gold)"/>
+  <!-- ascendant accent line (career trajectory) -->
+  <path d="M84 182 L156 182" stroke="rgba(201,168,76,0.45)" stroke-width="1.5"/>
+</svg>

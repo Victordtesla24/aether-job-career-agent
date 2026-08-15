@@ -107,6 +107,32 @@ def create_campaign(payload: CampaignCreate, _admin: AdminUser) -> dict[str, Any
     )
 
 
+@router.get("/campaigns/{campaign_id}/preview")
+def campaign_preview(campaign_id: str, _admin: AdminUser) -> dict[str, Any]:
+    """Brand-templated HTML preview of a campaign, rendered EXACTLY like a
+    live send: ``{{name}}`` personalization (sample name), then the
+    server-side compliance footer, then the branded wrapper. Read-only —
+    nothing is sent or recorded."""
+    from app.agents.sales_agent import (
+        append_compliance_footer,
+        personalize_template,
+    )
+    from app.services.sales_branding import render_branded_email
+
+    campaign = _repo().get_campaign(campaign_id)
+    if campaign is None:
+        raise HTTPException(status_code=404, detail="Campaign not found.")
+    body = append_compliance_footer(
+        personalize_template(campaign["templateBody"], "Alex")
+    )
+    return {
+        "campaignId": campaign["id"],
+        "name": campaign["name"],
+        "sampleName": "Alex",
+        "html": render_branded_email(campaign["name"], body),
+    }
+
+
 @router.put("/campaigns/{campaign_id}")
 def update_campaign(
     campaign_id: str, payload: CampaignUpdate, _admin: AdminUser
@@ -158,6 +184,104 @@ def run_now(_admin: AdminUser) -> dict[str, Any]:
         raise HTTPException(
             status_code=502, detail=f"Sales agent run failed: {exc}"
         ) from exc
+
+
+# ----------------------------------------------------------------- generate
+@router.post("/generate")
+def generate_content(_admin: AdminUser) -> dict[str, Any]:
+    """Ask the agent to author fresh marketing content NOW (synchronous):
+    two new campaign templates (created INACTIVE, awaiting human activation)
+    and three LinkedIn drafts — all real LLM output through the dynamically
+    routed model, grounded only in verifiable product facts, recorded as a
+    real AgentRun. LLM failure surfaces as an honest 502, never as
+    hand-written copy pretending to be agent output."""
+    from app.agents.sales_agent import generate_sales_marketing_content
+
+    try:
+        return generate_sales_marketing_content(trigger="manual")
+    except Exception as exc:  # noqa: BLE001 — surface the real reason
+        logger.exception("sales agent content generation failed")
+        raise HTTPException(
+            status_code=502, detail=f"Content generation failed: {exc}"
+        ) from exc
+
+
+# ----------------------------------------------------------- brand documents
+@router.get("/brand/documents")
+def brand_documents(_admin: AdminUser) -> dict[str, Any]:
+    """Registry of brand-templated admin documents (invoice, auto-reply and
+    Stripe-lifecycle email templates) plus the live plan catalog they render
+    against, and the static brand assets served by the web app."""
+    from app.repositories.billing import PlanRepository
+    from app.services.brand_documents import DOCUMENT_KINDS
+
+    plans = PlanRepository().list_active()
+    return {
+        "documents": [
+            {
+                "kind": kind,
+                "title": meta["title"],
+                "description": meta["description"],
+                "needsPlan": meta["needsPlan"],
+            }
+            for kind, meta in DOCUMENT_KINDS.items()
+        ],
+        "plans": [
+            {
+                "id": p["id"],
+                "name": p["name"],
+                "priceAudMonthly": float(p["priceAudMonthly"] or 0),
+                "priceAudAnnual": float(p["priceAudAnnual"] or 0),
+            }
+            for p in plans
+        ],
+        "assets": [
+            {"name": "aether-mark.png", "path": "/brand/aether-mark.png",
+             "description": "Primary Aether brand mark (design-system PNG, "
+                            "used in branded emails)."},
+            {"name": "aether-mark-512.png", "path": "/brand/aether-mark-512.png",
+             "description": "High-resolution 512px brand mark."},
+            {"name": "aether-mark.svg", "path": "/brand/aether-mark.svg",
+             "description": "Gold-gradient monogram mark on black."},
+            {"name": "aether-wordmark.svg", "path": "/brand/aether-wordmark.svg",
+             "description": "Horizontal wordmark lockup."},
+            {"name": "aether-icon.svg", "path": "/brand/aether-icon.svg",
+             "description": "Square app icon / favicon source."},
+        ],
+    }
+
+
+@router.get("/brand/documents/{kind}/preview")
+def brand_document_preview(
+    kind: str,
+    _admin: AdminUser,
+    plan: str = Query("starter"),
+    interval: str = Query("monthly"),
+) -> dict[str, Any]:
+    """Branded HTML preview of an admin document template. Plan-backed kinds
+    render against the LIVE Plan catalog row (real prices + gst_breakdown);
+    customer fields render as explicit merge fields — nothing is fabricated."""
+    from app.repositories.billing import PlanRepository
+    from app.services.brand_documents import DOCUMENT_KINDS, render_document
+
+    if kind not in DOCUMENT_KINDS:
+        raise HTTPException(status_code=404, detail="Unknown document kind.")
+    if interval not in ("monthly", "annual"):
+        raise HTTPException(
+            status_code=422, detail="interval must be 'monthly' or 'annual'."
+        )
+    plan_row = None
+    if DOCUMENT_KINDS[kind]["needsPlan"]:
+        plan_row = PlanRepository().get(plan)
+        if plan_row is None:
+            raise HTTPException(status_code=404, detail="Unknown plan id.")
+    return {
+        "kind": kind,
+        "title": DOCUMENT_KINDS[kind]["title"],
+        "planId": plan_row["id"] if plan_row else None,
+        "interval": interval if plan_row else None,
+        "html": render_document(kind, plan_row, interval),
+    }
 
 
 # -------------------------------------------------------------------- health

@@ -64,6 +64,7 @@ from app.services.llm_client import (
     LLMUnavailableError,
     get_model,
 )
+from app.services.sales_branding import render_branded_email
 
 logger = logging.getLogger("aether.sales_agent")
 
@@ -109,6 +110,24 @@ INTEREST_PHRASES = (
 #: Free plan monthly run cap (mirrors the seeded Free plan) — used only to
 #: decide "near the cap", never to report usage.
 FREE_PLAN_RUN_CAP = 5
+
+#: The ONLY facts the content-generation prompts may draw on — every line is
+#: verifiable against the production app itself. No metrics, testimonials or
+#: user counts appear here because none exist to cite.
+GROUNDED_FACTS = """\
+Product: Aether Career Job Agent — an AI job-search agent.
+URL: https://5cb5f0620.abacusai.cloud
+What it does: sources roles from licensed job APIs (no scraping; listings no
+older than 30 days); deterministic fit scoring shows WHY a role matches;
+resume tailoring and cover letters are grounded in the user's own resume and
+story bank, with an anti-fabrication entailment guard that reverts any claim
+not provable from the user's real history; every outbound action (every
+application, every email) waits in a human approval queue — nothing is sent
+without the user's explicit yes; Gmail triage handles inbox noise.
+Pricing (AUD, GST-inclusive): Free plan A$0 — 5 agent runs/month, no card
+required; Starter A$19/month; Pro A$39/month or A$359/year; Power A$69/month.
+Founder: Vikram Sarkar, a software engineer who built it for his own search.
+"""
 
 
 # --------------------------------------------------------------------- flags
@@ -452,6 +471,7 @@ class SalesAgent:
             sent = gmail.send(
                 to=sender_email, subject=reply_subject, body=body,
                 thread_id=thread_id,
+                html_body=render_branded_email(reply_subject, body),
             )
         except (GmailNotConnectedError, GmailError) as exc:
             self.repo.record_outreach(
@@ -594,7 +614,10 @@ class SalesAgent:
                 result["dryRunLogged"] += 1
                 continue
             try:
-                sent = gmail.send(to=email, subject=subject, body=body)  # type: ignore[union-attr]
+                sent = gmail.send(  # type: ignore[union-attr]
+                    to=email, subject=subject, body=body,
+                    html_body=render_branded_email(subject, body),
+                )
             except (GmailNotConnectedError, GmailError) as exc:
                 self.repo.record_outreach(
                     channel="email", outcome="error", lead_id=lead["id"],
@@ -757,6 +780,191 @@ class SalesAgent:
         set_setting("salesAgent.lastDigestDate", today)
         result["digest"] = True
 
+    # ----------------------------------------------------- content generation
+    def generate_marketing_content(self, trigger: str = "admin") -> dict[str, Any]:
+        """On-demand, LLM-authored marketing refresh (admin ``POST /generate``):
+
+        * one NEW ``free_to_paid_nudge`` campaign and one NEW ``welcome``
+          campaign (v2 copy), created **inactive** — the approval-queue
+          philosophy applies to the agent's own copy too: a human activates
+          it from the Campaigns tab before it can ever be used for a send;
+        * three fresh LinkedIn drafts (channel ``linkedin_draft``, outcome
+          ``draft_queued``) in the voice of the existing content calendar.
+
+        Every artifact is REAL LLM output through the same dynamically-routed
+        model as the pipeline (:func:`resolve_model`) and is grounded ONLY in
+        :data:`GROUNDED_FACTS`; a post-generation guard rejects any output
+        containing a dollar amount outside the real price list or a
+        percentage claim (we have no measured percentages to cite). On LLM
+        failure the run is recorded as ``failed`` with the reason — nothing
+        hand-written is ever passed off as agent output.
+
+        Idempotent per campaign name: an existing campaign with the same
+        generated-name label is never duplicated.
+        """
+        if not sales_agent_enabled():
+            return {
+                "ran": False,
+                "reason": "AETHER_SALES_AGENT_ENABLED is not true — honest no-op",
+            }
+        admin_id = resolve_admin_user_id()
+        if admin_id is None:
+            return {
+                "ran": False,
+                "reason": "no admin user matches AETHER_ADMIN_EMAIL — cannot run",
+            }
+        runs = AgentRunRepository()
+        run_row = runs.start(
+            admin_id, AGENT_KEY,
+            {"trigger": trigger, "task": "generate_marketing_content"},
+        )
+        result: dict[str, Any] = {
+            "ran": True,
+            "trigger": trigger,
+            "campaignsCreated": [],
+            "campaignsSkipped": [],
+            "linkedinDrafts": 0,
+            "errors": [],
+        }
+        try:
+            ensure_agent_config(admin_id)
+            model, model_source = resolve_model()
+            result["model"] = model
+            result["modelSource"] = model_source
+            self._generate_campaigns(model=model, result=result)
+            self._generate_linkedin_drafts(model=model, result=result, count=3)
+        except Exception as exc:  # noqa: BLE001 — the run row must go terminal
+            logger.exception("sales agent content generation failed")
+            result["errors"].append(str(exc))
+            runs.finish(run_row["id"], "failed", output=result, error=str(exc))
+            return result
+        status = "failed" if (
+            not result["campaignsCreated"]
+            and not result["campaignsSkipped"]
+            and result["linkedinDrafts"] == 0
+        ) else "completed"
+        runs.finish(run_row["id"], status, output=result)
+        result["agentRunId"] = run_row["id"]
+        return result
+
+    def _grounding_guard(self, text: str) -> str | None:
+        """Anti-fabrication check on generated copy. Returns a rejection
+        reason, or ``None`` when the text passes. Rules: every dollar amount
+        must be one of the REAL prices; no percentage claims (we have no
+        measured percentage to cite); no invented user/customer counts."""
+        import re  # noqa: PLC0415
+
+        allowed_amounts = {"0", "19", "39", "69", "359"}
+        for amt in re.findall(r"\$\s?(\d[\d,]*)", text):
+            if amt.replace(",", "") not in allowed_amounts:
+                return f"fabricated dollar amount ${amt}"
+        if re.search(r"\d+(?:\.\d+)?\s?%", text):
+            return "percentage claim — no measured percentage exists to cite"
+        if re.search(r"\b\d[\d,]*\+?\s+(?:users|customers|companies|candidates)\b",
+                     text, re.IGNORECASE):
+            return "invented user/customer count"
+        return None
+
+    def _generate_campaigns(self, *, model: str, result: dict[str, Any]) -> None:
+        specs = (
+            (
+                "free_to_paid_nudge",
+                "Free→Starter Nudge v2 (agent-generated)",
+                "an email nudging a FREE-plan user who is close to their "
+                "5-runs-per-month cap towards the Starter plan",
+            ),
+            (
+                "welcome",
+                "Welcome Reply v2 (agent-generated)",
+                "a warm reply to someone who emailed us expressing interest "
+                "in Aether (they asked about pricing or how it works)",
+            ),
+        )
+        existing_names = {c["name"] for c in self.repo.list_campaigns()}
+        for ctype, name, intent in specs:
+            if name in existing_names:
+                result["campaignsSkipped"].append(name)
+                continue
+            body = self._llm_client().complete(
+                "sales_agent_campaign",
+                system=(
+                    "You write ONE plain-text outreach email template for the "
+                    "product described in the FACTS block. HARD RULES: use ONLY "
+                    "facts from the block — never invent features, numbers, "
+                    "testimonials, results or promises; every price you mention "
+                    "must appear in the block verbatim; include the product URL "
+                    "exactly once; greet with the literal placeholder {{name}} "
+                    "on the first line; no subject line; no signature block and "
+                    "no unsubscribe line (a compliance footer is appended "
+                    "server-side); under 170 words; plain text only."
+                ),
+                user=f"FACTS:\n{GROUNDED_FACTS}\n\nWrite: {intent}.",
+                model=model,
+                temperature=0.5,
+                fixture_key=f"sales_generate_{ctype}",
+            ).strip()
+            if not body:
+                result["errors"].append(f"{ctype}: LLM returned empty output")
+                continue
+            reason = self._grounding_guard(body)
+            if reason:
+                result["errors"].append(f"{ctype}: rejected by grounding guard — {reason}")
+                continue
+            if "{{name}}" not in body:
+                body = "Hi {{name}},\n\n" + body
+            campaign = self.repo.create_campaign(
+                name=name, ctype=ctype, template_body=body, active=False,
+            )
+            result["campaignsCreated"].append(
+                {"id": campaign["id"], "name": name, "type": ctype,
+                 "active": False, "note": "awaiting human activation"}
+            )
+
+    def _generate_linkedin_drafts(
+        self, *, model: str, result: dict[str, Any], count: int = 3
+    ) -> None:
+        campaign = self.repo.active_campaign_by_type("linkedin_draft")
+        raw = self._llm_client().complete(
+            "sales_agent_linkedin_batch",
+            system=(
+                f"You draft {count} DIFFERENT LinkedIn posts for the product in "
+                "the FACTS block, in the voice of a hands-on founder: honest, "
+                "specific, no hype, first person. HARD RULES: use ONLY facts "
+                "from the block — never invent testimonials, user counts, "
+                "revenue, percentages or results; every price must appear in "
+                "the block verbatim; each post under 1300 characters, max 3 "
+                "hashtags, plain text; end each post with the product URL. "
+                "Separate posts with a line containing only '==='."
+            ),
+            user=(
+                f"FACTS:\n{GROUNDED_FACTS}\n\n"
+                f"Write {count} posts: one on the anti-fabrication guard, one "
+                "on the human approval queue, one founder reflection on why "
+                "honest tooling wins in a job search."
+            ),
+            model=model,
+            temperature=0.7,
+            fixture_key="sales_generate_linkedin",
+        )
+        posts = [p.strip() for p in (raw or "").split("===") if p.strip()]
+        for i, post in enumerate(posts[:count], start=1):
+            reason = self._grounding_guard(post)
+            if reason:
+                result["errors"].append(
+                    f"linkedin draft {i}: rejected by grounding guard — {reason}"
+                )
+                continue
+            self.repo.record_outreach(
+                channel="linkedin_draft",
+                outcome="draft_queued",
+                campaign_id=campaign["id"] if campaign else None,
+                subject=f"LinkedIn draft (agent-generated) — marketing refresh {i}",
+                body=post,
+                detail=f"agent-generated:marketing-refresh:{i} — queued for "
+                       "manual review; the agent never posts to LinkedIn",
+            )
+            result["linkedinDrafts"] += 1
+
     # ------------------------------------------------------------------ run
     def run(self, trigger: str = "timer", dry_run: bool | None = None) -> dict[str, Any]:
         if not sales_agent_enabled():
@@ -823,6 +1031,11 @@ def run_sales_agent(
 ) -> dict[str, Any]:
     """Module-level entrypoint used by the systemd timer CLI and /run-now."""
     return SalesAgent().run(trigger=trigger, dry_run=dry_run)
+
+
+def generate_sales_marketing_content(trigger: str = "admin") -> dict[str, Any]:
+    """Module-level entrypoint for the admin ``POST /generate`` route."""
+    return SalesAgent().generate_marketing_content(trigger=trigger)
 
 
 # ------------------------------------------------------------------ time utc

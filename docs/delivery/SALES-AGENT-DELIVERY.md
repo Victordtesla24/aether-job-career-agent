@@ -83,3 +83,51 @@ AETHER_SALES_AGENT_DRY_RUN=true    # shadow mode
 - LLM personalization falls back to the raw template on any LLM failure (logged), so copy quality can vary; failures are never hidden.
 - The digest is best-effort once per day; if the timer is down, health goes `stale` and the UI alarms, but no out-of-band alert is sent.
 - No A/B testing / learning loop yet (deliberate — see §4-E).
+
+
+## 8. Increment — 2026-08-15: Aether Career DS rebrand, live deploy, first real-LLM generation
+
+**Commits:** `95bae7de` (rebrand: emails, documents and `/admin/sales-agent` console retokened to the
+Aether Career Design System — near-black `#08080A` surfaces, parchment ink `#F5F1E8`, 96° gilt gradient,
+AB Sans/AB Marquee fonts, logo `/brand/aether-mark.png`; `ab-logo.png` removed) and `dd65d889`
+(tests: pipeline tests now inject an always-unavailable LLM stub so the template-fallback assertions no
+longer depend on "no fixtures on disk" — an untracked captured `sales_reply.json` fixture had broken that
+premise). Both pushed to `origin/main` and deployed.
+
+**Test gate:** `tests/test_sales_agent.py` — **45/45 passed** (48.4 s) under `scripts/run-tests.sh`
+against the real `aether_test` schema, after one genuine fix (the stub above). No compliance gate was
+weakened: consent provenance, suppression, idempotency, server-side footer, admin auth (401/403) all
+still asserted.
+
+**Deploy:** manual per runbook §5 (auto-deploy declines to pull while concurrent agents' foreign WIP sits
+in the shared tree — tree was already at `origin/main` HEAD so no pull was needed). `pnpm build`
+(BUILD_ID `KWhD279cIWHyBGqhflAQK`), `verify-web-build.sh` **PASS**, api/web/worker restarted back-to-back
+per §0.3. Verified live: api health 200, `/` 200, `/brand/aether-mark.png` 200,
+`/fonts/ab/AB-Sans-Regular.ttf` 200, served CSS bundle contains `.aether-ds-scope` + AB Sans
+`@font-face`, zero "Application error" in rendered HTML.
+
+**First real-LLM generation (production, authed `POST /generate`):** model **`claude-opus-4-8`**
+(source `anthropic_flagship`), no fallback needed, zero errors, audited as AgentRun
+`c39e532958693c61367bad515`. Created **inactive, awaiting human activation**:
+- `Free→Starter Nudge v2 (agent-generated)` (`c075d4e8b988ec3268de7d3da`)
+- `Welcome Reply v2 (agent-generated)` (`c207cbbe9c60d12812c81b21b`)
+- 3 LinkedIn drafts (`LinkedIn draft (agent-generated) — marketing refresh 1–3`, outcome `draft_queued`)
+
+**Verification (authed API, numbers from live responses):** campaigns 7 (5 prior active + 2 new
+inactive); branded preview of the new nudge renders Aether HTML (`#08080A`, `aether-mark.png`, `A$19`,
+unsubscribe footer, no legacy branding); LinkedIn drafts 20 total (17 prior + 3 new); suppressions 12;
+leads 5 (both grew since import — the live timer has been processing real inbound mail: 16 `unsubscribed`
+outcomes honored); health `ok`, fresh `lastRunAt`, timer active (30-min cadence); anonymous request →
+401 (non-admin 403 covered by the test suite).
+
+**Live-mode safety (state as found, per user order):** `AETHER_SALES_AGENT_DRY_RUN=false` (user-ordered;
+not reverted). **Two** Gmail accounts are flagged `usedForSalesAgent` (`sarkar.vikram@gmail.com`,
+`melbvicduque@gmail.com`) — flagged before this increment, not by it — so live sends are now *possible*
+on timer ticks. As of this verification **zero** `sent` outcomes exist in `SalesOutreachLog` (41
+`dry_run`, 20 `draft_queued`, 16 `unsubscribed`). Because sending is armed, the manual `run-now` was
+deliberately **skipped** this increment; the timer already provides fresh runs.
+
+**Honest gaps:** LinkedIn drafts total is 20 vs the "16 imported" figure in the task brief (actual prior
+count was 17); suppressions/leads (12/5) exceed the imported 2/2 because the live agent kept working
+between increments; non-admin 403 verified only via the test suite (no non-admin credential exercised
+against prod).

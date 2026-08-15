@@ -1013,6 +1013,83 @@ def _fill_value(page: Any, field: dict[str, Any], value: Any, documents: dict[st
             return True
         except Exception:  # noqa: BLE001
             return False
+    if kind == "combobox":
+        # Greenhouse/Ashby render required dropdowns as React typeahead
+        # comboboxes (`role="combobox"` / `select__input`): a bare ``.fill()``
+        # types text the widget never commits, so the field stays empty and the
+        # site rejects the submit — exactly the Easygo no_confirmation ending
+        # (2026-08-15). Operate the widget like a person: open it, type to
+        # filter, then CLICK the matching option from the popup listbox. The
+        # option must actually match the planned answer — when nothing matching
+        # is shown this returns ``False`` (recorded as unfilled) rather than
+        # committing whatever happens to be highlighted.
+        target = _first_present(page, control_selectors + scoped_controls)
+        if target is None:
+            return False
+        try:
+            target.click(timeout=_ACTION_TIMEOUT_MS)
+            target.fill(text_value, timeout=_ACTION_TIMEOUT_MS)
+        except Exception:  # noqa: BLE001
+            return False
+        option_text = text_value.replace('"', '\\"')
+        option = _first_present(
+            page,
+            [
+                f'[role="option"]:text-is("{option_text}")',
+                f'[role="option"]:has-text("{option_text}")',
+                f'[class*="select__option"]:text-is("{option_text}")',
+                f'[class*="select__option"]:has-text("{option_text}")',
+            ],
+        )
+        if option is not None:
+            try:
+                option.click(timeout=_ACTION_TIMEOUT_MS)
+                return True
+            except Exception:  # noqa: BLE001
+                return False
+        # No literal match. If the typeahead narrowed the popup to EXACTLY one
+        # candidate, that is the widget's own canonical phrasing of the typed
+        # answer (e.g. "Australia" -> "Australia (AU)") — commit it. Two or
+        # more remaining candidates is a genuine ambiguity: refuse, honestly.
+        try:
+            options = page.locator('[role="option"], [class*="select__option"]')
+            if options.count() == 1:
+                options.first.click(timeout=_ACTION_TIMEOUT_MS)
+                return True
+        except Exception:  # noqa: BLE001
+            return False
+        # Typing the full answer can filter the popup to NOTHING when the
+        # widget's canonical phrasings differ from the user's wording (Easygo:
+        # answer "Australian Citizen" vs option "I am an Australian/New Zealand
+        # Citizen"). Clear the filter so the popup shows the FULL list and
+        # commit the option the answer's own words pick out — but only under a
+        # strict-dominance rule: the best option must share >=2 content tokens
+        # with the answer AND strictly beat every other option. A tie or a
+        # <2-token overlap is a genuine ambiguity: refuse (recorded as
+        # unfilled), never guess between an employer's options.
+        try:
+            target.fill("", timeout=_ACTION_TIMEOUT_MS)
+            options = page.locator('[role="option"], [class*="select__option"]')
+            count = min(options.count(), 50)
+            answer_tokens = {t for t in re.findall(r"[a-z0-9]+", text_value.lower()) if len(t) > 1}
+            best_idx, best_score, second_score = -1, 0, 0
+            for idx in range(count):
+                option_tokens = {
+                    t
+                    for t in re.findall(r"[a-z0-9]+", str(options.nth(idx).inner_text() or "").lower())
+                    if len(t) > 1
+                }
+                score = len(answer_tokens & option_tokens)
+                if score > best_score:
+                    best_idx, second_score, best_score = idx, best_score, score
+                elif score > second_score:
+                    second_score = score
+            if best_idx >= 0 and best_score >= 2 and best_score > second_score:
+                options.nth(best_idx).click(timeout=_ACTION_TIMEOUT_MS)
+                return True
+        except Exception:  # noqa: BLE001
+            return False
+        return False
     for selector in control_selectors + scoped_controls:
         target = _first_present(page, [selector])
         if target is None:
