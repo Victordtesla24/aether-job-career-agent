@@ -51,7 +51,7 @@ export default function SankeyFlow({ data }: { data: SankeyData }) {
   });
 
   return (
-    <div className="glass mt-4 overflow-x-auto rounded-2xl border border-white/10 p-6">
+    <div className="mt-4 overflow-x-auto rounded-2xl border border-white/10 bg-[#0F0F12] p-6">
       <svg
         viewBox={`0 0 ${FRAME_W} 380`}
         className="w-full min-w-[1000px]"
@@ -80,7 +80,7 @@ export default function SankeyFlow({ data }: { data: SankeyData }) {
             <text
               x={n.x + NODE_W / 2}
               y={n.top - 10}
-              fill="#F4F4F8"
+              fill="#F5F1E8"
               fontSize="12"
               fontWeight="600"
               textAnchor="middle"
@@ -90,7 +90,7 @@ export default function SankeyFlow({ data }: { data: SankeyData }) {
             <text
               x={n.x + NODE_W / 2}
               y={348}
-              fill={i === 0 ? "#818CF8" : n.color}
+              fill={i === 0 ? "#4F74B5" : n.color}
               fontSize="13"
               fontWeight="700"
               textAnchor="middle"
@@ -106,7 +106,7 @@ export default function SankeyFlow({ data }: { data: SankeyData }) {
               key={`d-${f.id}`}
               x={f.dropX}
               y={f.dropY}
-              fill="#F87171"
+              fill="#B9544B"
               fontSize="10.5"
               textAnchor="middle"
               fontFamily="'JetBrains Mono', monospace"

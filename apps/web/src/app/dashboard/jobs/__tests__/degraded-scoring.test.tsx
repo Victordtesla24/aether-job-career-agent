@@ -174,7 +174,7 @@ describe("Job Discovery — 10-Dimensional Fit Score grid degraded-scoring UI (G
   it("does not plot the placeholder in the radar chart when a dimension is degraded", async () => {
     const chart1 = await renderWithInsights(insightsFixture(true, 50));
     const svg1 = chart1.querySelector('svg[aria-label="10-dimensional fit radar"]')!;
-    const shape1 = svg1.querySelector('polygon[stroke="#FF6B35"]')!.getAttribute("points");
+    const shape1 = svg1.querySelector('polygon[stroke="#C9A84C"]')!.getAttribute("points");
     cleanup();
 
     // A wildly different placeholder value on the SAME degraded dimensions
@@ -182,7 +182,7 @@ describe("Job Discovery — 10-Dimensional Fit Score grid degraded-scoring UI (G
     // the chart must be invariant to it, not plot it as if real.
     const chart2 = await renderWithInsights(insightsFixture(true, 91));
     const svg2 = chart2.querySelector('svg[aria-label="10-dimensional fit radar"]')!;
-    const shape2 = svg2.querySelector('polygon[stroke="#FF6B35"]')!.getAttribute("points");
+    const shape2 = svg2.querySelector('polygon[stroke="#C9A84C"]')!.getAttribute("points");
 
     expect(shape1).toBe(shape2);
 
@@ -192,11 +192,11 @@ describe("Job Discovery — 10-Dimensional Fit Score grid degraded-scoring UI (G
     cleanup();
     const chart3 = await renderWithInsights(insightsFixture(false, 50));
     const svg3 = chart3.querySelector('svg[aria-label="10-dimensional fit radar"]')!;
-    const shape3 = svg3.querySelector('polygon[stroke="#FF6B35"]')!.getAttribute("points");
+    const shape3 = svg3.querySelector('polygon[stroke="#C9A84C"]')!.getAttribute("points");
     cleanup();
     const chart4 = await renderWithInsights(insightsFixture(false, 91));
     const svg4 = chart4.querySelector('svg[aria-label="10-dimensional fit radar"]')!;
-    const shape4 = svg4.querySelector('polygon[stroke="#FF6B35"]')!.getAttribute("points");
+    const shape4 = svg4.querySelector('polygon[stroke="#C9A84C"]')!.getAttribute("points");
     expect(shape3).not.toBe(shape4);
   });
 

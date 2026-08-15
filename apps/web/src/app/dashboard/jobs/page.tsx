@@ -212,7 +212,7 @@ function timeAgo(iso?: string): string {
 }
 
 function ringColor(v: number): string {
-  return v >= 85 ? "#34D399" : v >= 70 ? "#FBBF24" : "#F87171";
+  return v >= 85 ? "#6FAF8D" : v >= 70 ? "#C8873A" : "#B9544B";
 }
 
 /**
@@ -373,7 +373,7 @@ function RadarChart({ dims }: { dims: Dimension[] }) {
           return <line key={i} x1={cx} y1={cy} x2={x} y2={y} />;
         })}
       </g>
-      <polygon points={shape} fill="rgba(255,107,53,0.18)" stroke="#FF6B35" strokeWidth="2" />
+      <polygon points={shape} fill="rgba(201,168,76,0.18)" stroke="#C9A84C" strokeWidth="2" />
     </svg>
   );
 }
