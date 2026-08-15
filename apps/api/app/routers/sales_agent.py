@@ -95,16 +95,27 @@ def list_campaigns(_admin: AdminUser) -> dict[str, Any]:
 
 
 @router.post("/campaigns", status_code=status.HTTP_201_CREATED)
-def create_campaign(payload: CampaignCreate, _admin: AdminUser) -> dict[str, Any]:
+def create_campaign(payload: CampaignCreate, admin: AdminUser) -> dict[str, Any]:
     if payload.type not in CAMPAIGN_TYPES:
         raise HTTPException(
             status_code=422,
             detail=f"type must be one of {sorted(CAMPAIGN_TYPES)}",
         )
-    return _repo().create_campaign(
+    row = _repo().create_campaign(
         name=payload.name, ctype=payload.type,
         template_body=payload.templateBody, active=payload.active,
     )
+    # MP-020: every admin mutation leaves an AdminAuditLog row.
+    from app.repositories.admin import write_audit
+
+    write_audit(
+        admin["id"],
+        "sales_campaign.created",
+        target_type="sales_campaign",
+        target_id=row["id"],
+        detail={"name": payload.name, "type": payload.type, "active": payload.active},
+    )
+    return row
 
 
 @router.get("/campaigns/{campaign_id}/preview")
@@ -135,7 +146,7 @@ def campaign_preview(campaign_id: str, _admin: AdminUser) -> dict[str, Any]:
 
 @router.put("/campaigns/{campaign_id}")
 def update_campaign(
-    campaign_id: str, payload: CampaignUpdate, _admin: AdminUser
+    campaign_id: str, payload: CampaignUpdate, admin: AdminUser
 ) -> dict[str, Any]:
     row = _repo().update_campaign(
         campaign_id,
@@ -145,6 +156,25 @@ def update_campaign(
     )
     if row is None:
         raise HTTPException(status_code=404, detail="Campaign not found.")
+    # MP-020: audit only the fields the admin actually changed (non-None).
+    from app.repositories.admin import write_audit
+
+    changed = {
+        key: value
+        for key, value in (
+            ("name", payload.name),
+            ("templateBody", payload.templateBody),
+            ("active", payload.active),
+        )
+        if value is not None
+    }
+    write_audit(
+        admin["id"],
+        "sales_campaign.updated",
+        target_type="sales_campaign",
+        target_id=campaign_id,
+        detail=changed,
+    )
     return row
 
 
@@ -174,21 +204,32 @@ def suppressions(_admin: AdminUser) -> dict[str, Any]:
 
 # ------------------------------------------------------------------- run-now
 @router.post("/run-now")
-def run_now(_admin: AdminUser) -> dict[str, Any]:
+def run_now(admin: AdminUser) -> dict[str, Any]:
     """Trigger one full pipeline run synchronously (honest no-op when the
     feature flag is off; shadow mode logs ``dry_run`` rows, sends nothing)."""
     try:
-        return run_sales_agent(trigger="manual")
+        result = run_sales_agent(trigger="manual")
     except Exception as exc:  # noqa: BLE001 — surface the real reason, not a 500 page
         logger.exception("manual sales agent run failed")
         raise HTTPException(
             status_code=502, detail=f"Sales agent run failed: {exc}"
         ) from exc
+    # MP-020: every admin mutation is audit-logged — manual pipeline triggers
+    # are privileged actions with outbound-email side effects.
+    from app.repositories.admin import write_audit
+
+    write_audit(
+        admin["id"],
+        "sales_agent.run_now",
+        target_type="sales_agent",
+        detail={"ran": bool(result.get("ran"))},
+    )
+    return result
 
 
 # ----------------------------------------------------------------- generate
 @router.post("/generate")
-def generate_content(_admin: AdminUser) -> dict[str, Any]:
+def generate_content(admin: AdminUser) -> dict[str, Any]:
     """Ask the agent to author fresh marketing content NOW (synchronous):
     two new campaign templates (created INACTIVE, awaiting human activation)
     and three LinkedIn drafts — all real LLM output through the dynamically
@@ -198,12 +239,26 @@ def generate_content(_admin: AdminUser) -> dict[str, Any]:
     from app.agents.sales_agent import generate_sales_marketing_content
 
     try:
-        return generate_sales_marketing_content(trigger="manual")
+        result = generate_sales_marketing_content(trigger="manual")
     except Exception as exc:  # noqa: BLE001 — surface the real reason
         logger.exception("sales agent content generation failed")
         raise HTTPException(
             status_code=502, detail=f"Content generation failed: {exc}"
         ) from exc
+    # MP-020: audit-log manual content generation (admin mutation — creates
+    # campaign templates and LinkedIn drafts).
+    from app.repositories.admin import write_audit
+
+    write_audit(
+        admin["id"],
+        "sales_marketing.generated",
+        target_type="sales_agent",
+        detail={
+            "campaigns": len(result.get("campaigns", []) or []),
+            "linkedin_drafts": len(result.get("linkedin_drafts", []) or []),
+        },
+    )
+    return result
 
 
 # ------------------------------------------------ persistent brand editor
@@ -503,7 +558,7 @@ def get_config(_admin: AdminUser) -> dict[str, Any]:
 
 
 @router.put("/config")
-def put_config(payload: ConfigUpdate, _admin: AdminUser) -> dict[str, Any]:
+def put_config(payload: ConfigUpdate, admin: AdminUser) -> dict[str, Any]:
     """Set (or clear with null) the model override in AgentConfig. The model
     id is free-form on purpose — the catalog evolves; routing is dynamic."""
     admin_id = resolve_admin_user_id()
@@ -522,6 +577,15 @@ def put_config(payload: ConfigUpdate, _admin: AdminUser) -> dict[str, Any]:
                 (model, admin_id, AGENT_KEY),
             )
         conn.commit()
+    # MP-020: audit-log config mutation (model override change).
+    from app.repositories.admin import write_audit
+
+    write_audit(
+        admin["id"],
+        "sales_agent_config.updated",
+        target_type="agent_config",
+        detail={"model": model},
+    )
     resolved, source = resolve_model()
     return {
         "configuredModel": model,
@@ -547,7 +611,7 @@ def sending_accounts(_admin: AdminUser) -> dict[str, Any]:
 
 @router.post("/sending-accounts/{account_id}")
 def set_sending_account(
-    account_id: str, payload: SendingAccountUpdate, _admin: AdminUser
+    account_id: str, payload: SendingAccountUpdate, admin: AdminUser
 ) -> dict[str, Any]:
     admin_id = resolve_admin_user_id()
     if admin_id is None:
@@ -560,4 +624,15 @@ def set_sending_account(
     )
     if not updated:
         raise HTTPException(status_code=404, detail="Gmail account not found.")
+    # MP-020: audit-log sending-account toggle (success only — a 404 above
+    # mutates nothing and therefore writes no audit row).
+    from app.repositories.admin import write_audit
+
+    write_audit(
+        admin["id"],
+        "sales_sending_account.updated",
+        target_type="gmail_account",
+        target_id=account_id,
+        detail={"enabled": payload.enabled},
+    )
     return {"accountId": account_id, "usedForSalesAgent": payload.enabled}

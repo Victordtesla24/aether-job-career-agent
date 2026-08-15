@@ -876,3 +876,147 @@ def test_render_document_uses_persisted_auto_reply_override():
     assert "Support replies are reviewed in Melbourne time." in html
     assert "https://example.test/unsubscribe" in html
     assert 'href="https://example.test/unsubscribe"' in html
+
+
+# ---------------------------------------------------------------- MP-020
+# Wave A (R2) hard requirement: EVERY admin mutation is audit-logged. The six
+# sales-agent console mutations below previously returned success without an
+# AdminAuditLog row, which made the console the one place an admin could act
+# without leaving a trail. Each case asserts the row lands with the acting
+# admin as actor and an honest, non-secret detail payload.
+
+
+def _admin_audit_actions(actor_id: str) -> list[dict]:
+    from app.db import get_connection
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT "action","targetType","targetId","detailJson" '
+                'FROM "AdminAuditLog" WHERE "actorUserId"=%s '
+                'ORDER BY "createdAt" DESC',
+                (actor_id,),
+            )
+            return [
+                {"action": r[0], "targetType": r[1], "targetId": r[2], "detail": r[3]}
+                for r in cur.fetchall()
+            ]
+
+
+def test_campaign_create_and_update_are_audit_logged(client, admin_headers):
+    actor_id = client._test_user_id
+    created = client.post(
+        "/admin/sales-agent/campaigns",
+        headers=admin_headers,
+        json={
+            "name": f"audit campaign {uuid.uuid4().hex[:6]}",
+            "type": "welcome",
+            "templateBody": "Hi {{name}}, audit body.",
+            "active": False,
+        },
+    )
+    assert created.status_code == 201, created.text
+    cid = created.json()["id"]
+    rows = _admin_audit_actions(actor_id)
+    create_row = next(r for r in rows if r["action"] == "sales_campaign.created")
+    assert create_row["targetType"] == "sales_campaign"
+    assert create_row["targetId"] == cid
+
+    updated = client.put(
+        f"/admin/sales-agent/campaigns/{cid}",
+        headers=admin_headers,
+        json={"active": True},
+    )
+    assert updated.status_code == 200, updated.text
+    rows = _admin_audit_actions(actor_id)
+    update_row = next(r for r in rows if r["action"] == "sales_campaign.updated")
+    assert update_row["targetId"] == cid
+    assert update_row["detail"]["active"] is True
+
+
+def test_run_now_and_generate_are_audit_logged(client, admin_headers, monkeypatch):
+    actor_id = client._test_user_id
+
+    # run-now: honest no-op while the feature flag is off — the ATTEMPT is
+    # still an admin action and must land in the trail with its outcome.
+    monkeypatch.delenv("AETHER_SALES_AGENT_ENABLED", raising=False)
+    ran = client.post("/admin/sales-agent/run-now", headers=admin_headers)
+    assert ran.status_code == 200, ran.text
+    rows = _admin_audit_actions(actor_id)
+    run_row = next(r for r in rows if r["action"] == "sales_agent.run_now")
+    assert run_row["detail"]["ran"] is False
+
+    # generate: stub the agent call — the audit contract, not the LLM, is
+    # under test here.
+    import app.agents.sales_agent as sales_agent_module
+
+    monkeypatch.setattr(
+        sales_agent_module,
+        "generate_sales_marketing_content",
+        lambda trigger: {"generated": True, "campaigns": [], "posts": []},
+    )
+    gen = client.post("/admin/sales-agent/generate", headers=admin_headers)
+    assert gen.status_code == 200, gen.text
+    rows = _admin_audit_actions(actor_id)
+    assert any(r["action"] == "sales_marketing.generated" for r in rows)
+
+
+def test_config_and_sending_account_updates_are_audit_logged(
+    client, admin_headers
+):
+    from app.db import get_connection
+
+    actor_id = client._test_user_id
+
+    cfg = client.put(
+        "/admin/sales-agent/config",
+        headers=admin_headers,
+        json={"model": "gpt-5.5-mini"},
+    )
+    assert cfg.status_code == 200, cfg.text
+    rows = _admin_audit_actions(actor_id)
+    cfg_row = next(r for r in rows if r["action"] == "sales_agent_config.updated")
+    assert cfg_row["detail"]["model"] == "gpt-5.5-mini"
+
+    # A real GmailAccount row owned by the admin (the repo UPDATE requires it).
+    from app.repositories.gmail_account import GmailAccountRepository
+
+    GmailAccountRepository()._ensure_table()  # creates "GmailAccount" if absent
+    account_id = f"acct-{uuid.uuid4().hex[:10]}"
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            # Same idempotent additive DDL _ensure_sales_tables runs — repeated
+            # here because that ensure is once-per-process and may have run
+            # before the table existed.
+            cur.execute(
+                'ALTER TABLE IF EXISTS "GmailAccount" '
+                'ADD COLUMN IF NOT EXISTS "usedForSalesAgent" boolean '
+                "NOT NULL DEFAULT false"
+            )
+            cur.execute(
+                'INSERT INTO "GmailAccount" ("id","userId","accountEmail") '
+                "VALUES (%s,%s,%s)",
+                (account_id, actor_id, f"{account_id}@example.com"),
+            )
+        conn.commit()
+
+    toggled = client.post(
+        f"/admin/sales-agent/sending-accounts/{account_id}",
+        headers=admin_headers,
+        json={"enabled": True},
+    )
+    assert toggled.status_code == 200, toggled.text
+    rows = _admin_audit_actions(actor_id)
+    acct_row = next(
+        r for r in rows if r["action"] == "sales_sending_account.updated"
+    )
+    assert acct_row["targetId"] == account_id
+    assert acct_row["detail"]["enabled"] is True
+
+    # A missed UPDATE (unknown id) must NOT fabricate an audit row.
+    missing = client.post(
+        f"/admin/sales-agent/sending-accounts/nope-{uuid.uuid4().hex[:6]}",
+        headers=admin_headers,
+        json={"enabled": False},
+    )
+    assert missing.status_code == 404
