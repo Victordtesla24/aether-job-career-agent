@@ -230,7 +230,7 @@ const HOP = {
     mechanism:
       "StoryRepository.create keyed by achievementKey (upsert-in-place on re-run)",
     evidence:
-      "apps/api/app/agents/story_extractor.py:327,338; dedup index apps/api/app/db.py:1159",
+      "apps/api/app/agents/story_extractor.py:616,693; dedup index apps/api/app/db.py:1159",
     discoveryEvidence:
       "apps/api/app/agents/story_extractor.py:96; dedup index apps/api/app/db.py:1159",
     anchors: [
@@ -323,7 +323,7 @@ const HOP = {
     to: "agent.storyExtraction",
     kind: "reads",
     mechanism: "resolve_user_resume_text -> extract_resume_bullets",
-    evidence: "apps/api/app/agents/story_extractor.py:118,206,567",
+    evidence: "apps/api/app/agents/story_extractor.py:157,482,1108",
     discoveryEvidence: "apps/api/app/agents/story_extractor.py:118,204-205",
     anchors: [
       "from app.services.resume_grounding import resolve_user_resume_text",
@@ -398,7 +398,7 @@ const HOP = {
     // (P1-A + B6 + D.524 + B1b + ML-STOPALL-001..004 + interim guards all
     // shift agents.py); anchors unchanged. The provenance re-anchor pass
     // revalidates every citation before the landing gates.
-    evidence: "apps/api/app/routers/agents.py:3872,3904",
+    evidence: "apps/api/app/routers/agents.py:3881,3913",
     discoveryEvidence: "apps/api/app/routers/agents.py:3380",
     anchors: [
       "def _pipeline_core(",
@@ -480,7 +480,7 @@ const HOP = {
     // honest-refusal check + its helper were inserted earlier in the file) —
     // re-verified against HEAD, same anchors, new line numbers.
     evidence:
-      "apps/api/app/agents/company_research_agent.py:53,183; narrative opt-in at apps/api/app/routers/agents.py:1784,2382",
+      "apps/api/app/agents/company_research_agent.py:53,183; narrative opt-in at apps/api/app/routers/agents.py:1784,2391",
     discoveryEvidence:
       "apps/api/app/agents/company_research_agent.py:53; narrative opt-in at apps/api/app/routers/agents.py:2020-2027",
     anchors: [
