@@ -373,7 +373,9 @@ function RadarChart({ dims }: { dims: Dimension[] }) {
           return <line key={i} x1={cx} y1={cy} x2={x} y2={y} />;
         })}
       </g>
-      <polygon points={shape} fill="rgba(201,168,76,0.18)" stroke="#C9A84C" strokeWidth="2" />
+      {/* R-VIZ: a chart line is chart-gold #AE8E32 (as Radar10 draws it); UI gold
+          #C9A84C stays for the large ≥18%-alpha area fill and non-chart accents. */}
+      <polygon points={shape} fill="rgba(201,168,76,0.18)" stroke="#AE8E32" strokeWidth="2" />
     </svg>
   );
 }
@@ -2012,7 +2014,9 @@ export default function JobsPage() {
                     <div className="grid gap-2.5 sm:grid-cols-2">
                       {selectedInsights.riskSignals.map((r) => (
                         <div key={r.label} className="elev-2 flex items-center gap-2.5 rounded-lg px-3 py-2.5" data-testid="risk-flag">
-                          <span className={r.severity === "high" ? "text-[#F87171]" : "text-aether-yellow"}>●</span>
+                          {/* One red for danger (#B9544B), and copper — never gold — for the
+                            lesser flag: R1 keeps gold out of state duty. */}
+                          <span className={r.severity === "high" ? "text-state-danger" : "text-state-warn"}>●</span>
                           <span className="text-xs text-[#C8C8DC]">{r.label}</span>
                         </div>
                       ))}
