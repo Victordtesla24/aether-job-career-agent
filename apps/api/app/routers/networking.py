@@ -6,7 +6,9 @@ idempotently on first use.
 """
 from __future__ import annotations
 
+import re
 from datetime import datetime
+from email.utils import parseaddr
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, status
@@ -14,6 +16,7 @@ from pydantic import BaseModel, Field
 
 from app.db import get_connection, new_id, rows_to_dicts
 from app.middleware.auth import CurrentUser
+from app.repositories.sales import ConsentViolationError, SalesRepository
 
 router = APIRouter()
 
@@ -33,6 +36,110 @@ _CONTACT_COLUMNS = (
     'c."id", c."userId", c."name", c."title", c."company",'
     ' c."stage", c."email", c."linkedinUrl", c."createdAt", c."updatedAt"'
 )
+
+_EMAIL_RE = re.compile(r"^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$")
+_PROFESSIONAL_SIGNAL = re.compile(
+    r"\b(recruit(?:er|ing)|hiring|role|position|opportunit(?:y|ies)|"
+    r"career|interview|talent|staffing|engineering|director|manager|"
+    r"professional)\b",
+    re.IGNORECASE,
+)
+
+
+def _professional_sender(message: dict[str, Any]) -> tuple[str, str] | None:
+    """Return normalized ``(name, email)`` only for an evidenced work signal.
+
+    This uses just the authenticated inbox's sender/header/body data, retains
+    no body text, and never guesses an address or consent basis.
+    """
+    name, email = parseaddr(message.get("from") or "")
+    email = email.strip().lower()
+    evidence = " ".join(
+        str(message.get(key) or "") for key in ("subject", "text", "html")
+    )
+    if not _EMAIL_RE.fullmatch(email) or not _PROFESSIONAL_SIGNAL.search(evidence):
+        return None
+    return (name.strip() or email.split("@", 1)[0], email)
+
+
+@router.post("/gmail/import-contacts")
+def import_gmail_contacts(current_user: CurrentUser) -> dict[str, int]:
+    """Owner-authorized import of professional inbound Gmail contacts.
+
+    Candidates need a real sender address plus a professional signal. Gmail
+    message/thread identifiers form the existing SalesLead consent provenance;
+    suppressed senders are neither saved nor handed off. Nothing is sent.
+    """
+    from app.services.gmail_service import GmailService
+
+    uid = current_user["id"]
+    gmail = GmailService(uid)
+    sales = SalesRepository()
+    seen: set[str] = set()
+    counts = {
+        "contactsCreated": 0,
+        "leadsCreated": 0,
+        "duplicates": 0,
+        "suppressed": 0,
+        "ignored": 0,
+    }
+    for header in gmail.list_message_headers(max_results=100):
+        message = gmail.get_message_bodies(header["id"])
+        candidate = _professional_sender(message)
+        if candidate is None:
+            counts["ignored"] += 1
+            continue
+        name, email = candidate
+        if email in seen:
+            counts["duplicates"] += 1
+            continue
+        seen.add(email)
+        if sales.is_suppressed(email):
+            counts["suppressed"] += 1
+            continue
+        thread_id = str(message.get("threadId") or "").strip()
+        message_id = str(message.get("id") or "").strip()
+        if not thread_id or not message_id:
+            # The sales repository will refuse a missing thread too; require the
+            # message identifier as well so both provenance pointers are real.
+            counts["ignored"] += 1
+            continue
+
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    'SELECT "id" FROM "Contact" WHERE "userId" = %s '
+                    'AND LOWER("email") = %s LIMIT 1',
+                    (uid, email),
+                )
+                if cur.fetchone() is None:
+                    cur.execute(
+                        '''INSERT INTO "Contact" (
+                            "id", "userId", "name", "stage", "email", "createdAt", "updatedAt"
+                        ) VALUES (%s, %s, %s, %s::"ContactStage", %s, now(), now())''',
+                        (new_id(), uid, name, "identified", email),
+                    )
+                    counts["contactsCreated"] += 1
+            conn.commit()
+
+        if sales.get_lead_by_email(email) is None:
+            try:
+                sales.create_lead(
+                    email=email,
+                    name=name,
+                    source="inbound_email",
+                    source_thread_id=thread_id,
+                    consent_type="inbound_signal",
+                    consent_evidence=(
+                        f"Gmail inbound message {message_id} in thread {thread_id}"
+                    ),
+                )
+                counts["leadsCreated"] += 1
+            except ConsentViolationError:
+                # No guessed or incomplete provenance becomes a lead.
+                counts["ignored"] += 1
+    return counts
+
 
 # ---------------------------------------------------------------------------
 # Table bootstrap
