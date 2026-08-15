@@ -1,0 +1,2 @@
+$ ruff check app/ tests/   (2026-08-15T00:57:34Z)
+[1;32mAll checks passed![0m
