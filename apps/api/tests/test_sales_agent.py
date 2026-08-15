@@ -28,6 +28,7 @@ from app.agents.sales_agent import (
     SalesAgent,
     append_compliance_footer,
     personalize_template,
+    sales_agent_live_scope,
 )
 from app.repositories.sales import (
     ConsentViolationError,
@@ -203,6 +204,86 @@ def test_disabled_agent_is_an_honest_noop(monkeypatch):
     result = SalesAgent().run(trigger="manual")
     assert result["ran"] is False
     assert "AETHER_SALES_AGENT_ENABLED" in result["reason"]
+
+
+def test_sales_live_scope_defaults_to_inbound(monkeypatch):
+    monkeypatch.delenv("AETHER_SALES_AGENT_LIVE_SCOPE", raising=False)
+
+    assert sales_agent_live_scope() == "inbound"
+
+
+def test_sales_live_scope_all_explicitly_enables_lifecycle(monkeypatch):
+    monkeypatch.setenv("AETHER_SALES_AGENT_LIVE_SCOPE", "all")
+
+    assert sales_agent_live_scope() == "all"
+
+
+def test_default_live_scope_skips_lifecycle_but_keeps_inbound_polling(monkeypatch):
+    class FakeRuns:
+        def start(self, *args, **kwargs):  # noqa: ANN002, ANN003
+            return {"id": "run-1"}
+
+        def finish(self, *args, **kwargs):  # noqa: ANN002, ANN003
+            return None
+
+    class FakeRepo:
+        def seed_default_campaigns(self):
+            return None
+
+        def sales_sending_accounts(self, admin_id):
+            return [{"id": "acct-1", "accountEmail": "sales@example.com"}]
+
+    agent = SalesAgent(repo=FakeRepo())  # type: ignore[arg-type]
+    calls: list[str] = []
+    monkeypatch.setenv("AETHER_SALES_AGENT_ENABLED", "true")
+    monkeypatch.delenv("AETHER_SALES_AGENT_LIVE_SCOPE", raising=False)
+    monkeypatch.setattr("app.agents.sales_agent.resolve_admin_user_id", lambda: "admin-1")
+    monkeypatch.setattr("app.agents.sales_agent.AgentRunRepository", FakeRuns)
+    monkeypatch.setattr("app.agents.sales_agent.ensure_agent_config", lambda admin_id: None)
+    monkeypatch.setattr("app.agents.sales_agent.resolve_model", lambda: ("test-model", "test"))
+    monkeypatch.setattr(agent, "_poll_account", lambda *args, **kwargs: calls.append("inbound"))
+    monkeypatch.setattr(agent, "_run_lifecycle", lambda *args, **kwargs: calls.append("lifecycle"))
+    monkeypatch.setattr(agent, "_run_linkedin_draft", lambda *args, **kwargs: None)
+    monkeypatch.setattr(agent, "_run_digest", lambda *args, **kwargs: None)
+
+    result = agent.run(trigger="manual", dry_run=False)
+
+    assert result["liveScope"] == "inbound"
+    assert calls == ["inbound"]
+
+
+def test_all_live_scope_runs_lifecycle(monkeypatch):
+    class FakeRuns:
+        def start(self, *args, **kwargs):  # noqa: ANN002, ANN003
+            return {"id": "run-1"}
+
+        def finish(self, *args, **kwargs):  # noqa: ANN002, ANN003
+            return None
+
+    class FakeRepo:
+        def seed_default_campaigns(self):
+            return None
+
+        def sales_sending_accounts(self, admin_id):
+            return []
+
+    agent = SalesAgent(repo=FakeRepo())  # type: ignore[arg-type]
+    calls: list[str] = []
+    monkeypatch.setenv("AETHER_SALES_AGENT_ENABLED", "true")
+    monkeypatch.setenv("AETHER_SALES_AGENT_LIVE_SCOPE", "all")
+    monkeypatch.setattr("app.agents.sales_agent.resolve_admin_user_id", lambda: "admin-1")
+    monkeypatch.setattr("app.agents.sales_agent.AgentRunRepository", FakeRuns)
+    monkeypatch.setattr("app.agents.sales_agent.ensure_agent_config", lambda admin_id: None)
+    monkeypatch.setattr("app.agents.sales_agent.resolve_model", lambda: ("test-model", "test"))
+    monkeypatch.setattr(agent, "_poll_account", lambda *args, **kwargs: calls.append("inbound"))
+    monkeypatch.setattr(agent, "_run_lifecycle", lambda *args, **kwargs: calls.append("lifecycle"))
+    monkeypatch.setattr(agent, "_run_linkedin_draft", lambda *args, **kwargs: None)
+    monkeypatch.setattr(agent, "_run_digest", lambda *args, **kwargs: None)
+
+    result = agent.run(trigger="manual", dry_run=False)
+
+    assert result["liveScope"] == "all"
+    assert calls == ["lifecycle"]
 
 
 def test_inbound_interest_to_dry_run_pipeline(repo, sales_env, monkeypatch):

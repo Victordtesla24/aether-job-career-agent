@@ -46,7 +46,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
 
-from app.db import ensure_user_lifecycle_columns, get_connection
+from app.db import ensure_admin_user_columns, ensure_user_lifecycle_columns, get_connection
 from app.repositories.agent_run import AgentRunRepository
 from app.repositories.sales import (
     DuplicateSendError,
@@ -143,6 +143,17 @@ def sales_agent_dry_run() -> bool:
     one-line switch ``AETHER_SALES_AGENT_DRY_RUN=false`` in ``.env``."""
     raw = os.environ.get("AETHER_SALES_AGENT_DRY_RUN", "true").strip().lower()
     return raw not in ("0", "false", "no", "off")
+
+
+def sales_agent_live_scope() -> str:
+    """Return the explicitly permitted live-send scope.
+
+    Lifecycle outreach remains opt-in even when the sales agent is enabled and
+    dry-run is disabled. Only ``all`` permits lifecycle sends; missing or
+    unrecognised values safely remain inbound-only.
+    """
+    scope = os.environ.get("AETHER_SALES_AGENT_LIVE_SCOPE", "inbound").strip().lower()
+    return "all" if scope == "all" else "inbound"
 
 
 # ------------------------------------------------------------------- helpers
@@ -526,11 +537,11 @@ class SalesAgent:
         (lazy DDL, ADR-TR-1 — a timer-triggered run can reach this line before
         any /admin request has ever touched the column in this worker).
 
-        ``suspended`` is deliberately NOT filtered here — see
-        ``tests/test_admin2_sales_coexistence.py`` for why that gap is
-        pre-existing on ``origin/main`` and is reported rather than widened
-        into from this branch.
+        SUSPENDED ACCOUNTS ARE NOT CANDIDATES. ``User.suspended`` is the
+        existing auth enforcement field; a suspended account must not receive
+        lifecycle marketing email.
         """
+        ensure_admin_user_columns()
         ensure_user_lifecycle_columns()
         sql = '''
             SELECT u."id", u."email", u."name",
@@ -549,6 +560,7 @@ class SalesAgent:
             WHERE LOWER(p."name") = 'free'
               AND u."email" IS NOT NULL
               AND u."deletedAt" IS NULL
+              AND u."suspended" = false
             GROUP BY u."id", u."email", u."name", s."currentPeriodStart",
                      u."createdAt"
         '''
@@ -991,6 +1003,7 @@ class SalesAgent:
             }
         if dry_run is None:
             dry_run = sales_agent_dry_run()
+        live_scope = sales_agent_live_scope()
         admin_id = resolve_admin_user_id()
         if admin_id is None:
             return {
@@ -1003,6 +1016,7 @@ class SalesAgent:
             "ran": True,
             "trigger": trigger,
             "dryRun": dry_run,
+            "liveScope": live_scope,
             "inboundScanned": 0,
             "leadsCreated": 0,
             "sent": 0,
@@ -1031,7 +1045,10 @@ class SalesAgent:
                 self._poll_account(
                     admin_id, account, dry_run=dry_run, model=model, result=result
                 )
-            self._run_lifecycle(admin_id, accounts, dry_run=dry_run, result=result)
+            if live_scope == "all":
+                self._run_lifecycle(admin_id, accounts, dry_run=dry_run, result=result)
+            else:
+                logger.info("sales agent: lifecycle skipped; live scope is inbound-only")
             self._run_linkedin_draft(model=model, result=result)
             self._run_digest(admin_id, accounts, dry_run=dry_run, result=result)
         except Exception as exc:  # noqa: BLE001 — the run row must go terminal
