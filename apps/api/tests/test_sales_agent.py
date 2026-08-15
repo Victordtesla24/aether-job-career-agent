@@ -71,9 +71,10 @@ class FakeGmail:
             "html": "",
         }
 
-    def send(self, to, subject, body, in_reply_to=None, thread_id=None, attachments=None):
+    def send(self, to, subject, body, in_reply_to=None, thread_id=None, attachments=None, html_body=None):
         self.sent.append(
-            {"to": to, "subject": subject, "body": body, "threadId": thread_id}
+            {"to": to, "subject": subject, "body": body, "threadId": thread_id,
+             "html_body": html_body}
         )
         # Thread/message ids must be globally unique: the test DB persists
         # across the whole pytest session, so per-instance counters would
@@ -325,6 +326,10 @@ ROUTES = [
     ("GET", "/admin/sales-agent/suppressions"),
     ("GET", "/admin/sales-agent/health"),
     ("POST", "/admin/sales-agent/run-now"),
+    ("POST", "/admin/sales-agent/generate"),
+    ("GET", "/admin/sales-agent/campaigns/some-id/preview"),
+    ("GET", "/admin/sales-agent/brand/documents"),
+    ("GET", "/admin/sales-agent/brand/documents/invoice/preview"),
 ]
 
 
@@ -406,3 +411,197 @@ def test_campaign_crud(client, admin_headers):
         json={"name": "x", "type": "cold_blast", "templateBody": "y"},
     )
     assert bad.status_code == 422
+
+
+
+# ------------------------------------------------------- branding + generate
+def test_branded_email_preserves_compliance_footer_verbatim():
+    """§6 hard gate survives templating: the branded HTML must contain the
+    full compliance footer text (escaped), and never the raw placeholder."""
+    from app.services.sales_branding import render_branded_email, split_compliance_footer
+
+    body = append_compliance_footer(
+        personalize_template("Hi {{name}},\n\nTry Aether today.", "Alex")
+    )
+    html = render_branded_email("Welcome", body)
+    assert "{{name}}" not in html
+    assert "Hi Alex," in html
+    assert "operated by Vikram Sarkar" in html
+    assert "Reply &#x27;unsubscribe&#x27; to stop receiving these emails." in html or (
+        "Reply 'unsubscribe' to stop receiving these emails." in html
+    )
+    assert "Aether Career Job Agent" in html
+    assert "AB Entertainment" not in html  # visual tokens only, never the DS name
+    main, footer = split_compliance_footer(body)
+    assert "unsubscribe" in footer.lower()
+    assert "unsubscribe" not in main.lower()
+
+
+def test_gmail_html_body_is_multipart_alternative_with_plain_first():
+    """html_body must never REPLACE the compliance-footed plain body."""
+    import base64
+    from email import message_from_bytes
+
+    from app.services.gmail_service import GmailService
+
+    svc = GmailService.__new__(GmailService)  # no credentials needed for _raw_message
+    raw = svc._raw_message(
+        "to@example.com", "Subj", "plain body with footer",
+        html_body="<html><body>branded</body></html>",
+    )
+    msg = message_from_bytes(base64.urlsafe_b64decode(raw))
+    assert msg.get_content_type() == "multipart/alternative"
+    parts = msg.get_payload()
+    assert parts[0].get_content_type() == "text/plain"
+    assert "plain body with footer" in parts[0].get_payload(decode=True).decode()
+    assert parts[1].get_content_type() == "text/html"
+    assert "branded" in parts[1].get_payload(decode=True).decode()
+
+
+def test_grounding_guard_rejects_fabrications():
+    agent = SalesAgent(repo=SalesRepository())
+    assert agent._grounding_guard("Starter is A$19/month.") is None
+    assert agent._grounding_guard("Only $499 today!") is not None
+    assert agent._grounding_guard("87% of users succeed") is not None
+    assert agent._grounding_guard("Join 10,000 users") is not None
+    assert agent._grounding_guard("5 agent runs per month, free.") is None
+
+
+def test_campaign_preview_route_renders_branded_html(client, admin_headers):
+    campaigns = client.get(
+        "/admin/sales-agent/campaigns", headers=admin_headers
+    ).json()["campaigns"]
+    resp = client.get(
+        f"/admin/sales-agent/campaigns/{campaigns[0]['id']}/preview",
+        headers=admin_headers,
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["campaignId"] == campaigns[0]["id"]
+    assert "<!DOCTYPE html>" in data["html"]
+    assert "{{name}}" not in data["html"]
+    assert "unsubscribe" in data["html"].lower()
+    missing = client.get(
+        "/admin/sales-agent/campaigns/nope/preview", headers=admin_headers
+    )
+    assert missing.status_code == 404
+
+
+class _FakeLLM:
+    """Deterministic stand-in — generate tests must not depend on live LLMs."""
+
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+
+    def complete(self, prompt_name, system, user, *, model, temperature,
+                 fixture_key=None, validate=None):
+        self.calls.append(prompt_name)
+        if prompt_name == "sales_agent_campaign":
+            return (
+                "Hi {{name}},\n\nYou are close to your 5 free runs. Starter is "
+                "A$19/month.\n\nhttps://5cb5f0620.abacusai.cloud"
+            )
+        return (
+            "Post one about the anti-fabrication guard. A$19/month.\n"
+            "https://5cb5f0620.abacusai.cloud\n===\n"
+            "Post two about the approval queue.\nhttps://5cb5f0620.abacusai.cloud\n"
+            "===\nPost three, founder reflection.\nhttps://5cb5f0620.abacusai.cloud"
+        )
+
+
+def test_generate_marketing_content_creates_inactive_campaigns_and_drafts(
+    repo, sales_env, monkeypatch
+):
+    # The test DB persists for the whole session — clear any earlier copies so
+    # the "creates" assertion is about THIS run.
+    from app.db import get_connection
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'DELETE FROM "SalesCampaign" WHERE "name" LIKE %s',
+                ("%(agent-generated)",),
+            )
+        conn.commit()
+    fake_llm = _FakeLLM()
+    agent = SalesAgent(repo=repo, llm=fake_llm)  # type: ignore[arg-type]
+    result = agent.generate_marketing_content(trigger="test")
+    assert result["ran"] is True
+    created = {c["name"] for c in result["campaignsCreated"]}
+    assert "Free→Starter Nudge v2 (agent-generated)" in created
+    assert "Welcome Reply v2 (agent-generated)" in created
+    # Approval-queue philosophy: agent copy starts INACTIVE.
+    for c in result["campaignsCreated"]:
+        assert c["active"] is False
+    assert result["linkedinDrafts"] == 3
+    # Idempotent by name: a second run skips, never duplicates.
+    again = SalesAgent(repo=repo, llm=_FakeLLM()).generate_marketing_content()  # type: ignore[arg-type]
+    assert not again["campaignsCreated"]
+    assert set(again["campaignsSkipped"]) == created
+
+
+def test_generate_is_honest_when_llm_fails(repo, sales_env):
+    class _BrokenLLM:
+        def complete(self, *a, **k):
+            raise RuntimeError("provider down")
+
+    result = SalesAgent(repo=repo, llm=_BrokenLLM()).generate_marketing_content()  # type: ignore[arg-type]
+    assert result["ran"] is True
+    assert result["errors"]  # the failure is recorded, nothing fabricated
+    assert not result["campaignsCreated"]
+
+
+# ------------------------------------------------------------ brand documents
+def test_brand_documents_registry_lists_kinds_plans_and_assets(
+    client, admin_headers
+):
+    resp = client.get("/admin/sales-agent/brand/documents", headers=admin_headers)
+    assert resp.status_code == 200
+    data = resp.json()
+    kinds = {d["kind"] for d in data["documents"]}
+    assert kinds == {
+        "invoice", "auto_reply", "subscription_confirmed",
+        "payment_failed", "cancellation_confirmed",
+    }
+    plan_ids = {p["id"] for p in data["plans"]}
+    assert {"free", "starter", "pro", "power"} <= plan_ids
+    asset_paths = {a["path"] for a in data["assets"]}
+    assert "/ab-logo.png" in asset_paths
+    assert "/brand/aether-mark.svg" in asset_paths
+
+
+def test_brand_invoice_preview_uses_live_plan_price_and_gst(
+    client, admin_headers
+):
+    resp = client.get(
+        "/admin/sales-agent/brand/documents/invoice/preview"
+        "?plan=starter&interval=monthly",
+        headers=admin_headers,
+    )
+    assert resp.status_code == 200
+    html = resp.json()["html"]
+    # Live catalog price (Starter A$19/mo) + single-source GST split (÷11).
+    assert "A$19.00" in html
+    assert "A$1.73" in html      # GST component
+    assert "A$17.27" in html     # net
+    # Honest merge fields, correct brand name, no legacy brand.
+    assert "{{customer_name}}" in html
+    assert "Aether Career Job Agent" in html
+    assert "AB Entertainment" not in html
+
+
+def test_brand_document_preview_rejects_unknown_kind_and_plan(
+    client, admin_headers
+):
+    assert client.get(
+        "/admin/sales-agent/brand/documents/nope/preview",
+        headers=admin_headers,
+    ).status_code == 404
+    assert client.get(
+        "/admin/sales-agent/brand/documents/invoice/preview?plan=nope",
+        headers=admin_headers,
+    ).status_code == 404
+    assert client.get(
+        "/admin/sales-agent/brand/documents/invoice/preview?interval=weekly",
+        headers=admin_headers,
+    ).status_code == 422

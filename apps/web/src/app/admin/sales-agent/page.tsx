@@ -19,6 +19,9 @@ import { useCallback, useEffect, useState } from "react";
 import { AdminPageHeader } from "../../../components/admin/admin-shell";
 import { describeApiError } from "../../../lib/api/client";
 import {
+  fetchBrandDocumentPreview,
+  fetchBrandDocuments,
+  fetchSalesCampaignPreview,
   fetchSalesCampaigns,
   fetchSalesHealth,
   fetchSalesLeads,
@@ -27,8 +30,11 @@ import {
   fetchSalesSendingAccounts,
   runSalesAgentNow,
   setSalesSendingAccount,
+  generateSalesContent,
   updateSalesCampaign,
+  type BrandDocuments,
   type SalesCampaign,
+  type SalesGenerateResult,
   type SalesHealth,
   type SalesLeadList,
   type SalesOutreachList,
@@ -37,13 +43,14 @@ import {
   type SalesSendingAccount,
 } from "../../../lib/api/salesAgent";
 
-type Tab = "campaigns" | "leads" | "outreach" | "linkedin";
+type Tab = "campaigns" | "leads" | "outreach" | "linkedin" | "brand";
 
 const TABS: { key: Tab; label: string }[] = [
   { key: "campaigns", label: "Campaigns" },
   { key: "leads", label: "Leads" },
   { key: "outreach", label: "Outreach log" },
   { key: "linkedin", label: "LinkedIn drafts" },
+  { key: "brand", label: "Brand" },
 ];
 
 function fmtDate(iso: string | null | undefined): string {
@@ -100,12 +107,23 @@ export default function SalesAgentPage() {
   const [editBody, setEditBody] = useState("");
   const [saving, setSaving] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [previewing, setPreviewing] = useState<string | null>(null);
+  const [previewHtml, setPreviewHtml] = useState("");
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [genResult, setGenResult] = useState<SalesGenerateResult | null>(null);
+  const [brand, setBrand] = useState<BrandDocuments | null>(null);
+  const [brandKind, setBrandKind] = useState<string | null>(null);
+  const [brandHtml, setBrandHtml] = useState("");
+  const [brandLoading, setBrandLoading] = useState(false);
+  const [brandPlan, setBrandPlan] = useState("starter");
+  const [brandInterval, setBrandInterval] = useState("monthly");
 
   const load = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const [ov, he, ac, ca, le, ou, dr] = await Promise.all([
+      const [ov, he, ac, ca, le, ou, dr, bd] = await Promise.all([
         fetchSalesOverview(),
         fetchSalesHealth(),
         fetchSalesSendingAccounts(),
@@ -113,6 +131,7 @@ export default function SalesAgentPage() {
         fetchSalesLeads({ limit: 100 }),
         fetchSalesOutreach({ limit: 100 }),
         fetchSalesOutreach({ channel: "linkedin_draft", limit: 50 }),
+        fetchBrandDocuments(),
       ]);
       setOverview(ov);
       setHealth(he);
@@ -121,6 +140,7 @@ export default function SalesAgentPage() {
       setLeads(le);
       setOutreach(ou);
       setDrafts(dr);
+      setBrand(bd);
     } catch (err) {
       setError(describeApiError(err, "Failed to load the sales agent console."));
     } finally {
@@ -187,6 +207,70 @@ export default function SalesAgentPage() {
       }
     },
     [load],
+  );
+
+  const onPreviewCampaign = useCallback(
+    async (c: SalesCampaign) => {
+      if (previewing === c.id) {
+        setPreviewing(null);
+        setPreviewHtml("");
+        return;
+      }
+      setPreviewLoading(true);
+      setError("");
+      try {
+        const preview = await fetchSalesCampaignPreview(c.id);
+        setPreviewing(c.id);
+        setPreviewHtml(preview.html);
+      } catch (err) {
+        setError(describeApiError(err, "Could not render the branded preview."));
+      } finally {
+        setPreviewLoading(false);
+      }
+    },
+    [previewing],
+  );
+
+  const onGenerateContent = useCallback(async () => {
+    setGenerating(true);
+    setError("");
+    try {
+      const result = await generateSalesContent();
+      setGenResult(result);
+      await load();
+    } catch (err) {
+      setError(describeApiError(err, "Content generation failed."));
+    } finally {
+      setGenerating(false);
+    }
+  }, [load]);
+
+  const onPreviewBrandDoc = useCallback(
+    async (kind: string, plan?: string, interval?: string) => {
+      const nextPlan = plan ?? brandPlan;
+      const nextInterval = interval ?? brandInterval;
+      // Toggle off only when re-clicking the SAME kind with unchanged params.
+      if (brandKind === kind && plan === undefined && interval === undefined) {
+        setBrandKind(null);
+        setBrandHtml("");
+        return;
+      }
+      setBrandLoading(true);
+      setError("");
+      try {
+        const preview = await fetchBrandDocumentPreview(kind, {
+          plan: nextPlan,
+          interval: nextInterval,
+        });
+        setBrandKind(kind);
+        setBrandHtml(preview.html);
+      } catch (err) {
+        setError(describeApiError(err, "Could not render the document preview."));
+      } finally {
+        setBrandLoading(false);
+      }
+    },
+    [brandKind, brandPlan, brandInterval],
   );
 
   const copyDraft = useCallback(async (id: string, body: string | null) => {
@@ -376,11 +460,41 @@ export default function SalesAgentPage() {
       {/* -------------------------------------------------------- campaigns */}
       {tab === "campaigns" && !loading ? (
         <div className="space-y-3">
-          <p className="text-xs text-aether-muted-dim">
-            Templates use {"{{name}}"} placeholders. The compliance footer (sender identity +
-            unsubscribe instruction) is appended server-side on every send — it is not part of
-            the editable template and cannot be removed here.
-          </p>
+          <div className="flex flex-wrap items-center gap-3">
+            <p className="text-xs text-aether-muted-dim">
+              Templates use {"{{name}}"} placeholders. The compliance footer (sender identity +
+              unsubscribe instruction) is appended server-side on every send — it is not part of
+              the editable template and cannot be removed here.
+            </p>
+            <button
+              type="button"
+              onClick={() => void onGenerateContent()}
+              disabled={generating}
+              className="ml-auto rounded-md border border-amber-400/40 bg-amber-500/10 px-4 py-2 text-sm font-medium text-amber-200 hover:bg-amber-500/20 disabled:opacity-50"
+            >
+              {generating ? "Agent writing..." : "Generate content (agent)"}
+            </button>
+          </div>
+          {genResult ? (
+            <div className="rounded-md border border-white/10 bg-aether-bg-elevated p-3 text-xs text-aether-muted">
+              {genResult.ran ? (
+                <>
+                  <span className="text-aether-text">
+                    Agent run complete (model: {genResult.model ?? "?"}).
+                  </span>{" "}
+                  Campaigns created: {genResult.campaignsCreated.map((c) => c.name).join(", ") || "none"}
+                  {genResult.campaignsSkipped.length > 0
+                    ? ` (already existed: ${genResult.campaignsSkipped.join(", ")})`
+                    : ""}
+                  . LinkedIn drafts queued: {genResult.linkedinDrafts ?? 0}. New campaigns are
+                  created INACTIVE — review and activate them here.
+                  {genResult.errors.length > 0 ? ` Errors: ${genResult.errors.join("; ")}` : ""}
+                </>
+              ) : (
+                <>Generation did not run: {genResult.reason ?? "unknown reason"}</>
+              )}
+            </div>
+          ) : null}
           {campaigns.map((c) => (
             <div key={c.id} className="rounded-xl border border-white/10 bg-aether-bg-elevated p-4">
               <div className="flex flex-wrap items-center gap-3">
@@ -409,7 +523,25 @@ export default function SalesAgentPage() {
                 >
                   {editing === c.id ? "Cancel" : "Edit template"}
                 </button>
+                <button
+                  type="button"
+                  disabled={previewLoading}
+                  onClick={() => void onPreviewCampaign(c)}
+                  className="rounded-md border border-amber-400/40 px-3 py-1 text-xs text-amber-200 hover:bg-amber-500/10 disabled:opacity-50"
+                >
+                  {previewing === c.id ? "Hide preview" : "Branded preview"}
+                </button>
               </div>
+              {previewing === c.id && previewHtml ? (
+                <div className="mt-3 overflow-hidden rounded-md border border-white/10">
+                  <iframe
+                    title={`Branded preview — ${c.name}`}
+                    srcDoc={previewHtml}
+                    sandbox=""
+                    className="h-[560px] w-full border-0 bg-black"
+                  />
+                </div>
+              ) : null}
               {editing === c.id ? (
                 <div className="mt-3">
                   <textarea
@@ -554,6 +686,105 @@ export default function SalesAgentPage() {
               the linkedin_draft campaign is active.
             </p>
           ) : null}
+        </div>
+      ) : null}
+
+      {/* ------------------------------------------------------------ brand */}
+      {tab === "brand" && !loading ? (
+        <div className="space-y-4">
+          <p className="text-xs text-aether-muted-dim">
+            Brand-templated admin documents — invoice, auto-reply and Stripe-lifecycle email
+            templates — rendered from the same design system as the campaign emails. Prices and
+            GST come live from the Plan catalog; customer fields render as explicit{" "}
+            {"{{merge_field}}"} tokens, never fabricated sample data.
+          </p>
+
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="text-xs text-aether-muted">
+              Plan{" "}
+              <select
+                value={brandPlan}
+                onChange={(e) => {
+                  setBrandPlan(e.target.value);
+                  if (brandKind) void onPreviewBrandDoc(brandKind, e.target.value, brandInterval);
+                }}
+                className="ml-1 rounded-md border border-white/10 bg-aether-bg-elevated px-2 py-1 text-xs text-aether-text"
+              >
+                {(brand?.plans ?? []).map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name} — A${p.priceAudMonthly}/mo
+                    {p.priceAudAnnual != null ? ` · A$${p.priceAudAnnual}/yr` : ""}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="text-xs text-aether-muted">
+              Interval{" "}
+              <select
+                value={brandInterval}
+                onChange={(e) => {
+                  setBrandInterval(e.target.value);
+                  if (brandKind) void onPreviewBrandDoc(brandKind, brandPlan, e.target.value);
+                }}
+                className="ml-1 rounded-md border border-white/10 bg-aether-bg-elevated px-2 py-1 text-xs text-aether-text"
+              >
+                <option value="monthly">monthly</option>
+                <option value="annual">annual</option>
+              </select>
+            </label>
+          </div>
+
+          {(brand?.documents ?? []).map((d) => (
+            <div key={d.kind} className="rounded-xl border border-white/10 bg-aether-bg-elevated p-4">
+              <div className="flex flex-wrap items-center gap-3">
+                <div>
+                  <p className="font-medium text-aether-text">{d.title}</p>
+                  <p className="mt-0.5 text-xs text-aether-muted-dim">{d.description}</p>
+                </div>
+                <button
+                  type="button"
+                  disabled={brandLoading}
+                  onClick={() => void onPreviewBrandDoc(d.kind)}
+                  className="ml-auto shrink-0 rounded-md border border-amber-400/40 px-3 py-1 text-xs text-amber-200 hover:bg-amber-500/10 disabled:opacity-50"
+                >
+                  {brandKind === d.kind ? "Hide preview" : "Preview"}
+                </button>
+              </div>
+              {brandKind === d.kind && brandHtml ? (
+                <div className="mt-3 overflow-hidden rounded-md border border-white/10">
+                  <iframe
+                    title={`Document preview — ${d.title}`}
+                    srcDoc={brandHtml}
+                    sandbox=""
+                    className="h-[620px] w-full border-0 bg-black"
+                  />
+                </div>
+              ) : null}
+            </div>
+          ))}
+
+          <div className="rounded-xl border border-white/10 bg-aether-bg-elevated p-4">
+            <p className="font-medium text-aether-text">Brand assets</p>
+            <p className="mt-0.5 text-xs text-aether-muted-dim">
+              Static SVG/PNG assets served by the web app — right-click to save, or use the
+              path in emails and documents.
+            </p>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {(brand?.assets ?? []).map((a) => (
+                <div key={a.path} className="rounded-md border border-white/10 bg-aether-bg p-3">
+                  {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset preview, natural size */}
+                  <img
+                    src={a.path}
+                    alt={a.description}
+                    className="h-24 w-full rounded bg-black object-contain"
+                  />
+                  <p className="mt-2 text-xs font-medium text-aether-text">{a.name}</p>
+                  <p className="text-[11px] text-aether-muted-dim">{a.description}</p>
+                  <code className="mt-1 block break-all text-[11px] text-aether-muted">{a.path}</code>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       ) : null}
     </div>
