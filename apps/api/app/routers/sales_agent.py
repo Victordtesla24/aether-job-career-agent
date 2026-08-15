@@ -236,8 +236,11 @@ def brand_documents(_admin: AdminUser) -> dict[str, Any]:
             for p in plans
         ],
         "assets": [
-            {"name": "ab-logo.png", "path": "/ab-logo.png",
-             "description": "Primary brand logo (design-system PNG)."},
+            {"name": "aether-mark.png", "path": "/brand/aether-mark.png",
+             "description": "Primary Aether brand mark (design-system PNG, "
+                            "used in branded emails)."},
+            {"name": "aether-mark-512.png", "path": "/brand/aether-mark-512.png",
+             "description": "High-resolution 512px brand mark."},
             {"name": "aether-mark.svg", "path": "/brand/aether-mark.svg",
              "description": "Gold-gradient monogram mark on black."},
             {"name": "aether-wordmark.svg", "path": "/brand/aether-wordmark.svg",

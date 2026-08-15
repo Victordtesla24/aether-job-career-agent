@@ -17,6 +17,9 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { AdminPageHeader } from "../../../components/admin/admin-shell";
+// Aether Career Design System skin — every rule is scoped under
+// `.aether-ds-scope`, so ONLY this console is restyled (not the admin shell).
+import "./sales-agent.css";
 import { describeApiError } from "../../../lib/api/client";
 import {
   fetchBrandDocumentPreview,
@@ -61,33 +64,31 @@ function fmtDate(iso: string | null | undefined): string {
 
 function StatCard({ label, value, note }: { label: string; value: string; note?: string }) {
   return (
-    <div className="rounded-xl border border-white/10 bg-aether-bg-elevated p-4">
-      <p className="text-xs uppercase tracking-wide text-aether-muted-dim">{label}</p>
-      <p className="mt-1 text-2xl font-semibold text-aether-text">{value}</p>
-      {note ? <p className="mt-1 text-xs text-aether-muted-dim">{note}</p> : null}
+    <div className="sa-card-gilt p-4">
+      <p className="sa-eyebrow">{label}</p>
+      <p className="sa-figure mt-1">{value}</p>
+      {note ? <p className="sa-meta mt-1">{note}</p> : null}
     </div>
   );
 }
 
 function OutcomeBadge({ outcome }: { outcome: string | null }) {
   const o = outcome ?? "unknown";
-  const color =
+  // DS state law: ok green / info / warn copper / danger — gold is brand,
+  // never a state; sapphire marks agent-drafted work; no-data is neutral.
+  const variant =
     o === "sent"
-      ? "bg-emerald-500/15 text-emerald-300"
+      ? "sa-badge-ok"
       : o === "dry_run"
-        ? "bg-sky-500/15 text-sky-300"
+        ? "sa-badge-info"
         : o === "draft_queued"
-          ? "bg-indigo-500/15 text-indigo-300"
+          ? "sa-badge-sapphire"
           : o === "blocked" || o === "unsubscribed"
-            ? "bg-amber-500/15 text-amber-300"
+            ? "sa-badge-warn"
             : o === "error" || o === "bounced"
-              ? "bg-red-500/15 text-red-300"
-              : "bg-white/10 text-aether-muted";
-  return (
-    <span className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${color}`}>
-      {o}
-    </span>
-  );
+              ? "sa-badge-danger"
+              : "sa-badge-neutral";
+  return <span className={`sa-badge ${variant}`}>{o}</span>;
 }
 
 export default function SalesAgentPage() {
@@ -290,92 +291,81 @@ export default function SalesAgentPage() {
     health != null && (health.status === "stale" || health.status === "error");
 
   return (
-    <div>
-      <AdminPageHeader
-        title="Sales Agent"
-        subtitle="Native in-app growth agent — inbound leads, lifecycle emails, LinkedIn drafts. Every number below is a live database query."
-      />
+    <div className="aether-ds-scope">
+      <div className="sa-header">
+        <AdminPageHeader
+          title="Sales Agent"
+          subtitle="Native in-app growth agent — inbound leads, lifecycle emails, LinkedIn drafts. Every number below is a live database query."
+        />
+      </div>
 
-      {error ? <p className="mb-3 text-sm text-red-300">{error}</p> : null}
+      {error ? (
+        <p className="mb-3 text-sm" style={{ color: "var(--state-danger)" }}>
+          {error}
+        </p>
+      ) : null}
 
       {healthAlarm ? (
-        <div className="mb-4 rounded-xl border border-red-500/40 bg-red-500/10 p-4 text-sm text-red-200">
+        <div className="sa-alarm mb-4 p-4 text-sm">
           <p className="font-semibold">Sales agent scheduler alarm</p>
           <p className="mt-1">{health?.detail}</p>
         </div>
       ) : null}
 
       {/* Health / control strip */}
-      <div className="mb-5 rounded-xl border border-white/10 bg-aether-bg-elevated p-4">
+      <div className="sa-card mb-5 p-4">
         <div className="flex flex-wrap items-center gap-3">
           <span
-            className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
+            className={`sa-badge ${
               health?.status === "ok"
-                ? "bg-emerald-500/15 text-emerald-300"
+                ? "sa-badge-ok"
                 : healthAlarm
-                  ? "bg-red-500/15 text-red-300"
-                  : "bg-white/10 text-aether-muted"
+                  ? "sa-badge-danger"
+                  : "sa-badge-neutral"
             }`}
           >
             {health ? `scheduler: ${health.status}` : "scheduler: …"}
           </span>
-          <span
-            className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
-              health?.enabled ? "bg-emerald-500/15 text-emerald-300" : "bg-white/10 text-aether-muted"
-            }`}
-          >
+          <span className={`sa-badge ${health?.enabled ? "sa-badge-ok" : "sa-badge-neutral"}`}>
             {health?.enabled ? "enabled" : "disabled"}
           </span>
-          <span
-            className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${
-              health?.dryRun ? "bg-sky-500/15 text-sky-300" : "bg-amber-500/15 text-amber-300"
-            }`}
-          >
+          <span className={`sa-badge ${health?.dryRun ? "sa-badge-info" : "sa-badge-warn"}`}>
             {health?.dryRun ? "shadow mode (dry-run — no email leaves)" : "LIVE sending"}
           </span>
-          <span className="text-xs text-aether-muted-dim">
+          <span className="sa-meta">
             Last run: {fmtDate(health?.lastRunAt)} · fires every {health?.intervalMinutes ?? 30} min
           </span>
           <button
             type="button"
             onClick={() => void onRunNow()}
             disabled={running}
-            className="ml-auto rounded-md bg-aether-indigo px-4 py-2 text-sm font-medium text-white hover:bg-aether-indigo/90 disabled:opacity-50"
+            className="sa-btn-primary ml-auto px-4 py-2 text-sm"
           >
             {running ? "Running…" : "Run now"}
           </button>
         </div>
-        {health?.detail ? (
-          <p className="mt-2 text-xs text-aether-muted-dim">{health.detail}</p>
-        ) : null}
+        {health?.detail ? <p className="sa-meta mt-2">{health.detail}</p> : null}
 
         {/* Sending accounts */}
-        <div className="mt-3 border-t border-white/10 pt-3">
-          <p className="text-xs uppercase tracking-wide text-aether-muted-dim">
+        <div className="sa-hairline-top mt-3 pt-3">
+          <p className="sa-eyebrow">
             Sending Gmail accounts (the agent polls + sends ONLY from flagged accounts)
           </p>
           {accounts.length === 0 ? (
-            <p className="mt-2 text-sm text-aether-muted">
+            <p className="mt-2 text-sm" style={{ color: "var(--fg-2)" }}>
               No Gmail accounts connected for the admin user.
             </p>
           ) : (
             <ul className="mt-2 flex flex-wrap gap-2">
               {accounts.map((a) => (
-                <li
-                  key={a.id}
-                  className="flex items-center gap-2 rounded-md border border-white/10 bg-aether-bg px-3 py-2 text-sm"
-                >
-                  <span className="text-aether-text">{a.accountEmail ?? a.id}</span>
-                  {a.isPrimary ? (
-                    <span className="text-xs text-aether-muted-dim">(primary)</span>
-                  ) : null}
+                <li key={a.id} className="sa-well flex items-center gap-2 px-3 py-2 text-sm">
+                  <span style={{ color: "var(--fg-1)" }}>{a.accountEmail ?? a.id}</span>
+                  {a.isPrimary ? <span className="sa-meta">(primary)</span> : null}
                   <button
                     type="button"
                     onClick={() => void onToggleAccount(a)}
-                    className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                      a.usedForSalesAgent
-                        ? "bg-emerald-500/15 text-emerald-300"
-                        : "bg-white/10 text-aether-muted hover:bg-white/20"
+                    className={`sa-badge ${
+                      a.usedForSalesAgent ? "sa-badge-ok" : "sa-badge-neutral"
                     }`}
                   >
                     {a.usedForSalesAgent ? "sales sending: ON" : "sales sending: off"}
@@ -385,7 +375,7 @@ export default function SalesAgentPage() {
             </ul>
           )}
           {health && health.sendingAccounts === 0 ? (
-            <p className="mt-2 text-xs text-amber-300">
+            <p className="mt-2 text-xs" style={{ color: "var(--state-warn)" }}>
               No account is flagged — the agent honestly no-ops inbound polling and sending
               until one is enabled above.
             </p>
@@ -393,8 +383,10 @@ export default function SalesAgentPage() {
         </div>
 
         {runResult ? (
-          <div className="mt-3 rounded-md border border-white/10 bg-aether-bg p-3 text-xs text-aether-muted">
-            <p className="font-medium text-aether-text">Last manual run</p>
+          <div className="sa-well mt-3 p-3 text-xs" style={{ color: "var(--fg-2)" }}>
+            <p className="font-medium" style={{ color: "var(--fg-1)" }}>
+              Last manual run
+            </p>
             <pre className="mt-1 overflow-x-auto whitespace-pre-wrap">
               {JSON.stringify(runResult, null, 2)}
             </pre>
@@ -444,24 +436,24 @@ export default function SalesAgentPage() {
             key={t.key}
             type="button"
             onClick={() => setTab(t.key)}
-            className={`rounded-md px-4 py-2 text-sm font-medium ${
-              tab === t.key
-                ? "bg-aether-indigo text-white"
-                : "border border-white/10 bg-aether-bg-elevated text-aether-muted hover:text-aether-text"
-            }`}
+            className={`px-4 py-2 text-sm ${tab === t.key ? "sa-tab-active" : "sa-tab"}`}
           >
             {t.label}
           </button>
         ))}
       </div>
 
-      {loading ? <p className="text-sm text-aether-muted">Loading…</p> : null}
+      {loading ? (
+        <p className="text-sm" style={{ color: "var(--fg-2)" }}>
+          Loading…
+        </p>
+      ) : null}
 
       {/* -------------------------------------------------------- campaigns */}
       {tab === "campaigns" && !loading ? (
         <div className="space-y-3">
           <div className="flex flex-wrap items-center gap-3">
-            <p className="text-xs text-aether-muted-dim">
+            <p className="sa-meta">
               Templates use {"{{name}}"} placeholders. The compliance footer (sender identity +
               unsubscribe instruction) is appended server-side on every send — it is not part of
               the editable template and cannot be removed here.
@@ -470,16 +462,16 @@ export default function SalesAgentPage() {
               type="button"
               onClick={() => void onGenerateContent()}
               disabled={generating}
-              className="ml-auto rounded-md border border-amber-400/40 bg-amber-500/10 px-4 py-2 text-sm font-medium text-amber-200 hover:bg-amber-500/20 disabled:opacity-50"
+              className="sa-btn-sapphire ml-auto px-4 py-2 text-sm font-medium"
             >
               {generating ? "Agent writing..." : "Generate content (agent)"}
             </button>
           </div>
           {genResult ? (
-            <div className="rounded-md border border-white/10 bg-aether-bg-elevated p-3 text-xs text-aether-muted">
+            <div className="sa-card p-3 text-xs" style={{ color: "var(--fg-2)" }}>
               {genResult.ran ? (
                 <>
-                  <span className="text-aether-text">
+                  <span style={{ color: "var(--fg-1)" }}>
                     Agent run complete (model: {genResult.model ?? "?"}).
                   </span>{" "}
                   Campaigns created: {genResult.campaignsCreated.map((c) => c.name).join(", ") || "none"}
@@ -496,20 +488,14 @@ export default function SalesAgentPage() {
             </div>
           ) : null}
           {campaigns.map((c) => (
-            <div key={c.id} className="rounded-xl border border-white/10 bg-aether-bg-elevated p-4">
+            <div key={c.id} className="sa-card p-4">
               <div className="flex flex-wrap items-center gap-3">
-                <p className="font-medium text-aether-text">{c.name}</p>
-                <span className="rounded-full bg-white/10 px-2 py-0.5 text-xs text-aether-muted">
-                  {c.type}
-                </span>
+                <p className="sa-card-title">{c.name}</p>
+                <span className="sa-badge sa-badge-neutral">{c.type}</span>
                 <button
                   type="button"
                   onClick={() => void onToggleCampaign(c)}
-                  className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                    c.active
-                      ? "bg-emerald-500/15 text-emerald-300"
-                      : "bg-white/10 text-aether-muted hover:bg-white/20"
-                  }`}
+                  className={`sa-badge ${c.active ? "sa-badge-ok" : "sa-badge-neutral"}`}
                 >
                   {c.active ? "active" : "inactive"}
                 </button>
@@ -519,7 +505,7 @@ export default function SalesAgentPage() {
                     setEditing(editing === c.id ? null : c.id);
                     setEditBody(c.templateBody);
                   }}
-                  className="ml-auto rounded-md border border-white/10 px-3 py-1 text-xs text-aether-muted hover:text-aether-text"
+                  className="sa-btn-ghost ml-auto px-3 py-1 text-xs"
                 >
                   {editing === c.id ? "Cancel" : "Edit template"}
                 </button>
@@ -527,18 +513,25 @@ export default function SalesAgentPage() {
                   type="button"
                   disabled={previewLoading}
                   onClick={() => void onPreviewCampaign(c)}
-                  className="rounded-md border border-amber-400/40 px-3 py-1 text-xs text-amber-200 hover:bg-amber-500/10 disabled:opacity-50"
+                  className="sa-btn-gilt px-3 py-1 text-xs"
                 >
                   {previewing === c.id ? "Hide preview" : "Branded preview"}
                 </button>
               </div>
               {previewing === c.id && previewHtml ? (
-                <div className="mt-3 overflow-hidden rounded-md border border-white/10">
+                <div
+                  className="mt-3 overflow-hidden"
+                  style={{
+                    borderRadius: "var(--radius-lg)",
+                    border: "1px solid var(--gold-border)",
+                  }}
+                >
                   <iframe
                     title={`Branded preview — ${c.name}`}
                     srcDoc={previewHtml}
                     sandbox=""
-                    className="h-[560px] w-full border-0 bg-black"
+                    className="h-[560px] w-full border-0"
+                    style={{ background: "var(--ink-0)" }}
                   />
                 </div>
               ) : null}
@@ -548,19 +541,22 @@ export default function SalesAgentPage() {
                     value={editBody}
                     onChange={(e) => setEditBody(e.target.value)}
                     rows={10}
-                    className="w-full rounded-md border border-white/10 bg-aether-bg p-3 font-mono text-xs text-aether-text"
+                    className="w-full p-3 text-xs"
                   />
                   <button
                     type="button"
                     disabled={saving || !editBody.trim()}
                     onClick={() => void onSaveCampaign(c)}
-                    className="mt-2 rounded-md bg-aether-indigo px-4 py-2 text-sm font-medium text-white hover:bg-aether-indigo/90 disabled:opacity-50"
+                    className="sa-btn-primary mt-2 px-4 py-2 text-sm"
                   >
                     {saving ? "Saving…" : "Save template"}
                   </button>
                 </div>
               ) : (
-                <pre className="mt-3 max-h-48 overflow-y-auto whitespace-pre-wrap rounded-md bg-aether-bg p-3 text-xs text-aether-muted">
+                <pre
+                  className="sa-well mt-3 max-h-48 overflow-y-auto whitespace-pre-wrap p-3 text-xs"
+                  style={{ color: "var(--fg-2)" }}
+                >
                   {c.templateBody}
                 </pre>
               )}
@@ -571,9 +567,9 @@ export default function SalesAgentPage() {
 
       {/* ------------------------------------------------------------ leads */}
       {tab === "leads" && !loading ? (
-        <div className="overflow-x-auto rounded-xl border border-white/10">
-          <table className="min-w-full text-sm">
-            <thead className="bg-aether-bg-elevated text-left text-xs uppercase tracking-wide text-aether-muted-dim">
+        <div className="sa-table-wrap">
+          <table className="sa-table min-w-full text-sm">
+            <thead>
               <tr>
                 <th className="px-4 py-3">Email</th>
                 <th className="px-4 py-3">Name</th>
@@ -583,26 +579,28 @@ export default function SalesAgentPage() {
                 <th className="px-4 py-3">Created</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-white/5">
+            <tbody>
               {(leads?.leads ?? []).map((l) => (
-                <tr key={l.id} className="hover:bg-white/5">
-                  <td className="px-4 py-3 text-aether-text">{l.email}</td>
-                  <td className="px-4 py-3 text-aether-muted">{l.name ?? "—"}</td>
-                  <td className="px-4 py-3 text-aether-muted">{l.source}</td>
+                <tr key={l.id}>
+                  <td className="px-4 py-3" style={{ color: "var(--fg-1)" }}>{l.email}</td>
+                  <td className="px-4 py-3" style={{ color: "var(--fg-2)" }}>{l.name ?? "—"}</td>
+                  <td className="px-4 py-3" style={{ color: "var(--fg-2)" }}>{l.source}</td>
                   <td className="px-4 py-3">
-                    <span title={l.consentEvidence} className="text-aether-muted">
+                    <span title={l.consentEvidence} style={{ color: "var(--fg-2)" }}>
                       {l.consentType}
                     </span>
                   </td>
                   <td className="px-4 py-3">
                     <OutcomeBadge outcome={l.status} />
                   </td>
-                  <td className="px-4 py-3 text-aether-muted">{fmtDate(l.createdAt)}</td>
+                  <td className="px-4 py-3" style={{ color: "var(--fg-2)" }}>
+                    {fmtDate(l.createdAt)}
+                  </td>
                 </tr>
               ))}
               {(leads?.leads ?? []).length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-6 text-center text-aether-muted">
+                  <td colSpan={6} className="px-4 py-6 text-center" style={{ color: "var(--fg-2)" }}>
                     No leads yet. Leads are only ever created from ratified consent signals
                     (inbound email, existing accounts) — never from guessed addresses.
                   </td>
@@ -615,9 +613,9 @@ export default function SalesAgentPage() {
 
       {/* --------------------------------------------------------- outreach */}
       {tab === "outreach" && !loading ? (
-        <div className="overflow-x-auto rounded-xl border border-white/10">
-          <table className="min-w-full text-sm">
-            <thead className="bg-aether-bg-elevated text-left text-xs uppercase tracking-wide text-aether-muted-dim">
+        <div className="sa-table-wrap">
+          <table className="sa-table min-w-full text-sm">
+            <thead>
               <tr>
                 <th className="px-4 py-3">When</th>
                 <th className="px-4 py-3">Channel</th>
@@ -627,24 +625,28 @@ export default function SalesAgentPage() {
                 <th className="px-4 py-3">Detail</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-white/5">
+            <tbody>
               {(outreach?.entries ?? []).map((o) => (
-                <tr key={o.id} className="hover:bg-white/5">
-                  <td className="px-4 py-3 text-aether-muted">{fmtDate(o.createdAt)}</td>
-                  <td className="px-4 py-3 text-aether-muted">{o.channel}</td>
-                  <td className="px-4 py-3 text-aether-text">{o.recipient ?? "—"}</td>
-                  <td className="px-4 py-3 text-aether-muted" title={o.body ?? undefined}>
+                <tr key={o.id}>
+                  <td className="px-4 py-3" style={{ color: "var(--fg-2)" }}>
+                    {fmtDate(o.createdAt)}
+                  </td>
+                  <td className="px-4 py-3" style={{ color: "var(--fg-2)" }}>{o.channel}</td>
+                  <td className="px-4 py-3" style={{ color: "var(--fg-1)" }}>
+                    {o.recipient ?? "—"}
+                  </td>
+                  <td className="px-4 py-3" style={{ color: "var(--fg-2)" }} title={o.body ?? undefined}>
                     {o.subject ?? "—"}
                   </td>
                   <td className="px-4 py-3">
                     <OutcomeBadge outcome={o.outcome} />
                   </td>
-                  <td className="px-4 py-3 text-xs text-aether-muted-dim">{o.detail ?? "—"}</td>
+                  <td className="sa-meta px-4 py-3">{o.detail ?? "—"}</td>
                 </tr>
               ))}
               {(outreach?.entries ?? []).length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-6 text-center text-aether-muted">
+                  <td colSpan={6} className="px-4 py-6 text-center" style={{ color: "var(--fg-2)" }}>
                     No outreach recorded yet. In shadow mode, would-be sends appear here as
                     dry_run rows with the full email body.
                   </td>
@@ -658,30 +660,33 @@ export default function SalesAgentPage() {
       {/* --------------------------------------------------------- linkedin */}
       {tab === "linkedin" && !loading ? (
         <div className="space-y-3">
-          <p className="text-xs text-aether-muted-dim">
+          <p className="sa-meta">
             Drafts only — LinkedIn&apos;s Terms prohibit automated posting, so there is no
             &quot;post&quot; button anywhere. Copy a draft and post it manually.
           </p>
           {(drafts?.entries ?? []).map((d) => (
-            <div key={d.id} className="rounded-xl border border-white/10 bg-aether-bg-elevated p-4">
+            <div key={d.id} className="sa-card p-4">
               <div className="flex items-center gap-3">
                 <OutcomeBadge outcome={d.outcome} />
-                <span className="text-xs text-aether-muted-dim">{fmtDate(d.createdAt)}</span>
+                <span className="sa-meta">{fmtDate(d.createdAt)}</span>
                 <button
                   type="button"
                   onClick={() => void copyDraft(d.id, d.body)}
-                  className="ml-auto rounded-md border border-white/10 px-3 py-1 text-xs text-aether-muted hover:text-aether-text"
+                  className="sa-btn-ghost ml-auto px-3 py-1 text-xs"
                 >
                   {copiedId === d.id ? "Copied ✓" : "Copy draft"}
                 </button>
               </div>
-              <pre className="mt-3 whitespace-pre-wrap rounded-md bg-aether-bg p-3 text-xs text-aether-muted">
+              <pre
+                className="sa-well mt-3 whitespace-pre-wrap p-3 text-xs"
+                style={{ color: "var(--fg-2)" }}
+              >
                 {d.body ?? d.detail ?? "(no body)"}
               </pre>
             </div>
           ))}
           {(drafts?.entries ?? []).length === 0 ? (
-            <p className="rounded-xl border border-white/10 bg-aether-bg-elevated p-6 text-center text-sm text-aether-muted">
+            <p className="sa-card p-6 text-center text-sm" style={{ color: "var(--fg-2)" }}>
               No LinkedIn drafts queued yet — the agent queues at most one per 24 hours when
               the linkedin_draft campaign is active.
             </p>
@@ -692,7 +697,7 @@ export default function SalesAgentPage() {
       {/* ------------------------------------------------------------ brand */}
       {tab === "brand" && !loading ? (
         <div className="space-y-4">
-          <p className="text-xs text-aether-muted-dim">
+          <p className="sa-meta">
             Brand-templated admin documents — invoice, auto-reply and Stripe-lifecycle email
             templates — rendered from the same design system as the campaign emails. Prices and
             GST come live from the Plan catalog; customer fields render as explicit{" "}
@@ -700,7 +705,7 @@ export default function SalesAgentPage() {
           </p>
 
           <div className="flex flex-wrap items-center gap-3">
-            <label className="text-xs text-aether-muted">
+            <label className="text-xs" style={{ color: "var(--fg-2)" }}>
               Plan{" "}
               <select
                 value={brandPlan}
@@ -708,7 +713,7 @@ export default function SalesAgentPage() {
                   setBrandPlan(e.target.value);
                   if (brandKind) void onPreviewBrandDoc(brandKind, e.target.value, brandInterval);
                 }}
-                className="ml-1 rounded-md border border-white/10 bg-aether-bg-elevated px-2 py-1 text-xs text-aether-text"
+                className="ml-1 px-2 py-1 text-xs"
               >
                 {(brand?.plans ?? []).map((p) => (
                   <option key={p.id} value={p.id}>
@@ -718,7 +723,7 @@ export default function SalesAgentPage() {
                 ))}
               </select>
             </label>
-            <label className="text-xs text-aether-muted">
+            <label className="text-xs" style={{ color: "var(--fg-2)" }}>
               Interval{" "}
               <select
                 value={brandInterval}
@@ -726,7 +731,7 @@ export default function SalesAgentPage() {
                   setBrandInterval(e.target.value);
                   if (brandKind) void onPreviewBrandDoc(brandKind, brandPlan, e.target.value);
                 }}
-                className="ml-1 rounded-md border border-white/10 bg-aether-bg-elevated px-2 py-1 text-xs text-aether-text"
+                className="ml-1 px-2 py-1 text-xs"
               >
                 <option value="monthly">monthly</option>
                 <option value="annual">annual</option>
@@ -735,52 +740,62 @@ export default function SalesAgentPage() {
           </div>
 
           {(brand?.documents ?? []).map((d) => (
-            <div key={d.kind} className="rounded-xl border border-white/10 bg-aether-bg-elevated p-4">
+            <div key={d.kind} className="sa-card p-4">
               <div className="flex flex-wrap items-center gap-3">
                 <div>
-                  <p className="font-medium text-aether-text">{d.title}</p>
-                  <p className="mt-0.5 text-xs text-aether-muted-dim">{d.description}</p>
+                  <p className="sa-card-title">{d.title}</p>
+                  <p className="sa-meta mt-0.5">{d.description}</p>
                 </div>
                 <button
                   type="button"
                   disabled={brandLoading}
                   onClick={() => void onPreviewBrandDoc(d.kind)}
-                  className="ml-auto shrink-0 rounded-md border border-amber-400/40 px-3 py-1 text-xs text-amber-200 hover:bg-amber-500/10 disabled:opacity-50"
+                  className="sa-btn-gilt ml-auto shrink-0 px-3 py-1 text-xs"
                 >
                   {brandKind === d.kind ? "Hide preview" : "Preview"}
                 </button>
               </div>
               {brandKind === d.kind && brandHtml ? (
-                <div className="mt-3 overflow-hidden rounded-md border border-white/10">
+                <div
+                  className="mt-3 overflow-hidden"
+                  style={{
+                    borderRadius: "var(--radius-lg)",
+                    border: "1px solid var(--gold-border)",
+                  }}
+                >
                   <iframe
                     title={`Document preview — ${d.title}`}
                     srcDoc={brandHtml}
                     sandbox=""
-                    className="h-[620px] w-full border-0 bg-black"
+                    className="h-[620px] w-full border-0"
+                    style={{ background: "var(--ink-0)" }}
                   />
                 </div>
               ) : null}
             </div>
           ))}
 
-          <div className="rounded-xl border border-white/10 bg-aether-bg-elevated p-4">
-            <p className="font-medium text-aether-text">Brand assets</p>
-            <p className="mt-0.5 text-xs text-aether-muted-dim">
+          <div className="sa-card p-4">
+            <p className="sa-card-title">Brand assets</p>
+            <p className="sa-meta mt-0.5">
               Static SVG/PNG assets served by the web app — right-click to save, or use the
               path in emails and documents.
             </p>
             <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {(brand?.assets ?? []).map((a) => (
-                <div key={a.path} className="rounded-md border border-white/10 bg-aether-bg p-3">
+                <div key={a.path} className="sa-well p-3">
                   {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset preview, natural size */}
                   <img
                     src={a.path}
                     alt={a.description}
-                    className="h-24 w-full rounded bg-black object-contain"
+                    className="h-24 w-full object-contain"
+                    style={{ background: "var(--ink-0)", borderRadius: "var(--radius-md)" }}
                   />
-                  <p className="mt-2 text-xs font-medium text-aether-text">{a.name}</p>
-                  <p className="text-[11px] text-aether-muted-dim">{a.description}</p>
-                  <code className="mt-1 block break-all text-[11px] text-aether-muted">{a.path}</code>
+                  <p className="mt-2 text-xs font-medium" style={{ color: "var(--fg-1)" }}>
+                    {a.name}
+                  </p>
+                  <p className="sa-meta">{a.description}</p>
+                  <code className="sa-meta mt-1 block break-all">{a.path}</code>
                 </div>
               ))}
             </div>

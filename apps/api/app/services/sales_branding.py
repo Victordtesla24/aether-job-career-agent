@@ -1,19 +1,20 @@
 """Brand-templated email rendering for the Sales Agent — the Aether Career
-Job Agent brand, built from the uploaded design-system tokens
-(``~/ab_design_system``) translated into EMAIL-CLIENT-SAFE HTML. The product
-name rendered in emails is ALWAYS "Aether Career Job Agent" — the design
-system contributes colors/type/logo only, never its own name.
+Job Agent brand, built from the definitive **Aether Career Design System**
+tokens (``~/aether_design_system``) translated into EMAIL-CLIENT-SAFE HTML.
+The product name rendered in emails is ALWAYS "Aether Career Job Agent" —
+the design system contributes colors/type/logo only, never its own name.
 
 Email clients strip ``<style>`` blocks, ignore web fonts and choke on flexbox,
 so every rule here is inlined and the layout is a centred single-column table.
-Design-system tokens used (from ``colors_and_type.css``):
+Design-system tokens used (from ``tokens/colors.css`` + ``typography.css``):
 
-* backgrounds ``#0A0A0A`` (page) / ``#111111`` (card) / ``#070707`` (footer)
-* gold palette ``#C9A84C`` (signature) · ``#D4B65C`` light · ``#B0923F`` dark
-  · ``#D4AF37`` accessible-on-black · signature gradient
-  ``135deg #B0923F → #C9A84C → #D4B65C``
-* text: white at 1.0 / 0.65 / 0.5 opacity (fg-1/2/3), eyebrow letter-spacing
-  ``.25em`` uppercase
+* grounds ``#08080A`` (--ink-0, page) / ``#0F0F12`` (--ink-1, card) /
+  ``#16161A`` (--ink-2, raised)
+* gilt palette ``#C9A84C`` (--gold) · ``#D4B65C`` light · ``#E8D5A3`` pale
+  · ``#B0923F`` dark · gilt gradient
+  ``96deg #B0923F → #C9A84C 38% → #E8D5A3 62% → #C9A84C``
+* text: warm parchment ``#F5F1E8`` (--fg-1) and its 0.62 / 0.46 alphas
+  (--fg-2/--fg-3) — never pure white; gold hairline ``rgba(201,168,76,.20)``
 * type: display 'AB Marquee' → Playfair Display → Georgia serif; body
   'AB Sans' → DM Sans → Helvetica sans (web fonts DON'T load in most email
   clients — the serif/sans system fallbacks ARE the design here)
@@ -30,27 +31,31 @@ from __future__ import annotations
 import html as _html
 import os
 
-#: Design-system tokens (colors_and_type.css) — visual tokens only.
+#: Aether Career Design System tokens (tokens/colors.css) — visual only.
 BRAND = {
-    "bg": "#0A0A0A",
-    "surface": "#111111",
-    "surface2": "#1A1A1A",
-    "footerBg": "#070707",
-    "gold": "#C9A84C",
-    "goldLight": "#D4B65C",
-    "goldDark": "#B0923F",
-    "goldAccessible": "#D4AF37",
-    "cream": "#FDF8F1",
-    "fg1": "#FFFFFF",
-    "fg2": "rgba(255,255,255,0.65)",
-    "fg3": "rgba(255,255,255,0.50)",
-    "hairline": "rgba(201,168,76,0.25)",
-    "cardBorder": "rgba(201,168,76,0.18)",
+    "bg": "#08080A",  # --ink-0 page ground
+    "surface": "#0F0F12",  # --ink-1 card
+    "surface2": "#16161A",  # --ink-2 raised
+    "footerBg": "#08080A",  # footer sits back on the page ground
+    "gold": "#C9A84C",  # --gold signature gilt
+    "goldLight": "#D4B65C",  # --gold-light
+    "goldPale": "#E8D5A3",  # --gold-pale (gradient high note)
+    "goldDark": "#B0923F",  # --gold-dark
+    "goldAccessible": "#C9A84C",  # gold reads AA on the ink grounds
+    "cream": "#F5F1E8",  # --fg-1 warm parchment
+    "fg1": "#F5F1E8",  # --fg-1 — never pure #FFF
+    "fg2": "rgba(245,241,232,0.62)",  # --fg-2
+    "fg3": "rgba(245,241,232,0.46)",  # --fg-3
+    "hairline": "rgba(201,168,76,0.20)",  # --gold-border
+    "cardBorder": "rgba(201,168,76,0.20)",  # --gold-border
     # Email-safe font stacks — the DS web fonts never load in email clients,
     # so the stacks lead with them but are DESIGNED around the fallbacks.
     "displayFont": "'AB Marquee','Playfair Display',Georgia,'Times New Roman',serif",
     "bodyFont": "'AB Sans','DM Sans',Helvetica,Arial,sans-serif",
-    "gradient": "linear-gradient(135deg,#B0923F 0%,#C9A84C 50%,#D4B65C 100%)",
+    # Gilt gradient — the DS's single "gilded gesture", 96deg four-stop.
+    "gradient": (
+        "linear-gradient(96deg,#B0923F 0%,#C9A84C 38%,#E8D5A3 62%,#C9A84C 100%)"
+    ),
 }
 
 #: The compliance footer separator written by ``append_compliance_footer``.
@@ -58,12 +63,13 @@ _FOOTER_SEPARATOR = "\n\n--\n"
 
 
 def brand_logo_url() -> str:
-    """Absolute production URL of the brand logo (served by the web app from
-    ``apps/web/public/ab-logo.png``)."""
+    """Absolute production URL of the Aether brand mark (served by the web app
+    from ``apps/web/public/brand/aether-mark.png`` — the design system's
+    canonical raster mark)."""
     base = (
         os.environ.get("AETHER_PUBLIC_URL") or "https://5cb5f0620.abacusai.cloud"
     ).rstrip("/")
-    return f"{base}/ab-logo.png"
+    return f"{base}/brand/aether-mark.png"
 
 
 def _paragraphs_html(text: str, color: str, size: str = "15px") -> str:

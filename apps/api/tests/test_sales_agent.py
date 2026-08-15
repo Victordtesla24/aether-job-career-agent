@@ -566,7 +566,7 @@ def test_brand_documents_registry_lists_kinds_plans_and_assets(
     plan_ids = {p["id"] for p in data["plans"]}
     assert {"free", "starter", "pro", "power"} <= plan_ids
     asset_paths = {a["path"] for a in data["assets"]}
-    assert "/ab-logo.png" in asset_paths
+    assert "/brand/aether-mark.png" in asset_paths
     assert "/brand/aether-mark.svg" in asset_paths
 
 
