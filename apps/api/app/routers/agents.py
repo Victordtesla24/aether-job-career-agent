@@ -2038,7 +2038,16 @@ def _agent_callable(
     if name in ("storyExtractor", "story-extractor"):
         from app.agents.story_extractor import StoryExtractorAgent
 
-        return "storyExtractor", (lambda: StoryExtractorAgent().run(user_id))
+        # B1c (ORCH-B1-BLUEPRINT-2026-08-14.md §4.3): storyExtractor was the
+        # one metered T2 content producer receiving no knobs at all — since
+        # ``_dispatch`` stamps the resolved policy onto the run regardless,
+        # every prior run recorded a ``policyTier`` it never obeyed. Matches
+        # tailor/coverLetter's shape exactly; ``{}`` degrades to today's
+        # shipped defaults.
+        knobs = _policy_knobs(params)
+        return "storyExtractor", (
+            lambda: StoryExtractorAgent().run(user_id, policy_knobs=knobs)
+        )
     if name in ("matcher", "job-matching", "jobMatching"):
         from app.agents.matcher_agent import MatcherAgent
 

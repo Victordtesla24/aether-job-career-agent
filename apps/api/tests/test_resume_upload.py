@@ -185,7 +185,9 @@ def test_upload_still_swallows_genuine_extractor_error_for_subscriber(
     monkeypatch.setenv("AETHER_REQUIRE_PAID_SUBSCRIPTION", "true")
     _set_plan(test_user_id, "pro", "active")
 
-    def _boom(self, user_id):
+    def _boom(self, user_id, **kwargs):
+        # B1c: the real binding now passes policy_knobs=... (matching
+        # tailor/coverLetter's shape) — this double must tolerate it.
         raise RuntimeError("synthetic extractor failure")
 
     monkeypatch.setattr(StoryExtractorAgent, "run", _boom)

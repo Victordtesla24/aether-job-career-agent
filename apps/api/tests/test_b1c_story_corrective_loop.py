@@ -383,16 +383,13 @@ class TestStrictnessPolicy:
         self, extractor, user_id
     ) -> None:
         """The ratchet property: anything strict accepts, standard also
-        accepts (never the reverse)."""
+        accepts (never the reverse). ``_story()`` is fully evidenced and well
+        over both tiers' STAR-body floors, so BOTH tiers must accept it."""
         agent, _ = extractor([[_story()]])
         strict_result = agent.run(
             user_id, policy_knobs={"storyEvidenceStrictness": "strict"}
         )
-        assert strict_result.created in (0, 1)
-        if strict_result.created == 1:
-            agent2, _ = extractor([[_story()]])
-            standard_result = agent2.run(user_id + "b", policy_knobs={})
-            assert standard_result.created == 1
+        assert strict_result.created == 1, strict_result.dropped
 
 
 # ---------------------------------------------------------------------------
