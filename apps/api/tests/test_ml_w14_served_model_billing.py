@@ -392,10 +392,14 @@ def test_rescued_run_does_not_consume_the_usd_spend_cap(
 def test_unrescued_run_records_exactly_what_it_records_today(
     monkeypatch, openrouter_env, tmp_path, client, auth_headers, test_user_id
 ):
-    """PIN (passes BEFORE and AFTER): when the intended model serves the run,
-    the recorded output and its cost are byte-for-byte today's — same key set,
-    same model stamp, no ``requestedModel`` key, and cost still computed from
-    the intended model's price by the unchanged formula."""
+    """PIN: when the intended model serves the run, the recorded cost and model
+    stamp are unchanged and no ``requestedModel`` key appears.
+
+    Key-set UPDATE per Architect decision audit wf_9a87f76f-eaa Track E (D5):
+    every run that actually reached an LLM now ALSO carries the two additive
+    disclosure keys ``servedModel`` + ``servedProvider`` — including this
+    no-substitution case, which previously disclosed nothing. The exact-key-set
+    assertion is kept (equally strict), extended by exactly those two keys."""
     from app.routers.agents import _price_for
 
     _set_is_admin(test_user_id, True)  # admin, but nothing 402s → no rescue
@@ -407,11 +411,16 @@ def test_unrescued_run_records_exactly_what_it_records_today(
     assert seen == [_PAID_PRIMARY], seen
     assert out["model"] == _PAID_PRIMARY
     assert "requestedModel" not in out, (
-        "no substitution happened, so the normal case must not grow a key"
+        "no substitution happened, so no intent key may appear"
     )
+    # D5 disclosure (audit wf_9a87f76f-eaa Track E): the served model and its
+    # billing provider are named even when they match the configured intent.
+    assert out["servedModel"] == _PAID_PRIMARY
+    assert out["servedProvider"] == "openrouter"
     assert set(out) == {
         "content", "duration_ms", "approvalRequired", "billingAudit",
         "model", "tokensIn", "tokensOut", "costUsd", "run_id",
+        "servedModel", "servedProvider",
     }, sorted(out)
     price_in, price_out = _price_for(_PAID_PRIMARY)
     assert out["costUsd"] == pytest.approx(

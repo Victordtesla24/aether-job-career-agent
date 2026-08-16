@@ -9,9 +9,12 @@ P1-A adds the three additive payload fields the FE (P1-B) renders as a chip:
 ``requestedModel`` (intent), ``servedModel`` (observation) and ``fallbackReason``
 (the mechanism that engaged, published by the mechanism itself — never inferred).
 
-PINs that must hold before and after: an ordinary run's output is byte-identical
-(no substitution → none of the three fields appear), and nothing is fabricated
-when the client observed nothing.
+PINs that must hold: no substitution → no ``requestedModel``/``fallbackReason``,
+and nothing is fabricated when the client observed nothing. (Updated per
+Architect decision audit wf_9a87f76f-eaa Track E (D5): ``servedModel`` — plus
+``servedProvider`` — is now ALWAYS disclosed on a run that reached an LLM, so
+the original "ordinary run grows no keys" pin narrowed to the two intent/reason
+fields; see test_cli_d5_served_model_disclosure.py.)
 """
 from __future__ import annotations
 
@@ -164,10 +167,15 @@ def test_a_substitution_records_all_three_fields_on_the_run_output(
     assert out["fallbackReason"] == "primary deepseek/x failed (retryable)"
 
 
-def test_an_ordinary_run_output_is_unchanged_no_new_keys(
+def test_an_ordinary_run_gains_only_the_d5_disclosure_keys(
     client, auth_headers, test_user_id, monkeypatch
 ):
-    """PIN: no substitution means none of the three fields appear at all."""
+    """PIN, updated per Architect decision audit wf_9a87f76f-eaa Track E (D5):
+    no substitution still means no ``requestedModel`` and no ``fallbackReason``
+    — but a run that reached an LLM now ALWAYS discloses ``servedModel`` (and
+    its billing provider), matching the observation, even when it equals the
+    intent. (Previously this pinned ``servedModel`` absent — the exact silence
+    D5 flags: the run record never named the model that actually served.)"""
     from app.routers import agents as agents_mod
 
     _run_with_observation(
@@ -177,8 +185,9 @@ def test_an_ordinary_run_output_is_unchanged_no_new_keys(
         test_user_id, "storyExtractor", {}, lambda: {"stories": []}
     )
     assert "requestedModel" not in out
-    assert "servedModel" not in out
     assert "fallbackReason" not in out
+    assert out["servedModel"] == _PRIMARY
+    assert out["servedProvider"] == "openrouter"
     assert out["model"] == _PRIMARY
 
 
@@ -192,6 +201,7 @@ def test_nothing_is_fabricated_when_the_client_observed_nothing(
         test_user_id, "storyExtractor", {}, lambda: {"stories": []}
     )
     assert "servedModel" not in out
+    assert "servedProvider" not in out  # D5 keys are observation-gated too
     assert "fallbackReason" not in out
 
 

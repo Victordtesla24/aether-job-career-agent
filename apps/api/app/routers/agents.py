@@ -1361,13 +1361,17 @@ def _execute_reserved_run(
             _intended_model = _model_for_agent(agent_name, override=_override_model)
             if _intended_model is not None and _intended_model != _degraded_served_model:
                 honest_output["requestedModel"] = _intended_model
-                # R-5: the same visibility triple as the success tail — a
-                # degraded run can be served by a fallback exactly like a
-                # successful one, and hiding that here would leave one of the
-                # two paths silently un-narratable.
-                honest_output["servedModel"] = _degraded_served_model
                 if _degraded_fallback_reason:
                     honest_output["fallbackReason"] = _degraded_fallback_reason
+            # R-5 recorded ``servedModel`` only on a substitution; D5 (audit
+            # wf_9a87f76f-eaa, Track E) discloses the served model AND its
+            # billing provider on EVERY degraded run that made a real LLM call
+            # — mirroring the success tail below. Same observation truth
+            # (``get_last_served_model``, captured inside the scope) and the
+            # same pure provider resolution the billing audit uses; nothing is
+            # fabricated — this whole branch is gated on the observation.
+            honest_output["servedModel"] = _degraded_served_model
+            honest_output["servedProvider"] = resolve_provider(_degraded_served_model)
             price_in, price_out = _price_guarding_down_pricing(
                 _degraded_served_model, honest_output.get("requestedModel")
             )
@@ -1508,6 +1512,20 @@ def _execute_reserved_run(
         if _fallback_reason:
             output["fallbackReason"] = _fallback_reason
         model = _served_model
+    # D5 (audit wf_9a87f76f-eaa, Track E): the substitution branch above
+    # disclosed the served model ONLY when it differed from the config-derived
+    # intent — so a run served by exactly the configured cheap/free model (the
+    # "auto"/default chains that route to OpenRouter models while the plan copy
+    # advertises Claude) disclosed nothing, and NO run output named the billing
+    # provider. Disclose both on EVERY run that factually reached an LLM: gated
+    # on the provider-published observation itself (``get_last_served_model``,
+    # the same truth the costing above uses), with the provider resolved by the
+    # SAME pure function the billing audit uses (``resolve_provider``). A run
+    # with no successful live call (deterministic agents, honest no-LLM no-ops,
+    # replay/fixture mode) observes nothing and stays keyless — never fabricated.
+    if _served_model:
+        output["servedModel"] = _served_model
+        output["servedProvider"] = resolve_provider(_served_model)
     # F-1 re-fix (ML-U1X-b regression): ``_model_for_agent`` now returns a real
     # id for a ROLE backend (``supervisor``/Orchestrator, ``_ROLE_MODEL_BACKENDS``)
     # even though that backend makes NO LLM call today — its sequencing is
