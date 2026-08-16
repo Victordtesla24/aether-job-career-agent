@@ -59,6 +59,7 @@ import {
   type SettingsPayload,
 } from "../../../lib/api/workspaces";
 import { runScoutAgent } from "../../../lib/api/jobs";
+import { fetchApplySweepStatus } from "../../../lib/api/applications";
 import {
   bySource,
   buildLinkedinUploadNotice,
@@ -131,6 +132,15 @@ export default function SettingsClient({
   const [active, setActive] = useState<string>("profile");
   const [profile, setProfile] = useState({ fullName: "", email: "", targetRole: "", location: "" });
   const [agentConfig, setAgentConfig] = useState({ autoApply: false, approvalGate: true, matchThreshold: 80 });
+  // CLI-D3 refix (audit wf_9a87f76f-eaa, adversarial MUST-FIX 2): the live
+  // operator kill-switch behind the apply sweep (AETHER_APPLY_SWEEP_ENABLED,
+  // apps/api/app/workers/apply_sweep.py sweep_enabled() — code default OFF,
+  // and OFF in the live deployment). The auto-apply hint below may only make
+  // the affirmative "automatically transmits" promise when this is true —
+  // the user's toggle alone does not run the sweep; BOTH must be on before
+  // anyone is swept. Defaults to false so a slow/failed fetch can only ever
+  // under-promise (same rule as tracker-lib.ts notTransmittedReason).
+  const [applySweepLive, setApplySweepLive] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savedNotice, setSavedNotice] = useState<string | null>(null);
   // Job Board Integrations sync (MV-settings-002): a single, real "Sync All"
@@ -359,6 +369,24 @@ export default function SettingsClient({
       .catch((e: unknown) =>
         setBillingError(e instanceof Error ? e.message : "Failed to load billing/subscription"),
       );
+  }, []);
+
+  // CLI-D3 refix (MUST-FIX 2): live read of GET /applications/apply-sweep-status
+  // — the same signal the Applications board and Approvals screen already
+  // consume. Best-effort: a failure keeps the honest `false` default.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const enabled = await fetchApplySweepStatus();
+        if (!cancelled) setApplySweepLive(enabled === true);
+      } catch {
+        // Keep false — never fabricate an enabled sweep from a failed check.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   // PAY-R3-06: the public plan catalog, purely for its price breakdown —
@@ -1042,20 +1070,48 @@ export default function SettingsClient({
                 <div>
                   <Toggle
                     label="Auto-apply"
-                    description="Preference for future automatic submission — saved now, enforced once auto-apply ships"
+                    description="Make your approved applications eligible for automatic sending — only jobs at or above your match threshold are ever auto-sent"
                     value={agentConfig.autoApply}
                     testId="toggle-autoapply"
                     onChange={(v) => setAgentConfig((c) => ({ ...c, autoApply: v }))}
                   />
-                  {/* INERT-CONFIG-001: this preference is persisted (PUT
-                      /workspaces/settings) but no backend agent code reads it
-                      — apps/api/app/workers/board_sweep.py's autopilot work
-                      always lands behind the same structural approval gate
-                      regardless of this toggle. Honest disclosure, no
-                      behavior change. */}
+                  {/* CLI-D3 (audit wf_9a87f76f-eaa D1, supersedes
+                      INERT-CONFIG-001): this toggle IS read by the backend now
+                      — apps/api/app/workers/apply_sweep.py only sweeps users
+                      whose own agentConfig.autoApply is true (re-checked at
+                      execution time), and application_submission.py's
+                      autonomous send path requires it too.
+
+                      CLI-D3 refix (adversarial MUST-FIX 2): the sweep ALSO
+                      requires the operator kill-switch
+                      (AETHER_APPLY_SWEEP_ENABLED, sweep_enabled() code
+                      default OFF — "both must be on before anyone is swept"),
+                      so the affirmative "automatically transmits" clause is
+                      conditioned on the LIVE apply-sweep-status signal and the
+                      default/off wording speaks eligibility. The autonomous
+                      send on a newly queued application
+                      (application_submission.maybe_autonomous_transmit) is
+                      NOT kill-switch-gated, so that clause stays
+                      unconditional; so do the negative guarantees. */}
                   <p className="mt-1 text-[10px] text-aether-muted-dim" data-testid="hint-autoapply">
-                    Saved, but not yet enforced by the agents — this preference doesn&rsquo;t currently change
-                    agent behaviour.
+                    {applySweepLive ? (
+                      <>
+                        Enforced by the agents: when on, the background apply sweep — enabled on this
+                        deployment — automatically transmits your approved applications that clear your
+                        match threshold. With the approval gate off, a newly queued application that
+                        clears your threshold is sent autonomously. Jobs below your match threshold are
+                        never auto-sent, and when off, Aether never auto-submits anything.
+                      </>
+                    ) : (
+                      <>
+                        Enforced by the agents: when on, your approved applications that clear your
+                        match threshold become eligible for automatic sending — though the background
+                        apply sweep is switched off on this deployment right now, so it is sending
+                        nothing. With the approval gate off, a newly queued application that clears
+                        your threshold is still sent autonomously. Jobs below your match threshold are
+                        never auto-sent, and when off, Aether never auto-submits anything.
+                      </>
+                    )}
                   </p>
                 </div>
                 <div>
@@ -1079,7 +1135,12 @@ export default function SettingsClient({
                 </div>
                 <div>
                   <div className="mb-1 flex justify-between text-xs">
-                    <span className="text-aether-muted">Match threshold — only surface jobs above</span>
+                    {/* CLI-D3 (audit wf_9a87f76f-eaa D2): the old label
+                        ("only surface jobs above") described job-SURFACING
+                        filtering that never existed. What this value really
+                        governs — now enforced by Track B — is automatic
+                        SUBMISSION. */}
+                    <span className="text-aether-muted">Match threshold — minimum score for auto-submission</span>
                     <span className="mono font-semibold">{agentConfig.matchThreshold}%</span>
                   </div>
                   <input
@@ -1093,12 +1154,17 @@ export default function SettingsClient({
                     className="w-full accent-[#C9A84C]"
                     aria-label="Match threshold"
                   />
-                  {/* INERT-CONFIG-001: persisted but not yet read by any
-                      backend job-surfacing logic. Honest disclosure, no
-                      behavior change. */}
+                  {/* CLI-D3 (audit wf_9a87f76f-eaa D2, supersedes
+                      INERT-CONFIG-001): enforced by
+                      application_submission.meets_match_threshold (inclusive
+                      >=) on every AUTO path — the apply sweep and the
+                      autonomous send both refuse a job scoring below this
+                      value, and an unscored job is below every threshold by
+                      definition. The user's explicit approve-and-execute on a
+                      specific application bypasses the bar by design. */}
                   <p className="mt-1 text-[10px] text-aether-muted-dim" data-testid="hint-matchthreshold">
-                    Saved, but not yet enforced by the agents — this value doesn&rsquo;t currently filter which
-                    jobs are surfaced.
+                    Enforced by the agents: jobs scoring below this value — or unscored jobs — are never
+                    auto-submitted. Approving and executing an application yourself bypasses this bar.
                   </p>
                 </div>
               </div>

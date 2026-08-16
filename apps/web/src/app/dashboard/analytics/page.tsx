@@ -147,7 +147,7 @@ function DecisionGuidance({ tellsYou, next }: DecisionGuidanceProps) {
  * The judge's must-fix: `agent-roi` was five bare numerals in a grid, two of
  * which (total spend, agent runs) are the same figures the executive band's
  * spend tile already shows above. Those two are DELETED. What is genuinely
- * this panel's own — cost per submitted application, cost per interview, and
+ * this panel's own — cost per prepared application, cost per interview, and
  * the honest "—" states — is re-expressed as a real chart, because a ratio
  * against a ratio has a shared scale (dollars) and therefore a shape.
  *
@@ -159,7 +159,7 @@ function DecisionGuidance({ tellsYou, next }: DecisionGuidanceProps) {
  *  2. An empty denominator is "—" with its reason on the row, never $0.00 —
  *     "no application reached this stage" is not "each one cost nothing".
  *  3. A ratio never appears without the figures it was computed from: `basis`
- *     puts "$8.16 over 287 submitted" beside the value, which is the same law
+ *     puts "$8.16 over 287 prepared" beside the value, which is the same law
  *     the interview-conversion chart obeys. That is a DENOMINATOR disclosure,
  *     not a restatement of the deleted spend tile — it exists only next to the
  *     division it justifies, and disappears with it when the windows disagree.
@@ -174,7 +174,10 @@ function roiCostRows(roi: AgentRoi, funnel: Funnel | null, period: Period): Bull
         testId: "roi-cost-per-application",
         label: "Cost per application",
         denominator: funnel?.applied ?? 0,
-        basisNoun: "submitted",
+        // CLI-D3/D4 (audit wf_9a87f76f-eaa): `funnel.applied` counts
+        // applications that left draft — preparation, not verified sends —
+        // so the denominator disclosure says "prepared".
+        basisNoun: "prepared",
       },
       {
         testId: "roi-cost-per-interview",
@@ -300,9 +303,12 @@ export default function AnalyticsPage() {
 
 
 
+  // CLI-D3/D4 (audit wf_9a87f76f-eaa): the second funnel stage counts
+  // applications that LEFT DRAFT — preparation, not proof of sending — so the
+  // stage-pair labels and tips say "Prepared", never "Applied"/"submitted".
   const CONVERSION_TIP: Record<string, string> = {
-    "Found → Applied": "Share of discovered jobs you went on to apply for.",
-    "Applied → Screened": "Share of applications that advanced to a recruiter screen.",
+    "Found → Prepared": "Share of discovered jobs you went on to prepare an application for.",
+    "Prepared → Screened": "Share of prepared applications that advanced to a recruiter screen.",
     "Screened → Interview": "Share of screened applications that reached an interview.",
     "Interview → Offer": "Share of interviews that resulted in a formal offer.",
   };
@@ -310,9 +316,9 @@ export default function AnalyticsPage() {
   // GOLD-MASTER V4 §6 / G-C: whether applications exist at all — used only
   // to decide the HONESTY FRAMING (badge) around interview_conversion_rate,
   // never to recompute the rate itself (that stays 100% API-derived). A
-  // brand-new account with zero submitted applications hasn't had a chance
+  // brand-new account with zero prepared applications hasn't had a chance
   // to convert anything, so a red "needs improvement" badge there would be
-  // misleading; once there is at least one submitted application, the
+  // misleading; once there is at least one prepared application, the
   // API's own >=1:5 floor (interview_conversion_healthy) is real signal and
   // is shown honestly, good or bad.
   const hasApplications = funnel !== null && funnel.applied > 0;
@@ -458,7 +464,7 @@ export default function AnalyticsPage() {
 
         NOTHING WAS DROPPED SILENTLY — where each figure lives now:
           · Applications (all stages) → the band's pipeline tile wears it as a
-            measured "N created" chip beside the submitted count. Both are
+            measured "N created" chip beside the prepared count. Both are
             period-scoped, so the two counts can honestly sit together.
           · Interviews / Offers / Jobs Found → the funnel below, and the
             pipeline tile's spark, both period-scoped, both drawn.
@@ -552,8 +558,8 @@ export default function AnalyticsPage() {
             <dl className="mt-4 grid grid-cols-2 gap-3">
               {(
                 [
-                  ["Found → Applied", conversion.found_to_applied],
-                  ["Applied → Screened", conversion.applied_to_screened],
+                  ["Found → Prepared", conversion.found_to_applied],
+                  ["Prepared → Screened", conversion.applied_to_screened],
                   ["Screened → Interview", conversion.screened_to_interview],
                   ["Interview → Offer", conversion.interview_to_offer],
                 ] as const
@@ -567,7 +573,7 @@ export default function AnalyticsPage() {
               ))}
             </dl>
             {/* GOLD-MASTER V4 §6 / G-C: interview_conversion_rate — real,
-                correct on the backend (interviews / submitted applications)
+                correct on the backend (interviews / prepared applications)
                 but previously stripped client-side because ConversionSchema
                 never declared the field. Rendered exactly as the API
                 returns it; the badge only changes FRAMING (color/label),
@@ -577,16 +583,21 @@ export default function AnalyticsPage() {
                 numeral and a SENTENCE that asked the reader to subtract one
                 from the other. They are now a bullet row and a labelled target
                 tick — the same two numbers, with the comparison drawn instead
-                of described. The denominator ("N interviews from M submitted")
+                of described. The denominator ("N interviews from M prepared")
                 rides on the row, so a percentage is never shown without the
                 count it came from. */}
             <div className="mt-4" data-testid="interview-conversion-rate">
               <BulletChart
                 title="Interview conversion vs the 1-in-5 target"
                 windowLabel={
+                  /* CLI-D3/D4 (audit wf_9a87f76f-eaa): the legacy rate's
+                     denominator is applications that LEFT DRAFT — preparation,
+                     not verified sends — so the window says "prepared". The
+                     verified rate below carries its own "sent (verified)"
+                     denominator. */
                   period === "all"
-                    ? "all time — interviews per application submitted"
-                    : `the selected period (${period}) — interviews per application submitted`
+                    ? "all time — interviews per application prepared"
+                    : `the selected period (${period}) — interviews per application prepared`
                 }
                 rows={[
                   {
@@ -598,7 +609,7 @@ export default function AnalyticsPage() {
                         ? undefined
                         : `${funnel.interviewed} interview${
                             funnel.interviewed === 1 ? "" : "s"
-                          } from ${funnel.applied} submitted`,
+                          } from ${funnel.applied} prepared`,
                     trailing: !hasApplications ? (
                       <span
                         className="rounded-full border border-white/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-aether-muted"
@@ -622,6 +633,31 @@ export default function AnalyticsPage() {
                       </span>
                     ),
                   },
+                  /* CLI-D3 ADDITIVE (audit wf_9a87f76f-eaa): interviews over
+                     TRANSMITTED — the rate a user can trust as "of what
+                     verifiably went out, how much converted". Rendered
+                     exactly as the API returns it, ONLY when the additive
+                     field is present (an older API during deploy shows no
+                     verified row rather than a fabricated one), with its own
+                     "sent (verified)" denominator disclosed on the row. */
+                  ...(conversion.verified_interview_conversion_rate != null
+                    ? [
+                        {
+                          label: "Verified interview conversion",
+                          value: conversion.verified_interview_conversion_rate,
+                          display: `${conversion.verified_interview_conversion_rate}%`,
+                          testId: "verified-interview-conversion-row",
+                          basis:
+                            funnel?.transmitted != null
+                              ? `${funnel.interviewed} interview${
+                                  funnel.interviewed === 1 ? "" : "s"
+                                } from ${funnel.transmitted} sent (verified)`
+                              : conversion.transmitted != null
+                                ? `${conversion.transmitted} sent (verified)`
+                                : undefined,
+                        },
+                      ]
+                    : []),
                 ]}
                 target={{
                   value: conversionTargetPct,
@@ -630,10 +666,11 @@ export default function AnalyticsPage() {
                 axisMax={Math.max(
                   conversionTargetPct * 1.5,
                   conversion.interview_conversion_rate * 1.15,
+                  (conversion.verified_interview_conversion_rate ?? 0) * 1.15,
                 )}
               />
               <DecisionGuidance
-                tellsYou="This shows the share of submitted applications that reached an interview in the displayed reporting window."
+                tellsYou="This shows the share of prepared applications (and of verified sends, when that row is shown) that reached an interview in the displayed reporting window."
                 next="Review the funnel and the Agent Performance Policy above before changing outreach or application materials."
               />
             </div>
@@ -851,7 +888,7 @@ export default function AnalyticsPage() {
                 footnote={`Runs average ${(roi.avg_duration_ms / 1000).toFixed(1)}s of wall-clock time.`}
               />
               <DecisionGuidance
-                tellsYou="This relates all-time agent spend to submitted applications and interviews only when the windows are comparable."
+                tellsYou="This relates all-time agent spend to prepared applications and interviews only when the windows are comparable."
                 next="Use the cost rows with the funnel when deciding where to focus agent effort; do not compare unavailable ratios."
               />
             </div>

@@ -43,6 +43,12 @@ type DashboardJob = Job & {
   currency?: string | null;
 };
 
+// CLI-D3 refix (audit wf_9a87f76f-eaa, attack-1): filtering matches on
+// `runBadge(r).label`, and "Submitted" is now transmission-proven only
+// (components/dashboard/feed.ts submissionRunBadge — output.submissionState
+// === "transmitted"). A submission run that merely queued an approval carries
+// the "Needs approval" badge, so this filter can no longer group
+// never-transmitted applications under "Submitted".
 const FEED_FILTERS = ["All", "Discovered", "Tailored", "Submitted", "Waiting"] as const;
 
 function initials(company: string) {

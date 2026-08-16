@@ -64,6 +64,23 @@ vi.mock("next/navigation", () => ({
   usePathname: () => usePathnameMock(),
 }));
 
+// CLI-D3 refix (audit wf_9a87f76f-eaa, adversarial MUST-FIX 2): the
+// auto-apply hint's affirmative "automatically transmits" clause is only true
+// when the operator kill-switch (AETHER_APPLY_SWEEP_ENABLED,
+// apps/api/app/workers/apply_sweep.py sweep_enabled() — code default OFF) is
+// ALSO on, so the settings screen now reads the live GET
+// /applications/apply-sweep-status signal like the applications/approvals
+// screens already do. Default mock = false (the code default and the honest
+// under-promise while the fetch is in flight or failed).
+const fetchApplySweepStatusMock = vi.fn();
+vi.mock("../../../../lib/api/applications", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../../../lib/api/applications")>();
+  return {
+    ...actual,
+    fetchApplySweepStatus: (...args: unknown[]) => fetchApplySweepStatusMock(...args),
+  };
+});
+
 // eslint-disable-next-line import/first
 import SettingsPage from "../page";
 // eslint-disable-next-line import/first
@@ -111,6 +128,7 @@ afterEach(() => {
   openBillingPortalMock.mockReset();
   fetchEntitlementMock.mockReset();
   fetchPlansMock.mockReset();
+  fetchApplySweepStatusMock.mockReset();
   usePathnameMock.mockReturnValue("/dashboard/settings");
   vi.unstubAllEnvs();
   if (originalLocationDescriptor) {
@@ -220,19 +238,33 @@ describe("SettingsPage — Privacy & Compliance tab", () => {
   });
 });
 
-describe("SettingsPage — Agent Configuration honest inert-preference hints (INERT-CONFIG-001)", () => {
-  // Fresh finding (uat/reports/evidence/models-live/web-fixes-review-verdict.json):
-  // autoApply, approvalGate and matchThreshold are persisted via PUT
-  // /workspaces/settings and echoed back, but no backend code reads them for
-  // behavior. The real approval gate is structural and unconditional
-  // (_APPROVAL_GATED = {"tailor","coverLetter","emailAgent"} in
-  // apps/api/app/routers/agents.py:77) — every such run creates an
-  // ApprovalRequest regardless of the toggle. These tests pin honest,
-  // unobtrusive helper text disclosing that gap — no behavior change.
-  async function renderOnAgents() {
+describe("SettingsPage — Agent Configuration enforcement disclosures (CLI-D3, audit wf_9a87f76f-eaa D1/D2)", () => {
+  // CONTRACT UPDATE — Architect decision CLI-D3 (audit wf_9a87f76f-eaa,
+  // findings D1/D2/D6). The previous INERT-CONFIG-001 pins in this block
+  // ("Saved, but not yet enforced") were written when no backend code read
+  // autoApply/matchThreshold. Track B of this remediation landed REAL
+  // enforcement (apps/api/app/services/application_submission.py +
+  // apps/api/app/workers/apply_sweep.py): `autoApply` gates every automatic
+  // transmission (the apply sweep only sweeps opted-in users, and the
+  // autonomous send path additionally requires the approval gate off), and
+  // `matchThreshold` bars any below-threshold or UNSCORED job from being
+  // auto-sent — while the user's explicit approve-and-execute on a specific
+  // application bypasses the threshold by design. These specs pin the NEW
+  // honest copy at equal strictness: the hints must now claim enforcement
+  // (and must no longer claim the opposite), with the same "no coming soon"
+  // and behavior-round-trip guards as before. The approval-gate hint is
+  // deliberately UNCHANGED (the structural _APPROVAL_GATED set in
+  // apps/api/app/routers/agents.py still gates tailor/coverLetter/emailAgent
+  // runs regardless of the toggle).
+  async function renderOnAgents(sweepEnabled = false) {
     fetchSettingsMock.mockResolvedValue(SETTINGS);
     fetchCareerDataMock.mockResolvedValue(CAREER_DATA);
     fetchSubscriptionMock.mockResolvedValue(SUBSCRIPTION);
+    // CLI-D3 refix (MUST-FIX 2): the live operator kill-switch signal. The
+    // default here is the code default (false) — the state the LIVE
+    // deployment is actually in (AETHER_APPLY_SWEEP_ENABLED=false in the
+    // production api/worker envs at the time of the audit).
+    fetchApplySweepStatusMock.mockResolvedValue(sweepEnabled);
     render(<SettingsPage />);
     await waitFor(() => screen.getByTestId("settings-nav-agents"));
     fireEvent.click(screen.getByTestId("settings-nav-agents"));
@@ -252,23 +284,78 @@ describe("SettingsPage — Agent Configuration honest inert-preference hints (IN
     expect(text.toLowerCase()).not.toContain("coming soon");
   });
 
-  it("discloses under auto-apply that the preference is saved but not yet enforced by the agents", async () => {
+  it("discloses under auto-apply that the toggle IS enforced — it gates automatic transmission (CLI-D3 / D1)", async () => {
     await renderOnAgents();
 
     const hint = screen.getByTestId("hint-autoapply");
     const text = hint.textContent ?? "";
-    expect(text).toMatch(/saved/i);
-    expect(text).toMatch(/not (yet )?enforced/i);
+    expect(text).toMatch(/enforced/i);
+    // The retraction this hint used to carry must be gone — it is no longer true.
+    expect(text).not.toMatch(/not (yet )?enforced/i);
+    expect(text).not.toMatch(/doesn(’|')t currently change/i);
+    // The hint names what enforcement actually means: the threshold bar and
+    // the safe OFF state.
+    expect(text).toMatch(/match threshold/i);
+    expect(text).toMatch(/never auto/i);
     expect(text.toLowerCase()).not.toContain("coming soon");
   });
 
-  it("gives the auto-apply toggle an honest description consistent with the hint below it (NTH-5)", async () => {
-    // Fresh finding (uat/reports/evidence/models-live/qa-res-001-review-verdict.json
-    // wave-3 niceToHave NTH-5): the toggle's OWN description used to read "Let
-    // agents submit applications without a manual approval step" — implying the
-    // preference is live — directly above a hint retracting that ("Saved, but
-    // not yet enforced..."). The description itself must be honest, not just the
-    // hint underneath it.
+  it("CLI-D3 refix (MUST-FIX 2): with the operator apply sweep OFF (live signal, the code default) the hint never promises unconditional automatic transmission", async () => {
+    // Track B's own contract: BOTH the user toggle AND the operator
+    // kill-switch must be on before anyone is swept
+    // (apps/api/app/workers/apply_sweep.py, sweep_enabled() default OFF), and
+    // AETHER_APPLY_SWEEP_ENABLED=false in the live production api/worker
+    // environments. So "when on, Aether automatically transmits…" conditioned
+    // on the toggle ALONE was an overclaim. The affirmative clause must be
+    // conditioned on the live sweepEnabled signal; with it false the hint
+    // speaks eligibility + discloses the sweep is off.
+    await renderOnAgents(false);
+
+    const hint = screen.getByTestId("hint-autoapply");
+    const text = hint.textContent ?? "";
+    // No unconditional transmit promise…
+    expect(text).not.toMatch(/when on, aether automatically transmits/i);
+    expect(text).not.toMatch(/automatically transmits/i);
+    // …the eligibility truth plus the disclosed off-state instead.
+    expect(text).toMatch(/eligible/i);
+    expect(text).toMatch(/sweep/i);
+    expect(text).toMatch(/(switched|turned|currently) off|not (currently )?running|off on this deployment/i);
+    // The TRUE unconditional clause stays: the autonomous send on a newly
+    // queued application (maybe_autonomous_transmit) is NOT kill-switch-gated.
+    expect(text).toMatch(/approval gate off/i);
+    expect(text).toMatch(/autonomous/i);
+    // The true negative guarantees survive at full strength.
+    expect(text).toMatch(/never auto/i);
+    expect(text).toMatch(/match threshold/i);
+  });
+
+  it("CLI-D3 refix (MUST-FIX 2): with the operator apply sweep ON (live signal) the hint states automatic transmission affirmatively", async () => {
+    await renderOnAgents(true);
+
+    const hint = await waitFor(() => {
+      const el = screen.getByTestId("hint-autoapply");
+      if (!/automatically transmits/i.test(el.textContent ?? "")) {
+        throw new Error("sweep-on copy not rendered yet");
+      }
+      return el;
+    });
+    const text = hint.textContent ?? "";
+    expect(text).toMatch(/automatically transmits/i);
+    expect(text).toMatch(/enabled on this deployment/i);
+    // Negative guarantees still present.
+    expect(text).toMatch(/never auto/i);
+    expect(text).toMatch(/match threshold/i);
+  });
+
+  it("gives the auto-apply toggle an honest LIVE description consistent with the enforced hint below it (CLI-D3 / D1 + refix MUST-FIX 2)", async () => {
+    // The description previously hedged ("saved now, enforced once auto-apply
+    // ships") because the toggle was inert. Auto-apply has shipped and is
+    // enforced (apply_sweep.sweep_user_if_opted_in +
+    // application_submission.maybe_autonomous_transmit), so the description
+    // must state the live behavior and must not retract it. Refix: it must
+    // ALSO not condition a transmit promise on the user toggle alone — the
+    // sweep needs the operator kill-switch too, so the static description
+    // speaks eligibility, and the hint below carries the live-signal truth.
     await renderOnAgents();
 
     const toggle = screen.getByTestId("toggle-autoapply");
@@ -276,24 +363,50 @@ describe("SettingsPage — Agent Configuration honest inert-preference hints (IN
     // paragraphs[0] is the "Auto-apply" label; paragraphs[1] is the description.
     const description = paragraphs[1]?.textContent ?? "";
 
-    expect(description.toLowerCase()).not.toContain("let agents submit applications");
+    // Still must not overclaim an approval-free path as the default…
     expect(description.toLowerCase()).not.toMatch(/without a manual approval step/);
-    expect(description).toMatch(/saved/i);
-    expect(description).toMatch(/future|once auto-apply ships|not yet/i);
+    // …must no longer claim the feature is unshipped/inert…
+    expect(description).not.toMatch(/future|once auto-apply ships|not yet/i);
+    expect(description).toMatch(/automatic(ally)?|transmit|submit/i);
+    // …and must not promise the deployment transmits on this toggle alone.
+    expect(description).not.toMatch(/let aether transmit applications automatically/i);
+    expect(description).toMatch(/eligible/i);
+    // The true negative guarantee stays.
+    expect(description).toMatch(/at or above your match threshold/i);
 
-    // The hint must still be present and must not contradict the new description.
+    // The hint must still be present and must not contradict the description.
     const hint = screen.getByTestId("hint-autoapply");
-    expect((hint.textContent ?? "")).toMatch(/saved/i);
+    expect(hint.textContent ?? "").toMatch(/enforced/i);
   });
 
-  it("discloses under match threshold that the preference is saved but not yet enforced by the agents", async () => {
+  it("discloses under match threshold that the value IS enforced as the auto-submission bar, and that explicit execute bypasses it (CLI-D3 / D2)", async () => {
     await renderOnAgents();
 
     const hint = screen.getByTestId("hint-matchthreshold");
     const text = hint.textContent ?? "";
-    expect(text).toMatch(/saved/i);
-    expect(text).toMatch(/not (yet )?enforced/i);
+    expect(text).toMatch(/enforced/i);
+    expect(text).not.toMatch(/not (yet )?enforced/i);
+    expect(text).not.toMatch(/doesn(’|')t currently filter/i);
+    // What enforcement means: below-threshold AND unscored jobs are barred
+    // from AUTO-submission…
+    expect(text).toMatch(/below/i);
+    expect(text).toMatch(/unscored|not( yet)? scored|no (fit )?score/i);
+    // …and the user's own explicit decision outranks the account-wide bar.
+    expect(text).toMatch(/bypass/i);
     expect(text.toLowerCase()).not.toContain("coming soon");
+  });
+
+  it("the match-threshold control no longer claims job-SURFACING filtering the backend does not do (CLI-D3 / D2)", async () => {
+    // The old slider label read "only surface jobs above" — matchThreshold
+    // never filtered which jobs are surfaced; what it really gates (now, per
+    // Track B) is automatic SUBMISSION. The label must say the true thing.
+    await renderOnAgents();
+
+    const section = screen.getByTestId("settings-agents");
+    const text = section.textContent ?? "";
+    expect(text).not.toMatch(/only surface jobs above/i);
+    expect(text).toMatch(/match threshold/i);
+    expect(text).toMatch(/auto-?subm/i);
   });
 
   it("does not change the persisted toggle/slider behavior — Save still round-trips agentConfig unchanged", async () => {

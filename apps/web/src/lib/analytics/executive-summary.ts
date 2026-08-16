@@ -172,12 +172,12 @@ export function steepestDropOff(steps: ReadonlyArray<{ label: string; value: num
 }
 
 /**
- * The ALL-STAGES application count, as a chip beside the submitted one.
+ * The ALL-STAGES application count, as a chip beside the prepared one.
  *
  * These are two different measurements of the same window — `/dashboard`
  * counts every Application row the period created (draft through offer),
- * `/funnel` counts only the ones actually submitted — and the gap between
- * them is the reader's draft backlog. The chip states BOTH counts and
+ * `/funnel` counts only the ones that left draft (prepared) — and the gap
+ * between them is the reader's draft backlog. The chip states BOTH counts and
  * subtracts nothing: the two endpoints define "in this period" on their own
  * date columns, so a difference is a real quantity but a computed remainder
  * would be a claim neither endpoint made.
@@ -185,17 +185,30 @@ export function steepestDropOff(steps: ReadonlyArray<{ label: string; value: num
  * This is where the deleted "Dashboard summary" card's one non-duplicated
  * figure lives now (round 2, F1).
  */
-function createdChip(dashboard: Dashboard | null, period: Period, submitted: number | null): ExecDelta | undefined {
+function createdChip(
+  dashboard: Dashboard | null,
+  period: Period,
+  prepared: number | null,
+  transmitted: number | null = null,
+): ExecDelta | undefined {
   if (dashboard === null) return undefined;
   const created = formatNumber(dashboard.totalApplications);
+  // CLI-D3/D4 (audit wf_9a87f76f-eaa, Architect decision CLI-D3): the funnel's
+  // left-draft count is PREPARATION, not proof of sending — the chip's words
+  // say "prepared", and when the API's additive `transmitted` field is
+  // present, the verified-send subset is stated beside it as the sent count.
+  // Absent field (older API) ⇒ no sent claim of any kind.
   return {
     text: `${created} created`,
     tone: "neutral",
     title:
       `${created} application records created, counted over ${periodWindow(period)} — every stage from draft to offer` +
-      (submitted === null
+      (prepared === null
         ? "."
-        : `; ${formatNumber(submitted)} of them have been submitted.`),
+        : `; ${formatNumber(prepared)} of them have been prepared (left draft)` +
+          (transmitted === null
+            ? "."
+            : `, ${formatNumber(transmitted)} of them sent (verified) by Aether.`)),
   };
 }
 
@@ -205,7 +218,9 @@ function pipelineTile(input: ExecutiveSummaryInput): ExecTileModel {
   if (funnel === null) {
     return {
       id: "pipeline",
-      label: "Applications submitted",
+      // CLI-D3/D4: `funnel.applied` counts applications that LEFT DRAFT —
+      // preparation, not verified sends — so the tile's label says so.
+      label: "Applications prepared",
       value: NOT_MEASURED,
       spark: { kind: "bars", data: [] },
       delta: createdChip(dashboard, period, null),
@@ -216,7 +231,9 @@ function pipelineTile(input: ExecutiveSummaryInput): ExecTileModel {
   }
   const steps = [
     { label: "Jobs found", value: funnel.jobs_found },
-    { label: "Applied", value: funnel.applied },
+    // CLI-D3/D4: honest stage name — see chart-adapters.funnelSteps for the
+    // same relabel on the full funnel chart.
+    { label: "Prepared", value: funnel.applied },
     { label: "Screened", value: funnel.screened },
     { label: "Interviewed", value: funnel.interviewed },
     { label: "Offers", value: funnel.offers },
@@ -224,13 +241,13 @@ function pipelineTile(input: ExecutiveSummaryInput): ExecTileModel {
   const worst = steepestDropOff(steps);
   return {
     id: "pipeline",
-    label: "Applications submitted",
+    label: "Applications prepared",
     value: formatNumber(funnel.applied),
     spark: {
       kind: "bars",
       data: steps.map((s) => ({ label: s.label, value: s.value })),
     },
-    delta: createdChip(dashboard, period, funnel.applied),
+    delta: createdChip(dashboard, period, funnel.applied, funnel.transmitted ?? null),
     insight: worst
       ? `Steepest drop-off ${worst.from} → ${worst.to}: ${pct(
           Math.round(worst.carriedPct * 10) / 10,
@@ -268,7 +285,9 @@ function conversionTile(input: ExecutiveSummaryInput): ExecTileModel {
   const { conversion, policy, period } = input;
   const declared = numberFrom(policy?.thresholds, "interviewConversionTarget");
   const target = declared === null ? INTERVIEW_TARGET_PCT : normaliseTarget(declared);
-  const basis = `${periodWindow(period)} — interviews per submitted application`;
+  // CLI-D3/D4: the legacy rate's denominator is applications that LEFT DRAFT
+  // — "prepared", not "submitted" (which now reads as a send claim).
+  const basis = `${periodWindow(period)} — interviews per prepared application`;
   if (conversion === null) {
     return {
       id: "conversion",
@@ -486,10 +505,12 @@ function spendTile(input: ExecutiveSummaryInput): ExecTileModel {
 
   const data: ChartDatum[] = [
     {
-      label: "Cost per submitted application",
+      // CLI-D3/D4: the denominator is `funnel.applied` — prepared (left
+      // draft), not verified sends — so the row's own words say so.
+      label: "Cost per prepared application",
       value: perApplication,
       display: perApplication === null ? undefined : money(perApplication),
-      note: blocked ?? "No application has been submitted yet, so there is nothing to divide by.",
+      note: blocked ?? "No application has been prepared yet, so there is nothing to divide by.",
     },
     {
       label: "Cost per interview",
@@ -532,9 +553,9 @@ function spendTile(input: ExecutiveSummaryInput): ExecTileModel {
         : undefined,
     insight:
       perApplication !== null
-        ? `${money(perApplication)} per submitted application.`
+        ? `${money(perApplication)} per prepared application.`
         : blocked === null
-          ? "No application submitted yet, so cost per application cannot be divided."
+          ? "No application prepared yet, so cost per application cannot be divided."
           : !windowsAlign
             ? `Select the “all” period to compare spend with the funnel like for like.`
             : "The funnel has not loaded, so cost per application cannot be divided.",
@@ -601,9 +622,11 @@ function rigorTile(input: ExecutiveSummaryInput): ExecTileModel {
           } recorded across ${formatNumber(points.length)} tier point${
             points.length === 1 ? "" : "s"
           }.`
-        : `Measured on ${formatNumber(
+        : // CLI-D3/D4: the policy's sample is left-draft applications —
+          // "prepared", never a send claim.
+          `Measured on ${formatNumber(
             policy.metricSnapshot.sampleSize,
-          )} submitted application${policy.metricSnapshot.sampleSize === 1 ? "" : "s"}.`,
+          )} prepared application${policy.metricSnapshot.sampleSize === 1 ? "" : "s"}.`,
     basis,
     measured: true,
   };

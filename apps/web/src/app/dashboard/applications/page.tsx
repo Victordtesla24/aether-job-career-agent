@@ -831,7 +831,11 @@ export default function ApplicationsPage() {
     .filter((s) => s.key === "discovered" || s.key === "evaluating" || s.key === "tailoring")
     .reduce((n, s) => n + s.cards.length, 0);
   const autoApplyOn = agentConfig?.autoApply ?? false;
-  const threshold = agentConfig?.matchThreshold ?? 85;
+  // CLI-D3: `null` until GET /workspaces/settings answers — the banner then
+  // names the bar without inventing a number (the backend enforces the user's
+  // STORED threshold either way; a fabricated "85%" here was a claim about a
+  // value the page had not read).
+  const threshold = agentConfig?.matchThreshold ?? null;
 
   return (
     <div className="flex flex-col gap-5">
@@ -941,13 +945,32 @@ export default function ApplicationsPage() {
           data-testid="auto-apply-banner"
         >
           <i className="fa-solid fa-shield-halved mt-0.5 text-state-warn" aria-hidden="true" />
+          {/* CLI-D3 (audit wf_9a87f76f-eaa D1/D2/D6): this sentence is now a
+              TRUE description of enforced behavior, matched word-for-word to
+              the backend contract (application_submission.py
+              maybe_autonomous_transmit + apply_sweep.py): the user's match
+              threshold gates AUTO-submission with an INCLUSIVE >= (so "≥",
+              not the old ">"), an unscored job is below every threshold, and
+              the user's explicit approve-and-execute on a specific
+              application bypasses the account-wide bar by design. The old
+              copy ("…and your explicit approval will be submitted")
+              overclaimed: an explicitly executed below-threshold application
+              IS submitted, and an autonomous send (auto-apply on, approval
+              gate off) records an autonomous approval rather than a
+              per-application human one. */}
           <p className="text-xs leading-relaxed text-aether-muted">
             <span className="font-semibold text-state-warn">
               Auto-apply is a high-risk action.
             </span>{" "}
-            Only applications with <span className="mono text-aether-text">Match Score &gt; {threshold}%</span>{" "}
-            and your explicit approval will be submitted. Auto-apply is currently{" "}
-            <span className="font-medium text-aether-text">{autoApplyOn ? "on" : "off"}</span>.
+            Only applications with{" "}
+            <span className="mono text-aether-text">
+              {threshold !== null
+                ? `Match Score ≥ ${threshold}%`
+                : "a Match Score at or above your saved threshold"}
+            </span>{" "}
+            are ever auto-submitted — below-threshold and unscored jobs wait for your decision, and
+            approving and executing an application yourself bypasses this threshold. Auto-apply is
+            currently <span className="font-medium text-aether-text">{autoApplyOn ? "on" : "off"}</span>.
           </p>
         </div>
 

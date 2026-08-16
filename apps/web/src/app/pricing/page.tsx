@@ -16,8 +16,14 @@
  * no backend code path routes a subscriber's plan to a different LLM; every
  * agent call resolves its model from a fixed task-type tier, identical for
  * every plan. This page does not render the `modelTier` label or any
- * feature bullet that claims per-plan model differentiation, and states the
- * real differentiator (monthly run quota) plainly instead.
+ * feature bullet that claims per-plan model differentiation.
+ *
+ * CLI-D3 / D4 (audit wf_9a87f76f-eaa) sharpens that rule to ALL feature
+ * bullets: the backend gates nothing by plan except the monthly agent-run
+ * quota and the monthly AI spend cap, so bullets implying a tier-gated
+ * capability ("Cover letters + story bank", "Priority email agent",
+ * "Everything in Starter", support tiers) are filtered too. Only quota-truth
+ * bullets render, and the header states the real differentiators plainly.
  *
  * PAY-R3-01/PAY-R3-03 fix — plan switching: an authenticated visitor who
  * already holds an active PAID subscription sees a "Current plan" badge on
@@ -45,6 +51,7 @@ import PublicFooter from "../../components/PublicFooter";
 import { ApiError, formatRetryAfter } from "../../lib/api/client";
 import { formatAud } from "../../lib/format";
 import {
+  fetchEntitlement,
   fetchPlans,
   fetchSubscription,
   isCheckoutSwitchedResult,
@@ -61,6 +68,28 @@ const TOKEN_STORAGE_KEY = "aether_token";
 // (there is none — MV-pricing-002). Filtered from display; the honest
 // differentiator (run quota) is stated separately in the page header.
 const MODEL_TIER_CLAIM_RE = /model tier|model access/i;
+
+// CLI-D3 / D4 (audit wf_9a87f76f-eaa): the ONLY per-plan-TIER differences any
+// code enforces are the monthly agent-run quota and the monthly AI spend cap
+// (Plan.runsPerMonth / Plan.spendCapUsdMonthly → UsageQuota,
+// apps/api/app/repositories/billing.py + services/entitlements.py). The API's
+// presentation bullets ("Cover letters + story bank", "Priority email agent",
+// "Everything in Starter", "Community support", …) read as a feature ladder,
+// implying capabilities gated to HIGHER tiers — no per-feature tier gate
+// exists; among entitled plans every capability is the same. So only bullets
+// stating a quota truth may render; the header states the real
+// differentiators.
+//
+// CLI-D3 refix (adversarial SECONDARY finding): one gate DOES exist and an
+// earlier version of this comment wrongly denied it — the paid-subscription
+// entitlement gate (apps/api/app/repositories/billing.py
+// subscription_gate_enabled, env AETHER_REQUIRE_PAID_SUBSCRIPTION, code
+// default ON; apps/api/app/routers/agents.py _require_active_subscription
+// then 402-walls FREE accounts out of every actionable agent). It gates
+// free-vs-paid, not tier-vs-tier, and the current deployment disables it —
+// which is why the "every plan includes every feature" sentence below renders
+// ONLY on a live requiresSubscription === false signal, never statically.
+const QUOTA_FACT_RE = /agent runs\s*\/\s*month|runs per month|run ceiling/i;
 
 // Subscription statuses the backend treats as "entitled paid" (mirrors
 // SubscriptionRepository.has_active_paid_subscription in
@@ -87,6 +116,14 @@ export default function PricingPage() {
   const [mySubscription, setMySubscription] = useState<SubscriptionState | null | undefined>(
     undefined,
   );
+  // CLI-D3 refix (adversarial SECONDARY finding): the LIVE operator verdict
+  // on the paid-subscription gate (GET /billing/entitlement
+  // `requiresSubscription`, mirroring subscription_gate_enabled). Three
+  // states: null = unknown (logged out — the endpoint is auth-only — or the
+  // fetch failed), in which the page under-claims and says nothing about
+  // feature access; false = gate off, the includes-every-feature sentence is
+  // true and renders; true = gate on, the page discloses it instead.
+  const [requiresSubscription, setRequiresSubscription] = useState<boolean | null>(null);
   // PAY-R3-01: confirmation shown after POST /billing/checkout switches an
   // existing subscription in place instead of redirecting to Stripe.
   const [switchNotice, setSwitchNotice] = useState<string | null>(null);
@@ -128,6 +165,14 @@ export default function PricingPage() {
         // still works, so degrade silently rather than blocking the page.
         if (err instanceof ApiError && err.status === 401) return;
         setMySubscription(null);
+      });
+    // CLI-D3 refix: best-effort read of the live gate verdict. A failure
+    // leaves `null` — the page then makes NO feature-access claim rather
+    // than fabricating one in either direction.
+    fetchEntitlement()
+      .then((e) => setRequiresSubscription(e.requiresSubscription))
+      .catch(() => {
+        // Keep null (unknown) — under-claim, never guess.
       });
   }, []);
 
@@ -243,13 +288,36 @@ export default function PricingPage() {
             All prices are in Australian dollars and GST-inclusive. Pick a plan and let
             Aether do the applying — cancel anytime.
           </p>
+          {/* CLI-D3 / D4 (audit wf_9a87f76f-eaa): "feature access" was an
+              overclaim — no code path gates any feature by plan TIER. The two
+              things the backend enforces between plan tiers are the monthly
+              agent-run quota and the monthly AI spend cap. */}
           <p
             data-testid="pricing-model-honesty-note"
             className="mx-auto mt-2 max-w-xl text-xs text-aether-muted-dim"
           >
-            Every plan uses the same AI models — plans differ by monthly agent-run
-            quota and feature access, not model quality.
+            Plans differ by monthly agent-run quota and monthly AI spend cap — every plan
+            uses the same AI models, never a downgraded model.
           </p>
+          {/* CLI-D3 refix (adversarial SECONDARY finding): the old static
+              "Every plan includes every feature" was true only because the
+              live env disables the paid-subscription gate
+              (AETHER_REQUIRE_PAID_SUBSCRIPTION=false); the code default is ON
+              and then agents.py _require_active_subscription 402-walls Free
+              out of every actionable agent — a flag flip would have silently
+              falsified the sentence. It now renders from the LIVE
+              requiresSubscription verdict, and the unknown state (logged out
+              / failed fetch) claims nothing. */}
+          {requiresSubscription === null ? null : (
+            <p
+              data-testid="pricing-feature-note"
+              className="mx-auto mt-1 max-w-xl text-xs text-aether-muted-dim"
+            >
+              {requiresSubscription
+                ? "On this deployment, running the agents requires an active paid subscription — a Free account can sign in and browse, and any paid plan unlocks every agent."
+                : "Right now this deployment gates no capability behind a paid plan — every plan includes every feature."}
+            </p>
+          )}
 
           <div
             className="mt-6 inline-flex items-center gap-1 rounded-xl border border-white/10 bg-white/5 p-1 text-sm"
@@ -433,7 +501,13 @@ export default function PricingPage() {
 
                   <ul className="mt-3 flex flex-1 flex-col gap-2 text-[13px] text-aether-muted">
                     {plan.features
-                      .filter((feature) => !MODEL_TIER_CLAIM_RE.test(feature))
+                      .filter(
+                        (feature) =>
+                          // CLI-D3 / D4: only quota-truth bullets survive —
+                          // see QUOTA_FACT_RE. Every other bullet implies a
+                          // plan-gated capability no code enforces.
+                          QUOTA_FACT_RE.test(feature) && !MODEL_TIER_CLAIM_RE.test(feature),
+                      )
                       .map((feature) => (
                         <li key={feature} className="flex items-start gap-2">
                           <i className="fa-solid fa-check mt-0.5 text-aether-green" aria-hidden="true" />

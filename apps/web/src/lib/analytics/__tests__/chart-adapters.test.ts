@@ -30,9 +30,14 @@ function funnel(overrides: Partial<Funnel> = {}): Funnel {
 describe("funnelSteps — a measured zero stays a zero", () => {
   it("keeps 0 as 0 and never converts it to null", () => {
     const steps = funnelSteps(funnel());
+    // CONTRACT UPDATE (Architect decision CLI-D3, audit wf_9a87f76f-eaa D3/D4):
+    // the second stage counts `funnel.applied` = applications that LEFT DRAFT —
+    // preparation, not proof of sending (live audit: 391 "submitted" rows were
+    // never transmitted anywhere). The old "Applied" label overclaimed; the
+    // honest label is "Prepared". Same values, same strictness.
     expect(steps.map((s) => s.label)).toEqual([
       "Jobs found",
-      "Applied",
+      "Prepared",
       "Screened",
       "Interviewed",
       "Offers",
@@ -54,6 +59,21 @@ describe("funnelSteps — a measured zero stays a zero", () => {
     // is legitimately larger than the live Jobs board list.
     const [jobsFound] = funnelSteps(funnel());
     expect(jobsFound.note).toMatch(/all time|discovered/i);
+  });
+
+  it("CLI-D3: the Prepared stage states what it counts, and carries the verified-send count when the API provides it", () => {
+    // With the additive `transmitted` field present, the note must surface it
+    // as the "sent (verified)" count, verbatim number, never recomputed.
+    const withTransmitted = funnelSteps(funnel({ transmitted: 21 }))[1];
+    expect(withTransmitted.label).toBe("Prepared");
+    expect(withTransmitted.note).toMatch(/left draft/i);
+    expect(withTransmitted.note).toContain("21 sent (verified)");
+
+    // Against an OLDER API (no `transmitted`), the note must still say what
+    // "Prepared" is — and must NOT invent a sent count of any kind.
+    const withoutTransmitted = funnelSteps(funnel())[1];
+    expect(withoutTransmitted.note).toMatch(/left draft/i);
+    expect(withoutTransmitted.note).not.toMatch(/sent \(verified\)/);
   });
 });
 

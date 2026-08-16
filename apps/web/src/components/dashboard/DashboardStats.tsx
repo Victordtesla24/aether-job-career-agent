@@ -52,6 +52,15 @@ export function buildStatCards(funnel: Funnel, extras: StatExtras = {}): StatCar
   const { weeklyApplied = null, avgFit = null } = extras;
   const interviewRate =
     funnel.applied > 0 ? Math.round((funnel.interviewed / funnel.applied) * 100) : 0;
+  // CLI-D3/D4 (audit wf_9a87f76f-eaa): `funnel.applied` counts applications
+  // that LEFT DRAFT — preparation, not proof of sending (live audit: 391
+  // "submitted" rows were never transmitted anywhere). The card's honesty
+  // copy says "prepared", and the additive `transmitted` field (verified
+  // sends — transmittedAt stamped by the real send path) is surfaced as the
+  // "sent (verified)" count whenever the API provides it. Absent field
+  // (older API during deploy) ⇒ the exact prior copy, no sent claim.
+  const weeklyNote =
+    weeklyApplied != null && weeklyApplied > 0 ? `+${weeklyApplied} this week` : "no new this week";
   return [
     {
       label: "Active Applications",
@@ -59,17 +68,19 @@ export function buildStatCards(funnel: Funnel, extras: StatExtras = {}): StatCar
       icon: "fa-solid fa-paper-plane",
       iconColor: "text-aether-coral",
       note:
-        weeklyApplied != null && weeklyApplied > 0
-          ? `+${weeklyApplied} this week`
-          : "no new this week",
+        funnel.transmitted != null
+          ? `${funnel.transmitted} sent (verified) · ${weeklyNote}`
+          : weeklyNote,
       noteColor:
         weeklyApplied != null && weeklyApplied > 0 ? "text-aether-green" : "text-aether-muted",
       trendUp: weeklyApplied != null && weeklyApplied > 0,
       // Honest about what's actually counted (data-consistency ruling,
-      // MV-mobile-dashboard-005): funnel.applied is every Application that
-      // has left "draft" — i.e. actually submitted — not a narrower
-      // "still active" subset, so the tooltip must not claim otherwise.
-      tooltip: "Applications you've submitted to an employer — every status past draft (screening, interview, offer, or rejected).",
+      // MV-mobile-dashboard-005, sharpened by CLI-D3): every Application that
+      // has left "draft" — prepared, which is NOT the same fact as sent.
+      tooltip:
+        funnel.transmitted != null
+          ? `Applications prepared — every status past draft (screening, interview, offer, or rejected). Preparation is not proof of sending: ${funnel.transmitted} of them were verifiably sent by Aether ("sent (verified)").`
+          : "Applications prepared — every status past draft (screening, interview, offer, or rejected). Preparation, not proof of sending.",
     },
     {
       label: "Interview Rate",
@@ -79,10 +90,10 @@ export function buildStatCards(funnel: Funnel, extras: StatExtras = {}): StatCar
       iconColor: "text-aether-indigo",
       note:
         funnel.applied > 0
-          ? `${funnel.interviewed} of ${funnel.applied} applied`
+          ? `${funnel.interviewed} of ${funnel.applied} prepared`
           : "no applications yet",
       noteColor: "text-aether-muted",
-      tooltip: "Share of your applications that progressed to at least one interview (Application → Interview %).",
+      tooltip: "Share of your prepared applications that progressed to at least one interview (Application → Interview %).",
     },
     {
       label: "Offers",

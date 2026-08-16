@@ -50,7 +50,18 @@ describe("runBadge", () => {
   it("maps wireframe badges per agent and status", () => {
     expect(runBadge(run({ agentName: "scout" })).label).toBe("Discovered");
     expect(runBadge(run({ agentName: "tailor" })).label).toBe("Tailored");
-    expect(runBadge(run({ agentName: "submission" })).label).toBe("Submitted");
+    // CLI-D3 refix (audit wf_9a87f76f-eaa, adversarial attack-1): "Submitted"
+    // now requires output PROVING a transmission (submissionState =
+    // "transmitted", the one state backed by Application."transmittedAt" —
+    // apps/api/app/agents/submission_agent.py). A bare completed submission
+    // run no longer earns it; the state-specific pins live in the
+    // "submission-run honesty" block below. This is a legitimate contract
+    // update, not a weakening: the old pin asserted a green "Submitted" chip
+    // for runs the agent's own catalog says transmit nothing.
+    expect(
+      runBadge(run({ agentName: "submission", output: { submissionState: "transmitted", transmitted: true } }))
+        .label,
+    ).toBe("Submitted");
     expect(runBadge(run({ agentName: "coverLetter" })).label).toBe("Drafted");
     expect(runBadge(run({ agentName: "supervisor" })).label).toBe("Completed");
     expect(runBadge(liveRun({ status: "running" })).label).toBe("Waiting");
@@ -96,6 +107,93 @@ describe("runBadge", () => {
       }),
     );
     expect(drafted.label).toBe("Drafted");
+  });
+});
+
+/**
+ * CLI-D3 refix (audit wf_9a87f76f-eaa, adversarial attack-1 — MUST-FIX 1).
+ *
+ * The Submission Agent "transmits NOTHING itself: a run ends as a pending
+ * card in Approvals" (apps/api/app/routers/agents.py) — its run output
+ * carries the honest terminal state (apps/api/app/agents/submission_agent.py:
+ * submissionState = transmitted | awaiting_approval | manual_step_required |
+ * recorded_not_transmitted | no_change | none). Before this fix the feed
+ * stamped a green "Submitted" chip and said "submitted an application" for
+ * EVERY completed submission run. These pins make the badge and sentence a
+ * function of the run's own evidence: only output proving a transmission may
+ * render "Submitted".
+ */
+describe("submission-run honesty (CLI-D3 refix, wf_9a87f76f-eaa attack-1)", () => {
+  const sub = (output: Record<string, unknown>) =>
+    run({ agentName: "submission", status: "completed", output });
+
+  it("an awaiting_approval submission run NEVER renders 'Submitted' — it reads as queued for approval, nothing sent", () => {
+    const r = sub({
+      submissionState: "awaiting_approval",
+      transmitted: false,
+      approvalId: "ap_1",
+      message: "Recorded in your tracker and queued for sending — NOT transmitted yet.",
+    });
+    const badge = runBadge(r);
+    expect(badge.label).not.toBe("Submitted");
+    expect(badge.label).toBe("Needs approval");
+    // Not the success green either — a queued card is not a sent application.
+    expect(badge.cls).not.toContain("aether-green");
+    const d = describeRun(r);
+    expect(d.text).not.toContain("submitted an application");
+    expect(d.text).toMatch(/approval/i);
+    expect(d.text).toMatch(/nothing sent|not (yet )?sent|nothing has been sent/i);
+  });
+
+  it("only transmission-proving output renders 'Submitted' / 'submitted an application'", () => {
+    const r = sub({
+      submissionState: "transmitted",
+      transmitted: true,
+      transmissionRef: "msg-abc",
+    });
+    expect(runBadge(r).label).toBe("Submitted");
+    expect(describeRun(r).text).toBe("submitted an application");
+  });
+
+  it("manual_step_required reads as its honest state, never 'Submitted'", () => {
+    const r = sub({
+      submissionState: "manual_step_required",
+      transmitted: false,
+      message: "Seek requires you to apply on their site.",
+    });
+    const badge = runBadge(r);
+    expect(badge.label).not.toBe("Submitted");
+    expect(badge.label).toBe("Manual step");
+    const d = describeRun(r);
+    expect(d.text).not.toContain("submitted an application");
+    expect(d.text).toMatch(/step|needs you/i);
+  });
+
+  it("no_change / none read as no-op checks, never 'Submitted'", () => {
+    for (const state of ["no_change", "none"]) {
+      const r = sub({ submissionState: state, transmitted: false });
+      expect(runBadge(r).label).not.toBe("Submitted");
+      expect(runBadge(r).label).toBe("No change");
+      expect(describeRun(r).text).not.toContain("submitted an application");
+    }
+  });
+
+  it("recorded_not_transmitted says recorded-not-sent, never 'Submitted'", () => {
+    const r = sub({ submissionState: "recorded_not_transmitted", transmitted: false });
+    expect(runBadge(r).label).not.toBe("Submitted");
+    const d = describeRun(r);
+    expect(d.text).not.toContain("submitted an application");
+    expect(d.text).toMatch(/not sent/i);
+  });
+
+  it("a completed submission run with NO state evidence (legacy/empty output) never claims a submission", () => {
+    for (const output of [{}, { submitted: true }]) {
+      const r = sub(output);
+      const badge = runBadge(r);
+      expect(badge.label).not.toBe("Submitted");
+      expect(badge.cls).not.toContain("aether-green");
+      expect(describeRun(r).text).not.toContain("submitted an application");
+    }
   });
 });
 

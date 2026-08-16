@@ -15,6 +15,14 @@ import { ApiError } from "../../../lib/api/client";
 const fetchPlansMock = vi.fn();
 const startCheckoutMock = vi.fn();
 const fetchSubscriptionMock = vi.fn();
+// CLI-D3 refix (audit wf_9a87f76f-eaa, adversarial SECONDARY finding): the
+// "every plan includes every feature" sentence is now conditioned on the LIVE
+// operator signal `requiresSubscription` (GET /billing/entitlement, mirroring
+// apps/api/app/repositories/billing.py subscription_gate_enabled — code
+// default ON, currently disabled in the live env). Default mock: a rejected
+// fetch, i.e. the unknown state a logged-out visitor is in (the endpoint is
+// auth-only), in which the page must under-claim.
+const fetchEntitlementMock = vi.fn();
 vi.mock("../../../lib/api/billing", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../../lib/api/billing")>();
   return {
@@ -22,6 +30,7 @@ vi.mock("../../../lib/api/billing", async (importOriginal) => {
     fetchPlans: (...args: unknown[]) => fetchPlansMock(...args),
     startCheckout: (...args: unknown[]) => startCheckoutMock(...args),
     fetchSubscription: (...args: unknown[]) => fetchSubscriptionMock(...args),
+    fetchEntitlement: (...args: unknown[]) => fetchEntitlementMock(...args),
   };
 });
 
@@ -79,6 +88,9 @@ const originalLocationDescriptor = Object.getOwnPropertyDescriptor(window, "loca
 beforeEach(() => {
   window.localStorage.clear();
   fetchSubscriptionMock.mockResolvedValue(NO_SUBSCRIPTION);
+  // Unknown entitlement by default (auth-only endpoint; a logged-out visitor
+  // can never learn requiresSubscription) — the page must under-claim.
+  fetchEntitlementMock.mockRejectedValue(new Error("401 unauthenticated"));
 });
 
 afterEach(() => {
@@ -86,6 +98,7 @@ afterEach(() => {
   fetchPlansMock.mockReset();
   startCheckoutMock.mockReset();
   fetchSubscriptionMock.mockReset();
+  fetchEntitlementMock.mockReset();
   window.localStorage.clear();
   if (originalLocationDescriptor) {
     Object.defineProperty(window, "location", originalLocationDescriptor);
@@ -188,6 +201,95 @@ describe("PricingPage", () => {
     expect(bodyText).not.toMatch(/model access/i);
     // The honest differentiator (run quota, not model quality) is stated.
     expect(bodyText).toMatch(/same ai models/i);
+  });
+
+  it("CLI-D3 / D4 (audit wf_9a87f76f-eaa): never renders feature bullets implying plan-gated capabilities no code enforces; states the REAL plan differences (run quota + spend cap)", async () => {
+    // The live GET /billing/plans catalog ships presentation bullets like
+    // "Cover letters + story bank" (starter), "Priority email agent" (pro),
+    // "Everything in Starter/Pro" and "Community support" — but the backend
+    // gates NOTHING by plan except the monthly agent-run quota and the
+    // monthly AI spend cap (Plan.runsPerMonth / Plan.spendCapUsdMonthly →
+    // UsageQuota, apps/api/app/repositories/billing.py). Cover letters, the
+    // email agent and every other capability are available on every plan, so
+    // a tier-ladder bullet implying otherwise is a false gate. Only
+    // quota-truth bullets may render.
+    fetchPlansMock.mockResolvedValue({
+      ...PLANS,
+      plans: PLANS.plans.map((p) => ({
+        ...p,
+        features:
+          p.id === "free"
+            ? ["5 tailored agent runs / month", "Light model tier", "Resume tailoring + ATS scoring", "Community support"]
+            : p.id === "starter"
+              ? ["30 tailored agent runs / month", "Standard model tier", "Cover letters + story bank", "Email agent (triage + drafts)"]
+              : p.id === "pro"
+                ? ["100 tailored agent runs / month", "Advanced model tier", "Everything in Starter", "Priority email agent"]
+                : ["300 tailored agent runs / month", "Full model access", "Everything in Pro", "Highest monthly run ceiling"],
+      })),
+    });
+    render(<PricingPage />);
+    await waitFor(() => screen.getByTestId("pricing-tier-power"));
+
+    const bodyText = document.body.textContent ?? "";
+    // No implied gated features that do not exist.
+    expect(bodyText).not.toMatch(/cover letters \+ story bank/i);
+    expect(bodyText).not.toMatch(/email agent \(triage/i);
+    expect(bodyText).not.toMatch(/priority email agent/i);
+    expect(bodyText).not.toMatch(/everything in (starter|pro)/i);
+    expect(bodyText).not.toMatch(/community support/i);
+    expect(bodyText).not.toMatch(/resume tailoring \+ ats scoring/i);
+    // Quota-truth bullets still render.
+    expect(bodyText).toMatch(/30 tailored agent runs \/ month/i);
+    expect(bodyText).toMatch(/highest monthly run ceiling/i);
+    // The header states EXACTLY what code enforces as the plan differences —
+    // and no longer the vague "feature access" claim.
+    expect(bodyText).toMatch(/agent-run quota/i);
+    expect(bodyText).toMatch(/spend cap/i);
+    expect(bodyText).not.toMatch(/feature access/i);
+    // CLI-D3 refix (adversarial SECONDARY finding — legitimate contract
+    // update): this test previously pinned the STATIC sentence "every plan
+    // includes every feature", which is only true while the operator keeps
+    // AETHER_REQUIRE_PAID_SUBSCRIPTION=false — the code default is ON
+    // (billing.py subscription_gate_enabled) and then _require_active_
+    // subscription 402-walls the Free plan from every actionable agent. The
+    // sentence may now render ONLY on a live requiresSubscription === false
+    // signal; this render is logged out (entitlement unknowable), so the page
+    // must not make the claim.
+    expect(bodyText).not.toMatch(/every plan includes every feature/i);
+    expect(bodyText).toMatch(/same ai models/i);
+  });
+
+  it("CLI-D3 refix: with a live requiresSubscription=false signal, the includes-every-feature clause renders (true under this operator configuration)", async () => {
+    window.localStorage.setItem("aether_token", "fake.jwt.token");
+    fetchPlansMock.mockResolvedValue(PLANS);
+    fetchEntitlementMock.mockResolvedValue({
+      active_paid: false,
+      plan: { id: "free", status: "active" },
+      requiresSubscription: false,
+    });
+    render(<PricingPage />);
+    await waitFor(() => screen.getByTestId("pricing-feature-note"));
+
+    const note = screen.getByTestId("pricing-feature-note").textContent ?? "";
+    expect(note).toMatch(/every plan includes every feature/i);
+  });
+
+  it("CLI-D3 refix: with a live requiresSubscription=true signal, the page discloses the paid gate and never claims every plan includes every feature", async () => {
+    window.localStorage.setItem("aether_token", "fake.jwt.token");
+    fetchPlansMock.mockResolvedValue(PLANS);
+    fetchEntitlementMock.mockResolvedValue({
+      active_paid: false,
+      plan: { id: "free", status: "active" },
+      requiresSubscription: true,
+    });
+    render(<PricingPage />);
+    await waitFor(() => screen.getByTestId("pricing-feature-note"));
+
+    const note = screen.getByTestId("pricing-feature-note").textContent ?? "";
+    expect(note).toMatch(/paid subscription/i);
+    expect(note).toMatch(/agents?/i);
+    const bodyText = document.body.textContent ?? "";
+    expect(bodyText).not.toMatch(/every plan includes every feature/i);
   });
 
   it("MV-pricing-004: shows a distinct honest message for a 400 (no Stripe price configured)", async () => {

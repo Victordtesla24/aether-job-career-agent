@@ -65,6 +65,37 @@ export function agentTile(agentName: string): FeedTile {
  * runs" table — keep reusing the SAME single definition. */
 export { coverLetterDegraded };
 
+/**
+ * CLI-D3 refix (audit wf_9a87f76f-eaa, adversarial attack-1 — MUST-FIX 1):
+ * badge per Submission Agent terminal state. The agent "transmits NOTHING
+ * itself: a run ends as a pending card in Approvals"
+ * (apps/api/app/routers/agents.py) and its output carries the honest state
+ * (apps/api/app/agents/submission_agent.py `submissionState` — the STATE_*
+ * vocabulary). Only `transmitted` — the ONE state read back from
+ * `Application."transmittedAt"` after the work — may render the green
+ * "Submitted" chip. Everything else, including a legacy/unknown output shape
+ * (the pre-U5d runs whose `submitted: true` was set unconditionally), gets an
+ * honest non-transmission badge.
+ */
+function submissionRunBadge(run: AgentRun): FeedBadge {
+  const state = (run.output ?? {})["submissionState"];
+  const byState: Record<string, FeedBadge> = {
+    transmitted: { label: "Submitted", cls: "bg-aether-green/15 text-aether-green border-aether-green/20" },
+    awaiting_approval: { label: "Needs approval", cls: "bg-aether-yellow/15 text-aether-yellow border-aether-yellow/20" },
+    manual_step_required: { label: "Manual step", cls: "bg-aether-amber/15 text-aether-amber border-aether-amber/20" },
+    recorded_not_transmitted: { label: "Recorded", cls: "bg-white/8 text-aether-muted border-white/10" },
+    no_change: { label: "No change", cls: "bg-white/8 text-aether-muted border-white/10" },
+    none: { label: "No change", cls: "bg-white/8 text-aether-muted border-white/10" },
+  };
+  return (
+    byState[typeof state === "string" ? state : ""] ?? {
+      // Unknown/legacy output proves nothing — neutral, never success green.
+      label: "Completed",
+      cls: "bg-white/8 text-aether-muted border-white/10",
+    }
+  );
+}
+
 /** Badge per run status/agent (wireframe: Discovered/Tailored/Submitted/Waiting).
  *
  * CRITICAL-2: a run whose in-flight status is older than any real run takes is
@@ -85,11 +116,14 @@ export function runBadge(run: AgentRun): FeedBadge {
     // that produced no letter.
     return { label: "Unavailable", cls: "bg-white/8 text-aether-muted border-white/10" };
   }
+  if (run.agentName === "submission") {
+    // CLI-D3 refix: never a blanket "Submitted" — see submissionRunBadge.
+    return submissionRunBadge(run);
+  }
   const byAgent: Record<string, FeedBadge> = {
     scout: { label: "Discovered", cls: "bg-aether-indigo/15 text-aether-violet border-aether-indigo/20" },
     matcher: { label: "Discovered", cls: "bg-aether-indigo/15 text-aether-violet border-aether-indigo/20" },
     tailor: { label: "Tailored", cls: "bg-aether-coral/15 text-aether-coral border-aether-coral/20" },
-    submission: { label: "Submitted", cls: "bg-aether-green/15 text-aether-green border-aether-green/20" },
     coverLetter: { label: "Drafted", cls: "bg-aether-amber/15 text-aether-amber border-aether-amber/20" },
   };
   return (
@@ -210,8 +244,50 @@ export function describeRun(run: AgentRun): { text: string; highlight: string | 
         metric: waiting ? "needs approval" : null,
       };
     }
-    case "submission":
-      return { text: "submitted an application", highlight: null, metric: null };
+    case "submission": {
+      // CLI-D3 refix (wf_9a87f76f-eaa attack-1, MUST-FIX 1): "submitted an
+      // application" was rendered for EVERY completed submission run, though
+      // the agent's own output distinguishes the one transmission-proven
+      // state from the queued/manual/no-op ones (submission_agent.py). The
+      // sentence is now a function of that evidence — the same rule
+      // lib/agents-feedback.ts already applies to the run banner.
+      const state = str(out.submissionState);
+      const message = str(out.message);
+      if (state === "transmitted") {
+        return { text: "submitted an application", highlight: null, metric: "transmitted" };
+      }
+      if (state === "awaiting_approval") {
+        return {
+          text: "queued an application for your approval — nothing sent yet",
+          highlight: null,
+          metric: "needs approval",
+        };
+      }
+      if (state === "manual_step_required") {
+        return {
+          text: "prepared an application — a step needs you before it can be sent",
+          highlight: null,
+          metric: message ? message.slice(0, 60) : "manual step",
+        };
+      }
+      if (state === "recorded_not_transmitted") {
+        return {
+          text: "recorded an application in your tracker — not sent",
+          highlight: null,
+          metric: "not sent",
+        };
+      }
+      if (state === "no_change" || state === "none") {
+        return {
+          text: "checked for ready applications — nothing new to submit",
+          highlight: null,
+          metric: null,
+        };
+      }
+      // Unknown/legacy output (including the pre-U5d `submitted: true` lie):
+      // no evidence of a transmission, so no claim of one.
+      return { text: "finished — no transmission recorded", highlight: null, metric: null };
+    }
     case "supervisor":
       return { text: "planned the discovery → tailoring pipeline", highlight: null, metric: null };
     default:

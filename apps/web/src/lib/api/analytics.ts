@@ -8,10 +8,20 @@ export type Period = "7d" | "30d" | "90d" | "all";
 export const FunnelSchema = z.object({
   period: z.string(),
   jobs_found: z.number(),
+  // CLI-D3 (audit wf_9a87f76f-eaa): `applied` counts applications that LEFT
+  // DRAFT — preparation, not proof of sending (analytics.py
+  // get_application_counts: status <> 'draft'). Surfaces labeling this count
+  // must say "prepared", never "submitted"/"sent".
   applied: z.number(),
   screened: z.number(),
   interviewed: z.number(),
   offers: z.number(),
+  // CLI-D3 ADDITIVE: DISTINCT jobs with a VERIFIED send (`transmittedAt IS
+  // NOT NULL`, stamped only by the real send path — never by a status
+  // change). Optional so the FE tolerates an older API during a rolling
+  // deploy: absence withholds every "sent (verified)" surface instead of
+  // fabricating a 0.
+  transmitted: z.number().optional(),
 });
 
 export type Funnel = z.infer<typeof FunnelSchema>;
@@ -57,6 +67,15 @@ export const ConversionSchema = z.object({
   // the entire fix; the value itself is untouched, API-derived data.
   interview_conversion_rate: z.number(),
   interview_conversion_healthy: z.boolean(),
+  // CLI-D3 ADDITIVE (audit wf_9a87f76f-eaa): the verified-send count for the
+  // same window, and interviews over TRANSMITTED — the rate a user can trust
+  // as "of what actually went out, how much converted". The legacy
+  // `interview_conversion_rate` above keeps its exact prior meaning (its
+  // denominator includes recorded-but-never-sent applications; the UI labels
+  // it "prepared"). Both optional so an older API during deploy still parses
+  // — absence withholds the verified surfaces, never fabricates them.
+  transmitted: z.number().optional(),
+  verified_interview_conversion_rate: z.number().optional(),
 });
 
 export type Conversion = z.infer<typeof ConversionSchema>;

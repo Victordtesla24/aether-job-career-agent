@@ -31,7 +31,20 @@ export function funnelSteps(funnel: Funnel): FunnelStep[] {
       // Saying so is what stops the two numbers reading as a data bug.
       note: "Every job discovered for you across all time — the Jobs board lists only currently-open postings, so its count is usually lower.",
     },
-    { label: "Applied", value: funnel.applied },
+    {
+      // CLI-D3/D4 (audit wf_9a87f76f-eaa, Architect decision CLI-D3): this
+      // stage counts `funnel.applied` — applications that LEFT DRAFT.
+      // Preparation, not proof of sending (live audit: 391 "submitted" rows
+      // were never transmitted anywhere), so the label says "Prepared" and
+      // the note surfaces the verified-send count whenever the API provides
+      // the additive `transmitted` field — never invented when it is absent.
+      label: "Prepared",
+      value: funnel.applied,
+      note:
+        funnel.transmitted == null
+          ? "Applications prepared (left draft) — preparation, not proof of sending."
+          : `Applications prepared (left draft); ${funnel.transmitted} sent (verified) by Aether.`,
+    },
     { label: "Screened", value: funnel.screened },
     { label: "Interviewed", value: funnel.interviewed },
     { label: "Offers", value: funnel.offers },

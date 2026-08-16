@@ -158,3 +158,79 @@ describe("interview_conversion_rate reaches the Analytics screen (GOLD-MASTER V4
     expect(tile.textContent?.toLowerCase()).toMatch(/needs improvement/);
   });
 });
+
+/**
+ * TRACK D / D3+D4 (audit wf_9a87f76f-eaa, Architect decision CLI-D3): the
+ * conversion payload now additionally carries `transmitted` (verified sends)
+ * and `verified_interview_conversion_rate` (interviews over TRANSMITTED). The
+ * legacy `interview_conversion_rate` keeps its exact prior value but its
+ * denominator includes recorded-but-never-sent applications (live audit: 391
+ * of them), so the page must (a) label that denominator honestly as
+ * "prepared", and (b) surface the verified rate, with its own "sent
+ * (verified)" denominator, whenever the API provides it — and never fabricate
+ * it when an older API does not.
+ */
+describe("verified interview conversion reaches the Analytics screen (CLI-D3)", () => {
+  it("labels the legacy denominator as prepared and renders the verified rate + sent (verified) basis when the API sends them", async () => {
+    mockApiWith(
+      {
+        period: "all",
+        jobs_found: 20,
+        applied: 10,
+        screened: 8,
+        interviewed: 3,
+        offers: 1,
+        transmitted: 4,
+      },
+      {
+        period: "all",
+        found_to_applied: 50,
+        applied_to_screened: 80,
+        screened_to_interview: 37.5,
+        interview_to_offer: 33.33,
+        interview_conversion_rate: 30,
+        interview_conversion_healthy: true,
+        transmitted: 4,
+        verified_interview_conversion_rate: 75,
+      },
+    );
+
+    render(<AnalyticsPage />);
+
+    const tile = await screen.findByTestId("interview-conversion-rate");
+    const text = tile.textContent ?? "";
+    // The legacy rate stays, and its denominator is named honestly.
+    expect(text).toMatch(/30%/);
+    expect(text.toLowerCase()).toContain("prepared");
+    expect(text.toLowerCase()).not.toContain("submitted");
+    // The verified rate is rendered exactly as the API returned it…
+    expect(text).toMatch(/verified/i);
+    expect(text).toMatch(/75%/);
+    // …with its own denominator disclosed as the sent (verified) count.
+    expect(text).toContain("4 sent (verified)");
+  });
+
+  it("does NOT fabricate a verified rate against an older API that omits the additive fields", async () => {
+    mockApiWith(
+      { period: "all", jobs_found: 20, applied: 10, screened: 8, interviewed: 3, offers: 1 },
+      {
+        period: "all",
+        found_to_applied: 50,
+        applied_to_screened: 80,
+        screened_to_interview: 37.5,
+        interview_to_offer: 33.33,
+        interview_conversion_rate: 30,
+        interview_conversion_healthy: true,
+      },
+    );
+
+    render(<AnalyticsPage />);
+
+    const tile = await screen.findByTestId("interview-conversion-rate");
+    const text = tile.textContent ?? "";
+    expect(text).toMatch(/30%/);
+    // No verified-rate row, no sent count — absence of the field is absence
+    // of the claim, never a 0 and never a copy of the legacy figure.
+    expect(text).not.toMatch(/sent \(verified\)/);
+  });
+});

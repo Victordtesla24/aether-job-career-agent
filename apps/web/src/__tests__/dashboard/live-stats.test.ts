@@ -63,6 +63,29 @@ describe("dashboard live stats", () => {
     expect(cards[3]!.unit).toBe("%");
   });
 
+  it("CLI-D3/D4 (audit wf_9a87f76f-eaa): labels the non-draft count as prepared and surfaces the verified sent count when the API provides it", () => {
+    // `funnel.applied` counts applications that LEFT DRAFT — preparation, not
+    // proof of sending (live audit: 391 "submitted" rows never transmitted).
+    // The card's honesty copy must say "prepared", and when the additive
+    // `transmitted` field is present, the verified send count is surfaced as
+    // "sent (verified)" — never invented when it is absent.
+    const cards = buildStatCards(
+      { ...FUNNEL_FIXTURE, transmitted: 57 },
+      { weeklyApplied: 8, avgFit: 91.2 },
+    );
+    expect(cards[0]!.note).toContain("57 sent (verified)");
+    expect(cards[0]!.tooltip.toLowerCase()).toContain("prepared");
+    expect(cards[0]!.tooltip.toLowerCase()).not.toContain("you've submitted");
+    // The interview-rate denominator is the same prepared count — named as such.
+    expect(cards[1]!.note).toBe("19 of 412 prepared");
+
+    // Older API (no `transmitted`): the note keeps its exact prior weekly
+    // form and no sent count is implied anywhere.
+    const older = buildStatCards(FUNNEL_FIXTURE, { weeklyApplied: 8, avgFit: 91.2 });
+    expect(older[0]!.note).toBe("+8 this week");
+    expect(older[0]!.tooltip).not.toMatch(/sent \(verified\)/);
+  });
+
   it("degrades gracefully with zero/absent data instead of fabricating numbers", () => {
     const zero = buildStatCards(
       { ...FUNNEL_FIXTURE, applied: 0, interviewed: 0, offers: 0 },

@@ -251,7 +251,10 @@ describe("summariseAts", () => {
 describe("the spend tile refuses to divide two different windows", () => {
   it("computes cost per application only on the 'all' period", () => {
     const t = tile("spend");
-    expect(t.insight).toBe("$0.03 per submitted application.");
+    // CLI-D3/D4 (audit wf_9a87f76f-eaa): `funnel.applied` counts applications
+    // that LEFT DRAFT — preparation, not verified sends — so the ratio's own
+    // words say "prepared", never "submitted". Same figure, same strictness.
+    expect(t.insight).toBe("$0.03 per prepared application.");
     expect(t.spark.data[0].display).toBe("$0.03");
   });
 
@@ -292,16 +295,31 @@ describe("the spend tile refuses to divide two different windows", () => {
  * These tests are what stops that deletion from being a quiet data loss.
  */
 describe("the deleted dashboard card's figures survive on the band", () => {
-  it("wears the all-stages application count as a chip beside the submitted one, subtracting nothing", () => {
+  it("wears the all-stages application count as a chip beside the prepared one, subtracting nothing", () => {
     const t = tile("pipeline", { dashboard: DASHBOARD });
-    expect(t.value).toBe("287"); // submitted, from the funnel
+    expect(t.value).toBe("287"); // prepared (left draft), from the funnel
     expect(t.delta?.text).toBe("460 created"); // all stages, from the dashboard
     expect(t.delta?.tone).toBe("neutral");
     // Both counts are stated; the difference between two endpoints' date
     // columns is never presented as a "drafts" figure neither one measured.
+    // CLI-D3/D4 (audit wf_9a87f76f-eaa): "submitted" → "prepared", because
+    // `funnel.applied` counts applications that left draft — preparation, not
+    // verified sends. Same figures, same strictness.
     expect(t.delta?.title).toContain("every stage from draft to offer");
-    expect(t.delta?.title).toContain("287 of them have been submitted");
-    expect(t.delta?.title).not.toMatch(/173|draft backlog|not yet submitted/);
+    expect(t.delta?.title).toContain("287 of them have been prepared");
+    expect(t.delta?.title).not.toMatch(/173|draft backlog|not yet prepared|have been submitted/);
+  });
+
+  it("CLI-D3: the chip additionally carries the verified-send count when the funnel provides `transmitted`", () => {
+    const t = tile("pipeline", {
+      dashboard: DASHBOARD,
+      funnel: { ...FUNNEL, transmitted: 21 },
+    });
+    expect(t.delta?.title).toContain("21 of them sent (verified)");
+
+    // Older API (no `transmitted`): no sent count is implied, ever.
+    const older = tile("pipeline", { dashboard: DASHBOARD });
+    expect(older.delta?.title).not.toMatch(/sent \(verified\)/);
   });
 
   it("names the window the count was taken over, and follows the selector", () => {
@@ -319,9 +337,9 @@ describe("the deleted dashboard card's figures survive on the band", () => {
     const t = tile("pipeline", { dashboard: DASHBOARD, funnel: null });
     expect(t.measured).toBe(false);
     expect(t.delta?.text).toBe("460 created");
-    // With no funnel there is no submitted count to compare against, and none
-    // is implied.
-    expect(t.delta?.title).not.toContain("submitted");
+    // With no funnel there is no prepared count to compare against, and none
+    // is implied (under either the old "submitted" name or the honest one).
+    expect(t.delta?.title).not.toMatch(/submitted|prepared/);
   });
 
   it("reports the PERIOD-SCOPED spend on a scoped period, and divides it by the same window's funnel", () => {
@@ -330,10 +348,10 @@ describe("the deleted dashboard card's figures survive on the band", () => {
     expect(t.basis).toContain("the selected period (7d)");
     expect(t.delta?.text).toBe("812 runs");
     expect(t.delta?.title).toContain("the selected period (7d)");
-    // 3.40 / 287 submitted — both measured over the same 7d window, so the
+    // 3.40 / 287 prepared — both measured over the same 7d window, so the
     // ratio the all-time ROI figure could never honestly produce is real here.
     expect(t.spark.data[0].display).toBe("$0.01");
-    expect(t.insight).toBe("$0.01 per submitted application.");
+    expect(t.insight).toBe("$0.01 per prepared application.");
   });
 
   it("keeps the all-time ROI figure on the 'all' period, where the two agree on window", () => {
@@ -402,8 +420,10 @@ describe("the rigor tile", () => {
   });
 
   it("falls back to the policy's own sample size when no history was recorded", () => {
+    // CLI-D3/D4: the policy's sample is applications that left draft —
+    // "prepared", not "submitted" (which now reads as a send claim).
     expect(tile("rigor", { policyHistory: null }).insight).toBe(
-      "Measured on 287 submitted applications.",
+      "Measured on 287 prepared applications.",
     );
   });
 });

@@ -183,10 +183,14 @@ describe("Analytics period selector (MV-analytics-004)", () => {
     expect(basis.textContent?.toLowerCase()).toContain("all time");
 
     // QA-2026-08-13 C-10: the qualifier still explains why this count is
-    // larger than the funnel's submitted-only "Applied" stage below it.
+    // larger than the funnel's left-draft-only "Prepared" stage below it.
+    // CLI-D3/D4 (audit wf_9a87f76f-eaa): the stage was relabeled from
+    // "Applied"/"submitted" to "prepared" because `funnel.applied` counts
+    // applications that left draft — preparation, not verified sends. The
+    // qualifier must use the honest word; the claim itself is unchanged.
     const qualifier = chip.getAttribute("title")?.toLowerCase() ?? "";
     expect(qualifier).toContain("every stage from draft to offer");
-    expect(qualifier).toContain("submitted");
+    expect(qualifier).toContain("prepared");
 
     // ...and it follows the selector rather than claiming a fixed window.
     fireEvent.click(screen.getByText("7d"));
