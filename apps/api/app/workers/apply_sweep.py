@@ -47,6 +47,17 @@ Two bounds make this safe to point at the real 339-row backlog:
   10), taken OLDEST APPROVAL FIRST, and the summary/log states how many
   applications remain queued — counted for real after the pass, not inferred.
 
+THE USER'S OWN SETTINGS GATE EVERY AUTONOMOUS FIRE (audit wf_9a87f76f-eaa,
+D1+D2). ``agentConfig.autoApply`` must be true before a user is swept at all —
+the cron lists only opted-in users (:func:`users_with_pending_transmissions`)
+and the job re-checks at execution time (:func:`sweep_user_if_opted_in`); the
+``AETHER_APPLY_SWEEP_ENABLED`` env var stays the operator kill-switch ON TOP.
+And within a pass, ``agentConfig.matchThreshold`` (default 50) bars any
+application whose job scores below it — or has no ``fitScore`` at all — from
+being auto-transmitted: an honest, non-terminal ``skippedBelowThreshold``,
+never a burned approval or a fabricated manual step. The user's explicit
+approve-and-execute path bypasses the threshold by design.
+
 KNOWN BOUND, stated rather than hidden: a TRANSPORT failure (the browser could
 not open the page, the site timed out) is counted ``failed`` and the row stays
 eligible for the next pass instead of being written down as a manual step.
@@ -183,14 +194,19 @@ def evidence_root() -> str:
 #: ``manualStepReason``, newest approval per application. ``approvedAt`` is the
 #: DECISION time (``resolvedAt``, falling back to ``createdAt`` for rows that
 #: predate that column being stamped) — the clock the stale-approval guard
-#: reads and the key the backlog drains by.
+#: reads and the key the backlog drains by. ``fitScore`` rides along (LEFT
+#: JOIN, so the selection itself is unchanged even for an application whose
+#: Job row is gone) for the D2 match-threshold gate; NULL means "unscored",
+#: which the gate treats as below every threshold.
 _PENDING_SELECT = '''
     SELECT DISTINCT ON (a."id")
            a."id" AS "applicationId",
            ar."id" AS "approvalId",
-           COALESCE(ar."resolvedAt", ar."createdAt") AS "approvedAt"
+           COALESCE(ar."resolvedAt", ar."createdAt") AS "approvedAt",
+           j."fitScore" AS "fitScore"
     FROM "Application" a
     JOIN "ApprovalRequest" ar ON ar."applicationId" = a."id"
+    LEFT JOIN "Job" j ON j."id" = a."jobId"
     WHERE a."userId" = %s
       AND ar."userId" = %s
       AND ar."type" = 'application_submit'::"ApprovalType"
@@ -241,9 +257,20 @@ def count_pending_transmissions(user_id: str) -> int:
 
 
 def users_with_pending_transmissions(limit: int | None = None) -> list[str]:
-    """Users who currently own at least one approved-but-non-terminal row."""
+    """OPTED-IN users who own at least one approved-but-non-terminal row.
+
+    D1 (audit wf_9a87f76f-eaa): the sweep honours the per-user
+    ``agentConfig.autoApply`` toggle, so this lists ONLY users whose own
+    Settings carry ``autoApply: true`` — a missing config, a missing key, or
+    ``false`` all mean "do not sweep me". The Settings API writes the field as
+    a JSON boolean, which ``->>`` reads back as the text ``'true'`` (the same
+    truth ``application_submission.auto_apply_enabled`` computes in Python).
+    The ``AETHER_APPLY_SWEEP_ENABLED`` env var remains the operator
+    kill-switch ON TOP of this — both must be on before anyone is swept.
+    """
     ensure_application_transmission_columns()
     ensure_application_manual_step_columns()
+    ensure_user_profile_columns()
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -251,10 +278,12 @@ def users_with_pending_transmissions(limit: int | None = None) -> list[str]:
                 SELECT DISTINCT a."userId"
                 FROM "Application" a
                 JOIN "ApprovalRequest" ar ON ar."applicationId" = a."id"
+                JOIN "User" u ON u."id" = a."userId"
                 WHERE ar."type" = 'application_submit'::"ApprovalType"
                   AND ar."status" = 'approved'::"ApprovalStatus"
                   AND a."transmittedAt" IS NULL
                   AND a."manualStepReason" IS NULL
+                  AND (u."agentConfig"->>'autoApply') = 'true'
                 ORDER BY a."userId"
                 ''',
             )
@@ -716,16 +745,44 @@ def sweep_pending_transmissions(
     Idempotent by construction: the selection query excludes anything already
     terminal, so a second pass over a board the first pass finished does no
     work at all and touches nothing.
+
+    D2 (audit wf_9a87f76f-eaa) — THE MATCH THRESHOLD IS REAL HERE. Within a
+    pass, an application whose job's ``fitScore`` is below the user's
+    ``agentConfig.matchThreshold`` (default 50) is NOT auto-transmitted. The
+    skip is honest and NON-terminal: it is counted as
+    ``skippedBelowThreshold`` in the summary and logged, the approval is NOT
+    burned, and NO manual step is stamped — the row simply stays queued. A
+    NULL ``fitScore`` (including an application whose Job row is gone) is
+    below EVERY threshold: an unscored job is never auto-fired. The user may
+    still execute such an application explicitly from the UI — the explicit
+    approve-and-execute path deliberately BYPASSES the threshold, because a
+    personal decision on a specific application outranks the account-wide
+    bar. KNOWN BOUND, stated rather than hidden: below-threshold rows keep
+    their place in the oldest-first batch, so a backlog whose oldest rows all
+    sit under the bar re-reads (and re-skips) them each pass rather than
+    reaching past them.
+
+    The per-user ``autoApply`` toggle is enforced one level up
+    (:func:`sweep_user_if_opted_in` for the job path,
+    :func:`users_with_pending_transmissions` for the cron path); this function
+    is the raw "drive this user's queue" primitive.
     """
+    from app.services.application_submission import (
+        meets_match_threshold,
+        user_match_threshold,
+    )
     from app.services.apply_executor import ApplyExecutorGuardError, ManualStepRequired
 
     batch = sweep_batch_size()
     rows = pending_transmissions(user_id, limit=batch)
+    user = _load_user(user_id) or {}
+    threshold = user_match_threshold(user.get("agentConfig"))
     summary: dict[str, Any] = {
         "processed": 0,
         "transmitted": 0,
         "manual_step": 0,
         "stale_approval": 0,
+        "skippedBelowThreshold": 0,
         "skipped": 0,
         "failed": 0,
         "remaining": 0,
@@ -749,6 +806,21 @@ def sweep_pending_transmissions(
             # transmitted and NOT silently left prepared: it now carries an
             # honest, actionable state with a one-click way back.
             summary["stale_approval"] += 1
+            continue
+        fit_score = row.get("fitScore")
+        if not meets_match_threshold(fit_score, threshold):
+            # D2: below the user's bar (or unscored) — nothing is fired,
+            # nothing is burned, nothing is stamped. The row stays queued and
+            # the user can still submit it explicitly from the board.
+            summary["skippedBelowThreshold"] += 1
+            logger.info(
+                "apply sweep: application %s skipped — fitScore %s is below "
+                "the user's match threshold %s; the approval is untouched and "
+                "the user can still submit it explicitly",
+                application_id,
+                "unscored" if fit_score is None else fit_score,
+                threshold,
+            )
             continue
         try:
             _attempt_transmission(user_id, application_id, approval_id)
@@ -782,13 +854,52 @@ def sweep_pending_transmissions(
     summary["remaining"] = count_pending_transmissions(user_id)
     logger.info(
         "apply sweep for user %s: processed %d of a %d-application batch "
-        "(transmitted %d, manual step %d, expired approval %d, skipped %d, "
-        "failed %d) — %d application(s) still queued for the next pass",
+        "(transmitted %d, manual step %d, expired approval %d, below "
+        "match-threshold %d, skipped %d, failed %d) — %d application(s) "
+        "still queued for the next pass",
         user_id, summary["processed"], batch, summary["transmitted"],
-        summary["manual_step"], summary["stale_approval"], summary["skipped"],
+        summary["manual_step"], summary["stale_approval"],
+        summary["skippedBelowThreshold"], summary["skipped"],
         summary["failed"], summary["remaining"],
     )
     return summary
+
+
+def sweep_user_if_opted_in(
+    user_id: str, *, deadline: float | None = None
+) -> dict[str, Any]:
+    """One user's sweep pass, behind their OWN ``autoApply`` toggle.
+
+    D1 (audit wf_9a87f76f-eaa): the cron path already enqueues only opted-in
+    users (:func:`users_with_pending_transmissions` filters in SQL), but a
+    sweep job can also be enqueued directly — so the toggle is re-checked
+    here, at execution time, against the user's CURRENT Settings. A user whose
+    ``agentConfig.autoApply`` is not true (missing config, missing key, or
+    ``false``) is not swept, and the skip is reported honestly
+    (``{"skipped": "autoApply_off"}``) rather than as an empty pass.
+
+    A ``user_id`` with NO ``User`` row at all is NOT treated as opted-out: it
+    owns nothing the sweep could ever send (the selection query joins
+    ``Application`` on ``userId``), so the pass runs and honestly reports an
+    empty board. The guard exists to protect real accounts that have not
+    opted in, not to change the no-op result for an id that does not exist.
+
+    Synchronous on purpose — it runs inside the worker thread
+    :func:`apply_sweep_user` dispatches, so its own DB reads also stay off
+    the event loop.
+    """
+    from app.services.application_submission import auto_apply_enabled
+
+    user = _load_user(user_id)
+    if user is not None and not auto_apply_enabled(user.get("agentConfig")):
+        logger.info(
+            "apply sweep: user %s has autoApply off — not swept; their "
+            "approved applications stay queued for their own explicit "
+            "submission",
+            user_id,
+        )
+        return {"skipped": "autoApply_off", "userId": user_id}
+    return sweep_pending_transmissions(user_id, deadline=deadline)
 
 
 async def apply_sweep_user(ctx: Any, user_id: str) -> dict[str, Any]:
@@ -804,12 +915,16 @@ async def apply_sweep_user(ctx: Any, user_id: str) -> dict[str, Any]:
     it in a worker thread — exactly as ``board_sweep_user`` already does with
     ``asyncio.to_thread(sweep_user_stretch, ...)`` — gives the sync browser code
     a thread with no running loop, so it works.
+
+    Two switches gate the pass, in order: the operator env kill-switch
+    (``AETHER_APPLY_SWEEP_ENABLED``), then the user's own ``autoApply`` toggle
+    (:func:`sweep_user_if_opted_in`, D1 audit wf_9a87f76f-eaa).
     """
     if not sweep_enabled():
         return {"skipped": "disabled", "userId": user_id}
     deadline = time.monotonic() + sweep_stretch_seconds()
     return await asyncio.to_thread(
-        sweep_pending_transmissions, user_id, deadline=deadline
+        sweep_user_if_opted_in, user_id, deadline=deadline
     )
 
 

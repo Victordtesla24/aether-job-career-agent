@@ -39,7 +39,10 @@ user's own explicit autonomous opt-in (``agentConfig.autoApply`` true AND
 ``agentConfig.approvalGate`` false), which is still recorded as an approval
 row with ``payload.autonomous = true`` so the audit trail names the mode that
 authorised it. Both defaults are the safe ones (``autoApply`` false,
-``approvalGate`` true).
+``approvalGate`` true). The autonomous path additionally honours the user's
+``agentConfig.matchThreshold`` (D6, audit wf_9a87f76f-eaa): a job scoring
+below it — or carrying no ``fitScore`` at all — is never auto-sent; the card
+stays pending for the user's explicit decision instead.
 """
 from __future__ import annotations
 
@@ -283,13 +286,20 @@ def resolve_job_apply_recipient(
     return derived
 
 
-def is_autonomous_submission_enabled(user_id: str) -> bool:
-    """True only when the user EXPLICITLY opted out of the approval gate.
+#: D2 (audit wf_9a87f76f-eaa): the fallback when ``agentConfig.matchThreshold``
+#: is missing or unreadable. The Settings screen always WRITES an explicit
+#: value (its own display default is 80, ``app.routers.workspaces``), so this
+#: fallback only governs configs that predate the field or were written by
+#: hand — and the audit's ruling for those is 50.
+_DEFAULT_MATCH_THRESHOLD = 50.0
 
-    Reads the same ``User.agentConfig`` blob the Settings screen writes
-    (``app.routers.workspaces``). Both defaults are safe: a user who has never
-    touched the setting has ``autoApply`` false and ``approvalGate`` true, so
-    this returns False and nothing can be sent without a human decision.
+
+def _load_agent_config(user_id: str) -> dict[str, Any]:
+    """The ``User.agentConfig`` blob the Settings screen writes, or ``{}``.
+
+    ``{}`` for a missing user, a NULL column, or a non-object value — every
+    read of it below treats absence as the SAFE default (``autoApply`` off,
+    ``approvalGate`` on, threshold at the audit default).
     """
     from app.db import ensure_user_profile_columns
 
@@ -299,9 +309,86 @@ def is_autonomous_submission_enabled(user_id: str) -> bool:
             cur.execute('SELECT "agentConfig" FROM "User" WHERE "id" = %s', (user_id,))
             row = cur.fetchone()
     config = (row[0] if row else None) or {}
+    return config if isinstance(config, dict) else {}
+
+
+def auto_apply_enabled(config: Any) -> bool:
+    """The user's ``agentConfig.autoApply`` toggle, safely read (default OFF).
+
+    THE one Python-side definition of "this user turned auto-apply on" —
+    the sweep worker and the autonomous email path both read it, so the two
+    can never disagree about the same user. Missing config, non-dict config,
+    and a missing/false key all mean OFF. (The SQL twin lives in
+    ``apply_sweep.users_with_pending_transmissions``: ``->>'autoApply' =
+    'true'`` — both agree on every value the Settings API can write, which is
+    a JSON boolean.)
+    """
+    return isinstance(config, dict) and bool(config.get("autoApply"))
+
+
+def user_match_threshold(config: Any) -> float:
+    """The user's ``agentConfig.matchThreshold``, clamped to 0..100.
+
+    D2 (audit wf_9a87f76f-eaa): missing/unreadable values fall back to
+    ``_DEFAULT_MATCH_THRESHOLD`` (50) rather than 0 — an absent bar must not
+    silently become "auto-fire everything".
+    """
     if not isinstance(config, dict):
+        return _DEFAULT_MATCH_THRESHOLD
+    raw = config.get("matchThreshold")
+    if raw is None or isinstance(raw, bool):
+        return _DEFAULT_MATCH_THRESHOLD
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        return _DEFAULT_MATCH_THRESHOLD
+    if value != value:  # NaN: every comparison is False, which would unbar the gate
+        return _DEFAULT_MATCH_THRESHOLD
+    return min(100.0, max(0.0, value))
+
+
+def meets_match_threshold(fit_score: Any, threshold: float) -> bool:
+    """Whether a job's ``fitScore`` clears the user's bar (``>=``).
+
+    A NULL/missing/unparseable score is BELOW every threshold by definition:
+    an unscored job is never auto-fired (audit wf_9a87f76f-eaa, D2/D6). The
+    comparison is ``>=`` — the user's bar is inclusive, so a job scoring
+    exactly at the threshold clears it.
+    """
+    if fit_score is None or isinstance(fit_score, bool):
         return False
-    return bool(config.get("autoApply")) and not bool(config.get("approvalGate", True))
+    try:
+        score = float(fit_score)
+    except (TypeError, ValueError):
+        return False
+    if score != score:  # NaN
+        return False
+    return score >= threshold
+
+
+def _job_fit_score(user_id: str, job_id: str) -> Any:
+    """This user's own ``Job.fitScore`` for ``job_id`` — ``None`` if unscored
+    or the job row is gone (both of which the threshold gate treats as BELOW)."""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT "fitScore" FROM "Job" WHERE "id" = %s AND "userId" = %s',
+                (job_id, user_id),
+            )
+            row = cur.fetchone()
+    return row[0] if row else None
+
+
+def is_autonomous_submission_enabled(user_id: str) -> bool:
+    """True only when the user EXPLICITLY opted out of the approval gate.
+
+    Reads the same ``User.agentConfig`` blob the Settings screen writes
+    (``app.routers.workspaces``). Both defaults are safe: a user who has never
+    touched the setting has ``autoApply`` false and ``approvalGate`` true, so
+    this returns False and nothing can be sent without a human decision.
+    """
+    config = _load_agent_config(user_id)
+    return auto_apply_enabled(config) and not bool(config.get("approvalGate", True))
 
 
 def _load_user(user_id: str) -> dict[str, Any] | None:
@@ -454,13 +541,27 @@ def queue_submission_approval(
 def maybe_autonomous_transmit(
     user_id: str, approval: dict[str, Any]
 ) -> dict[str, Any] | None:
-    """Send immediately IFF the user explicitly turned the approval gate off.
+    """Send immediately IFF the user's OWN settings authorise an unattended send.
 
-    Returns ``None`` when the user has NOT opted in — the approval simply
-    stays pending and nothing is sent, which is the default for every account.
+    THE EXACT CONTRACT (D6, audit wf_9a87f76f-eaa). An autonomous send fires
+    only when ALL of these hold, read from the same ``User.agentConfig`` the
+    Settings screen writes:
 
-    When they HAVE opted in (``autoApply`` true AND ``approvalGate`` false in
-    their own Settings), the authorisation is still WRITTEN DOWN before the
+    1. ``autoApply`` is true AND ``approvalGate`` is false (the explicit
+       autonomous opt-in — both defaults are the safe ones);
+    2. the job's ``fitScore`` is a real number ``>=`` the user's
+       ``matchThreshold`` (default 50 when unset). A NULL/missing score — or a
+       payload with no resolvable job — is BELOW the bar: an unscored job is
+       NEVER auto-fired.
+
+    Returns ``None`` whenever any gate fails — the approval simply stays
+    ``pending`` and nothing is sent, exactly as for a user who never opted in.
+    Nothing is burned by a blocked gate: the user can still approve and
+    execute the card explicitly, and that explicit path is NOT threshold-gated
+    (a personal decision on a specific application outranks the account-wide
+    bar, by design — the Applications board copy promises exactly this split).
+
+    When every gate passes, the authorisation is still WRITTEN DOWN before the
     send: the approval is resolved to ``approved`` with
     ``payload.autonomous = true``, and the single-shot ``executedAt`` claim is
     taken exactly as the human path takes it. So "no approval recorded" and
@@ -471,7 +572,24 @@ def maybe_autonomous_transmit(
     ``{"queued": ...}``-shaped error dict, because an outbound-mail problem
     must not fail the user's Apply click and must not be reported as a send.
     """
-    if not is_autonomous_submission_enabled(user_id):
+    config = _load_agent_config(user_id)
+    if not (auto_apply_enabled(config) and not bool(config.get("approvalGate", True))):
+        return None
+    # D6 — the match threshold gates the AUTONOMOUS fire, before anything is
+    # resolved or claimed, so a blocked send leaves the card fully intact.
+    payload = approval.get("payload")
+    job_id = str(payload.get("job_id") or "") if isinstance(payload, dict) else ""
+    fit_score = _job_fit_score(user_id, job_id) if job_id else None
+    threshold = user_match_threshold(config)
+    if not meets_match_threshold(fit_score, threshold):
+        logger.info(
+            "autonomous transmit withheld for application %s: fitScore %s is "
+            "below the user's match threshold %s — the approval card stays "
+            "pending for an explicit decision",
+            (payload or {}).get("application_id") if isinstance(payload, dict) else None,
+            "unscored" if fit_score is None else fit_score,
+            threshold,
+        )
         return None
     from app.repositories.approval import ApprovalRepository
 
