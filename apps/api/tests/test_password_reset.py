@@ -70,7 +70,7 @@ class TestForgotPasswordHonestAntiEnumeration:
         monkeypatch.setenv("AETHER_EMAIL_FROM", "noreply@aether.local")
         sent_to = []
 
-        def _fake_send(to_email, subject, text_body):
+        def _fake_send(to_email, subject, text_body, html_body=None):
             sent_to.append(to_email)
             return True
 
@@ -92,7 +92,7 @@ class TestPasswordResetTokenLifecycle:
         monkeypatch.setenv("AETHER_EMAIL_FROM", "noreply@aether.local")
         captured = {}
 
-        def _fake_send(to_email, subject, text_body):
+        def _fake_send(to_email, subject, text_body, html_body=None):
             captured["body"] = text_body
             return True
 
@@ -132,7 +132,7 @@ class TestPasswordResetTokenLifecycle:
         monkeypatch.setenv("AETHER_EMAIL_FROM", "noreply@aether.local")
         captured = {}
 
-        def _fake_send(to_email, subject, text_body):
+        def _fake_send(to_email, subject, text_body, html_body=None):
             captured["body"] = text_body
             return True
 
@@ -173,7 +173,7 @@ class TestPasswordResetTokenLifecycle:
         monkeypatch.setenv("AETHER_EMAIL_FROM", "noreply@aether.local")
         captured = {}
 
-        def _fake_send(to_email, subject, text_body):
+        def _fake_send(to_email, subject, text_body, html_body=None):
             captured["body"] = text_body
             return True
 
@@ -258,7 +258,7 @@ class TestPasswordResetInvalidatesSessions:
         monkeypatch.setenv("AETHER_EMAIL_FROM", "noreply@aether.local")
         captured = {}
 
-        def _fake_send(to_email, subject, text_body):
+        def _fake_send(to_email, subject, text_body, html_body=None):
             captured["body"] = text_body
             return True
 

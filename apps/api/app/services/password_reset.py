@@ -140,13 +140,68 @@ def consume_reset_token(raw_token: str) -> str | None:
     return user_id
 
 
+#: The reset email's copy, in one place so the text and HTML alternatives can
+#: never drift apart. The TTL sentence is load-bearing honesty: it states the
+#: real :data:`TOKEN_TTL` and the real single-use rule.
+_RESET_INTRO = (
+    "You (or someone with access to your email) requested a password "
+    "reset for your Aether account."
+)
+_RESET_TTL_NOTE = (
+    "This link expires in 1 hour and can only be used once. If you did "
+    "not request this, you can safely ignore this email — your password "
+    "will not change."
+)
+_RESET_CTA_LABEL = "Reset your password"
+
+
 def build_reset_email_body(reset_url: str) -> str:
-    """Plain-text body for the reset email — one honest link, one honest TTL."""
+    """Plain-text body for the reset email — one honest link, one honest TTL.
+
+    Kept as the plain-text half of :func:`build_reset_email_bodies` so any
+    caller that only wants text (and every existing test) keeps working
+    unchanged.
+    """
     return (
-        "You (or someone with access to your email) requested a password "
-        "reset for your Aether account.\n\n"
-        f"Reset your password: {reset_url}\n\n"
-        "This link expires in 1 hour and can only be used once. If you did "
-        "not request this, you can safely ignore this email — your password "
-        "will not change."
+        f"{_RESET_INTRO}\n\n"
+        f"{_RESET_CTA_LABEL}: {reset_url}\n\n"
+        f"{_RESET_TTL_NOTE}"
     )
+
+
+def build_reset_email_bodies(reset_url: str) -> tuple[str, str]:
+    """``(plain_text, branded_html)`` for the reset email.
+
+    The HTML is rendered by :mod:`app.services.email_branding` — the single
+    home for Aether-owned email templates (owner directive 2026-08-16) — so
+    the reset link arrives in the product's own obsidian-and-gilt identity.
+    The copy is identical in both parts: same link, same honest TTL, same
+    "ignore this if it wasn't you" reassurance. Nothing is added to the HTML
+    that the text part does not also say.
+    """
+    from app.services.email_branding import (
+        divider,
+        paragraph,
+        render_branded_email,
+    )
+
+    text_body = build_reset_email_body(reset_url)
+    html_body, _branded_text = render_branded_email(
+        "Reset your Aether password",
+        [
+            paragraph(_RESET_INTRO),
+            paragraph(
+                "Use the button below — or paste this link into your "
+                f"browser:\n{reset_url}"
+            ),
+            divider(),
+            paragraph(_RESET_TTL_NOTE),
+        ],
+        cta={"label": _RESET_CTA_LABEL, "url": reset_url},
+        footer_note=(
+            "Aether Career Job Agent — this is an automated security email; "
+            "nobody at Aether can see or set your password."
+        ),
+        preheader="Your Aether password-reset link (valid for 1 hour).",
+    )
+    return text_body, html_body
