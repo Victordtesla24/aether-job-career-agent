@@ -139,6 +139,19 @@ export const SalesGenerateResultSchema = z
       .optional()
       .default([]),
     campaignsSkipped: z.array(z.string()).optional().default([]),
+    promosCreated: z
+      .array(
+        z.object({
+          id: z.string(),
+          code: z.string(),
+          percentOff: z.number().optional(),
+          active: z.boolean(),
+          note: z.string().optional(),
+        }),
+      )
+      .optional()
+      .default([]),
+    promosSkipped: z.array(z.string()).optional().default([]),
     linkedinDrafts: z.number().optional(),
     errors: z.array(z.string()).optional().default([]),
   })

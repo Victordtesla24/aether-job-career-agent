@@ -58,6 +58,8 @@ from app.services.gmail_service import (
     GmailService,
     _split_address,
 )
+from app.services import stripe_gateway
+from app.services.stripe_gateway import StripeNotConfiguredError
 from app.services.llm_client import (
     _STATIC_MODEL_CATALOG,
     LLMClient,
@@ -142,6 +144,15 @@ AUTOMATED_SENDER_MARKERS = (
 #: Free plan monthly run cap (mirrors the seeded Free plan) — used only to
 #: decide "near the cap", never to report usage.
 FREE_PLAN_RUN_CAP = 5
+
+#: R3.1 self-authored promo — a single, deterministic, bounded discount the
+#: agent proposes on every marketing-content run (idempotent by code, Stripe
+#: is the source of truth). Percent/duration/cap are DECISIONS, not factual
+#: claims, so the grounding guard does not apply to them; they are bounded
+#: here so the agent can never author an unbounded giveaway.
+AGENT_PROMO_CODE = "AETHERAGENT20"
+AGENT_PROMO_PERCENT = 20.0
+AGENT_PROMO_MAX_REDEMPTIONS = 100
 
 #: The ONLY facts the content-generation prompts may draw on — every line is
 #: verifiable against the production app itself. No metrics, testimonials or
@@ -293,10 +304,14 @@ class SalesAgent:
         repo: SalesRepository | None = None,
         gmail_factory: Callable[[str, str], Any] | None = None,
         llm: LLMClient | None = None,
+        promo_gateway: Any | None = None,
     ) -> None:
         self.repo = repo or SalesRepository()
         self.gmail_factory = gmail_factory or _default_gmail_factory
         self._llm = llm
+        # Promo authoring goes through Stripe (source of truth — no local
+        # mirror). Injectable so tests never touch the network.
+        self.promo_gateway = promo_gateway or stripe_gateway
 
     # ---------------------------------------------------------------- LLM
     def _llm_client(self) -> LLMClient:
@@ -868,6 +883,9 @@ class SalesAgent:
           campaign (v2 copy), created **inactive** — the approval-queue
           philosophy applies to the agent's own copy too: a human activates
           it from the Campaigns tab before it can ever be used for a send;
+        * one self-authored promo (Stripe Coupon + PromotionCode, created
+          then immediately DEACTIVATED pending human activation — see
+          :meth:`_generate_promo`); idempotent by code against Stripe;
         * three fresh LinkedIn drafts (channel ``linkedin_draft``, outcome
           ``draft_queued``) in the voice of the existing content calendar.
 
@@ -903,6 +921,8 @@ class SalesAgent:
             "trigger": trigger,
             "campaignsCreated": [],
             "campaignsSkipped": [],
+            "promosCreated": [],
+            "promosSkipped": [],
             "linkedinDrafts": 0,
             "errors": [],
         }
@@ -912,6 +932,7 @@ class SalesAgent:
             result["model"] = model
             result["modelSource"] = model_source
             self._generate_campaigns(model=model, result=result)
+            self._generate_promo(result=result)
             self._generate_linkedin_drafts(model=model, result=result, count=3)
         except Exception as exc:  # noqa: BLE001 — the run row must go terminal
             logger.exception("sales agent content generation failed")
@@ -921,6 +942,8 @@ class SalesAgent:
         status = "failed" if (
             not result["campaignsCreated"]
             and not result["campaignsSkipped"]
+            and not result["promosCreated"]
+            and not result["promosSkipped"]
             and result["linkedinDrafts"] == 0
         ) else "completed"
         runs.finish(run_row["id"], status, output=result)
@@ -999,6 +1022,59 @@ class SalesAgent:
                 {"id": campaign["id"], "name": name, "type": ctype,
                  "active": False, "note": "awaiting human activation"}
             )
+
+    def _generate_promo(self, *, result: dict[str, Any]) -> None:
+        """Self-author ONE launch promo (R3.1) — review-gated like campaigns.
+
+        The promo is a Stripe Coupon + PromotionCode: a discount DEFINITION —
+        creating it charges nobody; money only moves if a customer redeems it
+        at their own checkout. Approval-queue philosophy: the code is created
+        and then immediately DEACTIVATED, so a human must activate it (Stripe
+        dashboard or admin Promos surface) before any customer can redeem it.
+
+        Grounding: the discount is a bounded, deterministic decision
+        (:data:`AGENT_PROMO_PERCENT` off, duration ``once``, capped at
+        :data:`AGENT_PROMO_MAX_REDEMPTIONS` redemptions) applied to the real
+        price list — no invented prices, no unbounded giveaways. Idempotent by
+        code: Stripe is the source of truth (no local mirror), so if
+        :data:`AGENT_PROMO_CODE` already exists there the run skips. A missing
+        Stripe configuration (or any Stripe failure) is recorded honestly in
+        ``result['errors']`` and the rest of the run continues.
+        """
+        try:
+            for pc in self.promo_gateway.list_promotion_codes():
+                if (pc.get("code") or "").upper() == AGENT_PROMO_CODE:
+                    result["promosSkipped"].append(pc.get("code"))
+                    return
+            coupon = self.promo_gateway.create_coupon(
+                name="Aether launch offer (agent-generated)",
+                percent_off=AGENT_PROMO_PERCENT,
+                duration="once",
+            )
+            promo = self.promo_gateway.create_promotion_code(
+                coupon_id=coupon["id"],
+                code=AGENT_PROMO_CODE,
+                max_redemptions=AGENT_PROMO_MAX_REDEMPTIONS,
+            )
+            # Review gate: never leave an agent-authored code redeemable.
+            self.promo_gateway.deactivate_promotion_code(promo["id"])
+            result["promosCreated"].append(
+                {
+                    "id": promo["id"],
+                    "code": promo.get("code") or AGENT_PROMO_CODE,
+                    "couponId": coupon["id"],
+                    "percentOff": AGENT_PROMO_PERCENT,
+                    "duration": "once",
+                    "maxRedemptions": AGENT_PROMO_MAX_REDEMPTIONS,
+                    "active": False,
+                    "note": "awaiting human activation (created inactive)",
+                }
+            )
+        except StripeNotConfiguredError as exc:
+            result["errors"].append(f"promo: Stripe not configured — {exc}")
+        except Exception as exc:  # noqa: BLE001 — promo failure must not kill the run
+            logger.warning("sales agent: promo self-authoring failed: %s", exc)
+            result["errors"].append(f"promo: {exc}")
 
     def _generate_linkedin_drafts(
         self, *, model: str, result: dict[str, Any], count: int = 3

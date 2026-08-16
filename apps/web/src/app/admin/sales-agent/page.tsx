@@ -504,8 +504,13 @@ export default function SalesAgentPage() {
                   {genResult.campaignsSkipped.length > 0
                     ? ` (already existed: ${genResult.campaignsSkipped.join(", ")})`
                     : ""}
-                  . LinkedIn drafts queued: {genResult.linkedinDrafts ?? 0}. New campaigns are
-                  created INACTIVE — review and activate them here.
+                  . Promos authored:{" "}
+                  {genResult.promosCreated.map((p) => p.code).join(", ") ||
+                    (genResult.promosSkipped.length > 0
+                      ? `none (already in Stripe: ${genResult.promosSkipped.join(", ")})`
+                      : "none")}
+                  . LinkedIn drafts queued: {genResult.linkedinDrafts ?? 0}. New campaigns and
+                  promos are created INACTIVE — review and activate them.
                   {genResult.errors.length > 0 ? ` Errors: ${genResult.errors.join("; ")}` : ""}
                 </>
               ) : (

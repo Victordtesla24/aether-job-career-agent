@@ -764,6 +764,94 @@ def test_generate_is_honest_when_llm_fails(repo, sales_env):
     assert not result["campaignsCreated"]
 
 
+class _FakePromoGateway:
+    """Stands in for ``services.stripe_gateway`` — records writes, no network."""
+
+    def __init__(self, existing_codes: list[str] | None = None) -> None:
+        self.existing = [
+            {"id": f"promo_existing_{i}", "code": c, "active": True}
+            for i, c in enumerate(existing_codes or [])
+        ]
+        self.coupons: list[dict] = []
+        self.created: list[dict] = []
+        self.deactivated: list[str] = []
+
+    def list_promotion_codes(self, limit=50):
+        return list(self.existing)
+
+    def create_coupon(self, *, name=None, percent_off=None, amount_off_aud=None,
+                      duration="once", duration_in_months=None):
+        coupon = {
+            "id": f"coup_{len(self.coupons) + 1}", "name": name,
+            "percentOff": percent_off, "amountOffAud": amount_off_aud,
+            "duration": duration, "durationInMonths": duration_in_months,
+        }
+        self.coupons.append(coupon)
+        return coupon
+
+    def create_promotion_code(self, *, coupon_id, code=None,
+                              max_redemptions=None, expires_at=None):
+        pc = {
+            "id": f"promo_{len(self.created) + 1}", "code": code, "active": True,
+            "couponId": coupon_id, "maxRedemptions": max_redemptions,
+        }
+        self.created.append(pc)
+        return pc
+
+    def deactivate_promotion_code(self, promotion_code_id):
+        self.deactivated.append(promotion_code_id)
+        return {"id": promotion_code_id, "active": False}
+
+
+def test_generate_self_authors_promo_inactive_and_idempotent(repo, sales_env):
+    """R3.1: the agent authors its own promo — review-gated (created inactive)
+    and idempotent against Stripe as the source of truth."""
+    gateway = _FakePromoGateway()
+    agent = SalesAgent(repo=repo, llm=_FakeLLM(), promo_gateway=gateway)  # type: ignore[arg-type]
+    result = agent.generate_marketing_content(trigger="test")
+    assert result["ran"] is True
+    assert len(result["promosCreated"]) == 1
+    promo = result["promosCreated"][0]
+    # Approval-queue philosophy: the agent's promo starts INACTIVE.
+    assert promo["active"] is False
+    assert promo["percentOff"] == 20
+    code = promo["code"]
+    assert code and gateway.created[0]["code"] == code
+    # The freshly created code was deactivated pending human approval.
+    assert gateway.deactivated == [gateway.created[0]["id"]]
+    # Grounded, bounded discount definition — never a recurring giveaway.
+    assert gateway.coupons[0]["duration"] == "once"
+    assert 0 < gateway.coupons[0]["percentOff"] <= 100
+    assert gateway.created[0]["maxRedemptions"] is not None
+    # Second run against Stripe already holding the code: skip, no new writes.
+    gateway2 = _FakePromoGateway(existing_codes=[code])
+    again = SalesAgent(
+        repo=repo, llm=_FakeLLM(), promo_gateway=gateway2  # type: ignore[arg-type]
+    ).generate_marketing_content()
+    assert not again["promosCreated"]
+    assert again["promosSkipped"] == [code]
+    assert not gateway2.created and not gateway2.coupons
+
+
+def test_generate_promo_is_honest_when_stripe_unconfigured(repo, sales_env):
+    """No Stripe key → the promo step records an honest error and the rest of
+    the run (campaigns, drafts) still completes — nothing fabricated."""
+    from app.services.stripe_gateway import StripeNotConfiguredError
+
+    class _NoStripe:
+        def list_promotion_codes(self, limit=50):
+            raise StripeNotConfiguredError("STRIPE_SECRET_KEY is not configured")
+
+    result = SalesAgent(
+        repo=repo, llm=_FakeLLM(), promo_gateway=_NoStripe()  # type: ignore[arg-type]
+    ).generate_marketing_content()
+    assert result["ran"] is True
+    assert not result["promosCreated"]
+    assert any(e.startswith("promo:") and "Stripe" in e for e in result["errors"])
+    # Drafts are unaffected by the promo failure.
+    assert result["linkedinDrafts"] == 3
+
+
 # ------------------------------------------------------------ brand documents
 def test_brand_documents_registry_lists_kinds_plans_and_assets(
     client, admin_headers
