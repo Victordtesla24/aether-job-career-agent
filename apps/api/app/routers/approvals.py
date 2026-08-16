@@ -446,7 +446,11 @@ def _execute_site_submission(
     * :class:`ApplyExecutorGuardError` -> its own 404/409. The approval is no
       longer ours to execute (already executed, or no longer approved).
     """
-    from app.services.apply_executor import ApplyExecutorGuardError, ManualStepRequired
+    from app.services.apply_executor import (
+        ApplyExecutorGuardError,
+        ApplyExecutorTransportError,
+        ManualStepRequired,
+    )
     from app.workers.apply_sweep import _attempt_transmission
 
     user_id = current_user["id"]
@@ -477,6 +481,20 @@ def _execute_site_submission(
         }
     except ApplyExecutorGuardError as exc:
         raise HTTPException(exc.http_status, exc.message) from exc
+    except ApplyExecutorTransportError as exc:
+        # F5-006: a browser/transport failure is our side failing to reach the
+        # site — an expected operational condition, not an unhandled server
+        # error. The execution claim was released by the executor, so the
+        # sweep can retry; report 502 with the honest "nothing was submitted"
+        # message instead of leaking a raw 500.
+        raise HTTPException(
+            http_status.HTTP_502_BAD_GATEWAY,
+            exc.message
+            or (
+                "The application site could not be reached — nothing was "
+                "submitted."
+            ),
+        ) from exc
     proof = _transmission_proof(user_id, application_id)
     if proof.get("transmittedAt") is None:
         # Defensive and deliberately loud: the executor only returns after

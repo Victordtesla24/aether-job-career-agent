@@ -536,6 +536,41 @@ class TestExecuteRoutesToTheApplyEngine:
             f"claim_execution ran {claims.count(approval_id)}x for one execute"
         )
 
+    def test_transport_failure_is_a_502_not_an_unhandled_500(
+        self, db_session, user_id, client, auth_headers, monkeypatch
+    ):
+        """F5-006 (Fable 5 adversarial review): a browser/transport failure
+        (e.g. the Playwright binary missing, or the site unreachable) raised
+        ``ApplyExecutorTransportError`` straight through the router as a raw
+        500. It is an expected operational condition — the honest answer is a
+        502 carrying the "nothing was submitted" message."""
+        job_id = _seed_job(db_session, user_id)
+        resume_id = _seed_resume(db_session, user_id, source_job_id=job_id)
+        app_id = _seed_application(db_session, user_id, job_id, resume_id)
+        approval_id = self._approve(client, auth_headers, app_id)
+
+        from app.services.apply_executor import ApplyExecutorTransportError
+        from app.workers import apply_sweep
+
+        def _transport_down(uid, application_id, aid):
+            raise ApplyExecutorTransportError(
+                "browser_failed",
+                "Could not open the application page (Error) — nothing was "
+                "submitted.",
+            )
+
+        monkeypatch.setattr(apply_sweep, "_attempt_transmission", _transport_down)
+
+        response = client.post(
+            f"/approvals/{approval_id}/execute", headers=auth_headers
+        )
+
+        assert response.status_code == 502, response.text
+        assert "nothing was submitted" in response.json()["detail"]
+        # And the row was NOT marked transmitted.
+        row = _truth_row(db_session, app_id)
+        assert row["transmittedAt"] is None
+
     def test_manual_step_outcome_is_reported_honestly_not_as_a_submission(
         self, db_session, user_id, client, auth_headers, monkeypatch
     ):
