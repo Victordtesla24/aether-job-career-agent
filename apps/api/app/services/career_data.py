@@ -509,8 +509,15 @@ def ingest_linkedin_export(csv_texts: dict[str, str]) -> dict[str, Any]:
     return result
 
 
-def parse_linkedin_export_zip(data: bytes) -> dict[str, str]:
-    """Extract ONLY the four known LinkedIn export CSVs out of a zip archive.
+def parse_linkedin_export_zip(
+    data: bytes, filenames: tuple[str, ...] = LINKEDIN_EXPORT_FILES
+) -> dict[str, str]:
+    """Extract ONLY the named LinkedIn export CSVs out of a zip archive.
+
+    ``filenames`` defaults to the four career-tailoring CSVs (B7). The
+    networking contact import (R4.1) passes ``("Connections.csv",)`` — a
+    deliberately separate, owner-initiated scope; this function still never
+    opens anything not explicitly asked for.
 
     Every other entry — other CSVs, media, LinkedIn's nested export folder —
     is skipped unread. Matches on basename (case-insensitive) so the export's
@@ -524,13 +531,18 @@ def parse_linkedin_export_zip(data: bytes) -> dict[str, str]:
     Either case, the caller (the upload router) turns it into an honest 422.
     Pure in-memory parsing — no filesystem, no network.
     """
+    basename_map = (
+        _LINKEDIN_EXPORT_BASENAME_MAP
+        if filenames == LINKEDIN_EXPORT_FILES
+        else {name.lower(): name for name in filenames}
+    )
     found: dict[str, str] = {}
     with zipfile.ZipFile(io.BytesIO(data)) as archive:
         for info in archive.infolist():
             if info.is_dir():
                 continue
             basename = info.filename.rsplit("/", 1)[-1]
-            canonical = _LINKEDIN_EXPORT_BASENAME_MAP.get(basename.lower())
+            canonical = basename_map.get(basename.lower())
             if canonical is None or canonical in found:
                 continue
             chunks: list[bytes] = []

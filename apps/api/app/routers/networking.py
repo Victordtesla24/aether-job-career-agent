@@ -11,7 +11,7 @@ from datetime import datetime
 from email.utils import parseaddr
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, File, HTTPException, UploadFile, status
 from pydantic import BaseModel, Field
 
 from app.db import get_connection, new_id, rows_to_dicts
@@ -175,6 +175,190 @@ def import_gmail_contacts(current_user: CurrentUser) -> dict[str, int]:
                 counts["leadsCreated"] += 1
             except ConsentViolationError:
                 # No guessed or incomplete provenance becomes a lead.
+                counts["ignored"] += 1
+    return counts
+
+
+def _connections_csv_rows(text: str) -> list[dict[str, str]]:
+    """Parse LinkedIn's ``Connections.csv``, tolerating its ``Notes:`` preamble.
+
+    LinkedIn prepends a few free-text "Notes:" lines before the real header
+    row (``First Name,Last Name,...``). Skip to the header, then parse with
+    the same CSV reader the B7 ingest uses. Pure in-memory — no network.
+    """
+    import csv as _csv  # noqa: PLC0415
+    import io as _io  # noqa: PLC0415
+
+    lines = text.splitlines()
+    start = 0
+    for i, line in enumerate(lines):
+        if line.lstrip('\ufeff"').lower().startswith("first name"):
+            start = i
+            break
+    else:
+        return []
+    reader = _csv.DictReader(_io.StringIO("\n".join(lines[start:])))
+    return [
+        {(k or "").strip(): (v or "").strip() for k, v in row.items() if k}
+        for row in reader
+    ]
+
+
+@router.post("/linkedin/import-contacts")
+async def import_linkedin_contacts(
+    current_user: CurrentUser, file: UploadFile = File(...)
+) -> dict[str, int]:
+    """Owner-provided LinkedIn export → professional contacts (R4.1).
+
+    Accepts LinkedIn's "Download your data" export **.zip** (only
+    ``Connections.csv`` is opened — reusing the B7 bounded zip reader) or the
+    loose ``Connections.csv``. This is a compliant, upload-only path: **zero
+    network calls to LinkedIn — ever**. Rows dedupe into the ``Contact``
+    table; rows that carry an email the connection chose to share also become
+    Sales leads with ratified ``existing_relationship`` consent provenance.
+    Suppressed emails are neither saved nor handed off. Nothing is sent.
+    """
+    import zipfile  # noqa: PLC0415
+
+    from app.services.career_data import (  # noqa: PLC0415
+        MAX_LINKEDIN_EXPORT_BYTES,
+        parse_linkedin_export_zip,
+    )
+
+    data = await file.read(MAX_LINKEDIN_EXPORT_BYTES + 1)
+    if len(data) > MAX_LINKEDIN_EXPORT_BYTES:
+        raise HTTPException(
+            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            f"LinkedIn export is larger than the "
+            f"{MAX_LINKEDIN_EXPORT_BYTES // (1024 * 1024)}MB upload limit.",
+        )
+    filename = (file.filename or "").strip()
+    suffix = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    if suffix == "zip":
+        try:
+            csv_texts = parse_linkedin_export_zip(data, filenames=("Connections.csv",))
+        except zipfile.BadZipFile:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                "Uploaded file is not a valid zip archive.",
+            ) from None
+        text = csv_texts.get("Connections.csv", "")
+        if not text:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                "Zip archive did not contain Connections.csv.",
+            )
+    elif suffix == "csv":
+        if filename.rsplit("/", 1)[-1].lower() != "connections.csv":
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                f"Unrecognized CSV file '{filename}'. Expected Connections.csv "
+                "from LinkedIn's 'Download your data' export.",
+            )
+        text = data.decode("utf-8", errors="replace")
+    else:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "Unsupported file type — upload the .zip from LinkedIn's "
+            "'Download your data' export, or its Connections.csv.",
+        )
+
+    uid = current_user["id"]
+    sales = SalesRepository()
+    counts = {
+        "rows": 0,
+        "contactsCreated": 0,
+        "leadsCreated": 0,
+        "duplicates": 0,
+        "suppressed": 0,
+        "ignored": 0,
+    }
+    seen_emails: set[str] = set()
+    seen_names: set[tuple[str, str]] = set()
+    for row in _connections_csv_rows(text):
+        counts["rows"] += 1
+        name = " ".join(
+            p for p in (row.get("First Name", ""), row.get("Last Name", "")) if p
+        ).strip()
+        email = (row.get("Email Address") or "").strip().lower()
+        company = (row.get("Company") or "").strip()
+        title = (row.get("Position") or "").strip()
+        url = (row.get("URL") or "").strip()
+        connected_on = (row.get("Connected On") or "").strip()
+        if email and not _EMAIL_RE.fullmatch(email):
+            email = ""
+        if not name and not email:
+            counts["ignored"] += 1
+            continue
+        # In-upload dedupe: by shared email when present, else by name+company.
+        if email:
+            if email in seen_emails:
+                counts["duplicates"] += 1
+                continue
+            seen_emails.add(email)
+        else:
+            key = (name.lower(), company.lower())
+            if key in seen_names:
+                counts["duplicates"] += 1
+                continue
+            seen_names.add(key)
+        if email and sales.is_suppressed(email):
+            counts["suppressed"] += 1
+            continue
+
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                if email:
+                    cur.execute(
+                        'SELECT "id" FROM "Contact" WHERE "userId" = %s '
+                        'AND LOWER("email") = %s LIMIT 1',
+                        (uid, email),
+                    )
+                else:
+                    cur.execute(
+                        'SELECT "id" FROM "Contact" WHERE "userId" = %s '
+                        'AND LOWER("name") = %s AND "email" IS NULL LIMIT 1',
+                        (uid, name.lower()),
+                    )
+                if cur.fetchone() is None:
+                    cur.execute(
+                        '''INSERT INTO "Contact" (
+                            "id", "userId", "name", "title", "company", "stage",
+                            "email", "linkedinUrl", "createdAt", "updatedAt"
+                        ) VALUES (%s, %s, %s, %s, %s, %s::"ContactStage",
+                                  %s, %s, now(), now())''',
+                        (
+                            new_id(), uid, name or email.split("@", 1)[0],
+                            title or None, company or None, "identified",
+                            email or None, url or None,
+                        ),
+                    )
+                    counts["contactsCreated"] += 1
+                else:
+                    # Known contact — count as duplicate but still fall through
+                    # to the lead hand-off, which is idempotent on its own.
+                    counts["duplicates"] += 1
+            conn.commit()
+
+        # Hand-off to Sales (R4.2): only connections who chose to share their
+        # email, with real existing-relationship provenance. Never guessed.
+        if email and sales.get_lead_by_email(email) is None:
+            try:
+                sales.create_lead(
+                    email=email,
+                    name=name or None,
+                    source="manual_approved",
+                    consent_type="existing_relationship",
+                    consent_evidence=(
+                        "LinkedIn Connections.csv export uploaded by the "
+                        f"account owner; first-degree connection '{name}'"
+                        + (f", connected {connected_on}" if connected_on else "")
+                        + "; email shared by the connection in their LinkedIn "
+                        "settings."
+                    ),
+                )
+                counts["leadsCreated"] += 1
+            except ConsentViolationError:
                 counts["ignored"] += 1
     return counts
 
