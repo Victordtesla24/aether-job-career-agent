@@ -1008,6 +1008,23 @@ def _evidence_path(evidence_dir: str, application_id: str, suffix: str) -> Path:
 #: form with twenty fields must not spend a minute discovering that.
 _ACTION_TIMEOUT_MS = 1500
 
+# CLI-SUB-005 (Architect D8) read-back verification timing. Grounded in the
+# 2026-08-16 live instrumentation (evidence/w1/A/pre-fix/): React ATS widgets
+# mirror state asynchronously, an Ashby résumé upload can trigger a whole-form
+# re-render, and Ashby's Location popup takes up to ~2s to geocode.
+_VERIFY_SETTLE_MS = 250  # settle before reading a fill back
+_VERIFY_SETTLE_FILE_MS = 1500  # file uploads may re-render the form
+_PRESUBMIT_SETTLE_MS = 500  # settle before the pre-submit commit gate
+_COMBOBOX_POPUP_POLLS = 10  # x 250ms — bounded wait for an async popup
+
+
+def _wait(page: Any, ms: int) -> None:
+    """Best-effort settle. Unit-test fakes may not implement the clock."""
+    try:
+        page.wait_for_timeout(ms)
+    except Exception:  # noqa: BLE001 — a fake page without a clock waits zero
+        pass
+
 
 def _first_present(page: Any, selectors: list[str]) -> Any | None:
     """The first selector that actually matches, resolved WITHOUT auto-waiting.
@@ -1070,6 +1087,43 @@ def _match_choice_option(answer: str, options: list[str]) -> str | None:
     return None
 
 
+def _locate_file_input(page: Any, field: dict[str, Any]) -> Any | None:
+    """The field's OWN ``input[type=file]`` — verified, never a page gamble.
+
+    CLI-SUB-005: the live Ashby page mounts an "Autofill from resume" file
+    input ABOVE the real form, outside every ``[data-field-path]`` block, and
+    uploading into it re-renders the form and wipes already-typed fields (the
+    flagship empty-application evidence). So every candidate match is verified
+    to actually BE a file input, and — when the parsed field carries a scope —
+    to live INSIDE that scope. No verified in-scope input means ``None``: the
+    caller refuses (honest unfilled) rather than uploading into a stranger.
+    """
+    name = str(field["name"])
+    scope = str(field.get("scope") or "")
+    escaped = name.replace('"', '\\"')
+    candidates = ([f"{scope} input[type=file]"] if scope else []) + [
+        f'[id="{escaped}"]',
+        f'[name="{escaped}"]',
+    ]
+    for selector in candidates:
+        try:
+            locator = page.locator(selector)
+            count = locator.count()
+        except Exception:  # noqa: BLE001 — a malformed selector is just a miss
+            continue
+        for index in range(min(count, 5)):
+            candidate = locator.nth(index)
+            try:
+                if not candidate.evaluate("el => el.tagName === 'INPUT' && el.type === 'file'"):
+                    continue
+                if scope and not candidate.evaluate("(el, s) => !!el.closest(s)", scope):
+                    continue
+            except Exception:  # noqa: BLE001 — unverifiable is not usable
+                continue
+            return candidate
+    return None
+
+
 def _fill_value(page: Any, field: dict[str, Any], value: Any, documents: dict[str, str]) -> bool:
     """Type one planned answer into the real DOM. ``True`` iff it landed.
 
@@ -1098,8 +1152,10 @@ def _fill_value(page: Any, field: dict[str, Any], value: Any, documents: dict[st
         path = documents.get(str(value))
         if not path:
             return False
-        candidates = ([f"{scope} input[type=file]"] if scope else []) + control_selectors
-        target = _first_present(page, candidates)
+        # CLI-SUB-005 fix (a): strictly the field's own verified file input —
+        # never an unguarded [id=]/[name=] grab that can hit Ashby's
+        # "Autofill from resume" box outside the field's scope.
+        target = _locate_file_input(page, field)
         if target is None:
             return False
         try:
@@ -1161,15 +1217,28 @@ def _fill_value(page: Any, field: dict[str, Any], value: Any, documents: dict[st
         except Exception:  # noqa: BLE001
             return False
         option_text = text_value.replace('"', '\\"')
-        option = _first_present(
-            page,
-            [
-                f'[role="option"]:text-is("{option_text}")',
-                f'[role="option"]:has-text("{option_text}")',
-                f'[class*="select__option"]:text-is("{option_text}")',
-                f'[class*="select__option"]:has-text("{option_text}")',
-            ],
-        )
+        option_selectors = [
+            f'[role="option"]:text-is("{option_text}")',
+            f'[role="option"]:has-text("{option_text}")',
+            f'[class*="select__option"]:text-is("{option_text}")',
+            f'[class*="select__option"]:has-text("{option_text}")',
+        ]
+        option = _first_present(page, option_selectors)
+        if option is None:
+            # CLI-SUB-005 root cause: a live ATS combobox populates its popup
+            # ASYNCHRONOUSLY (Ashby's Location geocodes the typed text), so an
+            # instant probe reads "no options" and the old code fell through to
+            # raw typing that the widget wiped on blur — then Submit was
+            # clicked over an empty required field (the flagship evidence).
+            # Wait — bounded — for the popup to render before concluding.
+            for _ in range(_COMBOBOX_POPUP_POLLS):
+                try:
+                    if page.locator('[role="option"], [class*="select__option"]').count() > 0:
+                        break
+                except Exception:  # noqa: BLE001
+                    break
+                _wait(page, 250)
+            option = _first_present(page, option_selectors)
         if option is not None:
             try:
                 option.click(timeout=_ACTION_TIMEOUT_MS)
@@ -1219,20 +1288,23 @@ def _fill_value(page: Any, field: dict[str, Any], value: Any, documents: dict[st
                 return True
             if count == 0:
                 # The widget rendered NO options at all — even with the filter
-                # cleared. On a live page a working React combobox always
-                # repopulates its listbox after the filter is cleared, so zero
-                # candidates means the option list simply does not render
-                # here: either the page is an inert captured DOM (replay mode
-                # — page JS is deliberately blocked) or the control is a
-                # free-text combobox that takes typed input directly. In both
-                # cases the only commitment the widget offers is the typed
-                # text itself, so re-type the answer and report it filled
-                # ONLY if the input verifiably retained it. A live widget
-                # whose options merely failed to match stays on the refusal
-                # paths above, and a live submit that this fallback did not
-                # actually satisfy is still caught by the no_confirmation
-                # guard — this can never fake a received application.
+                # cleared and after the bounded popup wait above. Either the
+                # page is an inert captured DOM (replay mode — page JS is
+                # deliberately blocked) or the control is a free-text combobox
+                # that takes typed input directly. The only commitment such a
+                # widget offers is the typed text itself — so re-type the
+                # answer, BLUR the control (the commit gesture), and report it
+                # filled ONLY if the input verifiably retained the text
+                # through the blur. CLI-SUB-005: a live React widget wipes
+                # uncommitted text exactly on blur (the flagship empty
+                # Location), so this read-back is what separates a real
+                # free-text fill from the lie the old fallback told.
                 target.fill(text_value, timeout=_ACTION_TIMEOUT_MS)
+                try:
+                    target.evaluate("el => el.blur && el.blur()")
+                except Exception:  # noqa: BLE001 — no blur surface: value check decides
+                    pass
+                _wait(page, 150)
                 return target.input_value(timeout=_ACTION_TIMEOUT_MS) == text_value
         except Exception:  # noqa: BLE001
             return False
@@ -1247,6 +1319,273 @@ def _fill_value(page: Any, field: dict[str, Any], value: Any, documents: dict[st
         except Exception:  # noqa: BLE001 — try the next shape, never fake it
             continue
     return False
+
+
+def _normalized_answer(text: str) -> str:
+    return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9 ]+", " ", str(text).lower())).strip()
+
+
+def _same_answer(observed: str, expected: str) -> bool:
+    """Does the DOM's committed text answer the planned value? (Tolerates the
+    widget's own canonical phrasing containing the answer, or vice versa.)"""
+    obs, exp = _normalized_answer(observed), _normalized_answer(expected)
+    if not obs or not exp:
+        return False
+    return obs == exp or exp in obs or obs in exp
+
+
+def _commit_state(
+    page: Any, field: dict[str, Any], value: Any, documents: dict[str, str]
+) -> tuple[bool, str]:
+    """What the DOM actually holds for one planned answer: (committed, observed).
+
+    CLI-SUB-005 fix (b): a fill only counts once the control's COMMITTED state
+    can be read back — ``input.value`` / ``:checked`` (plus the class/aria
+    markers React choice widgets use) / the selected option's text / the
+    uploaded file's name or its file-name chip / a combobox's displayed value.
+    Signal choices are grounded in the 2026-08-16 live instrumentation
+    (evidence/w1/A/): Ashby yes/no buttons mark the chosen option with an
+    ``_active``-style class only; Greenhouse job-boards REMOVES the file input
+    once an upload lands, leaving the chip as the only DOM evidence.
+    """
+    name = str(field["name"])
+    kind = str(field.get("kind") or "text")
+    scope = str(field.get("scope") or "")
+    escaped = name.replace('"', '\\"')
+    control_selectors = [f'[id="{escaped}"]', f'[name="{escaped}"]']
+    scoped_controls = (
+        [f"{scope} input:not([type=hidden])", f"{scope} textarea", f"{scope} select"]
+        if scope
+        else []
+    )
+    if kind == "file":
+        expected = os.path.basename(str(documents.get(str(value)) or ""))
+        if not expected:
+            return False, "no document to verify"
+        target = _locate_file_input(page, field)
+        if target is not None:
+            try:
+                observed = str(
+                    target.evaluate(
+                        "el => el.files && el.files.length ? el.files[0].name : ''"
+                    )
+                    or ""
+                )
+                if observed == expected:
+                    return True, f"files[0].name={observed!r}"
+            except Exception:  # noqa: BLE001 — fall through to the chip check
+                pass
+        chip_selectors = ([f'{scope} >> text="{expected}"'] if scope else []) + [
+            f'text="{expected}"'
+        ]
+        if _first_present(page, chip_selectors) is not None:
+            return True, f"file-name chip {expected!r}"
+        return False, "no file committed"
+    text_value = str(value)
+    if kind in {"radio", "checkbox"}:
+        signal_selectors = (
+            [
+                f"{scope} input:checked",
+                f'{scope} [aria-pressed="true"]',
+                f'{scope} [aria-checked="true"]',
+                f'{scope} [data-state="checked"]',
+                f'{scope} [aria-selected="true"]',
+                f'{scope} [class*="_active"]',
+                f'{scope} [class*="_selected"]',
+            ]
+            if scope
+            else [f'input[name="{escaped}"]:checked', f'[id="{escaped}"]:checked']
+        )
+        for selector in signal_selectors:
+            try:
+                if page.locator(selector).count() > 0:
+                    return True, f"selection marker {selector!r}"
+            except Exception:  # noqa: BLE001 — try the next signal shape
+                continue
+        return False, "no checked/active option"
+    if kind == "select":
+        target = _first_present(page, control_selectors + scoped_controls)
+        if target is None:
+            return False, "control not found"
+        try:
+            observed = str(
+                target.evaluate(
+                    "el => el.selectedOptions && el.selectedOptions.length"
+                    " ? (el.selectedOptions[0].textContent || '').trim() : ''"
+                )
+                or ""
+            )
+        except Exception:  # noqa: BLE001
+            return False, "selection unreadable"
+        if _same_answer(observed, text_value):
+            return True, f"selected {observed!r}"
+        return False, f"selected {observed!r}"
+    if kind == "combobox":
+        target = _first_present(page, control_selectors + scoped_controls)
+        if target is None:
+            return False, "control not found"
+        try:
+            expanded = str(target.evaluate("el => el.getAttribute('aria-expanded') || ''") or "")
+        except Exception:  # noqa: BLE001
+            expanded = ""
+        try:
+            display = str(target.input_value(timeout=_ACTION_TIMEOUT_MS) or "")
+        except Exception:  # noqa: BLE001
+            display = ""
+        if not display.strip():
+            # React selects (Greenhouse) clear the input and render the chosen
+            # text in a sibling single-value element instead.
+            try:
+                display = str(
+                    target.evaluate(
+                        """el => { let n = el; for (let i = 0; i < 6 && n; i++) {
+                            const sv = n.querySelector && n.querySelector(
+                                '[class*="single-value"], [class*="singleValue"]');
+                            if (sv && sv.textContent && sv.textContent.trim())
+                                return sv.textContent.trim();
+                            n = n.parentElement; } return ''; }"""
+                    )
+                    or ""
+                )
+            except Exception:  # noqa: BLE001
+                display = ""
+        # Typed-but-uncommitted text sits in an OPEN popup (the flagship live
+        # Location state) — display text only counts with the popup closed.
+        if display.strip() and expanded != "true":
+            return True, f"displays {display.strip()!r}"
+        return False, f"displays {display.strip()!r} (aria-expanded={expanded or 'n/a'})"
+    # text / textarea / email / tel / url / number / date
+    target = _first_present(page, control_selectors + scoped_controls)
+    if target is None:
+        return False, "control not found"
+    try:
+        observed = str(target.input_value(timeout=_ACTION_TIMEOUT_MS) or "")
+    except Exception:  # noqa: BLE001
+        return False, "value unreadable"
+    if kind == "tel":
+        observed_digits = re.sub(r"\D", "", observed)
+        expected_digits = re.sub(r"\D", "", text_value)
+        if observed_digits and expected_digits and (
+            observed_digits.endswith(expected_digits)
+            or expected_digits.endswith(observed_digits)
+        ):
+            return True, f"value {observed!r}"
+        return False, f"value {observed!r}"
+    if observed.strip() == text_value.strip():
+        return True, f"value {observed!r}"
+    return False, f"value {observed!r}"
+
+
+def _fill_and_verify(
+    page: Any,
+    field: dict[str, Any],
+    value: Any,
+    documents: dict[str, str],
+    *,
+    verify: bool,
+) -> bool:
+    """Fill, read the commit back, retry ONCE on mismatch — never claim.
+
+    ``verify=False`` reproduces the raw pre-CLI-SUB-005 behaviour and is used
+    ONLY in replay mode: a replayed page is a JS-dead capture (network and
+    scripts deliberately blocked), so React widgets can never mirror state
+    there and no employer can receive anything from it.
+    """
+    filled = _fill_value(page, field, value, documents)
+    if not verify:
+        return filled
+    settle = _VERIFY_SETTLE_FILE_MS if str(field.get("kind") or "") == "file" else _VERIFY_SETTLE_MS
+    if filled:
+        _wait(page, settle)
+        committed, _observed = _commit_state(page, field, value, documents)
+        if committed:
+            return True
+    filled = _fill_value(page, field, value, documents)  # ONE retry (re-click/re-fill)
+    if not filled:
+        return False
+    _wait(page, settle)
+    committed, _observed = _commit_state(page, field, value, documents)
+    return committed
+
+
+def _run_fill_plan(
+    page: Any,
+    plan_fields: list[dict[str, Any]],
+    documents: dict[str, str],
+    *,
+    verify: bool,
+) -> tuple[list[str], list[str], list[str]]:
+    """Execute the plan's fills. Returns (filled, unfilled, blocked_required).
+
+    With ``verify=True`` (live mode) a field is only ``filled`` once its
+    committed DOM state was read back — a fill the page did not keep lands in
+    ``unfilled`` (and ``blocked_required`` when required) instead of being
+    claimed, which is the whole CLI-SUB-005 fix.
+    """
+    filled: list[str] = []
+    unfilled: list[str] = []
+    blocked_required: list[str] = []
+    for field in plan_fields:
+        value = field.get("value")
+        if value is None:
+            continue
+        if _fill_and_verify(page, field, value, documents, verify=verify):
+            filled.append(str(field["name"]))
+        else:
+            unfilled.append(str(field["name"]))
+            if field.get("required"):
+                blocked_required.append(str(field.get("label") or field["name"]))
+    return filled, unfilled, blocked_required
+
+
+def _uncommitted_required_planned(
+    page: Any, plan_fields: list[dict[str, Any]], documents: dict[str, str]
+) -> list[dict[str, Any]]:
+    """REQUIRED planned fields whose committed DOM state is missing right now."""
+    stale: list[dict[str, Any]] = []
+    for field in plan_fields:
+        value = field.get("value")
+        if value is None or not field.get("required"):
+            continue
+        committed, _observed = _commit_state(page, field, value, documents)
+        if not committed:
+            stale.append(field)
+    return stale
+
+
+def _presubmit_required_commit_gate(
+    page: Any, plan_fields: list[dict[str, Any]], documents: dict[str, str]
+) -> None:
+    """No empty application is ever fired at an employer (CLI-SUB-005 fix (c)).
+
+    Immediately before the submit click, every REQUIRED planned field is
+    re-verified against the live DOM — this is what catches a re-render that
+    wiped fields AFTER their own fills verified (Ashby's autofill-from-resume
+    upload re-renders the whole form). Wiped fields get ONE refill pass; if
+    anything required is still uncommitted, ``ManualStepRequired
+    ('form_fill_failed')`` is raised carrying the exact field labels and the
+    submit control is NEVER activated.
+    """
+    _wait(page, _PRESUBMIT_SETTLE_MS)
+    stale = _uncommitted_required_planned(page, plan_fields, documents)
+    if not stale:
+        return
+    for field in stale:  # one refill pass — a re-render wiped these
+        _fill_and_verify(page, field, field.get("value"), documents, verify=True)
+    still = _uncommitted_required_planned(page, plan_fields, documents)
+    if not still:
+        return
+    labels = "; ".join(str(field.get("label") or field["name"]) for field in still)
+    raise ManualStepRequired(
+        "form_fill_failed",
+        (
+            "Aether typed the answers but this application form did not keep "
+            "every required one (the page re-rendered or rejected the "
+            "values), so it submitted nothing. Open the posting and apply "
+            "yourself: " + labels
+        ),
+        question=labels,
+    )
 
 
 def _resume_suffix(data: bytes) -> str:
@@ -1345,18 +1684,15 @@ def playwright_form_submitter(
                     # host that no longer answers.
                     page.route("**/*", lambda route: route.abort())
                     page.set_content(page_html or "", wait_until="domcontentloaded")
-                for field in plan["fields"]:
-                    value = field.get("value")
-                    if value is None:
-                        continue
-                    if _fill_value(page, field, value, documents):
-                        filled.append(str(field["name"]))
-                    else:
-                        unfilled.append(str(field["name"]))
-                        if field.get("required"):
-                            blocked_required.append(
-                                str(field.get("label") or field["name"])
-                            )
+                # CLI-SUB-005: live mode verifies every fill's committed DOM
+                # state (read-back + one retry); replay keeps the raw fills —
+                # a replayed page is a JS-dead capture no employer can
+                # receive anything from, and React widgets cannot mirror
+                # state without their scripts.
+                verify_commit = bool(apply_url)
+                filled, unfilled, blocked_required = _run_fill_plan(
+                    page, plan["fields"], documents, verify=verify_commit
+                )
                 if blocked_required:
                     # A REQUIRED answer we hold did not land in the form. The
                     # employer would receive an incomplete application with the
@@ -1375,6 +1711,17 @@ def playwright_form_submitter(
                         ),
                         question="; ".join(blocked_required),
                     )
+                if verify_commit:
+                    # CLI-SUB-005 PRE-SUBMIT GATE: re-verify every REQUIRED
+                    # planned field is still committed in the DOM (a résumé
+                    # upload can re-render the form and wipe earlier fills);
+                    # one refill pass, then an honest refusal — the submit
+                    # control is never activated over an empty required field.
+                    try:
+                        _presubmit_required_commit_gate(page, plan["fields"], documents)
+                    except ManualStepRequired:
+                        page.screenshot(path=str(screenshot), full_page=True)
+                        raise
                 before_url = page.url
                 submitted = _activate_submit(page)
                 page.wait_for_timeout(1500)
@@ -1428,6 +1775,7 @@ def playwright_form_submitter(
                 "capturedAt": datetime.now(timezone.utc).isoformat(),
                 "submitted": submitted,
                 "confirmation": confirmation,
+                "commitVerified": verify_commit,
                 "fieldsFilled": filled,
                 "fieldsNotFilled": unfilled,
                 "screenshot": screenshot.name,
