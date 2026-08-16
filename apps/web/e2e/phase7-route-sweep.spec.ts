@@ -199,8 +199,14 @@ test.describe("Phase-7 route sweep (PROBE-P7-12)", () => {
 
         let navError: string | null = null;
         try {
-          await page.goto(`${BASE_URL}${route}`, { waitUntil: "networkidle", timeout: 45_000 });
-          await page.waitForTimeout(1_000); // settle any post-idle rendering/toasts
+          // MP-037: authenticated routes (/dashboard, /dashboard/analytics,
+          // /dashboard/applications, …) poll live data, so "networkidle"
+          // never settles and 45s nav timeouts were false navigation
+          // failures. Wait for "load" plus a fixed settle window instead —
+          // the console/pageerror/response listeners above keep recording
+          // throughout, so the error-capture semantics are unchanged.
+          await page.goto(`${BASE_URL}${route}`, { waitUntil: "load", timeout: 45_000 });
+          await page.waitForTimeout(4_000); // settle client fetches/rendering/toasts
         } catch (err) {
           navError = err instanceof Error ? err.message : String(err);
         }

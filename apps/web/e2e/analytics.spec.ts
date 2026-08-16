@@ -18,7 +18,12 @@ test.describe("Analytics page", () => {
 
     await expect(page.getByRole("heading", { name: "Analytics", level: 1 })).toBeVisible();
     const funnel = page.getByTestId("funnel-chart");
-    await expect(funnel.getByText("Jobs Found")).toBeVisible({ timeout: 20_000 });
+    // MP-030: the product INTENTIONALLY renders the "Jobs found" label three
+    // times inside funnel-chart (visible bar label, the C-3 honesty footnote,
+    // and ChartFrame's sr-only data-table rowheader), so an unqualified
+    // getByText is a strict-mode violation. The assertion's intent is simply
+    // "the top-of-funnel label rendered" — pin the first occurrence.
+    await expect(funnel.getByText("Jobs Found").first()).toBeVisible({ timeout: 20_000 });
     // Jobs are discovered live from real sources, so both the top-of-funnel
     // and applied counts drift; assert they match the live API values
     // instead of hardcoded numbers.
@@ -26,11 +31,17 @@ test.describe("Analytics page", () => {
       headers: { Authorization: `Bearer ${await page.evaluate(() => localStorage.getItem("aether_token") ?? "")}` },
     });
     const body = (await res.json()) as { jobs_found: number; applied: number };
+    // MP-030 (part 2): the funnel renders counts through the chart kit's
+    // locale-stable formatter (`formatNumber` — Intl.NumberFormat("en-AU"),
+    // src/components/charts/geometry.ts), so once a count crosses 999 the
+    // visible text is "8,836", never "8836". Assert the product's own
+    // formatting of the live API value — same exact-live-number intent.
+    const enAu = new Intl.NumberFormat("en-AU");
     await expect(
-      funnel.getByText(String(body.jobs_found), { exact: true }).first(),
+      funnel.getByText(enAu.format(body.jobs_found), { exact: true }).first(),
     ).toBeVisible();
     await expect(
-      funnel.getByText(String(body.applied), { exact: true }).first(),
+      funnel.getByText(enAu.format(body.applied), { exact: true }).first(),
     ).toBeVisible();
   });
 

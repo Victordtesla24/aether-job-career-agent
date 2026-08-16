@@ -52,13 +52,18 @@ test('Auth Recipe Proof: Login and reach authenticated dashboard', async ({ page
 
   console.log('[3] Clicking submit button...');
 
-  // Wait for navigation AND localStorage token to be set
-  const [response] = await Promise.all([
-    page.waitForNavigation({ waitUntil: 'networkidle', timeout: 30000 }),
+  // MP-031: wait for the post-login URL, not `networkidle` — the
+  // authenticated dashboard legitimately polls live data, so the network
+  // never goes idle and `waitForNavigation({waitUntil:'networkidle'})` is a
+  // guaranteed 30s timeout (Playwright's docs mark networkidle DISCOURAGED
+  // for tests). The assertions below (final URL, JWT in localStorage,
+  // authenticated chrome) are unchanged.
+  await Promise.all([
+    page.waitForURL(/\/dashboard/, { timeout: 30000 }),
     page.click('button[type="submit"]'),
   ]);
 
-  console.log(`[4] Navigation response status: ${response?.status()}`);
+  console.log('[4] Navigated to post-login URL');
 
   // Wait a bit for any client-side state updates
   await page.waitForTimeout(1000);

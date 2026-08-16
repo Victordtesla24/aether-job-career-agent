@@ -102,12 +102,27 @@ test.describe("GAP-P7-DEF-B: internal-use email allowlist on /dashboard/settings
     // production row the gap record names). If a differently-configured
     // account is used, this soft-checks rather than hard-fails so the test
     // still exercises the save path.
+    // MP-033: this precondition was an `expect.soft`, which STILL fails the
+    // test at the end — contradicting this spec's own header ("soft-checks
+    // rather than hard-fails so the test still exercises the save path").
+    // The one production `admin@aether.local` row the gap record named no
+    // longer exists (BLOCKER-001 revocation; the account now stores a real
+    // email), so record the precondition honestly as an annotation and keep
+    // exercising the actual behaviour under test (the save path). The
+    // reserved-TLD allowlist contract itself stays pinned by the backend
+    // suite (apps/api/tests/test_gap_p7_def_b_email_validation.py).
     const emailValue = await page.getByTestId("settings-email").inputValue();
-    expect.soft(emailValue.endsWith("@aether.local"), `expected a stored @aether.local email, got "${emailValue}"`).toBe(true);
+    test.info().annotations.push({
+      type: "precondition",
+      description: emailValue.endsWith("@aether.local")
+        ? "stored email is @aether.local — full GAP-P7-DEF-B reproduction"
+        : `stored email is not @aether.local ("${emailValue.replace(/^[^@]+/, "<redacted>")}") — save path still exercised; reserved-TLD contract pinned by backend tests`,
+    });
 
     // Change an unrelated field only — the email itself is left untouched,
     // matching the backend's test_email_not_changed_unrelated_field_save_succeeds.
     const nameInput = page.getByTestId("settings-fullname");
+    const originalName = await nameInput.inputValue();
     await nameInput.fill("");
     await nameInput.fill(`GAP-P7-DEF-B Probe ${Date.now()}`);
 
@@ -115,6 +130,14 @@ test.describe("GAP-P7-DEF-B: internal-use email allowlist on /dashboard/settings
 
     // Target behaviour: success notice appears, not the top-level error
     // banner ("Fix the highlighted fields before saving." / a 422 message).
+    await expect(page.getByTestId("settings-saved-notice")).toBeVisible({ timeout: 15_000 });
+
+    // MP-033: restore the original display name so this spec never leaves
+    // "GAP-P7-DEF-B Probe …" residue on a real account (it runs against
+    // production data). The restore save re-exercises the same path.
+    await nameInput.fill("");
+    await nameInput.fill(originalName);
+    await page.getByTestId("save-settings-btn").click();
     await expect(page.getByTestId("settings-saved-notice")).toBeVisible({ timeout: 15_000 });
   });
 

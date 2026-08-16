@@ -37,14 +37,24 @@ test("dashboard renders the 13-item primary sidebar", async ({ page }) => {
   }
 });
 
-test("root route sends an anonymous visitor straight to /pricing (single hop)", async ({
-  page,
-}) => {
-  // Auth lives in localStorage, so a fresh (anonymous) context has no session:
-  // the root client page routes directly to the public /pricing landing page,
-  // no longer bouncing through /dashboard first.
-  await page.goto("/");
-  await expect(page).toHaveURL(/\/pricing$/);
+test.describe("root route, anonymous visitor", () => {
+  // MP-032: this test's premise is an ANONYMOUS visitor, but the `chromium`
+  // project injects the logged-in session via `storageState`
+  // (e2e/.auth/user.json → aether_token in localStorage) — under which the
+  // root page CORRECTLY routes to /dashboard. Clear the project-level
+  // storageState so the context is genuinely anonymous, matching the test's
+  // own stated premise. The product contract asserted is unchanged.
+  test.use({ storageState: { cookies: [], origins: [] } });
+
+  test("root route sends an anonymous visitor straight to /pricing (single hop)", async ({
+    page,
+  }) => {
+    // Auth lives in localStorage, so a fresh (anonymous) context has no session:
+    // the root client page routes directly to the public /pricing landing page,
+    // no longer bouncing through /dashboard first.
+    await page.goto("/");
+    await expect(page).toHaveURL(/\/pricing$/);
+  });
 });
 
 test("nav sections render real workspaces; unknown routes get a graceful panel (P1-S12)", async ({

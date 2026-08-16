@@ -46,7 +46,10 @@ test.describe("FEAT-B1: remove approval requests", () => {
 
     // Act: find the card under the "rejected" filter and remove it via the UI.
     await page.goto("/dashboard/approvals");
-    await page.getByRole("button", { name: "rejected", exact: true }).click();
+    // MP-034: the filter strip is the shared <SegmentedControl> (B2 global
+    // controls pass) — role="tab" with capitalized labels, no longer
+    // aria-pressed buttons.
+    await page.getByRole("tab", { name: "Rejected", exact: true }).click();
     const card = page
       .getByTestId("approval-card")
       .filter({ hasText: marker })
@@ -135,7 +138,8 @@ test.describe("FEAT-B1: remove approval requests", () => {
     ).length;
 
     await page.goto("/dashboard/approvals");
-    await page.getByRole("button", { name: "all", exact: true }).click();
+    // MP-034: shared <SegmentedControl> tabs (see above).
+    await page.getByRole("tab", { name: "All", exact: true }).click();
     await expect(
       page.getByTestId("approval-card").first().or(page.getByTestId("approvals-empty-state")),
     ).toBeVisible({ timeout: 20_000 });

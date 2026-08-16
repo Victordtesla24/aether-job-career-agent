@@ -106,7 +106,11 @@ test.describe("Mobile Regression Smoke Test (T3) - 390x844 Viewport", () => {
       });
 
       // Navigate to dashboard
-      await page.goto("/dashboard", { waitUntil: "networkidle" });
+      // MP-036: the dashboard polls live data, so "networkidle" never settles
+      // and the goto is a guaranteed timeout. Wait for "load" then for the
+      // real content sentinel (role=main below) — assertions unchanged.
+      await page.goto("/dashboard", { waitUntil: "load" });
+      await page.getByRole("main").waitFor({ state: "visible", timeout: 15000 });
 
       // Pre-load screenshot
       const preScreenshot = await page.screenshot({ fullPage: false });
@@ -178,7 +182,11 @@ test.describe("Mobile Regression Smoke Test (T3) - 390x844 Viewport", () => {
   }) => {
     const prefix = "rg-mob-dash";
 
-    await page.goto("/dashboard", { waitUntil: "networkidle" });
+    // MP-036: the dashboard polls live data, so "networkidle" never settles
+      // and the goto is a guaranteed timeout. Wait for "load" then for the
+      // real content sentinel (role=main below) — assertions unchanged.
+      await page.goto("/dashboard", { waitUntil: "load" });
+      await page.getByRole("main").waitFor({ state: "visible", timeout: 15000 });
 
     // Verify navigation is accessible at mobile width
     const navLinks = page.getByRole("link");
@@ -229,7 +237,10 @@ test.describe("Mobile Regression Smoke Test (T3) - 390x844 Viewport", () => {
       });
 
       // Navigate to approvals
-      await page.goto("/dashboard/approvals", { waitUntil: "networkidle" });
+      // MP-036: see the /dashboard note — approvals polls too; wait for real
+      // content instead of network idleness.
+      await page.goto("/dashboard/approvals", { waitUntil: "load" });
+      await page.getByRole("main").waitFor({ state: "visible", timeout: 15000 });
 
       // Pre-load screenshot
       const preScreenshot = await page.screenshot({ fullPage: false });
@@ -308,7 +319,10 @@ test.describe("Mobile Regression Smoke Test (T3) - 390x844 Viewport", () => {
   }) => {
     const prefix = "rg-mob-appr";
 
-    await page.goto("/dashboard/approvals", { waitUntil: "networkidle" });
+    // MP-036: see the /dashboard note — approvals polls too; wait for real
+      // content instead of network idleness.
+      await page.goto("/dashboard/approvals", { waitUntil: "load" });
+      await page.getByRole("main").waitFor({ state: "visible", timeout: 15000 });
 
     const card = page.getByTestId("approval-card").first();
     const empty = page.getByTestId("approvals-empty-state");
