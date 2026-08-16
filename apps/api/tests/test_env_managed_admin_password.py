@@ -89,9 +89,13 @@ def test_reset_password_refuses_an_env_managed_admin_identity(client, monkeypatc
 
     assert r.status_code == 409, r.text
     detail = r.json()["detail"]
-    # Honest: names the mechanism and the real remedy, never the hash value.
-    assert "AETHER_ADMIN_PASSWORD_HASH" in detail
-    assert "restart" in detail.lower()
+    # RT-001: honest AND professional — states the password is deployment-
+    # managed and directs to the operator, but internals (env-var names,
+    # rotation runbook) now live in the SERVER LOG, never in the response.
+    assert "managed at the deployment level" in detail
+    assert "operator" in detail.lower()
+    assert "AETHER_" not in detail
+    assert "restart the api" not in detail.lower()
     assert ENV_ADMIN_PASSWORD not in detail
     # And it really refused: nothing was written for the next boot to revert.
     assert _stored_hash(user_id) == before
@@ -175,7 +179,9 @@ def test_admin_set_password_refuses_an_env_managed_admin_identity(
 
     assert r.status_code == 409, r.text
     detail = r.json()["detail"]
-    assert "AETHER_ADMIN_PASSWORD_HASH" in detail
+    # RT-001: professional, internals-free refusal (operator detail -> logs).
+    assert "managed at the deployment level" in detail
+    assert "AETHER_" not in detail
     assert ENV_ADMIN_PASSWORD not in detail
     assert _stored_hash(user_id) == before
     # A refused change is NOT an audited change (nothing happened to record).
