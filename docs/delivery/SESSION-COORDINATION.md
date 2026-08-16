@@ -856,3 +856,9 @@ web handoff fixes (INV-M-002/003, CLI-004 FE copy, UI-W-01 partial), AND the inh
 c0bfd318 (committed before this review started; gate = full battery green: tsc 0 errors, vitest 1971/1971,
 full pytest in progress and must be green before restart). stash@{0} (orch-preserve-pre-consolidation) untouched.
 **Auto-deploy timer:** verified `inactive (dead)` — push cannot trigger a concurrent deploy.
+
+### 2026-08-16 05:2xZ — Session DA: DEPLOY WINDOW RELEASED
+- Deployed main@b97f53c8 (Fable 5 remediation batch: F5-001/004/006/008/010, CLI-001..006 already on origin, d9e59cd3 web handoff fixes, Wave B WIP c0bfd318).
+- New BUILD_ID mZNZzPnUFBuoEl80D35uE; services restarted 05:25:04Z; verify-web-build PASS; /api/health 200 ok.
+- Gates: GitHub CI run 31928750350 GREEN on b97f53c8 (ruff, mypy, pytest hosted-DB, web lint/types/vitest); local tsc 0 / vitest 1971/1971 / targeted pytest 155/155 under sanitized env.
+- Log: /home/ubuntu/fable5-review/logs/deploy-fable5.log
