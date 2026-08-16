@@ -60,6 +60,7 @@ is ever recorded as sent.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import re
@@ -791,11 +792,25 @@ def sweep_pending_transmissions(
 
 
 async def apply_sweep_user(ctx: Any, user_id: str) -> dict[str, Any]:
-    """ARQ job: one bounded sweep pass for one user."""
+    """ARQ job: one bounded sweep pass for one user, RUN OFF THE EVENT LOOP.
+
+    ``sweep_pending_transmissions`` drives a REAL browser via Playwright's
+    **sync** API (``apply_executor.fetch_apply_page`` / ``execute_site_application``).
+    The sync API refuses to run inside a live asyncio loop — it raises a bare
+    ``playwright...Error`` ("Sync API inside the asyncio loop"), which the
+    executor wraps as ``ApplyExecutorTransportError`` ("Could not open the
+    application page (Error)"). Called directly on the arq worker's loop, that
+    meant EVERY browser submission failed (prod: 1 of 687 transmitted). Running
+    it in a worker thread — exactly as ``board_sweep_user`` already does with
+    ``asyncio.to_thread(sweep_user_stretch, ...)`` — gives the sync browser code
+    a thread with no running loop, so it works.
+    """
     if not sweep_enabled():
         return {"skipped": "disabled", "userId": user_id}
     deadline = time.monotonic() + sweep_stretch_seconds()
-    return sweep_pending_transmissions(user_id, deadline=deadline)
+    return await asyncio.to_thread(
+        sweep_pending_transmissions, user_id, deadline=deadline
+    )
 
 
 async def apply_sweep_cron(ctx: Any) -> int:

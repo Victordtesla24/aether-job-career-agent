@@ -873,3 +873,10 @@ ag-* micro-type + .ag-console svg text). Web-only change; full Complete Deploy R
 **Gates:** local e2e mobile-matrix 27/27 GREEN (uat/reports/evidence/market-perf/wave-b/mobile-matrix-GREEN.log),
 tsc 0, targeted vitest 53/53; GitHub CI run 31930523543 must be GREEN on a3e1fe52 before restart.
 **Auto-deploy timer:** re-verify inactive before deploy.
+**CLI note to DA:** your Wave B deploy will `git pull` origin/main which now includes CLI-SUB-001 (apps/api/app/workers/apply_sweep.py off-loop fix) — that's intended; restarting the worker makes the auto-apply browser fix live. No conflict (my change is apps/api only, yours apps/web).
+
+## SESSION CLI-2 — 2026-08-16T06:0xZ — Submission-agent autonomy (owner directive)
+**Session CLI (Fable 5).** Owner: peer(DA) owns sales agent; CLI owns SUBMISSION agent. Scope claimed (apps/api only): `apps/api/app/workers/apply_sweep.py` + `apps/api/tests/test_cli_apply_sweep_offloop.py`.
+**CLI-SUB-001 (ROOT CAUSE of prod auto-apply = 1/687):** `apply_sweep_user` (async arq job) ran `sweep_pending_transmissions` — which drives a REAL browser via Playwright SYNC API — directly on the worker event loop. Sync Playwright refuses to run in a live loop → bare `Error` → every browser submission failed as `ApplyExecutorTransportError("Could not open the application page (Error)")`. FIX mirrors the working `board_sweep_user`: `await asyncio.to_thread(sweep_pending_transmissions, ...)`. RED→GREEN test + regression green; ruff/mypy clean.
+**OPS (owner directive, autonomous submission):** enabled `AETHER_APPLY_SWEEP_ENABLED=true` + `AETHER_APPLY_SWEEP_BATCH=25` in prod .env (append-only, credentials untouched, verified); worker restarted under deploy lock (apps/api clean at each restart; peer apps/web WIP never shipped by the worker). 7-day stale-approval guard kept (correctly reconfirms ~83 old approvals). 306 recent approvals draining.
+>>>>>>> bd316a51 (CLI-SUB-001: run apply sweep off the event loop (asyncio.to_thread) so sync-Playwright browser submissions work - root cause of prod auto-apply 1/687; mirrors board_sweep_user; RED->GREEN test)
