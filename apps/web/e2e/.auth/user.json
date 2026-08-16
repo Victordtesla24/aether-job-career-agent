@@ -2,11 +2,11 @@
   "cookies": [],
   "origins": [
     {
-      "origin": "http://127.0.0.1:3000",
+      "origin": "http://127.0.0.1:3100",
       "localStorage": [
         {
           "name": "aether_token",
-          "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjNmM4ZDAxNjNkOTczYTgwNDhlN2UzM2I4IiwidXNlcklkIjoiYzZjOGQwMTYzZDk3M2E4MDQ4ZTdlMzNiOCIsImVtYWlsIjoic2Fya2FyLnZpa3JhbUBnbWFpbC5jb20iLCJpYXQiOjE3ODU0NTIxMjQsImV4cCI6MTc4NTUzODUyNH0.LGBAXypJkRp4m2S9WtBrdlqy3_knOAZg8Rtuzf_o29Y"
+          "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjNmM4ZDAxNjNkOTczYTgwNDhlN2UzM2I4IiwidXNlcklkIjoiYzZjOGQwMTYzZDk3M2E4MDQ4ZTdlMzNiOCIsImVtYWlsIjoic2Fya2FyLnZpa3JhbUBnbWFpbC5jb20iLCJpYXQiOjE3ODY4NjAwODQsImV4cCI6MTc4Njk0NjQ4NH0.hSVsDxI7JzyuNdXhdx4BjBqHZyTxW2s2_HJ45_j0y-s"
         }
       ]
     }
