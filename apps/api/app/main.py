@@ -53,7 +53,10 @@ from app.routers import (
 )
 from app.services.agent_run_stream import StreamSlots
 from app.services.llm_client import get_mode
-from app.services.resume_grounding import MissingResumeError
+from app.services.resume_grounding import (
+    MissingResumeError,
+    ResumeBulletsUnavailableError,
+)
 
 
 def _env_int(name: str, default: int) -> int:
@@ -462,6 +465,24 @@ def create_app() -> FastAPI:
         return JSONResponse(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             content={"detail": str(exc) or "Add your resume before generating this."},
+        )
+
+    # RT-002: the caller HAS a résumé, but zero tailorable bullets could be
+    # parsed from it. That is an unprocessable INPUT, so it answers 422 with the
+    # actionable message verbatim — never the 503 "The AI service is temporarily
+    # unavailable" this used to masquerade as, which told the user (and the
+    # autopilot) to retry a call that can never succeed until the résumé itself
+    # is fixed.
+    @app.exception_handler(ResumeBulletsUnavailableError)
+    async def _no_tailorable_bullets_handler(  # pyright: ignore[reportUnusedFunction]
+        _request: Request, exc: ResumeBulletsUnavailableError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            content={
+                "detail": str(exc)
+                or "This resume has no tailorable bullet points."
+            },
         )
 
     # SEC-422 — request-validation failures must never echo a credential.

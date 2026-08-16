@@ -124,7 +124,9 @@ def is_configured() -> bool:
     return False
 
 
-def _send_via_smtp(to_email: str, subject: str, text_body: str) -> bool:
+def _send_via_smtp(
+    to_email: str, subject: str, text_body: str, html_body: str | None = None
+) -> bool:
     cfg = _smtp_env()
     if cfg is None or not cfg["from_addr"]:
         logger.info(
@@ -139,6 +141,11 @@ def _send_via_smtp(to_email: str, subject: str, text_body: str) -> bool:
     msg["From"] = cfg["from_addr"]
     msg["To"] = to_email
     msg.set_content(text_body)
+    if html_body:
+        # multipart/alternative with the plain text FIRST — the HTML is an
+        # alternative rendering, never a replacement: a text-only client must
+        # still receive the complete message.
+        msg.add_alternative(html_body, subtype="html")
     try:
         port = int(cfg["port"])
     except ValueError:
@@ -157,7 +164,9 @@ def _send_via_smtp(to_email: str, subject: str, text_body: str) -> bool:
         return False
 
 
-def _send_via_api(to_email: str, subject: str, text_body: str) -> bool:
+def _send_via_api(
+    to_email: str, subject: str, text_body: str, html_body: str | None = None
+) -> bool:
     cfg = _api_env()
     if cfg is None or not cfg["from_addr"]:
         logger.info(
@@ -169,16 +178,21 @@ def _send_via_api(to_email: str, subject: str, text_body: str) -> bool:
         return False
     import httpx
 
+    payload: dict[str, object] = {
+        "from": cfg["from_addr"],
+        "to": [to_email],
+        "subject": subject,
+        "text": text_body,
+    }
+    if html_body:
+        # Key omitted entirely when there is no HTML alternative, so the
+        # request stays byte-identical to the pre-existing behaviour.
+        payload["html"] = html_body
     try:
         resp = httpx.post(
             "https://api.resend.com/emails",
             headers={"Authorization": f"Bearer {cfg['api_key']}"},
-            json={
-                "from": cfg["from_addr"],
-                "to": [to_email],
-                "subject": subject,
-                "text": text_body,
-            },
+            json=payload,
             timeout=10.0,
         )
         if resp.status_code >= 400:
@@ -195,8 +209,18 @@ def _send_via_api(to_email: str, subject: str, text_body: str) -> bool:
         return False
 
 
-def send_email(to_email: str, subject: str, text_body: str) -> bool:
+def send_email(
+    to_email: str, subject: str, text_body: str, html_body: str | None = None
+) -> bool:
     """Best-effort outbound send; ``True`` only on a confirmed provider success.
+
+    ``html_body`` is OPTIONAL and additive: when given, the message goes out
+    as ``multipart/alternative`` with ``text_body`` as the FIRST alternative
+    (SMTP) or with an extra ``html`` field (API provider). Aether-owned mail
+    passes the branded HTML from
+    :func:`app.services.email_branding.render_branded_email` here; leaving it
+    ``None`` reproduces the previous plain-text behaviour exactly, which is
+    what user-authored and outreach mail deliberately keeps.
 
     Never raises — a transactional-email failure must never break the
     caller's request (``POST /auth/forgot-password`` stays a 200 either way,
@@ -216,8 +240,10 @@ def send_email(to_email: str, subject: str, text_body: str) -> bool:
             to_email,
         )
         return False
-    ok = _send_via_smtp(to_email, subject, text_body) if provider == "smtp" else _send_via_api(
-        to_email, subject, text_body
+    ok = (
+        _send_via_smtp(to_email, subject, text_body, html_body)
+        if provider == "smtp"
+        else _send_via_api(to_email, subject, text_body, html_body)
     )
     _last_attempted_send_ok = ok
     return ok

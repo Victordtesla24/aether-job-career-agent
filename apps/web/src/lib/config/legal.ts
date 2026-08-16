@@ -15,9 +15,11 @@
  *   - AETHER_OPERATOR_ABN — no default. An ABN cannot be honestly fabricated;
  *     when unset, the pages state plainly that one has not yet been
  *     published rather than showing a placeholder.
- *   - AETHER_SUPPORT_EMAIL — no default. A contact address cannot be
- *     honestly fabricated either; when unset, the pages state the actual
- *     (manual, operator-mediated) process instead of promising a support
+ *   - AETHER_SUPPORT_EMAIL — defaults to the owner-declared support address
+ *     in lib/brand.ts (directive 2026-08-16). Not a fabrication: the owner
+ *     named this address as the product's support contact; the env var still
+ *     overrides it per-deployment. (Historically there was no default and the
+ *     pages described a manual, operator-mediated
  *     channel that does not exist.
  *   - AETHER_SUPPORT_PHONE — no default, same rule as AETHER_SUPPORT_EMAIL:
  *     never fabricated, null (rendered as nothing) when unset.
@@ -25,6 +27,8 @@
  * Set these in the repo-root `.env` (see `.env.example`); `start-web.sh`
  * loads it before `pnpm start` (docs/delivery/DEPLOYMENT-RUNBOOK.md).
  */
+import { SUPPORT_EMAIL as BRAND_SUPPORT_EMAIL } from "../brand";
+
 interface OperatorLegalConfig {
   businessName: string;
   abn: string | null;
@@ -57,7 +61,8 @@ export function getOperatorLegalConfig(): OperatorLegalConfig {
   return {
     businessName: businessName && businessName.length > 0 ? businessName : "Aether",
     abn: abn && abn.length > 0 ? formatAbn(abn) : null,
-    supportEmail: supportEmail && supportEmail.length > 0 ? supportEmail : null,
+    supportEmail:
+      supportEmail && supportEmail.length > 0 ? supportEmail : BRAND_SUPPORT_EMAIL,
     supportPhone: supportPhone && supportPhone.length > 0 ? supportPhone : null,
   };
 }

@@ -309,7 +309,7 @@ def forgot_password(request: Request, body: ForgotPasswordRequest) -> ForgotPass
     """
     from app.repositories.admin import password_is_env_managed
     from app.services import email_sender
-    from app.services.password_reset import build_reset_email_body, create_reset_token
+    from app.services.password_reset import build_reset_email_bodies, create_reset_token
     from app.services.stripe_gateway import app_base_url
 
     guard_forgot_password_attempt(request, body.email)
@@ -332,10 +332,14 @@ def forgot_password(request: Request, body: ForgotPasswordRequest) -> ForgotPass
         raw_token = create_reset_token(user["id"])
         if email_enabled:
             reset_url = f"{app_base_url()}/reset-password?token={raw_token}"
+            # Branded HTML + the identical plain text (multipart/alternative):
+            # a text-only client still receives the complete, honest message.
+            reset_text, reset_html = build_reset_email_bodies(reset_url)
             sent = email_sender.send_email(
                 user["email"],
                 "Reset your Aether password",
-                build_reset_email_body(reset_url),
+                reset_text,
+                html_body=reset_html,
             )
             if not sent:
                 logger.info(

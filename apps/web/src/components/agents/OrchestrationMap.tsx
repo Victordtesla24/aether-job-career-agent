@@ -265,6 +265,7 @@ function NodeDetail({
 }) {
   const [mounted, setMounted] = useState(false);
   const [pos, setPos] = useState({ top: 0, left: 0 });
+  const tipRef = useRef<HTMLSpanElement | null>(null);
 
   useLayoutEffect(() => setMounted(true), []);
 
@@ -276,7 +277,19 @@ function NodeDetail({
       Math.max(8, rect.left),
       Math.max(8, (typeof window === "undefined" ? width + 16 : window.innerWidth) - width - 8),
     );
-    setPos({ top: rect.bottom + 8, left });
+    /* UI-OVL-2 (owner-reported, audit-verified 2026-08-16): the panel always
+       opened BELOW the anchor, so a node in the lower half of the viewport
+       pushed its tooltip past the fold (measured 202px tall at bottom 914 in a
+       900px viewport). Flip above the anchor when the space below can't hold
+       the rendered panel; clamp to the top edge as the last resort. */
+    const tipH = tipRef.current?.offsetHeight ?? 0;
+    const below = rect.bottom + 8;
+    const vh = typeof window === "undefined" ? below + tipH : window.innerHeight;
+    const top =
+      tipH > 0 && below + tipH > vh - 8
+        ? Math.max(8, rect.top - tipH - 8)
+        : below;
+    setPos({ top, left });
   }, [anchor]);
 
   useLayoutEffect(() => {
@@ -304,6 +317,7 @@ function NodeDetail({
     >
       <span
         id={id}
+        ref={tipRef}
         role="tooltip"
         className={`elev-3 block w-[280px] max-w-[calc(100vw-1rem)] rounded-lg p-3 text-[12px] leading-[1.45] text-aether-muted ${
           open ? "opacity-100" : "hidden opacity-0"

@@ -814,21 +814,57 @@ class SalesAgent:
             if reply_rate is not None
             else "not observable (no real sends yet)"
         )
-        body = (
-            f"Aether Sales Agent — daily digest ({today} UTC)\n\n"
-            f"Mode: {'DRY-RUN (shadow)' if dry_run else 'LIVE'}\n"
-            f"Signups (total users): {overview['signups']}\n"
-            f"Paid conversions (active/trialing/past_due, non-free): "
-            f"{overview['paidConversions']}\n"
-            f"MRR (AUD, billingInterval-aware): ${overview['mrrAud']:.2f}\n"
-            f"Leads: {overview['leads']}\n"
-            f"Emails really sent (all time): {overview['emailsSent']}\n"
-            f"Dry-run emails logged (all time): {overview['dryRunLogged']}\n"
-            f"Reply rate: {reply_rate_str}\n"
-            f"LinkedIn drafts queued: {overview['linkedinDraftsQueued']}\n"
-            f"Suppression list size: {overview['suppressionCount']}\n"
-            f"Outreach log rows today: {today_total}\n\n"
-            "All numbers above are live database queries — nothing is estimated."
+        # Owner directive (2026-08-16): Aether-OWNED email carries the brand.
+        # The digest is rendered by the canonical template module, which
+        # returns BOTH parts — the plain text keeps every value the HTML
+        # shows, so the logged/dry-run body is still fully informative.
+        from app.services.email_branding import (
+            divider,
+            paragraph,
+            render_branded_email,
+            stats,
+        )
+        from app.services.stripe_gateway import app_base_url
+
+        digest_stats = [
+            ("Mode", "DRY-RUN (shadow)" if dry_run else "LIVE"),
+            ("Signups (total users)", f"{overview['signups']}"),
+            (
+                "Paid conversions (active/trialing/past_due, non-free)",
+                f"{overview['paidConversions']}",
+            ),
+            ("MRR (AUD, billingInterval-aware)", f"${overview['mrrAud']:.2f}"),
+            ("Leads", f"{overview['leads']}"),
+            ("Emails really sent (all time)", f"{overview['emailsSent']}"),
+            ("Dry-run emails logged (all time)", f"{overview['dryRunLogged']}"),
+            ("Reply rate", reply_rate_str),
+            ("LinkedIn drafts queued", f"{overview['linkedinDraftsQueued']}"),
+            ("Suppression list size", f"{overview['suppressionCount']}"),
+            ("Outreach log rows today", f"{today_total}"),
+        ]
+        html_body, body = render_branded_email(
+            f"Aether Sales Agent — daily digest ({today} UTC)",
+            [
+                paragraph(
+                    "Where the sales pipeline stands as of this morning "
+                    "(UTC). Sent every day, including zero-activity days."
+                ),
+                stats(digest_stats),
+                divider(),
+                paragraph(
+                    "All numbers above are live database queries — nothing "
+                    "is estimated."
+                ),
+            ],
+            cta={"label": "Open the admin console", "url": f"{app_base_url()}/admin"},
+            footer_note=(
+                "Aether Career Job Agent — internal founder digest, sent to "
+                "the account owner only."
+            ),
+            preheader=(
+                f"{overview['signups']} signups · {overview['leads']} leads · "
+                f"{today_total} outreach rows today"
+            ),
         )
         recipient = (
             os.environ.get("AETHER_ADMIN_EMAIL")
@@ -856,7 +892,9 @@ class SalesAgent:
         else:
             gmail = self.gmail_factory(admin_id, accounts[0]["id"])
             try:
-                sent = gmail.send(to=recipient, subject=subject, body=body)
+                sent = gmail.send(
+                    to=recipient, subject=subject, body=body, html_body=html_body
+                )
             except (GmailNotConnectedError, GmailError) as exc:
                 result["errors"].append(f"digest send failed: {exc}")
                 return

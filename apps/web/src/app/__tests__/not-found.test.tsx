@@ -39,11 +39,15 @@ describe("Root not-found page (O-5, S-FIX slice C)", () => {
     expect(link.getAttribute("href")).toBe("mailto:help@example-operator.com");
   });
 
-  it("never fabricates a contact address — links to the Privacy Policy's contact section when unset", () => {
+  it("falls back to the owner-declared brand support address when the env is unset", () => {
+    // Contract change (owner directive 2026-08-16): the support address is no
+    // longer unknowable when AETHER_SUPPORT_EMAIL is unset — lib/brand.ts
+    // carries the owner-declared address, so the page renders a REAL mailto
+    // instead of the historical privacy-policy fallback. Not a fabrication:
+    // the address is owner-published brand identity, env still overrides.
     vi.stubEnv("AETHER_SUPPORT_EMAIL", "");
     render(<NotFound />);
-    expect(screen.queryByRole("link", { name: /^contact support$/i })).toBeNull();
-    const fallback = screen.getByRole("link", { name: /contact section/i });
-    expect(fallback.getAttribute("href")).toBe("/privacy-policy");
+    const link = screen.getByRole("link", { name: /^contact support$/i });
+    expect(link.getAttribute("href")).toBe("mailto:sarkar.vikram@gmail.com");
   });
 });

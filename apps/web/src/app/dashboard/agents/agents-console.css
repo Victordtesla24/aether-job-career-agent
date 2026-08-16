@@ -486,6 +486,16 @@
   color: #a0a0b8;
 }
 
+/* UI-OVL-1 (owner-reported overlap, live-verified 2026-08-16): a closed
+   `<details>` in this build still LAYS OUT its non-summary children — the
+   16.5px-tall closed disclosure painted its 50px `.ag-disc-more` paragraph
+   straight over the two rows beneath it (every ancestor up to the table is
+   overflow-visible, so nothing clipped it). Encode the closed-state hiding
+   explicitly instead of trusting the engine's details slotting. */
+.ag-disc:not([open]) > :not(summary) {
+  display: none;
+}
+
 /* Clamped closed, whole when open — one copy of the text, never two. */
 .ag-disc-line {
   display: -webkit-box;

@@ -206,7 +206,10 @@ async def run_agent_job(ctx: Any, job_id: str) -> None:
     from app.agents.cover_letter_agent import FabricationError, StructuralError
     from app.agents.tailor_agent import NoChangesApplied
     from app.routers.agents import _pipeline_job_ctx
-    from app.services.resume_grounding import MissingResumeError
+    from app.services.resume_grounding import (
+        MissingResumeError,
+        ResumeBulletsUnavailableError,
+    )
 
     repo = BackgroundJobRepository()
     job = repo.mark_processing(job_id)
@@ -253,6 +256,30 @@ async def run_agent_job(ctx: Any, job_id: str) -> None:
         except _TransientError:
             _pipeline_job_ctx.reset(token)
             raise
+        except ResumeBulletsUnavailableError as exc:
+            # RT-002: the tailor step refused because the user's résumé parsed
+            # ZERO tailorable bullets — an honest INPUT refusal that reached no
+            # model, so it is handled exactly like the MissingResumeError block
+            # below (complete + refund, never "failed"). Marking it failed would
+            # run ``_honest_message`` and stamp the polled job with the leaked
+            # class prefix "ResumeBulletsUnavailableError: …" in place of the
+            # actionable sentence the synchronous 422 shows.
+            _pipeline_job_ctx.reset(token)
+            honest_message = (
+                str(exc).strip() or "This resume has no tailorable bullet points."
+            )
+            honest_result = {
+                "resume_id": None,
+                "tailorableBullets": 0,
+                "message": honest_message,
+            }
+            if repo.mark_completed(job_id, honest_result):
+                repo.refund_pipeline_outstanding(job_id)
+            logger.info(
+                "pipeline job %s refused (no tailorable bullets in the base "
+                "resume), refunded", job_id
+            )
+            return
         except MissingResumeError as exc:
             # NF-final-PII-002 (review gap): a step inside _pipeline_core
             # (tailor / coverLetter) refused because this user has no résumé
@@ -317,6 +344,25 @@ async def run_agent_job(ctx: Any, job_id: str) -> None:
         if repo.mark_completed(job_id, honest_result):
             repo.refund_single_reservation(job_id)
         logger.info("job %s no-op (NoChangesApplied): 0 net edits, refunded", job_id)
+        return
+    except ResumeBulletsUnavailableError as exc:
+        # RT-002, single-agent (async ``POST /agents/tailor/run``) path: same
+        # honest input refusal as the pipeline branch above — complete with the
+        # actionable message verbatim and refund, never a "failed" job carrying
+        # the leaked exception-class prefix.
+        honest_message = (
+            str(exc).strip() or "This resume has no tailorable bullet points."
+        )
+        honest_result = {
+            "resume_id": None,
+            "tailorableBullets": 0,
+            "message": honest_message,
+        }
+        if repo.mark_completed(job_id, honest_result):
+            repo.refund_single_reservation(job_id)
+        logger.info(
+            "job %s refused (no tailorable bullets in the resume), refunded", job_id
+        )
         return
     except MissingResumeError as exc:
         # NF-final-PII-002: an OUTBOUND generation path (cover letter, tailor,
