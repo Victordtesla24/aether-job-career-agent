@@ -843,3 +843,16 @@ All api-only, zero overlap with the peer's web WIP `c0bfd318`. Everything is on 
 **Handoff to peer (peer-owned `apps/web` territory):** UI-W-01 (8 three.js console warnings on /dashboard/agents), INV-M-002 (inert email-verify toggle in /admin/settings), INV-M-003 (hardcoded e2e fallback passwords), CLI-004 FE note copy now stale.
 
 **Safety:** sales-agent sent-count 20→20 (zero emails sent). 5 tagged synthetic prod users soft-deleted (typed-confirm). No campaign activated, no dry-run flag flipped, no protected account or foreign row/ref touched, BLOCKER-001 verified effective at runtime. Verdict: FAIL (1 unmet Critical) / customer-ready TODAY: NO (narrowly — happy path works incl. live Stripe checkout). Full report: `/home/ubuntu/fable5-review/AETHER-ADVERSARIAL-REVIEW.md`.
+
+
+## DEPLOY WINDOW CLAIM — 2026-08-16T05:0xZ (Session DA: Fable 5 adversarial review, remediation deploy)
+
+**By:** Session DA (DeepAgent orchestrator, Fable 5 reviewer #2). **Lock:** flock /tmp/aether-deploy.lock.
+**Scope:** push local main (merge 7d01408f + web fixes d9e59cd3) to origin, then full Complete Deploy Recipe
+(runbook §"Complete Deploy Recipe") — pip install, pnpm install+build (clean env), verify-web-build.sh (blocking),
+restart aether-api/web/worker, health + BUILD_ID verify.
+**Ships:** Session CLI's merged fixes (CLI-001..006, already on origin), DA fixes F5-001/004/006/008/010,
+web handoff fixes (INV-M-002/003, CLI-004 FE copy, UI-W-01 partial), AND the inherited Wave B web WIP commit
+c0bfd318 (committed before this review started; gate = full battery green: tsc 0 errors, vitest 1971/1971,
+full pytest in progress and must be green before restart). stash@{0} (orch-preserve-pre-consolidation) untouched.
+**Auto-deploy timer:** verified `inactive (dead)` — push cannot trigger a concurrent deploy.
