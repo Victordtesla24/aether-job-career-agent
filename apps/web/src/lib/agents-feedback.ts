@@ -498,6 +498,40 @@ export function runErrorNotice(err: unknown, context: string): Notice {
       hrefLabel: "open Jobs →",
     };
   }
+  if (status === 409) {
+    // F5-010 (Fable 5 review): a 409 from the Stop-All / per-agent pause
+    // guard is a DELIBERATE, pre-side-effect refusal — the user's own
+    // controls stopped the agent, nothing ran and nothing was charged (see
+    // `_agent_paused_by_user` and the string/dict refusal shapes in
+    // apps/api/app/routers/agents.py). It previously fell through to the
+    // generic branch below, which (a) rendered it as a FAILURE with the raw
+    // truncated body ("agent_paused: ... (Stop Al") and (b) advised "Retry
+    // in a moment" — actively wrong, since retrying cannot succeed until the
+    // user re-enables the agent. It also halted the OrchestrationMap batch
+    // ("Stopped at Sentiment Analysis Agent — ..."), misreporting a pause as
+    // a pipeline failure. Mirror board_sweep's honest-skip semantics: an
+    // `info` notice (so the batch runner does not treat it as a refusal)
+    // with the ONE action that actually helps. Both backend refusal shapes
+    // are recognized: the plain-string `"agent_paused: ..."` detail from
+    // `_dispatch`/`_enqueue_single_agent` and the coded
+    // `{code: "agent_paused"}` dict from `_execute_reserved_run`.
+    const structured = apiErrorDetail(err);
+    const jsonDetail = extractApiJsonDetail(err);
+    const isPausedRefusal =
+      structured?.code === "agent_paused" ||
+      (typeof jsonDetail === "string" && jsonDetail.startsWith("agent_paused"));
+    if (isPausedRefusal) {
+      return {
+        kind: "info",
+        text: `${context} skipped — it's stopped by your agent controls (Stop All / per-agent toggle), so nothing ran and nothing was charged. Re-enable it with its toggle on the Agents page, then run it again.`,
+      };
+    }
+    // Any other genuine backend 409 conflict: surface the server's own
+    // detail rather than the generic retry copy, when one was sent.
+    if (jsonDetail) {
+      return { kind: "error", text: `${context} failed — ${jsonDetail}` };
+    }
+  }
   if (status === 401) {
     return {
       kind: "error",
