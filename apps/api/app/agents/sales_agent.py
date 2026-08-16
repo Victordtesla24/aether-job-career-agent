@@ -131,6 +131,38 @@ INTEREST_PHRASES = (
 #: the address local-part (the part before ``@``); the set is deliberately
 #: limited to unambiguous automation markers so genuine human prospects
 #: (``pat.prospect@…``, ``j.doe@…``) are never suppressed.
+#: RT-007 (live incident 2026-08-16): the agent auto-replied 6 times to
+#: ``onboarding@resend.dev`` — the transactional service delivering the app's
+#: OWN infrastructure alerts. Two structural gaps closed here:
+#: 1. AUTOMATED_SENDER_DOMAINS — transactional-infrastructure domains whose
+#:    mail is CATEGORICALLY automated regardless of local-part ("onboarding@"
+#:    carries no noreply marker). Exact domain (or subdomain) match only, so
+#:    a human at a company whose name merely contains one of these strings is
+#:    never suppressed.
+#: 2. SELF_ALERT_SUBJECT_PREFIXES — the app's own monitoring/alert mail
+#:    format. Aether must never converse with itself, whatever address the
+#:    alert relay uses.
+AUTOMATED_SENDER_DOMAINS = (
+    "resend.dev",
+    "sendgrid.net",
+    "mailgun.org",
+    "amazonses.com",
+    "postmarkapp.com",
+    "sparkpostmail.com",
+    "mandrillapp.com",
+)
+
+SELF_ALERT_SUBJECT_PREFIXES = ("[aether alert]", "[aether-alert]")
+
+
+def _is_self_alert_subject(subject: str) -> bool:
+    """True when ``subject`` is the app's own monitoring/alert mail (RT-007)."""
+    normalized = (subject or "").strip().lower()
+    return normalized.startswith(SELF_ALERT_SUBJECT_PREFIXES) or normalized.startswith(
+        tuple(f"re: {p}" for p in SELF_ALERT_SUBJECT_PREFIXES)
+    )
+
+
 AUTOMATED_SENDER_MARKERS = (
     "noreply",
     "no-reply",
@@ -148,6 +180,7 @@ AUTOMATED_SENDER_MARKERS = (
     "notification",
     "notify",
     "auto-reply",
+    "onboarding",
     "autoreply",
     "automated",
     "newsletter",
@@ -472,9 +505,16 @@ def _is_automated_sender(sender_email: str) -> bool:
     :data:`AUTOMATED_SENDER_MARKERS` marker as a substring of the local-part
     only (never the domain), so a normal address at, e.g., ``notify.com`` is
     judged on its local-part alone."""
-    local = (sender_email or "").split("@", 1)[0].lower()
+    addr = (sender_email or "").lower()
+    local, _, domain = addr.partition("@")
     if not local:
         return False
+    # RT-007: transactional-infra domains are categorically automated —
+    # exact domain or subdomain match, never a substring of a longer name.
+    if domain and any(
+        domain == d or domain.endswith("." + d) for d in AUTOMATED_SENDER_DOMAINS
+    ):
+        return True
     return any(marker in local for marker in AUTOMATED_SENDER_MARKERS)
 
 
@@ -686,6 +726,13 @@ class SalesAgent:
                 continue
             if sender_email == account_email:
                 continue  # our own outbound mail
+            if _is_self_alert_subject(header.get("subject") or ""):
+                # RT-007: the app's own monitoring mail — never a prospect,
+                # whatever relay address delivered it. Counted with the
+                # automated skips so the run output stays honest.
+                result["inboundSkippedAutomated"] += 1
+                summary["skippedAutomated"] += 1
+                continue
             if _is_automated_sender(sender_email):
                 # Automated / no-reply / notification mail is never a prospect
                 # signal — skip before classification so a bulk message that
