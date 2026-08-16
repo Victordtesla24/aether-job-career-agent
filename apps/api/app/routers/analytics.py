@@ -15,7 +15,12 @@ from app.agents.salary_intelligence_agent import (
     fetch_market_benchmark,
     user_disclosed_salary_median,
 )
-from app.db import ensure_user_profile_columns, get_connection, rows_to_dicts
+from app.db import (
+    ensure_application_transmission_columns,
+    ensure_user_profile_columns,
+    get_connection,
+    rows_to_dicts,
+)
 from app.middleware.auth import CurrentUser
 
 router = APIRouter()
@@ -83,8 +88,21 @@ def get_application_counts(
     also calls this function for its "Applied" node — every cumulative
     surface derives from this one function, with no divergent queries left.
 
+    ``transmitted`` (CLI-D3, audit wf_9a87f76f-eaa — "submitted must mean
+    sent"; the ADDITIVE exception to GOLD-MASTER-V2 §15's "do not modify this
+    helper", made by Architect decision CLI-D3): the DISTINCT-jobId subset
+    whose ``transmittedAt`` is NOT NULL — stamped only by the real send path
+    (``application_submission``) at the moment a message verifiably left the
+    building, never by a status change. The honest semantics the audit
+    demanded: **submitted counts applications that left draft — preparation;
+    transmitted counts verified sends** (live evidence: 391 "submitted" rows
+    that were never transmitted anywhere). ``submitted`` keeps its exact
+    prior meaning for funnel continuity; any surface whose label claims
+    "sent"/"verified" must use ``transmitted``. Same DISTINCT-jobId
+    discipline and the SAME ``period_clause`` as every other key.
+
     ``period_clause`` is an optional ``AND ...`` SQL fragment (see
-    ``_period_clause``) applied to both counts, e.g. a rolling time window.
+    ``_period_clause``) applied to all counts, e.g. a rolling time window.
     Any ``%s`` placeholder(s) inside a caller-supplied ``period_clause`` are
     bound from ``period_params``, appended after ``user_id`` in that order
     (MUST-FIX-2, AX round-3 final re-review) — this lets a caller pass an
@@ -110,6 +128,13 @@ def get_application_counts(
     # function (GAP-market-pulse-interview-count-divergence, fixed) — it
     # previously used a raw ``COUNT(*)`` instead, which could disagree with
     # this canonical figure on the SAME analytics page for the SAME data.
+    # CLI-D3: the query below names the lazy additive "transmittedAt" column
+    # (ADR-TR-1 / ensure_application_transmission_columns docstring: MUST be
+    # called by every path that reads it, before the statement that names
+    # it). Process-latched — after the first call this is a plain boolean
+    # check; the first call briefly borrows a second pooled connection for
+    # the information_schema probe.
+    ensure_application_transmission_columns()
     cur.execute(
         f'''
         SELECT
@@ -117,22 +142,34 @@ def get_application_counts(
             COUNT(DISTINCT "jobId") FILTER (WHERE "status" <> 'draft') AS submitted,
             COUNT(DISTINCT "jobId") FILTER (
                 WHERE "status" IN ('interview', 'offer')
-            ) AS interviewed
+            ) AS interviewed,
+            COUNT(DISTINCT "jobId") FILTER (
+                WHERE "transmittedAt" IS NOT NULL
+            ) AS transmitted
         FROM "Application" WHERE "userId" = %s{period_clause}
         ''',
         (user_id, *period_params),
     )
-    total, submitted, interviewed = cur.fetchone()
+    total, submitted, interviewed, transmitted = cur.fetchone()
     return {
         "total": int(total),
         "submitted": int(submitted),
         "interviewed": int(interviewed),
+        "transmitted": int(transmitted),
     }
 
 
 @router.get("/funnel")
 def funnel(current_user: CurrentUser, period: str = "all") -> dict[str, Any]:
-    """Application funnel counts for the requested look-back window."""
+    """Application funnel counts for the requested look-back window.
+
+    CLI-D3 (audit wf_9a87f76f-eaa): the payload additionally carries
+    ``transmitted`` — DISTINCT jobs with a verified send
+    (``transmittedAt IS NOT NULL``), same window. Submitted ("applied")
+    counts applications that left draft — preparation; transmitted counts
+    verified sends. Every pre-existing field keeps its exact prior meaning
+    (additive contract — the FE's zod schema pins them).
+    """
     user_id = current_user["id"]
     job_filter = _period_clause(period, '"createdAt"')
     with get_connection() as conn:
@@ -175,6 +212,10 @@ def funnel(current_user: CurrentUser, period: str = "all") -> dict[str, Any]:
         "screened": screened,
         "interviewed": interviewed,
         "offers": offers,
+        # CLI-D3 additive: verified sends only — "applied" above keeps
+        # counting every left-draft application (funnel continuity), this
+        # counts the subset that verifiably went out the door.
+        "transmitted": counts["transmitted"],
     }
 
 
@@ -237,6 +278,19 @@ def conversion(current_user: CurrentUser, period: str = "all") -> dict[str, Any]
     ``get_application_counts`` (DISTINCT jobId, never a raw Application-row
     count; see that function's docstring), never a placeholder. Healthy at
     the >=1:5 (20%) industry-standard floor.
+
+    CLI-D3 (audit wf_9a87f76f-eaa) — honest semantics: **submitted counts
+    applications that left draft — preparation; transmitted counts verified
+    sends** (``transmittedAt IS NOT NULL``). The payload therefore ALSO
+    carries, additively:
+
+    * ``transmitted`` — the verified-send count for the same window.
+    * ``verified_interview_conversion_rate`` — interviews over TRANSMITTED,
+      the rate a user can trust as "of what actually went out, how much
+      converted". The legacy ``interview_conversion_rate`` stays present and
+      byte-identical (its denominator includes recorded-but-never-sent
+      applications — live audit: 391 of them); the FE relabels it honestly
+      (Track D) rather than this endpoint silently changing its meaning.
     """
     data = funnel(current_user, period)
 
@@ -249,6 +303,12 @@ def conversion(current_user: CurrentUser, period: str = "all") -> dict[str, Any]
         with conn.cursor() as cur:
             counts = get_application_counts(cur, user_id, job_filter)
     interview_conversion_rate = rate(counts["interviewed"], counts["submitted"])
+    # CLI-D3: the SAME numerator over the VERIFIED denominator. With zero
+    # verified sends this is an honest 0.0 (rate()'s zero-denominator arm),
+    # never a copy of the legacy figure.
+    verified_interview_conversion_rate = rate(
+        counts["interviewed"], counts["transmitted"]
+    )
 
     return {
         "period": period,
@@ -258,6 +318,10 @@ def conversion(current_user: CurrentUser, period: str = "all") -> dict[str, Any]
         "interview_to_offer": rate(data["offers"], data["interviewed"]),
         "interview_conversion_rate": interview_conversion_rate,
         "interview_conversion_healthy": interview_conversion_rate >= 20.0,
+        # CLI-D3 additive fields — see this endpoint's docstring for the
+        # submitted-vs-transmitted semantics.
+        "transmitted": counts["transmitted"],
+        "verified_interview_conversion_rate": verified_interview_conversion_rate,
     }
 
 
@@ -864,12 +928,19 @@ def market_pulse(current_user: CurrentUser) -> dict[str, Any]:
             # real DB wall clock, so a single response could mix instants.
             # Now bound via the SAME ``%s::timestamptz`` parameter pattern
             # every other market-pulse query already uses.
-            f_last_month = get_application_counts(
+            last_month_counts = get_application_counts(
                 cur,
                 user_id,
                 ' AND "createdAt" >= %s::timestamptz - INTERVAL \'30 days\'',
                 (now_utc,),
-            )["submitted"]
+            )
+            f_last_month = last_month_counts["submitted"]
+            # CLI-D3 (audit wf_9a87f76f-eaa): the verified-send subset of the
+            # SAME rolling 30-day window — carried on the "Applications /
+            # month" row below so the one market-pulse figure derived from
+            # "submitted" also discloses how many of those applications
+            # verifiably left the building (transmittedAt IS NOT NULL).
+            f_last_month_transmitted = last_month_counts["transmitted"]
 
             # Average fit score across scored jobs (skill-match proxy). The
             # COUNT rides along because "no job has ever been fit-scored" and
@@ -1249,6 +1320,7 @@ def market_pulse(current_user: CurrentUser) -> dict[str, Any]:
     # without a provider stays market=None forever rather than borrowing a
     # number from a different measurement (GAP-P4-060).
     you_apps_month = int(f_last_month or 0)
+    you_apps_month_transmitted = int(f_last_month_transmitted or 0)
     target_role, target_location = _user_market_target(user_id)
     benchmark = fetch_market_benchmark(target_role, target_location)
     postings_market = benchmark.postingsLast30d if benchmark is not None else None
@@ -1262,6 +1334,11 @@ def market_pulse(current_user: CurrentUser) -> dict[str, Any]:
         "label": "Applications / month",
         "market": postings_market,
         "you": you_apps_month,
+        # CLI-D3 additive: of the ``you`` applications in this same 30-day
+        # window, how many carry a verified send (transmittedAt) — submitted
+        # counts applications that left draft (preparation), transmitted
+        # counts verified sends. ``you`` keeps its exact prior meaning.
+        "transmitted": you_apps_month_transmitted,
         "connected": postings_market is not None,
         "dataAsOf": postings_as_of,
     }
