@@ -29,12 +29,17 @@ from app.services.quality_gate import (
     is_below_floor,
 )
 from app.services.resume_format import FormatFidelity, describe_fidelity, pending_fidelity
-from app.services.resume_grounding import MissingResumeError
+from app.services.resume_grounding import (
+    MissingResumeError,
+    ResumeBulletsUnavailableError,
+    no_tailorable_bullets_message,
+)
 from app.services.resume_parser import parse_resume_pdf
 from app.services.resume_pdf import bundled_format_hashes, extract_pdf_bullets
 from app.services.resume_tailor import (
     ResumeTailorService,
     TailorResult,
+    extract_bullets,
     render_tailored_raw_text,
     strip_bullet_lines,
 )
@@ -80,6 +85,52 @@ def _bullets_need_healing(texts: list[str]) -> bool:
         if re.search(r"[A-Za-z]- [A-Za-z]", t):
             return True
     return False
+
+
+def _tailorable_bullet_texts(
+    stored: "list[Any] | None", resume_text: str
+) -> list[str]:
+    """The bullet texts a tailor run could ACTUALLY rewrite, in the same order
+    of preference ``ResumeTailorService._structure_originals`` resolves them.
+
+    RT-002. The honest question is not "is ``sections.bullets`` empty?" — a base
+    with no STORED bullets but a parseable ``raw_text`` has always tailored fine
+    through ``_structure_originals``' documented ``extract_bullets(resume_text)``
+    fallback, and nothing here changes that path. The question is whether EITHER
+    source yields a single bullet. When neither does, there is literally nothing
+    to send the model, which is exactly the production defect
+    (``Vik_Resume_BA.pdf``: stored ``[]`` AND a marker-free text layer).
+
+    Empty/whitespace entries are discarded first: a stored list of blank bullets
+    is not "some bullets", it is the same nothing wearing a different shape.
+    """
+    texts: list[str] = []
+    for item in stored or []:
+        if isinstance(item, str):
+            text = item
+        elif isinstance(item, Mapping):
+            text = str(item.get("text") or "")
+        else:
+            text = ""
+        if text.strip():
+            texts.append(text)
+    if texts:
+        return texts
+    return [b for b in extract_bullets(resume_text) if b.strip()]
+
+
+def _resume_label(base: Mapping[str, Any]) -> str:
+    """How to NAME this résumé to its owner in a refusal (RT-002).
+
+    Their own label if the row has one (it is what Resume Studio shows them),
+    else the version number, else a neutral noun — never an internal id, which
+    would name the record without identifying the document.
+    """
+    label = str(base.get("label") or "").strip()
+    if label:
+        return label
+    version = base.get("version")
+    return f"resume version {version}" if version is not None else "this resume"
 
 
 def _compute_conversion_metrics(
@@ -706,11 +757,34 @@ class TailoringAgent:
                 "Add your resume before tailoring or generating an application."
             )
 
-        jd = f"{job['title']} at {job['company']}. {job.get('description', '')}"
         # Tailor against the version's stored bullets when present so change
         # counts (and the diff endpoint) are measured against the parent the
         # user selected — not re-derived from the immutable base raw_text.
         parent_bullets = (base.get("sections") or {}).get("bullets") or None
+        # RT-002 — the honest guard, deliberately placed BEFORE the evidence
+        # corpora and the tailoring loop, i.e. before ANY model is contacted.
+        #
+        # The tailor prompt is BUILT from bullets ("Original bullets:\n" + …).
+        # With none available the model is handed an empty list and asked to
+        # rewrite it; the live one (a user-chosen model, so ADR-ML-3 correctly
+        # suppresses substitution) answered honestly in PROSE, ``complete_json``
+        # failed to parse it, and the resulting ``LLMUnavailableError`` was
+        # rendered to the owner as "The AI service is temporarily unavailable"
+        # — retryable, and false in every clause. board_sweep believed it,
+        # burned its circuit, and suppressed 1405 jobs per cycle indefinitely.
+        #
+        # The .docx ingest path hit this same class once before (see
+        # ``routers/resumes.py::_extract_docx_text``: "a .docx résumé previously
+        # extracted ZERO bullets … the upload succeeded and then nothing in it
+        # could ever be tailored") and it was fixed per FORMAT. This is the
+        # class-level fix: whatever the format, zero tailorable bullets is an
+        # input error, said plainly, at zero cost.
+        if not _tailorable_bullet_texts(parent_bullets, resume_text):
+            raise ResumeBulletsUnavailableError(
+                no_tailorable_bullets_message(_resume_label(base))
+            )
+
+        jd = f"{job['title']} at {job['company']}. {job.get('description', '')}"
         # Consolidated career evidence (GitHub/portfolio/LinkedIn, ADR D-0031)
         # widens the anti-fabrication corpus so a rewrite may draw on skills the
         # user's public work proves. Empty when no career data is ingested.

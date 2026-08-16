@@ -27,12 +27,33 @@ def _seed_job(client, auth_headers) -> dict:
     return client.get("/jobs", headers=auth_headers).json()[0]
 
 
-def _ingest_ba_resume(client, auth_headers) -> dict:
+#: The same BA résumé written with real bullet lines. ``BA_RAW_TEXT`` above is
+#: one unbroken paragraph, so ``extract_bullets`` legitimately finds NOTHING in
+#: it — which, since RT-002, is an honest 422 ("this resume has no tailorable
+#: bullet points") rather than a tailor run against an empty bullet list. Tests
+#: that pin the tailoring WIRING (parentId / carried formatHash) therefore
+#: ingest this line-structured variant: same content, same résumé, but a
+#: document a tailor run can actually act on.
+BA_RAW_TEXT_WITH_BULLETS = (
+    "VIKRAM DESHPANDE — Senior Business Analyst / Product Owner\n"
+    "EXPERIENCE\n"
+    "Lead Business Analyst at Microsoft Inc. (Oct 2015 - Oct 2016, Sydney NSW)\n"
+    "- Executed a comprehensive gap analysis for Azure ML telemetry, delivering "
+    "10 key insights that enhanced system reliability by 15% and decreased "
+    "incident MTTR by 10%.\n"
+    "Senior Business Analyst at InfoCentric (Aug 2011 - Nov 2014, Melbourne VIC)\n"
+    "- Delivered analytics and Business Intelligence (BI) projects, boosting "
+    "client customer engagement by 20% and automating regulatory reporting "
+    "workflows to achieve 100% accuracy.\n"
+)
+
+
+def _ingest_ba_resume(client, auth_headers, raw_text: str = BA_RAW_TEXT) -> dict:
     resp = client.post(
         "/resumes",
         json={
             "label": "BA resume — Senior Business Analyst / Product Owner",
-            "raw_text": BA_RAW_TEXT,
+            "raw_text": raw_text,
             "contact": {"email": "sarkar.vikram@gmail.com"},
         },
         headers=auth_headers,
@@ -110,7 +131,15 @@ class TestResumeIngestion:
         no accepted edits for the short BA variant — which, post-MV-resume-studio-003,
         is an honest no-op rather than a billed 0-change version. Stub the service to
         a real single-bullet change so the child-of-selected-résumé WIRING (parentId
-        / carried formatHash) is exercised, which is what this test pins."""
+        / carried formatHash) is exercised, which is what this test pins.
+
+        RT-002: the résumé ingested here is the LINE-STRUCTURED BA variant. The
+        one-paragraph ``BA_RAW_TEXT`` yields zero parseable bullets, and a
+        tailor run against zero bullets is now refused honestly (422) instead
+        of calling the model with an empty "Original bullets" block — the exact
+        production defect. This test is about the parent/formatHash wiring, not
+        about that refusal (``test_rt002_empty_bullets_guard.py`` owns it), so
+        it supplies a résumé that genuinely has bullets to tailor."""
         from app.services.resume_tailor import ResumeTailorService, TailorResult
 
         def _one_change(self, resume_text, job_description, originals=None,
@@ -130,7 +159,9 @@ class TestResumeIngestion:
 
         monkeypatch.setattr(ResumeTailorService, "tailor", _one_change)
 
-        created = _ingest_ba_resume(client, auth_headers)
+        created = _ingest_ba_resume(
+            client, auth_headers, raw_text=BA_RAW_TEXT_WITH_BULLETS
+        )
         job = _seed_job(client, auth_headers)
         resp = client.post(
             "/agents/tailor/run",

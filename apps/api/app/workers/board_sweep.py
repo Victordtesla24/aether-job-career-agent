@@ -935,7 +935,10 @@ def sweep_user_stretch(
     from app.agents.cover_letter_agent import FabricationError, StructuralError
     from app.agents.tailor_agent import NoChangesApplied
     from app.services.llm_client import LLMUnavailableError, QuotaExhaustedError
-    from app.services.resume_grounding import MissingResumeError
+    from app.services.resume_grounding import (
+        MissingResumeError,
+        ResumeBulletsUnavailableError,
+    )
 
     deadline = deadline if deadline is not None else time.monotonic() + sweep_stretch_seconds()
     max_jobs = max_jobs or sweep_max_jobs()
@@ -1053,6 +1056,39 @@ def sweep_user_stretch(
                 summary["covers"] += 1
                 summary["processed"] += 1
                 llm_outages = 0
+        except ResumeBulletsUnavailableError as exc:
+            # RT-002. An INPUT error, not an LLM failure — three consequences,
+            # all of them load-bearing:
+            #
+            # 1. It must never touch ``llm_outages`` or the circuit breaker.
+            #    ``_llm_failure`` returns None for it by construction (it is not
+            #    an LLMUnavailableError and classifies as nothing), so the only
+            #    way it could open the circuit is being caught below — hence
+            #    this clause sits ABOVE every LLM-aware handler.
+            # 2. It must stop the stretch after ONE attempt. Every eligible job
+            #    tailors from the SAME base résumé, so jobs 2..N would fail
+            #    identically; re-asking is the exact grinding behaviour
+            #    CRITICAL-3 removed for the 402 case.
+            # 3. The remaining jobs are SUPPRESSED, not failed: no model was
+            #    asked anything about them, so counting them as failures would
+            #    invent work and would also feed the cover-failure suppression
+            #    windows with attempts that never happened.
+            #
+            # Mirrors ``_abort_on_llm``'s shape (honest reason + counted
+            # remainder + one WARNING naming what was abandoned) with the input
+            # -error class in place of the LLM one. ``reason`` is deliberately
+            # not an ``llm-*`` string, so ``needs_continuation`` stays False and
+            # nothing reads this as an upstream outage.
+            summary["reason"] = "resume-no-bullets"
+            summary["suppressed"] = _remaining_eligible_count(user_id, attempted)
+            logger.warning(
+                "board-sweep %s: ABORTING stretch after job %s — resume input "
+                "error (NOT an LLM failure; circuit untouched); %d eligible "
+                "job(s) suppressed (not attempted) rather than retried "
+                "against the same unusable resume: %s",
+                user_id, job_id, summary["suppressed"], exc,
+            )
+            break
         except MissingResumeError:
             summary["reason"] = "no-resume"
             break
@@ -1221,8 +1257,9 @@ def sweep_user_stretch(
     # hit bounds. board_sweep_user uses this to decide whether to re-enqueue
     # itself so the sweep continues until the board is truly empty, per the
     # operator mandate ("keep working non-stop until the pipeline is cleared").
-    # board-complete / quota-exhausted / no-resume / llm-unavailable are HARD
-    # stops — retrying immediately would either find nothing or fail again.
+    # board-complete / quota-exhausted / no-resume / resume-no-bullets /
+    # llm-unavailable are HARD stops — retrying immediately would either find
+    # nothing or fail again.
     #
     # CRITICAL-3: ``processed > 0`` is now REQUIRED. A stretch that failed
     # every one of its ``max_jobs`` attempts also reports ``job-cap`` — and
@@ -1253,9 +1290,9 @@ async def board_sweep_user(ctx: Any, user_id: str) -> dict[str, Any]:
     board work exists and the operator mandate is "keep working non-stop until
     the pipeline is cleared" — so this ASKS for an immediate continuation
     instead of waiting for the next 10-minute cron tick. A HARD stop
-    (board-complete, quota-exhausted, no-resume, llm-unavailable) does NOT
-    ask — retrying immediately would just find nothing new or fail again for
-    the same reason.
+    (board-complete, quota-exhausted, no-resume, resume-no-bullets,
+    llm-unavailable) does NOT ask — retrying immediately would just find
+    nothing new or fail again for the same reason.
 
     ML-W-20 — the enqueue RESULT is now inspected and reported honestly.
     ``ArqRedis.enqueue_job`` returns ``None`` (never raises) when a job with

@@ -37,6 +37,50 @@ class MissingResumeError(Exception):
     """
 
 
+class ResumeBulletsUnavailableError(Exception):
+    """The résumé EXISTS but carries ZERO tailorable bullet points (RT-002).
+
+    A sibling of :class:`MissingResumeError`, deliberately NOT a subclass: the
+    two refusals have different causes and different remedies ("add a résumé"
+    vs "this résumé's bullets could not be parsed"), and every handler that
+    reports ``missingResume`` would state a falsehood about a user who has one.
+
+    Above all it is NOT an :class:`~app.services.llm_client.LLMUnavailableError`.
+    Production, owner résumé v2 ``Vik_Resume_BA.pdf``: a designed multi-column
+    layout parsed to ``sections.bullets == []`` while ``raw_text`` came through
+    intact, the tailor prompt was built with an EMPTY "Original bullets" block,
+    the (user-chosen, so un-substitutable per ADR-ML-3) model answered honestly
+    in prose, ``complete_json`` failed to parse it, and the whole thing was
+    reported as "The AI service is temporarily unavailable" — a RETRYABLE
+    class. ``board_sweep`` believed it, spent its three attempts, opened the
+    LLM circuit and suppressed 1405 eligible jobs every cycle, indefinitely.
+
+    The upstream was healthy the entire time. The INPUT was unusable. So this
+    class exists to be classified as what it is — a non-retryable input error —
+    and ``retryable`` is a hard ``False`` that every breaker/retry seam can
+    read the same way it reads ``LLMUnavailableError.retryable``.
+    """
+
+    #: Read by any seam asking "would trying again help?". It would not: every
+    #: attempt re-parses the same stored résumé and gets the same zero bullets.
+    retryable = False
+
+
+def no_tailorable_bullets_message(label: str) -> str:
+    """The ONE user-facing sentence for a résumé with zero parsed bullets.
+
+    Names the real cause, the résumé it happened to, and the two things that
+    actually fix it. Built here (not at each raise site) so the run row, the
+    422 body, the async job result and the autopilot log can never diverge into
+    different explanations of the same fact.
+    """
+    return (
+        f"This resume has no tailorable bullet points (0 were parsed from "
+        f"'{label}'). Open Resume Studio and run bullet extraction, or upload "
+        f"a text-based resume."
+    )
+
+
 def _own_base_text(base: dict[str, Any] | None) -> str:
     if not base:
         return ""

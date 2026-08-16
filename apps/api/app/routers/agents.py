@@ -1615,6 +1615,23 @@ _LLM_TIER_BY_BACKEND: dict[str, str] = {
     "tailor": "REASONING",
     "coverLetter": "REASONING",
     "storyExtractor": "STRUCTURED",
+    # RT-004: résumé bullet extraction is ONE STRUCTURED ``complete_json`` call
+    # that copies the user's own bullets verbatim out of their résumé text
+    # (``services.resume_bullets_llm``). It really does reach a model, so it rides
+    # the SAME atomic reserve-before-call / refund-on-failure rail as every
+    # other LLM backend — the exemption seam (``_DETERMINISTIC_BACKENDS`` /
+    # ``_OPTIONAL_LLM_BY_BACKEND``) exists only for calls that reach NO model,
+    # and exempting this one would hand out unmetered LLM capacity at one free
+    # run per résumé (the mirror image of F-03's silent metered run).
+    #
+    # Deliberately ABSENT from ``_RUNNABLE_BACKENDS`` / ``AGENT_CATALOG`` /
+    # ``_EXEC_CLASS_BY_BACKEND``: it is a Resume-Studio action on ONE résumé the
+    # caller names, not a board-level agent card the Supervisor could schedule,
+    # so it is dispatched straight through ``_record_run`` (the same direct
+    # seam the pipeline's supervisor/matcher nodes use) rather than
+    # ``_dispatch``. STRUCTURED also keeps it OFF the user model-override list
+    # — extraction is a fixed-model structured task, not generation.
+    "bulletExtractor": "STRUCTURED",
     "emailAgent": "REASONING",
     # companyResearch's deterministic synthesis is free, but its OPT-IN narrative
     # calls the LLM — and metering is per-backend, so the backend must be metered

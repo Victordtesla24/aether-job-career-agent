@@ -52,6 +52,40 @@ _UNSUPPORTED_FORMAT_DETAIL = (
 )
 
 
+#: What a caller is told when a résumé lands with ZERO parseable bullets
+#: (RT-004 disclosure). Uploading still SUCCEEDS — the text is real and the
+#: document is kept — but tailoring cannot run against it until bullets exist,
+#: and the honest moment to say so is now, not at the first failed tailor run.
+_NO_BULLETS_WARNING = (
+    "No bullet points could be parsed from this resume, so tailoring cannot "
+    "run against it yet. Run bullet extraction on it "
+    "(POST /resumes/{id}/extract-bullets) or upload a text-based resume with "
+    "one achievement per line."
+)
+
+
+def _tailorable_disclosure(sections: dict[str, Any]) -> dict[str, Any]:
+    """Honest, ALWAYS-present count of bullets a tailor run could use, plus a
+    warning when that count is zero (RT-004).
+
+    The live defect this closes: a designed multi-column PDF whose text layer
+    carries no markers parses to ``bullets == []`` while its ``raw_text`` is
+    perfect, so the upload looked entirely healthy — right up until every
+    tailor run against it failed, and (before RT-002) blamed the AI service for
+    it. Stating the real number in the response the user gets at upload time is
+    what turns a silent dead end into a fixable one.
+
+    Deliberately does NOT run the LLM extractor: that is a metered call, and
+    F-03 (PROD-UAT-2026-08-03) settled that a metered run must be the caller's
+    explicit, pre-disclosed choice, never a side effect of uploading a file.
+    """
+    count = len(sections.get("bullets") or [])
+    disclosure: dict[str, Any] = {"tailorableBullets": count}
+    if count == 0:
+        disclosure["tailoringWarning"] = _NO_BULLETS_WARNING
+    return disclosure
+
+
 @router.get("")
 def list_resumes(current_user: CurrentUser) -> list[dict[str, Any]]:
     repo = ResumeRepository()
@@ -125,13 +159,17 @@ def create_resume(body: ResumeIngestRequest, current_user: CurrentUser) -> dict[
     }
     format_hash = body.format_hash or hashlib.sha256(body.raw_text.encode()).hexdigest()[:16]
     repo = ResumeRepository()
-    return repo.create(
+    created = repo.create(
         current_user["id"],
         sections,
         format_hash,
         label=body.label,
         version=repo.next_version(current_user["id"]),
     )
+    # RT-004: state how many bullets this ingest actually yielded (and warn when
+    # that is zero) on the SAME response that reports the row — see
+    # ``_tailorable_disclosure``.
+    return {**created, **_tailorable_disclosure(sections)}
 
 
 def _looks_like_docx(data: bytes) -> bool:
@@ -380,9 +418,90 @@ async def upload_resume(
             extraction = {"error": str(exc), "errorType": type(exc).__name__}
     return {
         **resume,
+        **_tailorable_disclosure(sections),
         "storyExtraction": extraction,
         "storyExtractionRequested": extract_stories,
     }
+
+
+@router.post("/{resume_id}/extract-bullets")
+def run_bullet_extraction(
+    resume_id: str, current_user: CurrentUser
+) -> dict[str, Any]:
+    """Re-derive this résumé's bullets with the LLM and REPLACE the stored set.
+
+    RT-004 — the remedy the RT-002 refusal points at. The deterministic
+    ``extract_bullets`` state machine needs marker lines; a designed
+    multi-column PDF has none, so a perfectly good résumé can end up with zero
+    tailorable bullets and no way forward. This endpoint asks the model to COPY
+    the bullets out of the stored ``raw_text`` verbatim, and
+    ``services.resume_bullets_llm`` rejects, in code, anything it did not copy — so
+    the operation can only ever SELECT the user's own sentences, never author
+    new career claims. See that module for why the gate matters more here than
+    anywhere else: the result becomes the anti-fabrication evidence corpus the
+    tailoring guards later adjudicate against.
+
+    METERED, deliberately. It is one real STRUCTURED ``complete_json`` call, so
+    it runs through ``_record_run`` exactly like ``storyExtractor`` — atomic
+    quota reserve BEFORE the call, refund on any failure, an AgentRun audit row
+    the owner can see, and the USD spend cap enforced. F-03
+    (PROD-UAT-2026-08-03) established that genuine LLM work is never exempted
+    from metering and never runs as an undisclosed side effect; this is the
+    caller explicitly asking for it, on one résumé they name.
+
+    Owner-scoped through ``ResumeRepository.get_by_id(resume_id, user_id)``: a
+    résumé that is not the caller's own is a 404, not another user's document.
+
+    ``bulletsExtracted`` reports what was actually STORED — bullets the
+    anti-fabrication gate rejected are not counted, so the number can be lower
+    than what the model returned and is never a claim about work not done.
+    """
+    from app.routers.agents import _record_run
+    from app.services.resume_bullets_llm import llm_extract_bullets
+
+    repo = ResumeRepository()
+    resume = repo.get_by_id(resume_id, current_user["id"])
+    if resume is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Resume not found")
+    sections: dict[str, Any] = dict(resume.get("sections") or {})
+    raw_text = str(sections.get("raw_text") or "")
+    if not raw_text.strip():
+        # Nothing to extract FROM. Refused before the quota reserve, so an
+        # empty résumé never costs the caller a run.
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "This resume has no stored text to extract bullet points from. "
+            "Re-upload it as a PDF, .docx or plain-text file.",
+        )
+
+    def _extract() -> dict[str, Any]:
+        bullets = llm_extract_bullets(raw_text)
+        # Same shape the upload/ingest paths persist, so every downstream
+        # reader (tailoring, ATS scoring, the diff endpoint) sees one bullet
+        # format regardless of which extractor produced it. ``raw_text`` and
+        # ``formatHash`` are carried through untouched — the stored baseline
+        # document is never rewritten (U2a / R-F1 baseline immutability).
+        new_sections = {
+            **sections,
+            "bullets": [
+                {"text": text, "evidenceRef": f"bullet-{i}"}
+                for i, text in enumerate(bullets)
+            ],
+        }
+        updated = repo.update_sections(
+            resume_id, current_user["id"], new_sections, resume["formatHash"]
+        )
+        return {
+            "resume_id": resume_id,
+            "bulletsExtracted": len(bullets),
+            "tailorableBullets": len(bullets),
+            "replacedBulletCount": len(sections.get("bullets") or []),
+            "stored": updated is not None,
+        }
+
+    return _record_run(
+        current_user["id"], "bulletExtractor", {"resume_id": resume_id}, _extract
+    )
 
 
 @router.get("/{resume_id}")
