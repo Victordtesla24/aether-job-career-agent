@@ -29,7 +29,7 @@ recommendation, so lead activity joins real plan/subscription data).
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import psycopg2
@@ -66,10 +66,24 @@ LEAD_STATUSES = frozenset(
 #: never as a fake ``sent``.
 OUTREACH_OUTCOMES = frozenset(
     {"sent", "replied", "bounced", "unsubscribed", "draft_queued", "dry_run",
-     "blocked", "error"}
+     "blocked", "error", "reserved"}
 )
 
+#: The two outcomes that spend a LinkedIn draft slot. ``reserved`` is additive:
+#: it marks a slot claimed BEFORE the model call, so two overlapping runs can
+#: never both pass a cadence check that neither has yet recorded.
+DRAFT_QUEUED = "draft_queued"
+DRAFT_RESERVED = "reserved"
+
+#: A reservation older than this never became a draft (the run was killed
+#: between claiming the slot and writing the post), so it is reclaimed on the
+#: next reserve rather than holding a weekly slot until the window rolls past.
+LINKEDIN_RESERVATION_TTL_MINUTES = 15
+
 _ADVISORY_LOCK = 7420240725  # next free id per the repo's lock registry
+#: Serializes the LinkedIn weekly-cadence reserve (count + claim) across
+#: processes. Held for the duration of that ONE short transaction only.
+_LINKEDIN_CADENCE_LOCK = 7420240726
 
 _tables_ready = False
 
@@ -786,6 +800,214 @@ class SalesRepository:
         from app.repositories.admin import set_setting
 
         set_setting(f"salesAgent.watermark.{account_id}", json.dumps(value))
+
+    @staticmethod
+    def prune_orphan_watermarks(active_account_ids: tuple[str, ...] = ()) -> int:
+        """Delete watermark rows whose Gmail account no longer exists.
+
+        ``GmailAccount`` rows are really deleted when the operator disconnects
+        an account, but the watermark lived on in ``AdminSetting`` forever —
+        so a reconnect that minted a NEW account id left the old key behind as
+        permanent litter, and a re-used id would have resumed from a watermark
+        belonging to a mailbox that no longer exists. Idempotent: returns the
+        number of rows actually removed (0 on a clean store).
+
+        ``active_account_ids`` are the accounts the CURRENT run is polling and
+        are never pruned — they may legitimately not be ``GmailAccount`` rows
+        (injected test doubles), and pruning the watermark of a mailbox being
+        scanned right now would restart its backlog walk from scratch.
+        """
+        from app.repositories.gmail_account import GmailAccountRepository
+
+        GmailAccountRepository()._ensure_table()
+        prefix = "salesAgent.watermark."
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    'SELECT "key" FROM "AdminSetting" WHERE "key" LIKE %s',
+                    (f"{prefix}%",),
+                )
+                keys = [r[0] for r in cur.fetchall()]
+                if not keys:
+                    return 0
+                cur.execute('SELECT "id" FROM "GmailAccount"')
+                known = {r[0] for r in cur.fetchall()} | set(active_account_ids)
+                orphans = [k for k in keys if k[len(prefix):] not in known]
+                if not orphans:
+                    return 0
+                cur.execute(
+                    'DELETE FROM "AdminSetting" WHERE "key" = ANY(%s)', (orphans,)
+                )
+                removed = cur.rowcount
+            conn.commit()
+        return int(removed or 0)
+
+    # ------------------------------------------------------- linkedin cadence
+    @staticmethod
+    def _linkedin_draft_counts(cur: Any, since: datetime) -> tuple[int, Any]:
+        """``(count, lastAt)`` of the week's drafts on an OPEN cursor.
+
+        Reservations count: a slot claimed by a run that is still generating
+        its draft is spent, and a second run must see it as spent — that is
+        the whole point of :meth:`reserve_linkedin_draft_slot`.
+        """
+        cur.execute(
+            'SELECT COUNT(*), MAX("createdAt") FROM "SalesOutreachLog" '
+            'WHERE "channel" = %s AND "outcome" = ANY(%s) AND "createdAt" >= %s',
+            ("linkedin_draft", [DRAFT_QUEUED, DRAFT_RESERVED], since),
+        )
+        count, last_at = cur.fetchone()
+        return int(count or 0), last_at
+
+    def linkedin_draft_cadence(self, since: datetime) -> dict[str, Any]:
+        """How many LinkedIn drafts were queued since ``since``, and when the
+        most recent one was — the two facts the drafting cadence needs.
+
+        Counted straight off the outreach log (the only place drafts land), so
+        drafts queued by the admin "generate content" action count towards the
+        same weekly budget as the pipeline's own.
+        """
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                count, last_at = self._linkedin_draft_counts(cur, since)
+        return {"count": count, "lastAt": last_at}
+
+    def reserve_linkedin_draft_slot(
+        self,
+        *,
+        since: datetime,
+        per_week: int,
+        min_spacing_seconds: int = 0,
+        campaign_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Atomically claim ONE of the week's LinkedIn draft slots.
+
+        The cadence used to be a check-then-act: count the week's drafts, spend
+        ten seconds inside the model, then insert. Two overlapping runs — a
+        double-clicked ``/run-now``, two admin tabs, cron overlapping a manual
+        trigger — both read the same pre-insert count and both drafted, so the
+        advertised cap was not actually enforceable.
+
+        The count and the row that consumes the slot now happen inside ONE
+        transaction serialized by a transaction-scoped advisory lock, and the
+        reservation is taken BEFORE the model call. The lock is released by the
+        commit at the end of this method: no model call ever runs inside a
+        database transaction. An honest failure gives the slot straight back
+        (:meth:`release_linkedin_draft_slot`); success turns the reservation
+        into the real draft row in place (:meth:`finalize_linkedin_draft`), so
+        a slot is consumed exactly once.
+
+        Reservations older than :data:`LINKEDIN_RESERVATION_TTL_MINUTES` are
+        reclaimed here (idempotently): a process killed mid-draft must not hold
+        a weekly slot until the window rolls past it.
+        """
+        _ensure_sales_tables()
+        now = datetime.now(timezone.utc)
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT pg_advisory_xact_lock(%s)", (_LINKEDIN_CADENCE_LOCK,)
+                )
+                cur.execute(
+                    'DELETE FROM "SalesOutreachLog" WHERE "channel" = %s '
+                    'AND "outcome" = %s AND "createdAt" < %s',
+                    (
+                        "linkedin_draft",
+                        DRAFT_RESERVED,
+                        now - timedelta(minutes=LINKEDIN_RESERVATION_TTL_MINUTES),
+                    ),
+                )
+                reclaimed = int(cur.rowcount or 0)
+                count, last_at = self._linkedin_draft_counts(cur, since)
+                outcome: dict[str, Any] = {
+                    "reserved": False,
+                    "reservationId": None,
+                    "queuedLast7d": count,
+                    "lastAt": last_at,
+                    "blockedBy": None,
+                    "nextEligibleAt": None,
+                    "staleReclaimed": reclaimed,
+                }
+                if count >= per_week:
+                    outcome["blockedBy"] = "cap"
+                    conn.commit()
+                    return outcome
+                if last_at is not None and min_spacing_seconds > 0:
+                    last = last_at
+                    if last.tzinfo is None:
+                        last = last.replace(tzinfo=timezone.utc)
+                    next_at = last + timedelta(seconds=min_spacing_seconds)
+                    if now < next_at:
+                        outcome["blockedBy"] = "spacing"
+                        outcome["nextEligibleAt"] = next_at
+                        conn.commit()
+                        return outcome
+                reservation_id = new_id()
+                cur.execute(
+                    'INSERT INTO "SalesOutreachLog" '
+                    '("id","campaignId","channel","outcome","detail") '
+                    "VALUES (%s,%s,%s,%s,%s)",
+                    (
+                        reservation_id,
+                        campaign_id,
+                        "linkedin_draft",
+                        DRAFT_RESERVED,
+                        "weekly draft slot reserved — generating the draft now",
+                    ),
+                )
+            conn.commit()
+        outcome["reserved"] = True
+        outcome["reservationId"] = reservation_id
+        outcome["queuedLast7d"] = count
+        return outcome
+
+    def release_linkedin_draft_slot(self, reservation_id: str) -> bool:
+        """Hand an unused slot back. Only ever deletes a row still in the
+        ``reserved`` state — a real logged draft is never removed."""
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    'DELETE FROM "SalesOutreachLog" WHERE "id" = %s '
+                    'AND "channel" = %s AND "outcome" = %s',
+                    (reservation_id, "linkedin_draft", DRAFT_RESERVED),
+                )
+                released = int(cur.rowcount or 0)
+            conn.commit()
+        return released > 0
+
+    def finalize_linkedin_draft(
+        self,
+        reservation_id: str,
+        *,
+        subject: str,
+        body: str,
+        detail: str,
+    ) -> dict[str, Any] | None:
+        """Turn a reservation into the real queued draft, in place.
+
+        Updating the reserved row (rather than inserting a second one) is what
+        makes a slot consumable exactly once. Returns ``None`` when the
+        reservation is gone — e.g. reclaimed as stale — so the caller can say
+        so instead of pretending a draft was queued.
+        """
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    'UPDATE "SalesOutreachLog" SET "outcome" = %s, "subject" = %s, '
+                    '"body" = %s, "detail" = %s '
+                    'WHERE "id" = %s AND "outcome" = %s RETURNING *',
+                    (
+                        DRAFT_QUEUED,
+                        subject,
+                        body,
+                        detail,
+                        reservation_id,
+                        DRAFT_RESERVED,
+                    ),
+                )
+                rows = rows_to_dicts(cur)
+            conn.commit()
+        return rows[0] if rows else None
 
 
 #: Default campaign templates seeded so the UI is never empty. Copy is honest

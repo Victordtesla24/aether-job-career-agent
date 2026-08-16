@@ -331,6 +331,66 @@ export const SalesRunResultSchema = z
     reason: z.string().optional(),
     dryRun: z.boolean().optional(),
     inboundScanned: z.number().optional(),
+    inboundSkippedAutomated: z.number().optional(),
+    inboundClassifiedLlm: z.number().optional(),
+    inboundSkippedNoise: z.number().optional(),
+    classifierDegraded: z.number().optional(),
+    // Additive (S3): per-mailbox scan facts + one founder-readable sentence,
+    // so a run reporting zeros always says why it reports zeros.
+    explanation: z.string().optional(),
+    accounts: z
+      .array(
+        z
+          .object({
+            email: z.string().optional(),
+            scanned: z.number().optional(),
+            skippedAutomated: z.number().optional(),
+            backlogRemaining: z.boolean().optional(),
+            scanWindow: z
+              .object({ fromEpoch: z.number(), toEpoch: z.number() })
+              .partial()
+              .optional(),
+            // Additive: same-second tie blocks. `tieDrained` records a whole
+            // second fetched in full before the walk stepped below it;
+            // `tieOverflow` is the honest disclosure that MORE messages share
+            // that second than the per-second cap allows, so the oldest of
+            // them were not scanned. Both are absent in the normal case.
+            tieDrained: z
+              .object({ epoch: z.number(), messages: z.number() })
+              .partial()
+              .optional(),
+            tieOverflow: z
+              .object({ epoch: z.number(), cap: z.number() })
+              .partial()
+              .optional(),
+            // `tieDrainUnverified` is the third outcome, and the one that must
+            // never be silent: the drain of that second could not be proven to
+            // have reached it (it did not return messages already known to sit
+            // there), so the walk HELD its window instead of stepping over
+            // mail nobody read. It always ships with an error line too.
+            tieDrainUnverified: z
+              .object({
+                epoch: z.number(),
+                known: z.number(),
+                returned: z.number(),
+              })
+              .partial()
+              .optional(),
+          })
+          .passthrough(),
+      )
+      .optional(),
+    linkedinCadence: z
+      .object({
+        perWeek: z.number().optional(),
+        queuedLast7d: z.number().optional(),
+        drafted: z.number().optional(),
+        nextEligibleAt: z.string().nullable().optional(),
+        reason: z.string().optional(),
+      })
+      .passthrough()
+      .optional(),
+    watermarksPruned: z.number().optional(),
     leadsCreated: z.number().optional(),
     sent: z.number().optional(),
     dryRunLogged: z.number().optional(),
