@@ -774,3 +774,12 @@ intent); the BLOCKER-001/GATE-31 guard in `repositories/admin.py` is diff-verifi
 ## DEPLOY WINDOW RELEASED — 2026-08-15T22:5xZ (Wave A / R2)
 
 **Released by:** Wave A orchestrator (claimant above). Deploy completed under the claim: main@bdf24ea8 promoted; served-tree build RC=0; verify-web-build.sh PASS; **BUILD_ID DeEIFhAWVOahh35jcflP9**; restarts api 22:42:32Z / web 22:42:34Z / worker 22:42:39Z (flock /tmp/aether-deploy.lock held); all services active incl. redis-server; public /api/health ok v0.2.0; journalctl -p err since restart: no entries; admin API sweep all 200; adversarial review 20/20 PASS 0 findings (evidence: uat/reports/evidence/market-perf/wave-a/, gitignored — by path only). One throwaway probe user created and soft-deleted (typed-confirm DELETE, audit-logged); no other data mutated. Timers untouched. Lock released; window CLOSED — next claimant may proceed. Full record: ORCH-DELTA-2026-08-15b.md §9 (incl. operator scope change withholding ledger flips).
+
+
+
+## DEPLOY WINDOW CLAIM — 2026-08-16T01:37Z (Directive wave MP-030..038, orchestration session 2026-08-15b cont.)
+
+**Claimed by:** Directive-wave orchestrator (same session). **Lock:** `flock /tmp/aether-deploy.lock` held for the duration.
+**Scope:** promote `main@0b9a06b1` (e2e MP-030..037 spec fixes, MP-021 apply-executor combobox fallback, MP-035 companion stack, **MP-038 clock-skew session-invalidation fix** — the only runtime-behaviour changes are MP-021 + MP-038 in the API; web build re-done for hygiene) per DEPLOYMENT-RUNBOOK "Complete Deploy Recipe": pip → pnpm install → served-tree build (clean env §0.4) → verify-web-build.sh gate → restart api→web→worker → ExecMainStartTimestamp re-check → health + prod verify + independent verifier.
+**Pre-conditions verified:** working tree clean (only platform-managed `.abacus.donotdelete` + e2e `.auth/user.json` token refresh — not shipped code); gates green: e2e 82/82, pytest 4237P/0F/13S, vitest 1959/1959, tsc PASS (ORCH-DELTA §10.2); `aether-sales-agent.timer` next fire 01:45:58Z — restart sequence (~10s) completes well before; heavy suites finished.
+**Window released:** see closing note below.
