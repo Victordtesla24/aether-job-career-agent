@@ -169,6 +169,18 @@ class _FakeCalendarApi:
         return _CalendarList(self)
 
 
+@pytest.fixture(autouse=True)
+def _clear_calendar_probe_failure_cache():
+    """F5-004: the failed-probe TTL cache is module-level state — clear it
+    around every test so one test's cached failure can never leak into
+    another's expectation of a live probe."""
+    from app.services import calendar_service
+
+    calendar_service._probe_failure_cache.clear()
+    yield
+    calendar_service._probe_failure_cache.clear()
+
+
 @pytest.fixture()
 def fake_calendar(monkeypatch):
     """Patch the calendar client boundary; hand the fake back to the test."""
@@ -682,6 +694,46 @@ def test_settings_reports_needs_reauth_when_the_live_probe_fails_auth(
     assert len(cal) == 1
     assert cal[0]["status"] == "needs_reauth"
     assert "reconnect" in cal[0]["detail"].lower()
+
+
+def test_failed_probe_is_cached_and_not_repeated_every_poll(
+    test_user_id, db_session, monkeypatch
+):
+    """F5-004: a grant Google rejects (403 insufficientPermissions) used to be
+    re-probed — and re-logged — on EVERY settings poll (~every 20s, 3 031 log
+    lines in prod). The failed outcome must be cached for the TTL; a
+    successful probe must stay live (never cached)."""
+    from googleapiclient.errors import HttpError
+
+    from app.services import calendar_service
+    from app.services.calendar_service import GoogleCalendarService, connection_status
+
+    _connect_google(test_user_id, scopes=GMAIL_PLUS_CALENDAR_SCOPES)
+    resp = type("R", (), {"status": 403, "reason": "insufficientPermissions"})()
+    api = _FakeCalendarApi(
+        probe_error=HttpError(resp, b'{"error": {"message": "insufficient permissions"}}')
+    )
+    monkeypatch.setattr(GoogleCalendarService, "_client", lambda self: api)
+
+    first = connection_status(test_user_id)
+    assert first["status"] == "scope_missing"
+    assert api.probe_calls == 1
+
+    second = connection_status(test_user_id)
+    assert second["status"] == "scope_missing"
+    assert second["cached"] is True
+    assert api.probe_calls == 1, "cached failure must NOT re-probe Google"
+
+    # Once the TTL lapses, the probe is live again — and a SUCCESS clears the
+    # cache, so subsequent calls keep probing (success is never cached).
+    calendar_service._probe_failure_cache.clear()
+    api.probe_error = None
+    third = connection_status(test_user_id)
+    assert third["status"] == "connected"
+    assert api.probe_calls == 2
+    fourth = connection_status(test_user_id)
+    assert fourth["status"] == "connected"
+    assert api.probe_calls == 3, "successful probes are always live"
 
 
 def test_settings_has_no_calendar_row_without_a_google_account(

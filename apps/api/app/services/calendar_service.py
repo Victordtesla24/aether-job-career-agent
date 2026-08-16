@@ -31,6 +31,8 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
+import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
@@ -437,6 +439,50 @@ STATUS_NEEDS_REAUTH = "needs_reauth"
 STATUS_UNAVAILABLE = "unavailable"
 STATUS_CONNECTED = "connected"
 
+#: F5-004 (Fable 5 adversarial review): ``GET /workspaces/settings`` live-probes
+#: the Calendar grant on EVERY dashboard poll. When the stored grant claims the
+#: scope but Google actually rejects it (403 insufficientPermissions), that
+#: meant one failed Google round-trip — and one googleapiclient WARNING line —
+#: every ~20 seconds, forever (3 031 log lines observed in production). A
+#: FAILED probe outcome is now remembered for this TTL and served from cache;
+#: a SUCCESSFUL probe is never cached, so "connected" still means Google
+#: accepted the token on this request (GM2-EMAIL-001 honesty contract intact —
+#: the cache can only make us report a stale FAILURE, never a stale success).
+_PROBE_FAILURE_TTL_SECONDS = 600
+
+_probe_failure_cache: dict[tuple[str, str | None], tuple[float, dict[str, Any]]] = {}
+_probe_failure_lock = threading.Lock()
+
+
+def _cached_probe_failure(key: tuple[str, str | None]) -> dict[str, Any] | None:
+    """The remembered failed-probe outcome for ``key``, if still fresh."""
+    with _probe_failure_lock:
+        entry = _probe_failure_cache.get(key)
+        if entry is None:
+            return None
+        expires_at, outcome = entry
+        if time.monotonic() >= expires_at:
+            del _probe_failure_cache[key]
+            return None
+        return dict(outcome)
+
+
+def _remember_probe_failure(
+    key: tuple[str, str | None], outcome: dict[str, Any]
+) -> dict[str, Any]:
+    """Cache a failed probe outcome for the TTL and return it unchanged."""
+    with _probe_failure_lock:
+        _probe_failure_cache[key] = (
+            time.monotonic() + _PROBE_FAILURE_TTL_SECONDS,
+            dict(outcome),
+        )
+    return outcome
+
+
+def _clear_probe_failure(key: tuple[str, str | None]) -> None:
+    with _probe_failure_lock:
+        _probe_failure_cache.pop(key, None)
+
 
 def connection_status(
     user_id: str, account_id: str | None = None, probe: bool = True
@@ -488,25 +534,32 @@ def connection_status(
                 "grant; not re-verified on this request)."
             ),
         }
+    # F5-004: a recently FAILED probe is served from cache instead of hitting
+    # Google again on every settings poll. ``"cached": True`` keeps the answer
+    # honest about not having re-verified on this request.
+    cache_key = (user_id, account_id)
+    cached = _cached_probe_failure(cache_key)
+    if cached is not None:
+        return {**base, **cached, "cached": True}
     try:
         service.probe()
     except CalendarScopeNotGrantedError:
-        return {
+        return _remember_probe_failure(cache_key, {
             **base,
             "status": STATUS_SCOPE_MISSING,
             "probed": True,
             "message": SCOPE_MISSING_MESSAGE,
-        }
+        })
     except CalendarAuthError:
-        return {
+        return _remember_probe_failure(cache_key, {
             **base,
             "status": STATUS_NEEDS_REAUTH,
             "probed": True,
             "message": AUTH_EXPIRED_MESSAGE,
-        }
+        })
     except CalendarError as exc:
         # Honest third state: we could not verify. NOT "connected".
-        return {
+        return _remember_probe_failure(cache_key, {
             **base,
             "status": STATUS_UNAVAILABLE,
             "probed": True,
@@ -514,7 +567,8 @@ def connection_status(
                 "Google Calendar could not be reached just now, so its "
                 f"connection could not be verified: {exc}"
             ),
-        }
+        })
+    _clear_probe_failure(cache_key)
     return {
         **base,
         "status": STATUS_CONNECTED,
