@@ -398,7 +398,7 @@ const HOP = {
     // (P1-A + B6 + D.524 + B1b + ML-STOPALL-001..004 + interim guards all
     // shift agents.py); anchors unchanged. The provenance re-anchor pass
     // revalidates every citation before the landing gates.
-    evidence: "apps/api/app/routers/agents.py:3889,3921",
+    evidence: "apps/api/app/routers/agents.py:3907,3939",
     discoveryEvidence: "apps/api/app/routers/agents.py:3380",
     anchors: [
       "def _pipeline_core(",
@@ -480,7 +480,7 @@ const HOP = {
     // honest-refusal check + its helper were inserted earlier in the file) —
     // re-verified against HEAD, same anchors, new line numbers.
     evidence:
-      "apps/api/app/agents/company_research_agent.py:53,183; narrative opt-in at apps/api/app/routers/agents.py:1784,2391",
+      "apps/api/app/agents/company_research_agent.py:53,183; narrative opt-in at apps/api/app/routers/agents.py:1802,2409",
     discoveryEvidence:
       "apps/api/app/agents/company_research_agent.py:53; narrative opt-in at apps/api/app/routers/agents.py:2020-2027",
     anchors: [
