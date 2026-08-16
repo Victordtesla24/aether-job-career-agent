@@ -311,11 +311,17 @@ def collect_policy_metrics(user_id: str) -> dict[str, Any]:
 
     Sources, all live DB reads — nothing modelled, nothing defaulted:
 
-    * ``sampleSize`` / ``conversionRate`` — DISTINCT-job submission and
-      interview counts, computed with the SAME semantics as
-      ``analytics.get_application_counts`` (an application counts as submitted
-      once it leaves ``draft``; ``interview``/``offer`` count as an interview
-      reached), so the policy panel and the conversion chart can never disagree.
+    * ``sampleSize`` / ``conversionRate`` — DISTINCT-job VERIFIED-submission and
+      interview counts. ``submitted`` counts only jobs with a real
+      ``transmittedAt`` (an application the agent actually sent), NOT every
+      non-draft row: the funnel's "left draft" population includes prepared /
+      approved / recorded-but-unverified applications that never left the
+      building, and computing a conversion rate over those phantoms (e.g. 0.3%
+      over ~390 never-sent rows) fabricated the very signal this policy escalates
+      on. With few real transmissions the sample is honestly below
+      ``MIN_SAMPLE_SIZE`` and the policy returns ``insufficient_data`` rather
+      than tightening rigor on fiction. ``interview``/``offer`` still count as an
+      interview reached.
     * ``dimensionScores`` — the mean of the 10-dimension snapshots recorded on
       the most recent :data:`_DIMENSION_SAMPLE_LIMIT` submissions that HAVE one
       (``Application.dimensionScoresAtSubmission``). Applications submitted
@@ -336,7 +342,7 @@ def collect_policy_metrics(user_id: str) -> dict[str, Any]:
                     '''
                     SELECT
                       COUNT(DISTINCT "jobId") FILTER (
-                          WHERE "status" <> 'draft'::"ApplicationStatus") AS submitted,
+                          WHERE "transmittedAt" IS NOT NULL) AS submitted,
                       COUNT(DISTINCT "jobId") FILTER (
                           WHERE "status" IN ('interview'::"ApplicationStatus",
                                              'offer'::"ApplicationStatus")
