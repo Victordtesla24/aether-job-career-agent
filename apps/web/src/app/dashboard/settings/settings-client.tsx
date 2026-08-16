@@ -1000,6 +1000,17 @@ export default function SettingsClient({
                       From LinkedIn: Settings → Data privacy → “Get a copy of your data”. Upload
                       the .zip, or just Positions.csv / Education.csv / Skills.csv / Profile.csv.
                     </p>
+                    <p
+                      className="mt-1 text-[11px] text-aether-muted-dim"
+                      data-testid="career-linkedin-connections-hint"
+                    >
+                      Your export&apos;s Connections.csv is <em>not</em> read here — import your
+                      network separately on the{" "}
+                      <a href="/dashboard/networking" className="underline hover:text-white">
+                        Networking page
+                      </a>{" "}
+                      (“Import LinkedIn export”).
+                    </p>
                     {linkedinUploadNotice ? (
                       <p
                         className="mt-2 text-[11px] text-aether-green"

@@ -40,6 +40,13 @@ const createNetworkingContactMock = vi.fn();
 const fetchNetworkingContactMock = vi.fn();
 const deleteNetworkingContactMock = vi.fn();
 
+const importGmailContactsMock = vi.fn();
+const importLinkedInConnectionsMock = vi.fn();
+vi.mock("../../../../lib/api/networking", () => ({
+  importGmailContacts: (...a: unknown[]) => importGmailContactsMock(...a),
+  importLinkedInConnections: (...a: unknown[]) => importLinkedInConnectionsMock(...a),
+}));
+
 vi.mock("../../../../lib/api/workspaces", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../../../lib/api/workspaces")>();
   return {
@@ -235,15 +242,22 @@ describe("NetworkingPage — Outreach Queue + Communication Log field mismatch (
   });
 });
 
-describe("NetworkingPage — honest LinkedIn control (MV-networking-003)", () => {
-  it("does not claim to import LinkedIn connections when no LinkedIn integration exists", async () => {
+describe("NetworkingPage — honest LinkedIn control (MV-networking-003, amended by W-NET-1)", () => {
+  it("W-NET-1 (2026-08-16): the LinkedIn import control now exists BECAUSE the backend does", async () => {
+    // MV-networking-003 removed a dishonest 'Import from LinkedIn' label
+    // that had no backend. The honesty rule is unchanged — a control must do
+    // what it says. POST /networking/linkedin/import-contacts (R4.1) is now
+    // a real upload-only importer (zero LinkedIn network calls), so the
+    // control returns as a FILE upload — never an OAuth/connect claim.
     fetchNetworkingSummaryMock.mockResolvedValue(summary({ stats: { contacts: 0, activeConversations: 0, referralsInFlight: 0, responseRate: 0 }, pipeline: [] }));
     render(<NetworkingPage />);
     await waitFor(() => screen.getByTestId("networking-empty-state"));
 
-    expect(screen.queryByText(/import from linkedin/i)).toBeNull();
+    const input = screen.getByTestId("import-linkedin-contacts-input");
+    expect(input.getAttribute("type")).toBe("file");
+    expect(input.getAttribute("accept")).toBe(".zip,.csv");
     const bodyText = document.body.textContent ?? "";
-    expect(bodyText).not.toMatch(/import your linkedin connections/i);
+    expect(bodyText).not.toMatch(/connect (your )?linkedin/i);
   });
 
   it("the empty-state manual-add control opens the real Add Contact modal (matches what it actually does)", async () => {
@@ -374,5 +388,55 @@ describe("NetworkingPage — contact delete wiring (ML-networking-001)", () => {
     await waitFor(() => screen.getByTestId("contact-detail-error"));
     expect(screen.getByTestId("contact-detail-error").textContent).toContain("failed (500)");
     expect(screen.getByTestId("contact-detail-modal")).toBeTruthy();
+  });
+});
+
+
+describe("NetworkingPage — contact importers (W-NET-1)", () => {
+  it("Gmail import reports the server's real counts and refreshes the summary", async () => {
+    fetchNetworkingSummaryMock.mockResolvedValue(summary());
+    importGmailContactsMock.mockResolvedValue({
+      contactsCreated: 27, leadsCreated: 27, duplicates: 53, suppressed: 1, ignored: 19,
+    });
+    render(<NetworkingPage />);
+    await waitFor(() => screen.getByTestId("networking-crm"));
+    const before = fetchNetworkingSummaryMock.mock.calls.length;
+
+    fireEvent.click(screen.getByTestId("import-gmail-contacts-btn"));
+    await waitFor(() => screen.getByTestId("import-notice"));
+    const notice = screen.getByTestId("import-notice").textContent ?? "";
+    expect(notice).toMatch(/27 contact\(s\) created/);
+    expect(notice).toMatch(/53 duplicate\(s\) skipped/);
+    expect(notice).toMatch(/1 suppressed/);
+    expect(fetchNetworkingSummaryMock.mock.calls.length).toBeGreaterThan(before);
+  });
+
+  it("a failed Gmail import surfaces the honest error, never a fake success", async () => {
+    fetchNetworkingSummaryMock.mockResolvedValue(summary());
+    importGmailContactsMock.mockRejectedValue(new Error("Gmail account not connected."));
+    render(<NetworkingPage />);
+    await waitFor(() => screen.getByTestId("networking-crm"));
+
+    fireEvent.click(screen.getByTestId("import-gmail-contacts-btn"));
+    await waitFor(() => screen.getByTestId("import-error"));
+    expect(screen.getByTestId("import-error").textContent).toMatch(/not connected/i);
+    expect(screen.queryByTestId("import-notice")).toBeNull();
+  });
+
+  it("LinkedIn file selection uploads through the importer and reports counts", async () => {
+    fetchNetworkingSummaryMock.mockResolvedValue(summary());
+    importLinkedInConnectionsMock.mockResolvedValue({
+      contactsCreated: 214, duplicates: 6, suppressed: 0,
+    });
+    render(<NetworkingPage />);
+    await waitFor(() => screen.getByTestId("networking-crm"));
+
+    const file = new File(["First Name,Last Name"], "Connections.csv", { type: "text/csv" });
+    fireEvent.change(screen.getByTestId("import-linkedin-contacts-input"), {
+      target: { files: [file] },
+    });
+    await waitFor(() => screen.getByTestId("import-notice"));
+    expect(importLinkedInConnectionsMock).toHaveBeenCalledWith(file);
+    expect(screen.getByTestId("import-notice").textContent).toMatch(/214 contact\(s\) created/);
   });
 });
