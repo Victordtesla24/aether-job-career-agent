@@ -34,7 +34,12 @@ import {
 } from "../../../lib/api/workspaces";
 import { STAGE_ACCENT, buildPipelineColumns, formatOutreachKind, formatWhen, initials, totalContacts } from "./lib";
 import { useRealtimeResources } from "../../../hooks/useRealtime";
-import { importGmailContacts, importLinkedInConnections } from "../../../lib/api/networking";
+import {
+  importGmailContacts,
+  importLinkedInConnections,
+  listContacts,
+  type ContactListRow,
+} from "../../../lib/api/networking";
 
 const EMPTY_FORM = { name: "", role: "", company: "" };
 
@@ -48,6 +53,15 @@ export default function NetworkingPage() {
   const [importing, setImporting] = useState<"gmail" | "linkedin" | null>(null);
   const [importNotice, setImportNotice] = useState<string | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
+  // W-NET-2: the FULL contact browser. The kanban deliberately previews only
+  // 5 cards per column; with hundreds of imported contacts that preview was
+  // the ONLY window — "I cannot see my contacts" (owner, live). This modal
+  // lists every contact from GET /networking/contacts with client-side
+  // search, and rows open the existing detail panel.
+  const [showAllContacts, setShowAllContacts] = useState(false);
+  const [allContacts, setAllContacts] = useState<ContactListRow[] | null>(null);
+  const [allContactsError, setAllContactsError] = useState<string | null>(null);
+  const [contactSearch, setContactSearch] = useState("");
   const [form, setForm] = useState(EMPTY_FORM);
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -261,6 +275,25 @@ export default function NetworkingPage() {
           </label>
           <button
             type="button"
+            data-testid="view-all-contacts-btn"
+            onClick={() => {
+              setShowAllContacts(true);
+              setAllContactsError(null);
+              listContacts()
+                .then(setAllContacts)
+                .catch((e) =>
+                  setAllContactsError(
+                    e instanceof Error ? e.message : "Could not load contacts.",
+                  ),
+                );
+            }}
+            className="rounded-xl border border-white/15 px-3 py-2 text-sm font-semibold text-aether-muted hover:border-white/30 hover:text-white"
+          >
+            <i className="fa-solid fa-address-book mr-2" aria-hidden="true" />
+            View all ({contactCount})
+          </button>
+          <button
+            type="button"
             data-testid="add-contact-btn"
             onClick={() => setShowAdd(true)}
             className="rounded-xl bg-aether-coral px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
@@ -269,6 +302,90 @@ export default function NetworkingPage() {
           </button>
         </div>
       </header>
+
+      {showAllContacts ? (
+        <div
+          className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 p-4 pt-16"
+          data-testid="all-contacts-modal"
+          onClick={() => setShowAllContacts(false)}
+        >
+          <div
+            className="bg-surface-1 max-h-[75vh] w-full max-w-2xl overflow-hidden rounded-[14px] border border-white/10"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-3 border-b border-white/10 p-4">
+              <h2 className="text-sm font-semibold">
+                All contacts{allContacts ? ` (${allContacts.length})` : ""}
+              </h2>
+              <button
+                type="button"
+                data-testid="all-contacts-close"
+                onClick={() => setShowAllContacts(false)}
+                className="text-aether-muted hover:text-white"
+                aria-label="Close"
+              >
+                <i className="fa-solid fa-xmark" aria-hidden="true" />
+              </button>
+            </div>
+            <div className="p-4">
+              <input
+                type="search"
+                data-testid="all-contacts-search"
+                placeholder="Search name, company or title…"
+                value={contactSearch}
+                onChange={(e) => setContactSearch(e.target.value)}
+                className="mb-3 w-full rounded-lg border border-white/10 bg-transparent px-3 py-2 text-sm"
+              />
+              {allContactsError ? (
+                <p className="text-sm text-red-300" data-testid="all-contacts-error">
+                  {allContactsError}
+                </p>
+              ) : allContacts === null ? (
+                <p className="text-sm text-aether-muted">Loading…</p>
+              ) : (
+                <ul
+                  className="max-h-[52vh] divide-y divide-white/5 overflow-y-auto"
+                  data-testid="all-contacts-list"
+                >
+                  {allContacts
+                    .filter((c) => {
+                      const q = contactSearch.trim().toLowerCase();
+                      if (!q) return true;
+                      return [c.name, c.company, c.title, c.email]
+                        .filter(Boolean)
+                        .some((v) => String(v).toLowerCase().includes(q));
+                    })
+                    .map((c) => (
+                      <li key={c.id}>
+                        <button
+                          type="button"
+                          data-testid={`all-contacts-row-${c.id}`}
+                          onClick={() => {
+                            setShowAllContacts(false);
+                            setSelectedContactId(c.id);
+                          }}
+                          className="flex w-full items-baseline justify-between gap-3 px-1 py-2 text-left hover:bg-white/5"
+                        >
+                          <span className="min-w-0 truncate text-sm font-medium">
+                            {c.name}
+                            {c.title || c.company ? (
+                              <span className="ml-2 font-normal text-aether-muted">
+                                {[c.title, c.company].filter(Boolean).join(" @ ")}
+                              </span>
+                            ) : null}
+                          </span>
+                          <span className="shrink-0 text-[11px] uppercase tracking-wide text-aether-muted-dim">
+                            {c.stage}
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {importNotice ? (
         <p data-testid="import-notice" className="text-sm text-aether-green">

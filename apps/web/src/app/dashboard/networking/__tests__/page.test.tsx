@@ -42,9 +42,11 @@ const deleteNetworkingContactMock = vi.fn();
 
 const importGmailContactsMock = vi.fn();
 const importLinkedInConnectionsMock = vi.fn();
+const listContactsMock = vi.fn();
 vi.mock("../../../../lib/api/networking", () => ({
   importGmailContacts: (...a: unknown[]) => importGmailContactsMock(...a),
   importLinkedInConnections: (...a: unknown[]) => importLinkedInConnectionsMock(...a),
+  listContacts: (...a: unknown[]) => listContactsMock(...a),
 }));
 
 vi.mock("../../../../lib/api/workspaces", async (importOriginal) => {
@@ -438,5 +440,57 @@ describe("NetworkingPage — contact importers (W-NET-1)", () => {
     await waitFor(() => screen.getByTestId("import-notice"));
     expect(importLinkedInConnectionsMock).toHaveBeenCalledWith(file);
     expect(screen.getByTestId("import-notice").textContent).toMatch(/214 contact\(s\) created/);
+  });
+});
+
+
+describe("NetworkingPage — full contact browser (W-NET-2)", () => {
+  const rows = [
+    { id: "c1", name: "Priya Sharma", title: "Recruiter", company: "SEEK", stage: "identified", email: "p@seek.com", linkedinUrl: null },
+    { id: "c2", name: "Tom Nguyen", title: "EM", company: "Canva", stage: "contacted", email: null, linkedinUrl: null },
+    { id: "c3", name: "Ana Silva", title: null, company: "Atlassian", stage: "identified", email: null, linkedinUrl: null },
+  ];
+
+  it("View all opens the browser listing EVERY contact, not the 5-card preview", async () => {
+    fetchNetworkingSummaryMock.mockResolvedValue(summary());
+    listContactsMock.mockResolvedValue(rows);
+    render(<NetworkingPage />);
+    await waitFor(() => screen.getByTestId("networking-crm"));
+
+    fireEvent.click(screen.getByTestId("view-all-contacts-btn"));
+    await waitFor(() => screen.getByTestId("all-contacts-list"));
+    expect(listContactsMock).toHaveBeenCalled();
+    expect(screen.getByTestId("all-contacts-row-c1")).toBeTruthy();
+    expect(screen.getByTestId("all-contacts-row-c3")).toBeTruthy();
+  });
+
+  it("search filters by name/company/title client-side", async () => {
+    fetchNetworkingSummaryMock.mockResolvedValue(summary());
+    listContactsMock.mockResolvedValue(rows);
+    render(<NetworkingPage />);
+    await waitFor(() => screen.getByTestId("networking-crm"));
+    fireEvent.click(screen.getByTestId("view-all-contacts-btn"));
+    await waitFor(() => screen.getByTestId("all-contacts-list"));
+
+    fireEvent.change(screen.getByTestId("all-contacts-search"), { target: { value: "canva" } });
+    expect(screen.queryByTestId("all-contacts-row-c1")).toBeNull();
+    expect(screen.getByTestId("all-contacts-row-c2")).toBeTruthy();
+  });
+
+  it("clicking a row opens the existing contact detail panel", async () => {
+    fetchNetworkingSummaryMock.mockResolvedValue(summary());
+    listContactsMock.mockResolvedValue(rows);
+    fetchNetworkingContactMock.mockResolvedValue({
+      id: "c2", name: "Tom Nguyen", title: "EM", company: "Canva", stage: "contacted",
+      email: null, linkedinUrl: null, outreach: [],
+    });
+    render(<NetworkingPage />);
+    await waitFor(() => screen.getByTestId("networking-crm"));
+    fireEvent.click(screen.getByTestId("view-all-contacts-btn"));
+    await waitFor(() => screen.getByTestId("all-contacts-list"));
+
+    fireEvent.click(screen.getByTestId("all-contacts-row-c2"));
+    expect(screen.queryByTestId("all-contacts-modal")).toBeNull();
+    await waitFor(() => expect(fetchNetworkingContactMock).toHaveBeenCalledWith("c2"));
   });
 });
