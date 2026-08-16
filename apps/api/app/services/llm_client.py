@@ -1449,6 +1449,11 @@ def _active_quota_block(user_id: str, provider: str) -> "dict[str, Any] | None":
 _RATE_LIMIT_STREAKS: dict[str, dict[str, float]] = {}
 _RATE_LIMIT_STREAKS_LOCK = threading.Lock()
 
+#: RT-006 — the one bounded same-model retry window for a sole-model chain
+#: that hit a real 429 (jittered so concurrent runs don't re-collide).
+_SAME_MODEL_429_RETRY_DELAY_MIN = 2.0
+_SAME_MODEL_429_RETRY_DELAY_MAX = 5.0
+
 
 def get_model_429_streak_threshold() -> int:
     """Consecutive 429s before a model cools (``AETHER_MODEL_429_STREAK``)."""
@@ -2763,6 +2768,7 @@ class LLMClient:
         #: the backoff below. Non-retryable failures deliberately do not
         #: advance it: they never wait.
         retry_attempt = 0
+        same_model_429_retries = 0  # RT-006: at most one per call, sole-model chains
         idx = 0
         while idx < len(chain):
             attempt_model = chain[idx]
@@ -2931,6 +2937,38 @@ class LLMClient:
                             )
                             _sleep_for_backoff(delay)
                         retry_attempt += 1
+                    # RT-006: the PRIMARY model (the user's explicit pick /
+                    # the configured first choice) that hits a REAL 429 gets
+                    # exactly ONE same-model retry after a short jittered wait
+                    # BEFORE any fallback is consulted.
+                    # Live evidence (2026-08-16 ~14:42Z, subscription window at
+                    # its boundary): the identical request 429'd then served
+                    # 'OK' seconds later — so one bounded retry converts an
+                    # honest-but-avoidable failure into the user's chosen model
+                    # actually serving. Guards: never for a synthetic cooling
+                    # skip, never while the model is cooling, at most once per
+                    # call, and only when the budget still holds an attempt.
+                    if (
+                        idx == 0
+                        and same_model_429_retries == 0
+                        and _exc_is_http_429(exc)
+                        and not getattr(exc, "_aether_cooling_skip", False)
+                        and _model_cooling_seconds_left(attempt_model) <= 0
+                        and self._remaining_budget()
+                        > _MIN_ATTEMPT_SECONDS + _SAME_MODEL_429_RETRY_DELAY_MAX
+                    ):
+                        same_model_429_retries += 1
+                        delay = random.uniform(
+                            _SAME_MODEL_429_RETRY_DELAY_MIN,
+                            _SAME_MODEL_429_RETRY_DELAY_MAX,
+                        )
+                        logger.info(
+                            "RT-006: sole-model %s hit a 429 — one same-model "
+                            "retry in %.1fs (prompt=%s)",
+                            attempt_model, delay, prompt_name,
+                        )
+                        _sleep_for_backoff(delay)
+                        continue
                     break  # genuine call error → next model (no same-model retry)
                 if validate is not None:
                     try:
