@@ -60,9 +60,14 @@ Fresh census (2026-08-16T07:0xZ, `/tmp/wavee-census-pre.txt`) differed materiall
   NULL, `username='Vikram'`, `suspended=false`, email + passwordHash untouched. abhikadam28: untouched.
 - **Live behaviour:** `/api/health` 200; **owner login succeeds** (200, access_token issued — credentials
   never printed); authenticated empty-state probes: `GET /api/jobs` → `[]`, `/api/applications` → `[]`,
-  `/api/agents/runs` → `[]`, `/api/stories` → `[]` — the brand-new-subscriber dashboard state, verified via
-  the live API (API-level probes used in place of pixel screenshots; every dashboard surface renders from
-  exactly these endpoints).
+  `/api/agents/runs` → `[]`, `/api/stories` → `[]` — the brand-new-subscriber dashboard state.
+- **Screenshot proof (empty dashboards):** captured post-wipe via headless Playwright against PROD after a
+  real owner UI login (`apps/web/e2e/wavee-screenshots.mjs`):
+  `uat/reports/evidence/market-perf/wave-e/wave-e-{dashboard,jobs,applications,agents,stories}.png` —
+  dashboard shows 0 active applications / 0% interview rate / 0 offers / no scored jobs; Jobs shows
+  "0 discovered … No matching jobs"; Story Bank shows "Your Story Bank is empty" with 0 stories.
+  (Dashboard's Agent Activity shows one sales-agent run "just now": the restarted `aether-sales-agent.timer`
+  fired at 07:15Z, AFTER the committed wipe — normal post-wipe live operation, not residue.)
 
 ## Outstanding (honest)
 
