@@ -31,6 +31,22 @@ export interface LinkedInImportResult {
   rowsParsed?: number;
 }
 
+/** One row of GET /networking/contacts (full, uncapped contact list). */
+export interface ContactListRow {
+  id: string;
+  name: string;
+  title: string | null;
+  company: string | null;
+  stage: string;
+  email: string | null;
+  linkedinUrl: string | null;
+  createdAt?: string;
+}
+
+/** The FULL contact list — the pipeline summary previews only 5 per column. */
+export const listContacts = (): Promise<ContactListRow[]> =>
+  apiRequest<ContactListRow[]>("/networking/contacts");
+
 export const importGmailContacts = (): Promise<GmailImportResult> =>
   apiRequest<GmailImportResult>("/networking/gmail/import-contacts", {
     method: "POST",
