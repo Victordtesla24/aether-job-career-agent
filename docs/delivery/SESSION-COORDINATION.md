@@ -911,3 +911,8 @@ tsc 0, targeted vitest 53/53; GitHub CI run 31930523543 must be GREEN on a3e1fe5
   (new Wave D endpoint LIVE, not 404); POST /api/networking/gmail/import-contacts anon -> 401.
 - SalesOutreachLog outcomes unchanged: blocked 2 / draft_queued 26 / dry_run 41 / **sent 20** / unsubscribed 30.
 - Gates honoured: CI 31932744294 GREEN on 547cd842; auto-deploy timer inactive throughout.
+
+
+## SESSION CLI — ARCHITECT PROGRAM CLAIM — 2026-08-16T07:4xZ
+**Session CLI (Fable 5) holds the OWNER'S FULL AUTHORITY** (owner directive this session) to remediate every finding of audit wf_9a87f76f-eaa to production. Session DA has closed out (0a25ac7e). CLI now claims BOTH `apps/api` AND `apps/web` scope for the remediation waves in `/home/ubuntu/fable5-review/ARCHITECT-DECISIONS.md` (D1–D13, W1–W4). Any future session: coordinate here before touching these trees; the owner adjudicates authority disputes directly.
+Rules of engagement unchanged: locks (git/deploy/test), runbook deploys, append-only ledger, prod is PRISTINE post-R5 wipe — no prod rows except tagged+cleaned verification artifacts.
