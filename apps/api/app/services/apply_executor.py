@@ -1088,6 +1088,23 @@ def _fill_value(page: Any, field: dict[str, Any], value: Any, documents: dict[st
             if best_idx >= 0 and best_score >= 2 and best_score > second_score:
                 options.nth(best_idx).click(timeout=_ACTION_TIMEOUT_MS)
                 return True
+            if count == 0:
+                # The widget rendered NO options at all — even with the filter
+                # cleared. On a live page a working React combobox always
+                # repopulates its listbox after the filter is cleared, so zero
+                # candidates means the option list simply does not render
+                # here: either the page is an inert captured DOM (replay mode
+                # — page JS is deliberately blocked) or the control is a
+                # free-text combobox that takes typed input directly. In both
+                # cases the only commitment the widget offers is the typed
+                # text itself, so re-type the answer and report it filled
+                # ONLY if the input verifiably retained it. A live widget
+                # whose options merely failed to match stays on the refusal
+                # paths above, and a live submit that this fallback did not
+                # actually satisfy is still caught by the no_confirmation
+                # guard — this can never fake a received application.
+                target.fill(text_value, timeout=_ACTION_TIMEOUT_MS)
+                return target.input_value(timeout=_ACTION_TIMEOUT_MS) == text_value
         except Exception:  # noqa: BLE001
             return False
         return False
