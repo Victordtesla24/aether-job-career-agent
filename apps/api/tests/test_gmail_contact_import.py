@@ -198,24 +198,32 @@ def test_import_requires_authenticated_owner(client):
     assert response.status_code == 401
 
 
-def test_import_without_gmail_connected_is_409_not_500(
+def test_import_without_gmail_connected_is_an_honest_409_not_a_500(
     client, auth_headers, monkeypatch
 ):
-    """F5-008: a user who never connected Gmail must get an honest 409 (client
-    condition, same contract as approvals/workspaces), not a 500."""
+    """CLI-003 / F5-008: a user who has not connected Gmail must get the same
+    honest 409 gmail_not_connected contract the send paths use — never a 500
+    stack trace (live incident: POST /networking/gmail/import-contacts
+    returned 500 when GmailService raised GmailNotConnectedError)."""
     from app.services.gmail_service import GmailNotConnectedError
 
-    class NotConnectedGmail:
+    class DisconnectedGmail:
         def list_message_headers(self, query=None, max_results=100):  # noqa: ANN001
-            raise GmailNotConnectedError("Gmail is not connected for this user")
+            raise GmailNotConnectedError(
+                "Gmail is not connected — connect your account to continue."
+            )
 
-    _install_gmail(monkeypatch, NotConnectedGmail())
+        def get_message_bodies(self, message_id):  # noqa: ANN001
+            raise AssertionError("must not be reached")
+
+    _install_gmail(monkeypatch, DisconnectedGmail())
 
     response = client.post("/networking/gmail/import-contacts", headers=auth_headers)
 
     assert response.status_code == 409, response.text
     detail = response.json()["detail"]
     assert detail["error"] == "gmail_not_connected"
+    assert "connect" in detail["message"].lower()
     assert "Nothing was imported" in detail["message"]
 
 

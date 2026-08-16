@@ -795,3 +795,51 @@ intent); the BLOCKER-001/GATE-31 guard in `repositories/admin.py` is diff-verifi
 - **Step 1:** pytest shard 3 rerun VERIFIED clean — `/tmp/pytest-rerun-123.log`: **397 passed, RC=0** (prior failures were debug contamination, confirmed).
 - **Step 2:** target `d09fc071` already live — ancestor of `main@6cbfae08` promoted 01:39:34Z under the directive-wave window (BUILD_ID **qXgb40x27HDmiPnAawi6k**, verified on-disk == served HTML). Only newer origin/main commit `a196ae36` is docs-only. **Redeploy skipped deliberately:** active concurrent Wave B session holds uncommitted WIP in shipped web files (admin/executive components, mtimes minutes old) — restart/rebuild forbidden with foreign WIP present and would bake it into prod. WIP untouched; `stash@{0}` retained.
 - **Step 3:** independent verifier sweep PASS with **one pre-existing finding**: 20 real emails sent since live-arming (2026-08-15T04:15Z→2026-08-16T01:46Z) — 19 auto-replies to `notifications@github.com` (GitHub CI mail misclassified as prospect interest; no automated-sender guard in `_classify_inbound`), 1 legitimate owner digest. **Stopped** via DB suppression of `notifications@github.com` (SalesSuppressionList, reason `automated_sender_misfire_guard`; count 17→18). Zero emails sent by this session (before/after sent-count both 20). Recommended code follow-up: automated-sender guard in `_classify_inbound` (not done in this step — no-deploy window). Evidence: `uat/reports/evidence/market-perf/deploy-20260816/{verify.log,prod-verify-2026-08-16b.md}` (gitignored, by path). Ledger untouched.
+
+
+## SESSION REGISTER — 2026-08-16T02:5xZ — Session CLI (Fable 5 adversarial reviewer)
+
+**Session:** CLI (Claude Code Fable 5, ultracode). **Role:** independent 3rd-party adversarial
+review + zero-defect remediation per `/home/ubuntu/aether-fable5-orchestrator-adversarial-review-prompt.md`.
+**Ticket range:** `CLI-###` (work), `GOV-2xx` (governance) — disjoint from ABX/MP ranges.
+**Branch:** `cli/fable5-review` (isolated worktree `/home/ubuntu/fable5-review/wt`, based at `origin/main` 93ca450c).
+Everything I land goes to `main` via fast-forward from origin/main; branch deleted at close (owner directive: no leftover branches/PRs).
+
+**Non-interference:** I have READ the tail of this ledger. I recognize the incumbent peer holds an
+UNPUSHED local-`main` WIP checkpoint `c0bfd318` (MP-039 Wave B R1, web-only: apps/web + e2e). I will
+NOT touch that commit, the shared local-main checkout state, apps/web, apps/web/e2e, or the
+components/admin executive surfaces the peer is actively editing. I will NOT rebase/reset the shared
+checkout and will NOT restart any service while the peer's undeployed WIP occupies the served tree.
+
+**My claimed (disjoint) scope — apps/api only + review evidence:**
+- `apps/api/app/agents/sales_agent.py` (CLI-001: add automated-sender guard to inbound classification — the root cause of the 19 github.com auto-reply misfires that DB suppression only band-aided)
+- `apps/api/tests/test_cli001_sales_automated_sender_guard.py` (new RED→GREEN test)
+- `docs/delivery/SESSION-COORDINATION.md` (append-only claims)
+- evidence tree: `/home/ubuntu/fable5-review/**` (outside the repo — not committed)
+
+**Safety invariants I honor:** sent-count baseline = 20 (must stay 20; zero real emails sent by this
+review); never flip AETHER_SALES_AGENT_DRY_RUN; never activate campaigns; never rotate/print the owner
+credential or the 4 coupled locations; never delete/alter any DB row I did not create; no LinkedIn
+automation; BLOCKER-001/GATE-31 guard stays intact. Deploy of my api-only fix is COORDINATION-GATED on
+the peer's undeployed web WIP — will land to main, DEV-verified, and hand off the one-line restart to
+the next clean deploy window rather than disturb the shared tree.
+
+
+## SESSION CLI CLOSE-OUT — 2026-08-16T03:5xZ (Fable 5 adversarial reviewer)
+
+**Landed to main (CI 31924804265 GREEN — full pytest + vitest + tsc + ruff + mypy all success):**
+- CLI-001 `635ff8a6` — automated-sender guard in sales-agent inbound path (root cause of 19 github.com auto-reply misfires; DB suppression was only a band-aid). +`inboundSkippedAutomated` counter, 21 RED→GREEN tests.
+- CLI-002 `0291dd53`+`e8e860f6` — **fixed main CI which had been RED since 2026-08-15T05:26Z** (5 ruff + 1 mypy error across landed files). ~12 prior "green-gated" pushes were in fact unverified — recorded as a false-positive class.
+- CLI-003 `403c1e3c` — `/networking/gmail/import-contacts` honest 409 (was uncaught 500).
+- CLI-005 `ce39ff92` — `/approvals/{id}/execute` honest 502 on transport failure (was uncaught 500).
+- CLI-004+006 `d596b751` — replyRate always null while reply-detection unimplemented (was fabricated 0.0); signups excludes admins to match executive metrics.
+
+All api-only, zero overlap with the peer's web WIP `c0bfd318`. Everything is on `origin/main`; **no CLI branch/PR on origin** (pushed HEAD:main directly); local branch+worktree removed at close.
+
+**CRITICAL for the owner — INV-C-001:** a full prod `.env` backup (`​.env.bak-predeploy`, 60 secrets incl. the live `sk_live` Stripe key byte-identical to current) is recoverable from 59 LOCAL `refs/deepagent/turns/*` snapshot refs. **NOT on origin/GitHub** (verified). Blocked-by-rails for me (peer-managed refs + credential-rotation rails). Owner step: purge deepagent refs + `git gc`, then rotate STRIPE/DB/webhook/NEXTAUTH secrets. Full detail: `/home/ubuntu/fable5-review/AETHER-ADVERSARIAL-REVIEW.md` §3.
+
+**DEPLOY of CLI-001/003/004/005 to prod is coordination-gated on the peer's undeployed web WIP** occupying the shared served tree — the peer's own next `git pull --rebase` + runbook deploy ships them (api+worker restart applies the api changes). Not deployed by me to avoid shipping the peer's partial work.
+
+**Handoff to peer (peer-owned `apps/web` territory):** UI-W-01 (8 three.js console warnings on /dashboard/agents), INV-M-002 (inert email-verify toggle in /admin/settings), INV-M-003 (hardcoded e2e fallback passwords), CLI-004 FE note copy now stale.
+
+**Safety:** sales-agent sent-count 20→20 (zero emails sent). 5 tagged synthetic prod users soft-deleted (typed-confirm). No campaign activated, no dry-run flag flipped, no protected account or foreign row/ref touched, BLOCKER-001 verified effective at runtime. Verdict: FAIL (1 unmet Critical) / customer-ready TODAY: NO (narrowly — happy path works incl. live Stripe checkout). Full report: `/home/ubuntu/fable5-review/AETHER-ADVERSARIAL-REVIEW.md`.

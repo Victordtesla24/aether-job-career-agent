@@ -383,7 +383,7 @@ class TestStoryExtractorKeyMappingRoundTrip:
         NOT the catalog's UI key ``"storyExtraction"``) must be invisible to
         the enforcement query and never block a dispatch."""
         from app.agents.story_extractor import StoryExtractorAgent
-        from app.routers.agents import _ensure_agent_config_schema, _dispatch
+        from app.routers.agents import _dispatch, _ensure_agent_config_schema
 
         ensure_user_billing(test_user_id)
         calls = patch_agent_run(StoryExtractorAgent, lambda: {"extracted": 5})

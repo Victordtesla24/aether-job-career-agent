@@ -67,9 +67,9 @@ pytestmark = pytest.mark.skip(
     "its fix (GOV-063, ORCH-DELTA-2026-08-15b.md)"
 )
 
-from app.services import llm_client as lc
-from app.services.llm_client import LLMClient, LLMUnavailableError
-from app.workers import board_sweep
+from app.services import llm_client as lc  # noqa: E402 — deliberate: after quarantine pytestmark
+from app.services.llm_client import LLMClient, LLMUnavailableError  # noqa: E402
+from app.workers import board_sweep  # noqa: E402
 
 #: Read through ``getattr`` ONLY so this module still COLLECTS against the
 #: pre-fix code and every test below reports its own honest RED, instead of the

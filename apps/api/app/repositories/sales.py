@@ -709,7 +709,13 @@ class SalesRepository:
         ensure_user_lifecycle_columns()
         with get_connection() as conn:
             with conn.cursor() as cur:
-                cur.execute('SELECT COUNT(*) FROM "User" WHERE "deletedAt" IS NULL')
+                # Same population as /admin/metrics/executive (admin_metrics.py:
+                # 90,179): admins are staff, not signups — counting them here
+                # made the two admin screens disagree (6 vs 5).
+                cur.execute(
+                    'SELECT COUNT(*) FROM "User"'
+                    ' WHERE "deletedAt" IS NULL AND "isAdmin" = false'
+                )
                 signups = int(cur.fetchone()[0])
                 cur.execute(
                     '''
@@ -741,7 +747,12 @@ class SalesRepository:
                 sent, replied, dry_run, drafts = cur.fetchone()
                 cur.execute('SELECT COUNT(*) FROM "SalesLead"')
                 lead_count = int(cur.fetchone()[0])
-        reply_rate = (replied / sent) if sent else None
+        # Honest: NOTHING in the codebase writes outcome='replied' today (the
+        # inbound handler only skips already-sent threads), so a reply rate is
+        # not observable at all — showing 0.0% would assert a measurement the
+        # system cannot make. Stays null until a real reply-detection writer
+        # exists; then restore (replied / sent) with the sent>0 guard.
+        reply_rate = None
         return {
             "signups": signups,
             "paidConversions": paid_conversions,
@@ -749,9 +760,7 @@ class SalesRepository:
             "leads": lead_count,
             "emailsSent": int(sent),
             "repliesObserved": int(replied),
-            # Honest: reply detection depends on inbound polling; when no
-            # emails were ever sent the rate is not observable, not 0%.
-            "replyRate": round(reply_rate, 4) if reply_rate is not None else None,
+            "replyRate": reply_rate,
             "dryRunLogged": int(dry_run),
             "linkedinDraftsQueued": int(drafts),
             "suppressionCount": self.suppression_count(),

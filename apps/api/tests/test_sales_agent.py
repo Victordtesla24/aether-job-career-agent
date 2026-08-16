@@ -466,7 +466,7 @@ def test_automated_sender_skipped_before_lead_or_reply_even_live(
     agent = _agent_with(repo, fake, monkeypatch)
     result = agent.run(trigger="manual", dry_run=False)
 
-    assert result["skippedAutomated"] == 1
+    assert result["inboundSkippedAutomated"] == 1
     # Robot: no send, no lead, no outreach log row of ANY outcome.
     assert [s for s in fake.sent if s["to"] == robot] == []
     assert repo.get_lead_by_email(robot) is None

@@ -102,7 +102,7 @@ def evaluate(
             and isinstance(conversion, (int, float))
             and conversion < target
         ):
-            requested = {
+            requested: dict[str, Any] = {
                 "maxIterations": int(knobs.get("maxIterations") or 0) + 2,
                 "targetScore": round(float(knobs.get("targetScore") or 0.0) + 3.0, 1),
             }

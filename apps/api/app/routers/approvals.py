@@ -482,19 +482,10 @@ def _execute_site_submission(
     except ApplyExecutorGuardError as exc:
         raise HTTPException(exc.http_status, exc.message) from exc
     except ApplyExecutorTransportError as exc:
-        # F5-006: a browser/transport failure is our side failing to reach the
-        # site — an expected operational condition, not an unhandled server
-        # error. The execution claim was released by the executor, so the
-        # sweep can retry; report 502 with the honest "nothing was submitted"
-        # message instead of leaking a raw 500.
-        raise HTTPException(
-            http_status.HTTP_502_BAD_GATEWAY,
-            exc.message
-            or (
-                "The application site could not be reached — nothing was "
-                "submitted."
-            ),
-        ) from exc
+        # Our side failed to open/drive the employer page — nothing was
+        # submitted, the execution claim is released, and the sweep can retry.
+        # An expected refusal, so an honest 502, never a stack-trace 500.
+        raise HTTPException(http_status.HTTP_502_BAD_GATEWAY, exc.message) from exc
     proof = _transmission_proof(user_id, application_id)
     if proof.get("transmittedAt") is None:
         # Defensive and deliberately loud: the executor only returns after
