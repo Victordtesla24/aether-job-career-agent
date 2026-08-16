@@ -902,3 +902,12 @@ tsc 0, targeted vitest 53/53; GitHub CI run 31930523543 must be GREEN on a3e1fe5
 **Recipe:** full Complete Deploy Recipe per DEPLOYMENT-RUNBOOK (install, clean-env build, verify-web-build gate, restart api/web/worker, health + BUILD_ID verify, sent-count 20 check).
 **Gates:** CI 31932744294 GREEN on 547cd842 (and 31932263064 on 3b74e578); local: sales-agent suite 79/79, networking suites 24/24, ruff+mypy clean, tsc 0.
 **Auto-deploy timer:** verified inactive at claim time.
+
+### 2026-08-16 07:0xZ — Session DA: DEPLOY WINDOW RELEASED (Waves C+D)
+- Deployed main@547cd842 (+de8ae1ff, ce7a8858, 3b74e578). New BUILD_ID DoT-qM7YAckJe1JoWnNGu; services
+  restarted 07:06:14Z; verify-web-build PASS; deploy exit=0 (/tmp/waved-deploy.log).
+- Independent prod probes (curl, distinct from deploy script): /api/health 200 ok; public
+  _buildManifest for new BUILD_ID 200; POST /api/networking/linkedin/import-contacts anon -> 401
+  (new Wave D endpoint LIVE, not 404); POST /api/networking/gmail/import-contacts anon -> 401.
+- SalesOutreachLog outcomes unchanged: blocked 2 / draft_queued 26 / dry_run 41 / **sent 20** / unsubscribed 30.
+- Gates honoured: CI 31932744294 GREEN on 547cd842; auto-deploy timer inactive throughout.
