@@ -70,7 +70,11 @@ def import_gmail_contacts(current_user: CurrentUser) -> dict[str, int]:
     message/thread identifiers form the existing SalesLead consent provenance;
     suppressed senders are neither saved nor handed off. Nothing is sent.
     """
-    from app.services.gmail_service import GmailService
+    from app.services.gmail_service import (
+        GmailAuthError,
+        GmailNotConnectedError,
+        GmailService,
+    )
 
     uid = current_user["id"]
     gmail = GmailService(uid)
@@ -83,7 +87,23 @@ def import_gmail_contacts(current_user: CurrentUser) -> dict[str, int]:
         "suppressed": 0,
         "ignored": 0,
     }
-    for header in gmail.list_message_headers(max_results=100):
+    try:
+        headers = gmail.list_message_headers(max_results=100)
+    except (GmailAuthError, GmailNotConnectedError):
+        # Same honest contract the send paths use (workspaces/approvals): a
+        # user without a connected Gmail account is an expected precondition,
+        # not a server error.
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail={
+                "error": "gmail_not_connected",
+                "message": (
+                    "Gmail is not connected — connect your Gmail account in "
+                    "Settings, then run the import again. Nothing was imported."
+                ),
+            },
+        )
+    for header in headers:
         message = gmail.get_message_bodies(header["id"])
         candidate = _professional_sender(message)
         if candidate is None:
