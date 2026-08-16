@@ -862,3 +862,14 @@ full pytest in progress and must be green before restart). stash@{0} (orch-prese
 - New BUILD_ID mZNZzPnUFBuoEl80D35uE; services restarted 05:25:04Z; verify-web-build PASS; /api/health 200 ok.
 - Gates: GitHub CI run 31928750350 GREEN on b97f53c8 (ruff, mypy, pytest hosted-DB, web lint/types/vitest); local tsc 0 / vitest 1971/1971 / targeted pytest 155/155 under sanitized env.
 - Log: /home/ubuntu/fable5-review/logs/deploy-fable5.log
+
+## DEPLOY WINDOW CLAIM — 2026-08-16T06:0xZ (Session DA: Wave B mobile-matrix residuals)
+
+**By:** Session DA (DeepAgent orchestrator). **Lock:** flock /tmp/aether-deploy.lock.
+**Scope:** deploy main@a3e1fe52 — S-UI-B4-MOBILE Wave B residual fixes (MarketPulse 7px SVG caption → 12px HTML,
+globals.css floor extended to fractional text-[9.5/10.5/11.5px] utilities, agents-console.css mobile floor for
+ag-* micro-type + .ag-console svg text). Web-only change; full Complete Deploy Recipe per runbook
+(pip/pnpm install, clean-env build, verify-web-build.sh blocking, restart api/web/worker, health + BUILD_ID verify).
+**Gates:** local e2e mobile-matrix 27/27 GREEN (uat/reports/evidence/market-perf/wave-b/mobile-matrix-GREEN.log),
+tsc 0, targeted vitest 53/53; GitHub CI run 31930523543 must be GREEN on a3e1fe52 before restart.
+**Auto-deploy timer:** re-verify inactive before deploy.
