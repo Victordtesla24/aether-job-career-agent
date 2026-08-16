@@ -1,6 +1,11 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // Allow an alternate build output directory so an e2e "companion" build
+  // (baked with AETHER_API_PROXY pointing at an isolated test API) can coexist
+  // with the production `.next` build in the same working tree. Must be set at
+  // BOTH build time and start time (`next start` reads the same env).
+  distDir: process.env.AETHER_WEB_DIST_DIR ?? ".next",
   // Fonts and Font Awesome are loaded via <link> tags in the root layout rather
   // than next/font so that `next build` never needs network access at build time
   // (keeps CI and offline builds deterministic).
