@@ -52,14 +52,13 @@ from app.repositories.sales import (
     DuplicateSendError,
     SalesRepository,
 )
+from app.services import stripe_gateway
 from app.services.gmail_service import (
     GmailError,
     GmailNotConnectedError,
     GmailService,
     _split_address,
 )
-from app.services import stripe_gateway
-from app.services.stripe_gateway import StripeNotConfiguredError
 from app.services.llm_client import (
     _STATIC_MODEL_CATALOG,
     LLMClient,
@@ -67,6 +66,7 @@ from app.services.llm_client import (
     get_model,
 )
 from app.services.sales_branding import render_branded_email
+from app.services.stripe_gateway import StripeNotConfiguredError
 
 logger = logging.getLogger("aether.sales_agent")
 
