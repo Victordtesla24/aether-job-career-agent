@@ -424,6 +424,7 @@ class TestBackwardCompatibility:
 
     def test_output_shape_is_additive_only(self, extractor, user_id) -> None:
         from dataclasses import fields
+
         from app.agents.story_extractor import StoryExtractionResult
 
         pre_b1c_fields = {"created", "dropped", "story_ids", "bullets", "merged", "stripped"}
