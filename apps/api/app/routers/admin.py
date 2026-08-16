@@ -118,10 +118,19 @@ def admin_list_users(
 
 @router.get("/users/{user_id}")
 def admin_user_detail(_admin: AdminUser, user_id: str) -> dict[str, Any]:
-    """User detail: activity, subscription, quota, recent runs, spend (USD)."""
+    """User detail: activity, subscription, quota, recent runs, spend (USD).
+
+    RT-001: additionally carries ``passwordManaged`` (bool) — True when this
+    identity's password is owned by deployment configuration (§14.7), so the
+    admin UI can disable the password control UPFRONT instead of offering an
+    action that is refused with a 409 on submit (dead affordance).
+    """
     detail = admin_repo.get_user_detail(user_id)
     if detail is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
+    detail["passwordManaged"] = admin_repo.password_is_env_managed(
+        (detail.get("user") or {}).get("email") or detail.get("email")
+    )
     return detail
 
 
@@ -381,6 +390,9 @@ async def admin_set_password(
     _require_user(user_id)
     target = UserRepository().get_auth_context(user_id)
     if admin_repo.password_is_env_managed(target.get("email") if target else None):
+        # RT-001: the operator remedy (env var + rotation steps) goes to the
+        # SERVER LOG where operators look; HTTP carries the clean message only.
+        logger.info(admin_repo.ENV_MANAGED_PASSWORD_OPS_DETAIL)
         raise HTTPException(
             status.HTTP_409_CONFLICT, admin_repo.ENV_MANAGED_PASSWORD_MESSAGE
         )

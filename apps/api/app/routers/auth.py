@@ -392,6 +392,7 @@ def reset_password(request: Request, body: ResetPasswordRequest) -> ResetPasswor
     """
     from app.repositories.admin import (
         ENV_MANAGED_PASSWORD_MESSAGE,
+        ENV_MANAGED_PASSWORD_OPS_DETAIL,
         password_is_env_managed,
     )
     from app.services.password_reset import consume_reset_token
@@ -407,6 +408,8 @@ def reset_password(request: Request, body: ResetPasswordRequest) -> ResetPasswor
     reset_reset_password_failures(request, body.token)
     user = UserRepository().get_by_id(user_id)
     if password_is_env_managed(user.get("email") if user else None):
+        # RT-001: operator remedy to the server log; HTTP stays internal-free.
+        logger.info(ENV_MANAGED_PASSWORD_OPS_DETAIL)
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=ENV_MANAGED_PASSWORD_MESSAGE,

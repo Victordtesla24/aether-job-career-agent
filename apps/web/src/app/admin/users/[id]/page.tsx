@@ -693,31 +693,47 @@ export default function AdminUserDetailPage() {
         </Panel>
 
         <Panel title="Credentials — password" testId="admin-password-panel">
-          <p className="mb-2 text-xs text-aether-muted">
-            Hashed server-side with the app&apos;s own hasher. The value is never stored in
-            the clear, never shown again and never written to the audit log. Every existing
-            session for this user is invalidated before this call returns — it waits out the
-            token-timestamp grace window (about a second) so that is true, not assumed.
-          </p>
-          <div className="flex flex-wrap items-center gap-2">
-            <input
-              type="password"
-              aria-label="New password"
-              autoComplete="new-password"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              className="w-56 rounded-md border border-white/10 bg-aether-bg px-3 py-2 text-sm text-aether-text"
-            />
-            <button
-              type="button"
-              data-testid="admin-set-password"
-              onClick={onSetPassword}
-              disabled={busy}
-              className={PRIMARY_BTN}
+          {detail.passwordManaged ? (
+            /* RT-001: this identity's password is deployment-managed — offering
+               the control here was a dead affordance that ended in a 409 on
+               submit. State it upfront, professionally, and offer nothing. */
+            <p
+              className="text-xs text-aether-muted"
+              data-testid="admin-password-managed-note"
             >
-              Set password
-            </button>
-          </div>
+              This account&apos;s password is managed at the deployment level and
+              can&apos;t be changed from the admin console. Contact your operator to
+              rotate it.
+            </p>
+          ) : (
+            <>
+              <p className="mb-2 text-xs text-aether-muted">
+                Hashed server-side with the app&apos;s own hasher. The value is never stored in
+                the clear, never shown again and never written to the audit log. Every existing
+                session for this user is invalidated before this call returns — it waits out the
+                token-timestamp grace window (about a second) so that is true, not assumed.
+              </p>
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  type="password"
+                  aria-label="New password"
+                  autoComplete="new-password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="w-56 rounded-md border border-white/10 bg-aether-bg px-3 py-2 text-sm text-aether-text"
+                />
+                <button
+                  type="button"
+                  data-testid="admin-set-password"
+                  onClick={onSetPassword}
+                  disabled={busy}
+                  className={PRIMARY_BTN}
+                >
+                  Set password
+                </button>
+              </div>
+            </>
+          )}
         </Panel>
 
         <Panel title="Credentials — email, username, name" testId="admin-identity-panel">

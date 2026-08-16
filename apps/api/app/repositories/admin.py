@@ -1638,15 +1638,27 @@ def health_overview() -> dict[str, Any]:
 
 
 #: Refusal text for an in-app password change on the identity §14.7 owns.
-#: Names the mechanism AND the real remedy; carries NO credential material (not
-#: the hash, not the address) so it is safe to return over HTTP and to log.
+#: RT-001 (runtime-defect, owner report 2026-08-16): the previous text named
+#: the internal env variable and its rotation runbook IN THE HTTP RESPONSE —
+#: deployment internals do not belong in an account-level flow's error. The
+#: user-facing message is now professional and internal-free; the full
+#: operator remedy lives in :data:`ENV_MANAGED_PASSWORD_OPS_DETAIL`, which the
+#: refusing route writes to the SERVER LOG (where operators look), never to
+#: HTTP. Neither carries credential material.
 ENV_MANAGED_PASSWORD_MESSAGE = (
-    "This account's password is managed by server configuration "
-    "(AETHER_ADMIN_PASSWORD_HASH) and is re-applied every time the API "
-    "restarts, so a password set here would be silently reverted at the next "
-    "restart. The change was refused instead of accepted-then-lost. To change "
-    "it for real, rotate AETHER_ADMIN_PASSWORD_HASH to a bcrypt hash of the "
-    "new password and restart the API."
+    "This account's password is managed at the deployment level and cannot be "
+    "changed from the admin console. The change was refused rather than "
+    "accepted and silently reverted. Please contact your operator to rotate "
+    "this credential."
+)
+
+#: Operator-only detail for the same refusal — server logs only, never HTTP.
+ENV_MANAGED_PASSWORD_OPS_DETAIL = (
+    "Password change refused for the env-managed admin identity: "
+    "AETHER_ADMIN_PASSWORD_HASH is re-applied on every API boot "
+    "(apply_admin_rotation), so an in-app change would be silently reverted. "
+    "To rotate for real: set AETHER_ADMIN_PASSWORD_HASH to a bcrypt hash of "
+    "the new password and restart the API."
 )
 
 

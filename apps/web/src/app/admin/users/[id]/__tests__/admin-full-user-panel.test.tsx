@@ -121,6 +121,24 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+describe("RT-001: deployment-managed password suppresses the dead control", () => {
+  it("renders the professional managed note and NO password form when passwordManaged", async () => {
+    await renderPage(detail({ passwordManaged: true }));
+    const note = screen.getByTestId("admin-password-managed-note");
+    expect(note.textContent).toMatch(/managed at the deployment level/i);
+    // Internals never render (the class rule the owner reported).
+    expect(note.textContent).not.toMatch(/AETHER_|bcrypt|restart the API/i);
+    expect(screen.queryByTestId("admin-set-password")).toBeFalsy();
+    expect(screen.queryByLabelText(/^new password$/i)).toBeFalsy();
+  });
+
+  it("offers the password form for an ordinary account", async () => {
+    await renderPage(detail({ passwordManaged: false }));
+    expect(screen.getByTestId("admin-set-password")).toBeTruthy();
+    expect(screen.queryByTestId("admin-password-managed-note")).toBeFalsy();
+  });
+});
+
 describe("entitlement controls", () => {
   it("sends a tier override with the chosen plan and note", async () => {
     await renderPage(detail());

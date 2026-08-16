@@ -314,20 +314,24 @@ describe("resetPassword", () => {
   });
 
   it("surfaces a 409 config-managed refusal with the backend's own detail (§14.7)", async () => {
-    // The §14.7 rotation re-applies AETHER_ADMIN_PASSWORD_HASH on every API
-    // boot, so a reset for that ONE identity is refused rather than accepted
-    // and silently reverted at the next restart. The visitor must SEE that
-    // reason — a generic "Reset failed (409). Please try again." would tell
-    // them to retry something that can never succeed.
+    // RT-001 contract: the §14.7 refusal reaches the visitor with the API's
+    // own professional reason — a generic "Reset failed (409). Please try
+    // again." would tell them to retry something that can never succeed —
+    // and that reason NEVER carries deployment internals (env-var names,
+    // rotation runbooks): those live in the server log for operators.
     const detail =
-      "This account's password is managed by server configuration " +
-      "(AETHER_ADMIN_PASSWORD_HASH) and is re-applied every time the API restarts.";
+      "This account's password is managed at the deployment level and cannot " +
+      "be changed from the admin console. The change was refused rather than " +
+      "accepted and silently reverted. Please contact your operator to rotate " +
+      "this credential.";
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse({ detail }, 409)));
 
     await expect(resetPassword("real-token", "BrandNewPassw0rd", "http://api.test")).rejects.toMatchObject({
       status: 409,
       message: detail,
     });
+    // The internals-free property, pinned explicitly (RT-001).
+    expect(detail).not.toMatch(/AETHER_|bcrypt|restart the API/i);
   });
 
   it("surfaces a 429 with the Retry-After seconds", async () => {

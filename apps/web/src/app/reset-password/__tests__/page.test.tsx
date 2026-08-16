@@ -93,14 +93,17 @@ describe("ResetPasswordPage", () => {
   });
 
   it("shows the config-managed refusal instead of a false success (§14.7)", async () => {
-    // The API refuses a reset for the env-managed admin identity, because the
-    // §14.7 rotation re-applies AETHER_ADMIN_PASSWORD_HASH on every restart and
-    // would silently revert it. The page must render that reason and must NOT
-    // show the "Your password has been reset" success state.
+    // RT-001 contract: the API refuses a reset for the env-managed admin
+    // identity with a PROFESSIONAL, internals-free message (the operator
+    // remedy lives in the server log). The page must render that reason,
+    // must NOT show the "Your password has been reset" success state, and
+    // must never surface deployment internals to a visitor.
     resetPasswordMock.mockRejectedValue(
       new AuthApiError(
-        "This account's password is managed by server configuration " +
-          "(AETHER_ADMIN_PASSWORD_HASH) and is re-applied every time the API restarts.",
+        "This account's password is managed at the deployment level and " +
+          "cannot be changed from the admin console. The change was refused " +
+          "rather than accepted and silently reverted. Please contact your " +
+          "operator to rotate this credential.",
         409,
       ),
     );
@@ -113,9 +116,10 @@ describe("ResetPasswordPage", () => {
     fireEvent.click(screen.getByRole("button", { name: /reset password/i }));
 
     await waitFor(() => expect(screen.getByTestId("reset-password-error")).toBeTruthy());
-    expect(screen.getByTestId("reset-password-error").textContent).toMatch(
-      /managed by server configuration/i,
-    );
+    const rendered = screen.getByTestId("reset-password-error").textContent ?? "";
+    expect(rendered).toMatch(/managed at the deployment level/i);
+    // RT-001: internals must never render to a visitor.
+    expect(rendered).not.toMatch(/AETHER_|bcrypt|restart the API/i);
     expect(screen.queryByTestId("reset-password-success")).toBeFalsy();
   });
 });

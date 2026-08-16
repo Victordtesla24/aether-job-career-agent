@@ -171,6 +171,10 @@ export const AdminUserDetailSchema = z.object({
   runCount: z.number(),
   currency: z.string(),
   entitlement: EntitlementViewSchema.optional().default({}),
+  // RT-001: true when this identity's password is deployment-managed (§14.7) —
+  // the UI must not offer the password control. Optional so an older API
+  // during a rolling deploy still parses (treated as not managed).
+  passwordManaged: z.boolean().optional().default(false),
 });
 export type AdminUserDetail = z.infer<typeof AdminUserDetailSchema>;
 
