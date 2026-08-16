@@ -63,7 +63,8 @@ function uniqueEmail(tag: string): string {
  *  failure further down the test. */
 async function signupAndLogin(page: Page, tag: string): Promise<void> {
   const email = uniqueEmail(tag);
-  const password = "Sup3rSecret1";
+  // Random per-run throwaway password (user is created by this test) — INV-M-003.
+  const password = `E2eTmpAa1!${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
   await page.goto("/signup");
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(password);

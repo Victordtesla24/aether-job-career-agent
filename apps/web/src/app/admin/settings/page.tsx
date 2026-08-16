@@ -2,11 +2,10 @@
 
 /**
  * /admin/settings — platform settings (§15 Tier 1). Signup toggle: when off,
- * POST /api/auth/register returns 403. Email-verification is an INERT toggle:
- * it is disabled (read-only) and its handler is a no-op — no backend code reads
- * or enforces the setting yet, so it is NOT wired to any audit trail or side
- * effect (ML-audit-emailverify-toggle-001). It is a not-yet-enforced
- * placeholder, surfaced only to signal the roadmap item.
+ * POST /api/auth/register returns 403. The former email-verification toggle was
+ * REMOVED (INV-M-002): no backend code reads or enforces that setting, so an
+ * inert control had no place in a production admin UI. The API field
+ * (emailVerificationEnabled) still exists and can be re-surfaced once enforced.
  */
 import { useEffect, useState } from "react";
 
@@ -92,7 +91,7 @@ export default function AdminSettingsPage() {
 
   return (
     <div className="max-w-2xl">
-      <AdminPageHeader title="Settings" subtitle="Registration and verification controls." />
+      <AdminPageHeader title="Settings" subtitle="Registration controls." />
 
       {notice ? <p className="mb-3 text-sm text-aether-green">{notice}</p> : null}
       {error ? <p className="mb-3 text-sm text-red-300">{error}</p> : null}
@@ -104,15 +103,6 @@ export default function AdminSettingsPage() {
           checked={settings.signupEnabled}
           disabled={busy}
           onChange={(v) => void patch({ signupEnabled: v })}
-        />
-        <Toggle
-          label="Email verification"
-          hint="Not yet available — no backend code reads or enforces this setting."
-          checked={settings.emailVerificationEnabled}
-          disabled
-          onChange={() => {
-            /* no-op: nothing enforces this setting yet (ML-audit-emailverify-toggle-001) */
-          }}
         />
       </div>
     </div>

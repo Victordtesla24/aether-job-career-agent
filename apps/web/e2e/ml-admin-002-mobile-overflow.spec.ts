@@ -29,9 +29,19 @@ import { test, expect } from "@playwright/test";
  * vars, all with defaults matching that local setup).
  */
 
+function requireEnv(name: string): string {
+  const v = process.env[name];
+  if (!v) {
+    throw new Error(
+      `${name} must be set (see scripts/run-e2e-full.sh) — hardcoded password fallbacks were removed (INV-M-003)`,
+    );
+  }
+  return v;
+}
+
 const BASE_URL = process.env.E2E_BASE_URL ?? "http://127.0.0.1:3010";
 const ADMIN_EMAIL = process.env.E2E_ADMIN_EMAIL ?? "ml-admin-002-local@example.com";
-const ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD ?? "MlAdmin002Test1";
+const ADMIN_PASSWORD = requireEnv("E2E_ADMIN_PASSWORD");
 const VIEWPORT = { width: 390, height: 844 };
 const OVERFLOW_TOLERANCE_PX = 5;
 

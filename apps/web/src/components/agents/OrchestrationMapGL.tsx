@@ -265,14 +265,17 @@ export default function OrchestrationMapGL({
     const animated = packets.length > 0 || auras.some((a) => a.live);
 
     // ---- draw loop --------------------------------------------------------
-    const clock = new THREE.Clock();
+    // Wall-clock elapsed time via performance.now() — THREE.Clock is
+    // deprecated (UI-W-01) and all uses here are periodic functions of t,
+    // so a plain monotonic origin is sufficient (no delta bookkeeping).
+    const timeOriginMs = performance.now();
     let raf = 0;
     let running = false;
     let visible = true;
     let onScreen = true;
 
     const draw = () => {
-      const t = clock.getElapsedTime();
+      const t = (performance.now() - timeOriginMs) / 1000;
       for (const p of packets) {
         const u = (t / PARTICLE_PERIOD_S + p.phase) % 1;
         const pt = p.curve.getPointAt(u);
@@ -297,7 +300,6 @@ export default function OrchestrationMapGL({
     const start = () => {
       if (running || !animated || !visible || !onScreen) return;
       running = true;
-      clock.getDelta();
       raf = requestAnimationFrame(tick);
     };
     const stop = () => {

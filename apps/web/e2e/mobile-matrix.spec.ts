@@ -39,9 +39,19 @@ const MIN_TAP_PX = 44;
 
 // Companion-stack coordinates for the admin describe — identical defaults to
 // ml-admin-002-mobile-overflow.spec.ts (fixture identities, not credentials).
+function requireEnv(name: string): string {
+  const v = process.env[name];
+  if (!v) {
+    throw new Error(
+      `${name} must be set (see scripts/run-e2e-full.sh) — hardcoded password fallbacks were removed (INV-M-003)`,
+    );
+  }
+  return v;
+}
+
 const ADMIN_BASE_URL = process.env.E2E_BASE_URL ?? "http://127.0.0.1:3010";
 const ADMIN_EMAIL = process.env.E2E_ADMIN_EMAIL ?? "ml-admin-002-local@example.com";
-const ADMIN_PASSWORD = process.env.E2E_ADMIN_PASSWORD ?? "MlAdmin002Test1";
+const ADMIN_PASSWORD = requireEnv("E2E_ADMIN_PASSWORD");
 
 const DASHBOARD_ROUTES: ReadonlyArray<{ route: string; sentinel: RegExp }> = [
   { route: "/dashboard", sentinel: /./ },

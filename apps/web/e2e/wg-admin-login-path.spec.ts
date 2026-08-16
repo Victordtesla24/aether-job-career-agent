@@ -34,10 +34,20 @@ import { test, expect } from "@playwright/test";
  * leaking an admin-specific denial.
  */
 
+function requireEnv(name: string): string {
+  const v = process.env[name];
+  if (!v) {
+    throw new Error(
+      `${name} must be set (see scripts/run-e2e-full.sh) — hardcoded password fallbacks were removed (INV-M-003)`,
+    );
+  }
+  return v;
+}
+
 const BASE_URL = process.env.WG_E2E_BASE_URL ?? "http://127.0.0.1:3095";
 const ADMIN_EMAIL = process.env.WG_E2E_ADMIN_EMAIL ?? "wg-admin-68075c7601@example.com";
 const USER_EMAIL = process.env.WG_E2E_USER_EMAIL ?? "wg-user-519a113ab2@example.com";
-const PASSWORD = process.env.WG_E2E_PASSWORD ?? "WgE2eTest1";
+const PASSWORD = requireEnv("WG_E2E_PASSWORD");
 
 test.use({ baseURL: BASE_URL, storageState: undefined });
 

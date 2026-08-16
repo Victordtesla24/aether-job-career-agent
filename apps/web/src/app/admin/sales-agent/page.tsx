@@ -7,7 +7,7 @@
  * agent now runs INSIDE this app (30-min systemd timer + admin "Run now"),
  * with its own AdminUser-gated API under /api/admin/sales-agent/*. Everything
  * shown here is a live database query — no estimates, no fabricated metrics;
- * reply rate honestly reads "not observable" until real sends exist.
+ * reply rate honestly reads "n/a — reply detection not yet implemented" (CLI-004).
  *
  * Compliance surfaced in the UI: LinkedIn items are DRAFTS ONLY (copy button,
  * never a post button — LinkedIn's Terms prohibit automated posting), the
@@ -444,7 +444,7 @@ export default function SalesAgentPage() {
           }
           note={
             overview && overview.replyRate === null
-              ? "not observable — no real sends yet"
+              ? "reply detection not yet implemented"
               : undefined
           }
         />
