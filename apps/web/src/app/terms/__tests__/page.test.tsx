@@ -155,11 +155,14 @@ describe("TermsPage", () => {
     expect(bodyText).not.toMatch(/\bUSA\b/);
   });
 
-  it("MV-terms-003: states an honest 'not yet published' contact instead of a nonexistent Settings/support channel when no support email is configured", () => {
+  it("MV-terms-003 (amended 2026-08-16): unset env falls back to the owner-declared brand support address", () => {
+    // Same contract change as the privacy-policy and not-found repins:
+    // lib/brand.ts now carries the owner-published support address, so a
+    // real mailto renders instead of 'not yet published'. Env still overrides.
     vi.stubEnv("AETHER_SUPPORT_EMAIL", "");
     render(<TermsPage />);
     const bodyText = document.body.textContent ?? "";
-    expect(bodyText).toMatch(/support contact address has not yet been published/i);
+    expect(bodyText).toMatch(/sarkar\.vikram@gmail\.com/i);
     expect(bodyText).not.toMatch(/reach us via the settings page/i);
     expect(bodyText).not.toMatch(/in-app support channel/i);
   });

@@ -246,7 +246,7 @@ const HOP = {
     kind: "reads",
     mechanism:
       "StoryRepository.list_by_user -> flattened title+tags+STAR+metrics text",
-    evidence: "apps/api/app/agents/tailor_agent.py:206,245",
+    evidence: "apps/api/app/agents/tailor_agent.py:257,296",
     discoveryEvidence: "apps/api/app/agents/tailor_agent.py:146-188",
     anchors: ["def build_story_evidence(", "stories = repo.list_by_user(user_id)"],
     status: "live",
@@ -257,7 +257,7 @@ const HOP = {
     kind: "feeds",
     mechanism:
       "story_evidence joined into evidence_extra and threaded to TailoringLoop.run",
-    evidence: "apps/api/app/agents/tailor_agent.py:726,738,767",
+    evidence: "apps/api/app/agents/tailor_agent.py:800,812,841",
     discoveryEvidence: "apps/api/app/agents/tailor_agent.py:546,556,573",
     anchors: [
       "story_evidence = build_story_evidence(",
@@ -309,7 +309,7 @@ const HOP = {
     kind: "writes",
     mechanism:
       "new tailored Resume version (raw_text regenerated from tailored bullets); raises NoChangesApplied when net_changes==0 so no billed no-op version is created",
-    evidence: "apps/api/app/agents/tailor_agent.py:809,816,858",
+    evidence: "apps/api/app/agents/tailor_agent.py:883,890,932",
     discoveryEvidence: "apps/api/app/agents/tailor_agent.py:611-620",
     anchors: [
       "raise NoChangesApplied(",
@@ -398,7 +398,7 @@ const HOP = {
     // (P1-A + B6 + D.524 + B1b + ML-STOPALL-001..004 + interim guards all
     // shift agents.py); anchors unchanged. The provenance re-anchor pass
     // revalidates every citation before the landing gates.
-    evidence: "apps/api/app/routers/agents.py:3907,3939",
+    evidence: "apps/api/app/routers/agents.py:3924,3956",
     discoveryEvidence: "apps/api/app/routers/agents.py:3380",
     anchors: [
       "def _pipeline_core(",
@@ -480,7 +480,7 @@ const HOP = {
     // honest-refusal check + its helper were inserted earlier in the file) —
     // re-verified against HEAD, same anchors, new line numbers.
     evidence:
-      "apps/api/app/agents/company_research_agent.py:53,183; narrative opt-in at apps/api/app/routers/agents.py:1802,2409",
+      "apps/api/app/agents/company_research_agent.py:53,183; narrative opt-in at apps/api/app/routers/agents.py:1819,2426",
     discoveryEvidence:
       "apps/api/app/agents/company_research_agent.py:53; narrative opt-in at apps/api/app/routers/agents.py:2020-2027",
     anchors: [
