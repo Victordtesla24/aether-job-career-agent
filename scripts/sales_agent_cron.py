@@ -53,6 +53,10 @@ def main() -> int:
         )
         return 1
     print(json.dumps(result, default=str))
+    # The structured payload is for machines; this one line is for the human
+    # reading the journal — a run of zeros must say why it is zero.
+    if result.get("explanation"):
+        print(f"[sales-agent-cron] {result['explanation']}")
     if result.get("ran") and result.get("errors"):
         # Partial errors are logged but the run itself completed — exit 0 so
         # systemd doesn't mark the unit failed for a single bad message.

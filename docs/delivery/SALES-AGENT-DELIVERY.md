@@ -44,7 +44,7 @@ A native, admin-only sales/growth agent living inside this repo and this VM, wit
 | **A. Auditable task definition (PARTIAL)** | Fixed. Everything is versioned in this repo: agent code, router, systemd units (`deploy/aether-sales-agent.*`), cron entrypoint. `git log` is the audit trail; `systemctl list-timers` shows the schedule; `GET /admin/sales-agent/health` exposes last-run state. No opaque external scheduler. |
 | **B. Spam Act compliance (FAIL)** | Fixed by construction — see §3. Consent ledger, immutable suppression table, concrete footer enforced at send time, synchronous unsubscribe handling. |
 | **C. Invented/harvested addresses (FAIL)** | Fixed by construction. `create_lead` requires consent type + evidence; sources restricted to `{inbound_email, existing_user, referral, manual_approved}`; the LLM is never given the ability to pick recipients. |
-| **D. LinkedIn draft-only (PARTIAL)** | Enforced in code: the LinkedIn path can only write `draft_queued` outreach rows (max 1 per 24 h); there is no LinkedIn credential, connector, or posting code anywhere in the repo. UI offers copy-to-clipboard only. |
+| **D. LinkedIn draft-only (PARTIAL)** | Enforced in code: the LinkedIn path can only write `draft_queued` outreach rows, at most `AETHER_SALES_LINKEDIN_DRAFTS_PER_WEEK` per rolling 7 days; the slot is claimed in the database (advisory-locked `reserved` row) BEFORE the model is called and given back if the draft fails, so two overlapping runs cannot both spend the same slot. There is no LinkedIn credential, connector, or posting code anywhere in the repo. UI offers copy-to-clipboard only. |
 | **E. Self-learning loop (FAIL)** | Honest scope reduction: no fake "learning" layer was built. Every run is an `AgentRun` row (`agentName='salesAgent'`) with structured output (counts, model, errors) — a real run log first; experimentation can be layered on measured outcomes later. |
 | **F. Daily executive summary (FAIL)** | Implemented: once-daily digest (UTC-gated via `AdminSetting salesAgent.lastDigestDate`) with real overview numbers, sent to the admin email in live mode, logged as `dry_run` in shadow mode. |
 | **G. Idempotency / duplicate sends (FAIL)** | Fixed at the **database** layer: partial unique indexes on `gmailThreadId` (WHERE outcome='sent') and `gmailMessageId`; `record_outreach` converts `UniqueViolation` into `DuplicateSendError`; processed inbound message ids are checked before handling; per-account watermarks prevent rescans. Covered by tests. |
@@ -60,6 +60,45 @@ Current `.env` flags (values, not secrets):
 AETHER_SALES_AGENT_ENABLED=true
 AETHER_SALES_AGENT_DRY_RUN=true    # shadow mode
 ```
+
+Optional tuning (defaults shown — unset is fine):
+
+```
+AETHER_SALES_BACKLOG_DAYS=90                 # how far back a NEVER-SEEN mailbox is scanned
+AETHER_SALES_TIE_MAX_RESULTS=500             # messages drained from ONE tied whole second per run
+AETHER_SALES_LINKEDIN_DRAFTS_PER_WEEK=2      # LinkedIn DRAFT budget per rolling 7 days (0 = off)
+AETHER_OPERATOR_TZ=Australia/Sydney          # timezone used in the run's plain-English explanation
+```
+
+- **Backlog:** an account with no stored watermark is scanned `AETHER_SALES_BACKLOG_DAYS`
+  back, 50 messages per run, walking older across successive runs until caught up. The
+  watermark only ever moves past mail that was really scanned, and each run reports
+  `accounts[].backlogRemaining` so "caught up" is a fact, not an assumption. Previously a
+  reconnected mailbox looked back only 24 hours and then jumped its watermark to *now*,
+  so every pre-connection message was invisible permanently.
+- **Same-second ties:** Gmail timestamps have whole-second resolution while the result cap
+  is per request, so one second can hold more messages than a page returns. The walk moves
+  below a second only after fetching that second in full (`AETHER_SALES_TIE_MAX_RESULTS`,
+  default 500 = Gmail's own list cap), which is what stops it from either stepping over
+  unscanned mail or wedging on a tie it cannot get past. More than the cap in a single
+  second is reported on the run (`accounts[].tieOverflow` plus an error line naming the
+  timestamp) — never silently dropped.
+- **Gmail boundary semantics are never assumed.** Google documents `after:`/`before:` by
+  example and never states whether either bound is inclusive, so every window query the
+  walk sends is widened by one second at each end (`after:{lo-1} before:{hi+1}` — a
+  superset of `[lo, hi]` under all four readings, and never the empty range that
+  `after:X before:X` is under three of them) and the exact window is enforced in Python.
+  The boundary drain additionally *verifies* itself: the page already proves at least one
+  message sits at that second, so a drain that does not return those known messages has
+  demonstrably not reached it. That case holds the window and is disclosed as
+  `accounts[].tieDrainUnverified` plus an error line — it is never read as "nothing more
+  is there", which is how a wrong boundary assumption would otherwise turn into silent
+  mail loss that looks like clean coverage in the run result.
+- **Classification:** the curated phrase lists are a fast path and remain authoritative —
+  an inbound *unsubscribe* is decided by phrases alone and never consults a model. Only a
+  message the phrases do not classify costs one structured LLM call (so a busy backlog run
+  can make up to 50 classification calls per account); an unavailable model degrades to the
+  phrase verdict and is counted as `classifierDegraded`, never guessed.
 
 - The agent code reads the flags from the process environment at **run time** — but the two entrypoints load `.env` differently:
   - **Timer job** (`scripts/sales_agent_cron.py`): reloads `.env` on every tick → picks up a flag flip on the next 30-min run with **no restart**.

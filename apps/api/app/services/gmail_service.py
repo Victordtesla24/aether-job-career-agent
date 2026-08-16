@@ -728,6 +728,14 @@ class GmailService:
                         # Additive (sales agent): the thread id is needed for
                         # reply threading + the DB send-idempotency gate.
                         "threadId": msg.get("threadId"),
+                        # Additive (sales agent backlog walk): Gmail's own
+                        # receive timestamp in ms. The sales agent pages a
+                        # months-deep inbox backlog by moving the scan
+                        # window's ceiling down to the oldest message it
+                        # actually scanned, which requires a trustworthy
+                        # per-message epoch — the ``Date`` header is
+                        # sender-supplied and can be absent or wrong.
+                        "internalDate": msg.get("internalDate"),
                         "from": _header(raw, "From"),
                         "subject": _header(raw, "Subject"),
                         "date": _header(raw, "Date"),

@@ -79,18 +79,20 @@ function OutcomeBadge({ outcome }: { outcome: string | null }) {
   const o = outcome ?? "unknown";
   // DS state law: ok green / info / warn copper / danger — gold is brand,
   // never a state; sapphire marks agent-drafted work; no-data is neutral.
-  const variant =
-    o === "sent"
-      ? "sa-badge-ok"
-      : o === "dry_run"
-        ? "sa-badge-info"
-        : o === "draft_queued"
-          ? "sa-badge-sapphire"
-          : o === "blocked" || o === "unsubscribed"
-            ? "sa-badge-warn"
-            : o === "error" || o === "bounced"
-              ? "sa-badge-danger"
-              : "sa-badge-neutral";
+  // `reserved` is a weekly LinkedIn draft slot claimed before the model was
+  // called — a real in-flight state, shown as such and never as a finished
+  // draft.
+  const variants: Record<string, string> = {
+    sent: "sa-badge-ok",
+    dry_run: "sa-badge-info",
+    reserved: "sa-badge-info",
+    draft_queued: "sa-badge-sapphire",
+    blocked: "sa-badge-warn",
+    unsubscribed: "sa-badge-warn",
+    error: "sa-badge-danger",
+    bounced: "sa-badge-danger",
+  };
+  const variant = variants[o] ?? "sa-badge-neutral";
   return <span className={`sa-badge ${variant}`}>{o}</span>;
 }
 
@@ -413,6 +415,14 @@ export default function SalesAgentPage() {
             <p className="font-medium" style={{ color: "var(--fg-1)" }}>
               Last manual run
             </p>
+            {runResult.explanation ? (
+              <p className="mt-1" style={{ color: "var(--fg-1)" }}>
+                {runResult.explanation}
+              </p>
+            ) : null}
+            {runResult.linkedinCadence?.reason ? (
+              <p className="mt-1">LinkedIn drafts: {runResult.linkedinCadence.reason}.</p>
+            ) : null}
             <pre className="mt-1 overflow-x-auto whitespace-pre-wrap">
               {JSON.stringify(runResult, null, 2)}
             </pre>
