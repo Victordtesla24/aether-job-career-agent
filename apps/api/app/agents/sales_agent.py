@@ -107,6 +107,38 @@ INTEREST_PHRASES = (
     "aether",
 )
 
+#: Local-part markers that identify an AUTOMATED / no-reply / notification
+#: sender. Inbound mail from such an address is never a real prospect signal —
+#: it must be skipped before classification so a bulk/notification message that
+#: happens to contain an interest phrase can never trigger an auto-reply. This
+#: closes the live incident where GitHub CI mail (``notifications@github.com``)
+#: was auto-replied to 19 times because ``INTEREST_PHRASES`` matched its body
+#: and nothing inspected the sender. Matched as a case-insensitive substring of
+#: the address local-part (the part before ``@``); the set is deliberately
+#: limited to unambiguous automation markers so genuine human prospects
+#: (``pat.prospect@…``, ``j.doe@…``) are never suppressed.
+AUTOMATED_SENDER_MARKERS = (
+    "noreply",
+    "no-reply",
+    "no_reply",
+    "donotreply",
+    "do-not-reply",
+    "do_not_reply",
+    "dont-reply",
+    "mailer-daemon",
+    "mailerdaemon",
+    "mail-daemon",
+    "postmaster",
+    "bounce",
+    "notifications",
+    "notification",
+    "notify",
+    "auto-reply",
+    "autoreply",
+    "automated",
+    "newsletter",
+)
+
 #: Free plan monthly run cap (mirrors the seeded Free plan) — used only to
 #: decide "near the cap", never to report usage.
 FREE_PLAN_RUN_CAP = 5
@@ -241,6 +273,18 @@ def _contains_any(text: str, phrases: tuple[str, ...]) -> bool:
     return any(p in text for p in phrases)
 
 
+def _is_automated_sender(sender_email: str) -> bool:
+    """True when ``sender_email`` is an automated / no-reply / notification
+    address that must never be engaged as an inbound sales signal. Matches an
+    :data:`AUTOMATED_SENDER_MARKERS` marker as a substring of the local-part
+    only (never the domain), so a normal address at, e.g., ``notify.com`` is
+    judged on its local-part alone."""
+    local = (sender_email or "").split("@", 1)[0].lower()
+    if not local:
+        return False
+    return any(marker in local for marker in AUTOMATED_SENDER_MARKERS)
+
+
 class SalesAgent:
     """One run of the sales pipeline. All collaborators injectable for tests."""
 
@@ -339,6 +383,13 @@ class SalesAgent:
                 continue
             if sender_email == account_email:
                 continue  # our own outbound mail
+            if _is_automated_sender(sender_email):
+                # Automated / no-reply / notification mail is never a prospect
+                # signal — skip before classification so a bulk message that
+                # happens to contain an interest phrase can never trigger an
+                # auto-reply (regression: 19 auto-replies to notifications@github.com).
+                result["inboundSkippedAutomated"] += 1
+                continue
             try:
                 msg = gmail.get_message_bodies(mid)
             except GmailError as exc:
@@ -1018,6 +1069,7 @@ class SalesAgent:
             "dryRun": dry_run,
             "liveScope": live_scope,
             "inboundScanned": 0,
+            "inboundSkippedAutomated": 0,
             "leadsCreated": 0,
             "sent": 0,
             "dryRunLogged": 0,
