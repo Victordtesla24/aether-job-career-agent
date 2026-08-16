@@ -100,6 +100,71 @@ _STANDARD_FIELDS: dict[str, str] = {
     "website": "website",
 }
 
+#: Label-normalised fallback for the SAME standard identity fields, used when a
+#: form keys its inputs by an opaque machine name (Ashby uses a UUID like
+#: ``39ebb162-1514-…`` whose ``name`` matches nothing in ``_STANDARD_FIELDS``)
+#: but shows a human LABEL ("LinkedIn", "Preferred First Name"). Strictly a
+#: whitelist of UNAMBIGUOUS standard identity labels — never an employer's
+#: free-text question — so the guarantee in :func:`_answer_for` (never guess an
+#: answer from words that merely look similar) is preserved. Verified gap: the
+#: profile HELD a LinkedIn URL and preferred name, but the plan raised
+#: ``unknown_required_question`` because only the UUID name was consulted.
+_LABEL_STANDARD_FIELDS: dict[str, str] = {
+    "name": "name",
+    "full name": "name",
+    "legal name": "name",
+    "full legal name": "name",
+    "first name": "first_name",
+    "given name": "first_name",
+    "given names": "first_name",
+    "preferred first name": "preferred_name",
+    "preferred name": "preferred_name",
+    "last name": "last_name",
+    "surname": "last_name",
+    "family name": "last_name",
+    "preferred last name": "last_name",
+    "email": "email",
+    "email address": "email",
+    "e mail": "email",
+    "phone": "phone",
+    "phone number": "phone",
+    "mobile": "phone",
+    "mobile number": "phone",
+    "mobile phone": "phone",
+    "contact number": "phone",
+    "telephone": "phone",
+    "location": "location",
+    "city": "location",
+    "current location": "location",
+    "current city": "location",
+    "country": "country",
+    "linkedin": "linkedin",
+    "linkedin profile": "linkedin",
+    "linkedin url": "linkedin",
+    "linkedin profile url": "linkedin",
+    "website": "website",
+    "personal website": "website",
+    "portfolio": "website",
+    "portfolio url": "website",
+    "resume": "resume",
+    "cv": "resume",
+    "resume/cv": "resume",
+    "resume / cv": "resume",
+    "cover letter": "cover_letter",
+}
+
+
+def _normalize_field_label(raw: Any) -> str:
+    """Lower, drop parentheticals/required markers/punctuation, collapse spaces.
+
+    ``"LinkedIn Profile URL *"`` → ``"linkedin profile url"``; ``"Resume/CV"`` →
+    ``"resume/cv"`` (the slash is kept because it is meaningful in that label)."""
+    text = str(raw or "").lower()
+    text = re.sub(r"\(.*?\)", " ", text)  # "(optional)", "(if applicable)"
+    text = text.replace("*", " ")
+    text = re.sub(r"[^a-z0-9/ ]+", " ", text)  # keep the resume/cv slash
+    return re.sub(r"\s+", " ", text).strip()
+
 
 class ManualStepRequired(Exception):
     """A human has to finish this one — and here is exactly why.
@@ -521,6 +586,11 @@ def _answer_for(field: dict[str, Any], profile: dict[str, Any]) -> Any:
     if explicit is not None:
         return explicit
     key = _STANDARD_FIELDS.get(str(field["name"]).lower())
+    if not key:
+        # Fallback: an opaque machine name (Ashby UUID) but a human LABEL that
+        # names a standard identity field. Whitelist-only, so a free-text
+        # employer question never resolves here.
+        key = _LABEL_STANDARD_FIELDS.get(_normalize_field_label(field.get("label")))
     if key:
         return _standard_answer(key, profile)
     kind = field.get("kind")
@@ -955,6 +1025,51 @@ def _first_present(page: Any, selectors: list[str]) -> Any | None:
     return None
 
 
+def _match_choice_option(answer: str, options: list[str]) -> str | None:
+    """The option label a radio/checkbox answer selects, or ``None``.
+
+    Gives choice widgets the same tolerance the combobox path already has for
+    widgets whose option text differs from the user's wording — a banked
+    ``"Yes"`` onto ``"Yes, I'm based in Australia"``, ``"Australian Citizen"``
+    onto ``"I am an Australian/New Zealand Citizen"``. Order: exact, then a
+    yes/no head match, then a one-way prefix, then a >=1-shared-token STRICT
+    DOMINANCE rule. A tie or no overlap returns ``None`` (recorded as unfilled)
+    rather than guessing between an employer's options.
+    """
+    if not options:
+        return None
+
+    def _n(text: str) -> str:
+        return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9 ]+", " ", str(text).lower())).strip()
+
+    ans = _n(answer)
+    if not ans:
+        return None
+    norm = [(opt, _n(opt)) for opt in options]
+    for opt, no in norm:  # exact
+        if no == ans:
+            return opt
+    ans_head = ans.split(" ", 1)[0]
+    if ans_head in ("yes", "no"):  # yes/no question — head word decides
+        heads = [opt for opt, no in norm if no.split(" ", 1)[0] == ans_head]
+        if len(heads) == 1:
+            return heads[0]
+    prefix = [opt for opt, no in norm if no and (no.startswith(ans) or ans.startswith(no))]
+    if len(prefix) == 1:
+        return prefix[0]
+    ans_tokens = {t for t in ans.split() if len(t) > 1}
+    best, best_score, second = None, 0, 0
+    for opt, no in norm:
+        score = len({t for t in no.split() if len(t) > 1} & ans_tokens)
+        if score > best_score:
+            best, second, best_score = opt, best_score, score
+        elif score > second:
+            second = score
+    if best is not None and best_score >= 1 and best_score > second:
+        return best
+    return None
+
+
 def _fill_value(page: Any, field: dict[str, Any], value: Any, documents: dict[str, str]) -> bool:
     """Type one planned answer into the real DOM. ``True`` iff it landed.
 
@@ -997,6 +1112,20 @@ def _fill_value(page: Any, field: dict[str, Any], value: Any, documents: dict[st
         candidates = [f'{scope} >> text="{text_value}"'] if scope else []
         candidates.append(f'label:text-is("{text_value}")')
         target = _first_present(page, candidates)
+        if target is None:
+            # Option-aware fuzzy match against the parsed choice labels, so a
+            # banked "Yes"/"Australian Citizen" lands on the widget's own
+            # verbose option instead of leaving a required yes/no unfilled.
+            matched = _match_choice_option(text_value, field.get("options") or [])
+            if matched:
+                esc = matched.replace('"', '\\"')
+                fuzzy = [f'{scope} >> text="{esc}"'] if scope else []
+                fuzzy += [
+                    f'label:text-is("{esc}")',
+                    f'label:has-text("{esc}")',
+                    f'text="{esc}"',
+                ]
+                target = _first_present(page, fuzzy)
         if target is None:
             return False
         try:
