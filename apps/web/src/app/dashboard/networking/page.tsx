@@ -34,6 +34,7 @@ import {
 } from "../../../lib/api/workspaces";
 import { STAGE_ACCENT, buildPipelineColumns, formatOutreachKind, formatWhen, initials, totalContacts } from "./lib";
 import { useRealtimeResources } from "../../../hooks/useRealtime";
+import { importGmailContacts, importLinkedInConnections } from "../../../lib/api/networking";
 
 const EMPTY_FORM = { name: "", role: "", company: "" };
 
@@ -41,6 +42,12 @@ export default function NetworkingPage() {
   const [data, setData] = useState<NetworkingSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
+  // W-NET-1: owner-initiated contact importers (Gmail correspondence /
+  // LinkedIn export). One shared busy flag so the two can't race each other;
+  // the notice reports the server's real counts, never a summary guess.
+  const [importing, setImporting] = useState<"gmail" | "linkedin" | null>(null);
+  const [importNotice, setImportNotice] = useState<string | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
   const [form, setForm] = useState(EMPTY_FORM);
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -187,15 +194,92 @@ export default function NetworkingPage() {
           <h1 className="text-2xl font-bold">Networking</h1>
           <p className="text-sm text-aether-muted">Recruiter &amp; Referral CRM — warm intros beat cold applies.</p>
         </div>
-        <button
-          type="button"
-          data-testid="add-contact-btn"
-          onClick={() => setShowAdd(true)}
-          className="rounded-xl bg-aether-coral px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
-        >
-          + Add Contact
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            data-testid="import-gmail-contacts-btn"
+            disabled={importing !== null}
+            onClick={async () => {
+              setImporting("gmail");
+              setImportNotice(null);
+              setImportError(null);
+              try {
+                const r = await importGmailContacts();
+                setImportNotice(
+                  `Gmail import: ${r.contactsCreated} contact(s) created, ` +
+                    `${r.duplicates} duplicate(s) skipped, ${r.suppressed} suppressed, ` +
+                    `${r.ignored} non-professional sender(s) ignored.`,
+                );
+                loadSummary();
+              } catch (e) {
+                setImportError(e instanceof Error ? e.message : "Gmail import failed.");
+              } finally {
+                setImporting(null);
+              }
+            }}
+            className="rounded-xl border border-white/15 px-3 py-2 text-sm font-semibold text-aether-muted hover:border-white/30 hover:text-white disabled:opacity-50"
+          >
+            <i className="fa-solid fa-envelope mr-2" aria-hidden="true" />
+            {importing === "gmail" ? "Importing…" : "Import from Gmail"}
+          </button>
+          <label
+            data-testid="import-linkedin-contacts-label"
+            className={`cursor-pointer rounded-xl border border-white/15 px-3 py-2 text-sm font-semibold text-aether-muted hover:border-white/30 hover:text-white ${
+              importing !== null ? "pointer-events-none opacity-50" : ""
+            }`}
+          >
+            <i className="fa-brands fa-linkedin mr-2" aria-hidden="true" />
+            {importing === "linkedin" ? "Importing…" : "Import LinkedIn export"}
+            <input
+              type="file"
+              accept=".zip,.csv"
+              className="hidden"
+              data-testid="import-linkedin-contacts-input"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                e.target.value = "";
+                if (!file) return;
+                setImporting("linkedin");
+                setImportNotice(null);
+                setImportError(null);
+                try {
+                  const r = await importLinkedInConnections(file);
+                  setImportNotice(
+                    `LinkedIn import: ${r.contactsCreated} contact(s) created, ` +
+                      `${r.duplicates} duplicate(s) skipped, ${r.suppressed} suppressed.`,
+                  );
+                  loadSummary();
+                } catch (err) {
+                  setImportError(
+                    err instanceof Error ? err.message : "LinkedIn import failed.",
+                  );
+                } finally {
+                  setImporting(null);
+                }
+              }}
+            />
+          </label>
+          <button
+            type="button"
+            data-testid="add-contact-btn"
+            onClick={() => setShowAdd(true)}
+            className="rounded-xl bg-aether-coral px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
+          >
+            + Add Contact
+          </button>
+        </div>
       </header>
+
+      {importNotice ? (
+        <p data-testid="import-notice" className="text-sm text-aether-green">
+          {importNotice}
+        </p>
+      ) : null}
+      {importError ? (
+        <p data-testid="import-error" className="text-sm text-red-300">
+          {importError}
+        </p>
+      ) : null}
 
       {isEmpty ? (
         <div className="bg-surface-1 rounded-[14px] border border-white/10 p-12 text-center" data-testid="networking-empty-state">
