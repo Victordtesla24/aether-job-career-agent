@@ -32,6 +32,7 @@ import logging
 import os
 import random
 import re
+import threading
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -1424,6 +1425,81 @@ def _active_quota_block(user_id: str, provider: str) -> "dict[str, Any] | None":
 # CRITICAL-3 — retry backoff (exponential, full jitter) + circuit breaker.
 # --------------------------------------------------------------------------
 
+# --------------------------------------------------------------------------
+# RT-005 — per-model short cooldown after a SUSTAINED run of ambiguous 429s.
+#
+# Live incident (2026-08-16 14:15-14:25Z): the subscription credential served
+# sustained HTTP 429s whose body carried no quota phrase and no long
+# retry-after, so ``_anthropic_429_is_subscription_quota`` (correctly,
+# conservatively) classified every one as transient — and the chain paid a
+# doomed live call + backoff on EVERY attempt for over ten minutes. This
+# tracker adds the missing middle: after ``AETHER_MODEL_429_STREAK`` (default
+# 4) consecutive 429s for one model with no success in between, that model
+# cools for ``AETHER_MODEL_429_COOLDOWN_SECONDS`` (default 900 — 15 minutes,
+# deliberately SHORT so a wrong guess can never pause anyone for hours the
+# way the quota block would). While cooling, an attempt raises the same
+# 429-shaped error the live call would have produced — through the IDENTICAL
+# handling path (operator-chain rules, user-chain rules, fallback staging,
+# disclosure) — just without the network call or the pointless backoff sleep.
+# A success for the model clears its streak. In-process state only: each
+# api/worker process learns independently, which is exactly the scope a
+# burst-limiter needs (no schema, no cross-process coordination to go wrong).
+# --------------------------------------------------------------------------
+
+_RATE_LIMIT_STREAKS: dict[str, dict[str, float]] = {}
+_RATE_LIMIT_STREAKS_LOCK = threading.Lock()
+
+
+def get_model_429_streak_threshold() -> int:
+    """Consecutive 429s before a model cools (``AETHER_MODEL_429_STREAK``)."""
+    try:
+        n = int(os.environ.get("AETHER_MODEL_429_STREAK", "4"))
+    except ValueError:
+        return 4
+    return max(2, n)
+
+
+def get_model_429_cooldown_seconds() -> float:
+    """Cooldown length (``AETHER_MODEL_429_COOLDOWN_SECONDS``, default 900)."""
+    try:
+        s = float(os.environ.get("AETHER_MODEL_429_COOLDOWN_SECONDS", "900"))
+    except ValueError:
+        return 900.0
+    return max(30.0, s)
+
+
+def _exc_is_http_429(exc: BaseException) -> bool:
+    return "HTTP 429" in str(exc)
+
+
+def _note_model_429(model: str) -> None:
+    """Record one real 429 for ``model``; open its cooldown at the threshold."""
+    now = time.monotonic()
+    with _RATE_LIMIT_STREAKS_LOCK:
+        entry = _RATE_LIMIT_STREAKS.setdefault(model, {"count": 0.0, "cooled_until": 0.0})
+        entry["count"] += 1
+        if entry["count"] >= get_model_429_streak_threshold() and entry["cooled_until"] <= now:
+            entry["cooled_until"] = now + get_model_429_cooldown_seconds()
+            logger.warning(
+                "model %s entered a %.0fs rate-limit cooldown after %d consecutive "
+                "429s — attempts will fail fast (no live call) until it expires",
+                model, get_model_429_cooldown_seconds(), int(entry["count"]),
+            )
+
+
+def _clear_model_429(model: str) -> None:
+    with _RATE_LIMIT_STREAKS_LOCK:
+        _RATE_LIMIT_STREAKS.pop(model, None)
+
+
+def _model_cooling_seconds_left(model: str) -> float:
+    with _RATE_LIMIT_STREAKS_LOCK:
+        entry = _RATE_LIMIT_STREAKS.get(model)
+        if not entry:
+            return 0.0
+        return max(0.0, entry["cooled_until"] - time.monotonic())
+
+
 def get_llm_retry_backoff_base_seconds() -> float:
     """Base delay of the exponential backoff between RETRYABLE live attempts.
 
@@ -2753,6 +2829,19 @@ class LLMClient:
                         if attempt_model in free_chain_models
                         else {}
                     )
+                    # RT-005: a model in an active rate-limit cooldown fails
+                    # fast with the SAME 429-shaped error a live call would
+                    # produce, through the identical handling below — minus
+                    # the doomed network call and the pointless backoff.
+                    cooling_left = _model_cooling_seconds_left(attempt_model)
+                    if cooling_left > 0:
+                        cooling_exc = RuntimeError(
+                            f"LLM provider HTTP 429 (cooling): model "
+                            f"{attempt_model} is rate-limited; cooldown ends "
+                            f"in {cooling_left:.0f}s"
+                        )
+                        cooling_exc._aether_cooling_skip = True  # type: ignore[attr-defined]
+                        raise cooling_exc
                     content = self._call_live(
                         system, user, model=attempt_model, temperature=temperature,
                         max_seconds=attempt_seconds, **shaping,
@@ -2792,6 +2881,12 @@ class LLMClient:
                         "LLM live call failed (model=%s, prompt=%s): %s",
                         attempt_model, prompt_name, exc,
                     )
+                    # RT-005: count only REAL 429s toward the cooldown streak —
+                    # a synthetic cooling skip must never extend its own block.
+                    if _exc_is_http_429(exc) and not getattr(
+                        exc, "_aether_cooling_skip", False
+                    ):
+                        _note_model_429(attempt_model)
                     # ADR-AGI-3 Decision 3: the OPERATOR chain advances on
                     # EXHAUSTION SIGNALS ONLY. A 404/5xx/timeout is a failure OF
                     # the operator's chosen model, and walking to the next
@@ -2821,6 +2916,9 @@ class LLMClient:
                     if (
                         classify_llm_failure(exc) == LLM_FAILURE_RETRYABLE
                         and idx + 1 < len(chain)
+                        # RT-005: no wait after a synthetic cooling skip — the
+                        # answer was known without a network call.
+                        and not getattr(exc, "_aether_cooling_skip", False)
                     ):
                         delay = _backoff_delay(retry_attempt)
                         # Never spend budget a real attempt still needs.
@@ -2850,6 +2948,8 @@ class LLMClient:
                 # the primary was abandoned AND that something else worked.
                 if idx > 0:
                     _promote_fallback_reason()
+                # RT-005: a real success ends the model's 429 streak.
+                _clear_model_429(attempt_model)
                 # Record only if missing so curated replay fixtures are
                 # never clobbered by variable live output.
                 if not self._fixture_path(prompt_name, fixture_key).is_file():
