@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+import { COPYRIGHT_YEAR, PRODUCT_NAME, SUPPORT_EMAIL } from "../lib/brand";
+
 /**
  * Shared legal-links row for public, unauthenticated pages — MV-terms-001 /
  * MV-privacy-policy-001. Before this, /login, /signup, and /pricing had no
@@ -23,7 +25,14 @@ export default function PublicFooter() {
         Terms
       </Link>
       <span aria-hidden="true">·</span>
-      <span>&copy; 2026 Aether</span>
+      <a href={`mailto:${SUPPORT_EMAIL}`} className="hover:text-white transition">
+        Contact support
+      </a>
+      <span aria-hidden="true">·</span>
+      <span>
+        &copy; {COPYRIGHT_YEAR} {PRODUCT_NAME} · A product of V<sup>2</sup> Group Pty. Ltd. ·
+        All rights reserved.
+      </span>
     </footer>
   );
 }

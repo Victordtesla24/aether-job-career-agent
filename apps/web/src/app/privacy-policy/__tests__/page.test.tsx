@@ -85,11 +85,15 @@ describe("PrivacyPolicyPage", () => {
     expect(bodyText).toMatch(/OAIC|Office of the Australian Information Commissioner/);
   });
 
-  it("MV-privacy-policy-003: states an honest 'not yet published' contact instead of a nonexistent Settings/support channel when no support email is configured", () => {
+  it("MV-privacy-policy-003 (amended 2026-08-16): unset env falls back to the owner-declared brand support address", () => {
+    // Contract change (owner directive): lib/brand.ts now carries the
+    // owner-published support address, so 'not yet published' is no longer
+    // the honest state — a real mailto is. Env still overrides (next test).
     vi.stubEnv("AETHER_SUPPORT_EMAIL", "");
     render(<PrivacyPolicyPage />);
+    const mailLink = screen.getByRole("link", { name: /sarkar\.vikram@gmail\.com/i });
+    expect(mailLink.getAttribute("href")).toBe("mailto:sarkar.vikram@gmail.com");
     const bodyText = document.body.textContent ?? "";
-    expect(bodyText).toMatch(/support contact address has not yet been published/i);
     expect(bodyText).not.toMatch(/reach us via the settings page/i);
     expect(bodyText).not.toMatch(/in-app support channel/i);
   });

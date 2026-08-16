@@ -65,6 +65,7 @@ import { LayoutGroup, motion } from "framer-motion";
 import { useEffect, useState } from "react";
 
 import { useRealtimeSnapshot } from "../../hooks/useRealtime";
+import { COPYRIGHT_YEAR, PRODUCT_NAME } from "../../lib/brand";
 import { agentPulse, type AgentPulse } from "../../lib/agent-run-health";
 import { fetchAgents } from "../../lib/api/agents";
 import { fetchSubscription, type SubscriptionState } from "../../lib/api/billing";
@@ -484,7 +485,10 @@ export function Rail({
           </>
         ) : null}
         <span>·</span>
-        <span>© 2026 Aether</span>
+        <span>
+          © {COPYRIGHT_YEAR} {PRODUCT_NAME} · A product of V<sup>2</sup> Group Pty. Ltd. · All
+          rights reserved.
+        </span>
       </div>
     </motion.aside>
   );
