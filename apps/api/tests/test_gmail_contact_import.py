@@ -196,3 +196,40 @@ def test_import_refuses_candidate_without_gmail_thread_provenance(
 def test_import_requires_authenticated_owner(client):
     response = client.post("/networking/gmail/import-contacts")
     assert response.status_code == 401
+
+
+def test_import_without_gmail_connected_is_409_not_500(
+    client, auth_headers, monkeypatch
+):
+    """F5-008: a user who never connected Gmail must get an honest 409 (client
+    condition, same contract as approvals/workspaces), not a 500."""
+    from app.services.gmail_service import GmailNotConnectedError
+
+    class NotConnectedGmail:
+        def list_message_headers(self, query=None, max_results=100):  # noqa: ANN001
+            raise GmailNotConnectedError("Gmail is not connected for this user")
+
+    _install_gmail(monkeypatch, NotConnectedGmail())
+
+    response = client.post("/networking/gmail/import-contacts", headers=auth_headers)
+
+    assert response.status_code == 409, response.text
+    detail = response.json()["detail"]
+    assert detail["error"] == "gmail_not_connected"
+    assert "Nothing was imported" in detail["message"]
+
+
+def test_import_gmail_outage_is_502_not_500(client, auth_headers, monkeypatch):
+    """F5-008: a transient Gmail failure maps to 502 with an honest message."""
+    from app.services.gmail_service import GmailError
+
+    class BrokenGmail:
+        def list_message_headers(self, query=None, max_results=100):  # noqa: ANN001
+            raise GmailError("backend unavailable")
+
+    _install_gmail(monkeypatch, BrokenGmail())
+
+    response = client.post("/networking/gmail/import-contacts", headers=auth_headers)
+
+    assert response.status_code == 502, response.text
+    assert response.json()["detail"]["error"] == "gmail_unavailable"

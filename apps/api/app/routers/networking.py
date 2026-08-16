@@ -70,7 +70,12 @@ def import_gmail_contacts(current_user: CurrentUser) -> dict[str, int]:
     message/thread identifiers form the existing SalesLead consent provenance;
     suppressed senders are neither saved nor handed off. Nothing is sent.
     """
-    from app.services.gmail_service import GmailService
+    from app.services.gmail_service import (
+        GmailAuthError,
+        GmailError,
+        GmailNotConnectedError,
+        GmailService,
+    )
 
     uid = current_user["id"]
     gmail = GmailService(uid)
@@ -83,8 +88,41 @@ def import_gmail_contacts(current_user: CurrentUser) -> dict[str, int]:
         "suppressed": 0,
         "ignored": 0,
     }
-    for header in gmail.list_message_headers(max_results=100):
-        message = gmail.get_message_bodies(header["id"])
+    # F5-008: a user without Gmail connected (or with expired authorization)
+    # is a normal client condition, not a server fault — map it to 409 exactly
+    # like the other Gmail-backed routes (approvals, workspaces) instead of
+    # letting GmailNotConnectedError escape as a 500.
+    try:
+        headers = gmail.list_message_headers(max_results=100)
+    except (GmailAuthError, GmailNotConnectedError):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail={
+                "error": "gmail_not_connected",
+                "message": (
+                    "No Gmail account connected (or authorization expired) — "
+                    "connect Gmail to import contacts. Nothing was imported."
+                ),
+            },
+        ) from None
+    except GmailError:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            detail={
+                "error": "gmail_unavailable",
+                "message": (
+                    "Gmail could not be reached right now — nothing was "
+                    "imported. Please try again."
+                ),
+            },
+        ) from None
+    for header in headers:
+        try:
+            message = gmail.get_message_bodies(header["id"])
+        except GmailError:
+            # One unreadable message must not fail the whole import.
+            counts["ignored"] += 1
+            continue
         candidate = _professional_sender(message)
         if candidate is None:
             counts["ignored"] += 1
