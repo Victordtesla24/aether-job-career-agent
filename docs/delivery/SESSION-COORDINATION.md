@@ -890,3 +890,15 @@ tsc 0, targeted vitest 53/53; GitHub CI run 31930523543 must be GREEN on a3e1fe5
   /home/ubuntu/fable5-review/waveb-prod-probe.mjs ready (fixed: import @playwright/test, domcontentloaded);
   re-run with LOGIN_EMAIL/LOGIN_PASSWORD from repo .env, OUT_PATH to wave-b dir. R1.4 ledger box NOT yet
   flipped pending that artifact. Waves C/D/E not started.
+
+## DEPLOY WINDOW CLAIM — 2026-08-16T07:1xZ (Session DA: Waves C+D)
+
+**By:** Session DA (DeepAgent orchestrator). **Lock:** flock /tmp/aether-deploy.lock.
+**Scope:** deploy main@547cd842 — ships FOUR undeployed commits on top of deployed a3e1fe52:
+- de8ae1ff (Session CLI: submission-agent work already merged to main — shipping it is intended; worker restart picks it up),
+- ce7a8858 (Wave C / R3.1: Sales Agent promo self-authoring — Stripe coupon+promotion code created INACTIVE behind review gate; idempotent; honest errors when Stripe unconfigured; web admin surface shows promo counts),
+- 3b74e578 (ruff I001 lint fix),
+- 547cd842 (Wave D / R4: POST /networking/linkedin/import-contacts — Connections.csv → Contact + existing_relationship lead hand-off; zero-network proven; B7 zip reader reused via backward-compatible filenames param).
+**Recipe:** full Complete Deploy Recipe per DEPLOYMENT-RUNBOOK (install, clean-env build, verify-web-build gate, restart api/web/worker, health + BUILD_ID verify, sent-count 20 check).
+**Gates:** CI 31932744294 GREEN on 547cd842 (and 31932263064 on 3b74e578); local: sales-agent suite 79/79, networking suites 24/24, ruff+mypy clean, tsc 0.
+**Auto-deploy timer:** verified inactive at claim time.
