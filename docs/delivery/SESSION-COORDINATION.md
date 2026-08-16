@@ -880,3 +880,13 @@ tsc 0, targeted vitest 53/53; GitHub CI run 31930523543 must be GREEN on a3e1fe5
 **CLI-SUB-001 (ROOT CAUSE of prod auto-apply = 1/687):** `apply_sweep_user` (async arq job) ran `sweep_pending_transmissions` — which drives a REAL browser via Playwright SYNC API — directly on the worker event loop. Sync Playwright refuses to run in a live loop → bare `Error` → every browser submission failed as `ApplyExecutorTransportError("Could not open the application page (Error)")`. FIX mirrors the working `board_sweep_user`: `await asyncio.to_thread(sweep_pending_transmissions, ...)`. RED→GREEN test + regression green; ruff/mypy clean.
 **OPS (owner directive, autonomous submission):** enabled `AETHER_APPLY_SWEEP_ENABLED=true` + `AETHER_APPLY_SWEEP_BATCH=25` in prod .env (append-only, credentials untouched, verified); worker restarted under deploy lock (apps/api clean at each restart; peer apps/web WIP never shipped by the worker). 7-day stale-approval guard kept (correctly reconfirms ~83 old approvals). 306 recent approvals draining.
 >>>>>>> bd316a51 (CLI-SUB-001: run apply sweep off the event loop (asyncio.to_thread) so sync-Playwright browser submissions work - root cause of prod auto-apply 1/687; mirrors board_sweep_user; RED->GREEN test)
+
+### 2026-08-16 06:1xZ — Session DA: DEPLOY WINDOW RELEASED (Wave B residuals)
+- Deployed main@a3e1fe52 (S-UI-B4-MOBILE Wave B residual fixes). New BUILD_ID ts9OVkqLJijdMGdlojOWP;
+  services restarted 06:08:07Z; verify-web-build PASS; /api/health 200 ok; sales sent-count 20/20 unchanged.
+- Gates: CI run 31930523543 GREEN on a3e1fe52; local e2e mobile-matrix 27/27 GREEN
+  (uat/reports/evidence/market-perf/wave-b/mobile-matrix-GREEN.log); tsc 0; targeted vitest 53/53.
+- OUTSTANDING: prod-side probe artifact (mobile-matrix-report-GREEN.json) not yet captured — probe script
+  /home/ubuntu/fable5-review/waveb-prod-probe.mjs ready (fixed: import @playwright/test, domcontentloaded);
+  re-run with LOGIN_EMAIL/LOGIN_PASSWORD from repo .env, OUT_PATH to wave-b dir. R1.4 ledger box NOT yet
+  flipped pending that artifact. Waves C/D/E not started.
