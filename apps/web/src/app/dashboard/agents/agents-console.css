@@ -597,3 +597,29 @@
     inset 0 1px 0 0 rgba(255, 255, 255, 0.1),
     0 0 0 2px rgba(255, 255, 255, 0.22);
 }
+
+
+
+/* ── MOBILE LEGIBILITY FLOOR (S-UI-B4-MOBILE / R1.4) ──────────────────────
+ * Same contract as the globals.css floor: the console's micro-type roles
+ * (.ag-subline 11.5px, .ag-eyebrow 10.5px, .ag-stat-label 10px,
+ * .ag-stage-label 9.5px, .ag-table thead th 9.5px, .ag-disc-caret 8px) are
+ * APPROVED desktop sizes but violate the 12px mobile floor enforced by
+ * apps/web/e2e/mobile-matrix.spec.ts. Below 768px they clamp to exactly
+ * 12px; desktop output is byte-identical. `!important` for the same reason
+ * as in globals.css. The orchestration map's SVG <text> labels use fontSize
+ * presentation attributes (9.5px) that no utility-class floor can reach, so
+ * they are clamped here via the element selector — CSS font-size wins over
+ * a presentation attribute per the SVG cascade rules.
+ */
+@media (max-width: 767px) {
+  .ag-subline,
+  .ag-eyebrow,
+  .ag-stat-label,
+  .ag-stage-label,
+  .ag-table thead th,
+  .ag-disc-caret,
+  .ag-console svg text {
+    font-size: 12px !important;
+  }
+}

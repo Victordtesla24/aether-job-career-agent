@@ -606,8 +606,11 @@ html {
   .type-mono-micro,
   .text-\[8px\],
   .text-\[9px\],
+  .text-\[9\.5px\],
   .text-\[10px\],
-  .text-\[11px\] {
+  .text-\[10\.5px\],
+  .text-\[11px\],
+  .text-\[11\.5px\] {
     font-size: 12px !important;
   }
 }

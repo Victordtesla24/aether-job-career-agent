@@ -482,36 +482,41 @@ export default function MarketPulse() {
             Jobs by Source
           </h3>
           <div className="flex items-center gap-5">
-            <svg viewBox="0 0 100 100" className="h-32 w-32 -rotate-90" role="img" aria-label="Jobs by source">
-              {donutSegments(data.sources).map((s) => (
-                <circle
-                  key={s.label}
-                  cx="50"
-                  cy="50"
-                  r="40"
-                  fill="none"
-                  stroke={s.color}
-                  strokeWidth="12"
-                  strokeDasharray={s.dasharray}
-                  strokeDashoffset={s.dashoffset}
-                />
-              ))}
-              <text
-                x="50"
-                y="46"
-                textAnchor="middle"
-                transform="rotate(90 50 50)"
-                className="font-mono tabular-nums"
-                fill="#F5F1E8"
-                fontSize="16"
-                fontWeight="700"
-              >
-                {data.sourcesTotal}
-              </text>
-              <text x="50" y="60" textAnchor="middle" transform="rotate(90 50 50)" fill="rgba(245,241,232,0.46)" fontSize="7">
-                {data.sourcesLabel}
-              </text>
-            </svg>
+            {/* S-UI-B4-MOBILE / R1.4: the donut's caption used to be a 7px SVG
+                <text> — invisible on desktop review but a hard violation of the
+                12px mobile legibility floor (SVG font-size attributes ignore
+                the globals.css floor). The label now renders as HTML below the
+                ring at text-xs (12px), and the total re-centers in the ring. */}
+            <div className="flex flex-col items-center gap-1.5">
+              <svg viewBox="0 0 100 100" className="h-32 w-32 -rotate-90" role="img" aria-label="Jobs by source">
+                {donutSegments(data.sources).map((s) => (
+                  <circle
+                    key={s.label}
+                    cx="50"
+                    cy="50"
+                    r="40"
+                    fill="none"
+                    stroke={s.color}
+                    strokeWidth="12"
+                    strokeDasharray={s.dasharray}
+                    strokeDashoffset={s.dashoffset}
+                  />
+                ))}
+                <text
+                  x="50"
+                  y="55"
+                  textAnchor="middle"
+                  transform="rotate(90 50 50)"
+                  className="font-mono tabular-nums"
+                  fill="#F5F1E8"
+                  fontSize="16"
+                  fontWeight="700"
+                >
+                  {data.sourcesTotal}
+                </text>
+              </svg>
+              <span className="text-xs text-aether-muted-dim">{data.sourcesLabel}</span>
+            </div>
             <div className="space-y-2">
               {data.sources.map((s) => (
                 <div key={s.label} className="flex items-center gap-2 text-xs">
