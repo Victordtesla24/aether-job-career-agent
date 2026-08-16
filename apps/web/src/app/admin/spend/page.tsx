@@ -10,6 +10,7 @@ import { useEffect, useState } from "react";
 
 import { AdminPageHeader } from "../../../components/admin/admin-shell";
 import { fetchAdminSpend, formatUsd, type AdminSpend } from "../../../lib/api/admin";
+import { DecisionGuidance } from "../../../components/ui/decision-guidance";
 
 export default function AdminSpendPage() {
   const [data, setData] = useState<AdminSpend | null>(null);
@@ -75,6 +76,11 @@ export default function AdminSpendPage() {
           </tbody>
         </table>
       </div>
+      {/* R1.2 — decision affordance for the spend surface. */}
+      <DecisionGuidance
+        tellsYou="the platform's actual LLM cost to date in US$, summed from per-run cost records and attributed to the user who triggered each run."
+        next="compare the heaviest spender's cost against their plan price on /admin/subscriptions — a user whose spend approaches their plan revenue needs a limit review."
+      />
     </div>
   );
 }

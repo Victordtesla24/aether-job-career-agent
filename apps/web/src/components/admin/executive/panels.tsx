@@ -19,6 +19,8 @@
  */
 import type { ReactNode } from "react";
 
+import { DecisionGuidance } from "../../ui/decision-guidance";
+
 export function Panel({
   title,
   caption,
@@ -27,6 +29,7 @@ export function Panel({
   className,
   testId,
   measured,
+  guidance,
 }: {
   title: string;
   /** The declared window / basis. Always rendered — C-3 applies to panels too. */
@@ -37,6 +40,11 @@ export function Panel({
   testId?: string;
   /** Mirrored to `data-measured` so a reviewer can assert honesty from the DOM. */
   measured?: boolean;
+  /**
+   * R1.2 — the panel's "what this tells you / what to do next" affordance.
+   * Copy must state only what the figure establishes and a concrete action.
+   */
+  guidance?: { tellsYou: string; next: string };
 }) {
   return (
     <section
@@ -54,6 +62,7 @@ export function Panel({
         {action ? <div className="shrink-0">{action}</div> : null}
       </header>
       <div className="min-w-0 flex-1">{children}</div>
+      {guidance ? <DecisionGuidance tellsYou={guidance.tellsYou} next={guidance.next} /> : null}
     </section>
   );
 }

@@ -34,6 +34,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { AdminPageHeader } from "../../../components/admin/admin-shell";
 import { FIELD, QUIET_BTN } from "../../../components/admin/admin-ui";
+import { DecisionGuidance } from "../../../components/ui/decision-guidance";
 import SegmentedControl from "../../../components/ui/SegmentedControl";
 import { formatDate } from "../../../lib/format";
 import {
@@ -469,6 +470,11 @@ export default function AdminSubscriptionsPage() {
       <p className="mt-3 text-xs text-aether-muted-dim">
         {loading ? "Loading..." : `${visible.length} of ${total} accounts loaded`}
       </p>
+      {/* R1.2 — decision affordance for the subscriptions table. */}
+      <DecisionGuidance
+        tellsYou="every account's current plan and subscription state as recorded in billing — the filter tabs slice the same real rows, never a sample."
+        next="reconcile the paying tab against the MRR tile on /admin: a mismatch between the two means a subscription row needs manual review."
+      />
 
       {deleteTarget ? (
         <DeleteSubscriptionModal

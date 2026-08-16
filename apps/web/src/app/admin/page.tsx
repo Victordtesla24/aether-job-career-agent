@@ -67,6 +67,7 @@ import {
   ReferrersPanel,
 } from "../../components/admin/executive/OpsStrip";
 import { Panel, Skeleton } from "../../components/admin/executive/panels";
+import { DecisionGuidance } from "../../components/ui/decision-guidance";
 import {
   buildFunnelSteps,
   buildKpiTiles,
@@ -413,9 +414,24 @@ export default function AdminExecutiveDashboardPage() {
                   hint="GET /admin/metrics/executive does not report a 24h-windowed failed-run rate."
                   tone="neutral"
                 />
+                {/* R1.2 — one guidance line spanning the operations tiles. */}
+                <DecisionGuidance
+                  className="sm:col-span-2 xl:col-span-4"
+                  tellsYou="revenue-side account counts and a 7-day signup figure from billing/summary and the metrics series — a tile that cannot be measured says so instead of showing zero."
+                  next="if paying accounts or MRR moved since your last visit, open /admin/billing to see which subscription rows changed."
+                />
               </div>
 
-              <Panel title="Stale data" testId="admin-ops-stale-data" measured={hygiene != null}>
+              <Panel
+                title="Stale data"
+                testId="admin-ops-stale-data"
+                measured={hygiene != null}
+                guidance={{
+                  tellsYou:
+                    "counts of rows the hygiene report flags as stale — soft-deleted users, orphaned billing pairs and canceled subscriptions still on record.",
+                  next: "keep these at zero: use the linked screens to review each bucket, and only purge orphans after confirming the count matches expectation.",
+                }}
+              >
                 {hygieneError ? (
                   <p className="type-meta text-aether-amber">{hygieneError}</p>
                 ) : hygiene ? (

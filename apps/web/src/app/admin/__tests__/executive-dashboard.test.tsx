@@ -448,3 +448,21 @@ describe("loading, polling and failure", () => {
     expect(screen.getByTestId("admin-kpi-mrr").getAttribute("data-measured")).toBe("false");
   });
 });
+
+
+describe("decision guidance (R1.2 — what this tells you / what to do next)", () => {
+  it("annotates every executive visualisation with a decision affordance", async () => {
+    render(<AdminExecutiveDashboardPage />);
+    await waitFor(() => expect(screen.getByTestId("admin-kpi-mrr")).toBeTruthy());
+    // One affordance for the KPI band, one per growth panel, one per ops
+    // panel: the ledger's rule is per-visualisation, not per-page.
+    const notes = screen.getAllByTestId("decision-guidance");
+    expect(notes.length).toBeGreaterThanOrEqual(8);
+    for (const note of notes) {
+      expect(note.textContent).toContain("What this tells you");
+      expect(note.textContent).toContain("What to do next");
+      // No empty affordances: each line carries real copy beyond its label.
+      expect((note.textContent ?? "").length).toBeGreaterThan(60);
+    }
+  });
+});

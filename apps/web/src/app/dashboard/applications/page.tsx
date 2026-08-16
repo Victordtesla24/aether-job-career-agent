@@ -220,7 +220,7 @@ function MoveMenu({
         aria-expanded={open}
         aria-label={`Move ${card.title} at ${card.company} to another stage`}
         onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-1.5 rounded-md border border-hairline bg-white/[0.04] px-2 py-1 text-[10px] font-medium text-aether-muted transition-colors duration-[--dur-fast] hover:border-hairline-strong hover:bg-surface-3 hover:text-aether-text max-sm:min-h-[36px]"
+        className="flex items-center gap-1.5 rounded-md border border-hairline bg-white/[0.04] px-2 py-1 text-[10px] font-medium text-aether-muted transition-colors duration-[--dur-fast] hover:border-hairline-strong hover:bg-surface-3 hover:text-aether-text max-sm:min-h-[44px]"
       >
         <i className="fa-solid fa-arrow-right-arrow-left text-[9px]" aria-hidden="true" />
         Move to…

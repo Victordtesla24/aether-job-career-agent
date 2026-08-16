@@ -37,6 +37,11 @@ export function ReferrersPanel({ model }: { model: ReferrerModel }) {
       measured={model.measured}
       title="Top referrers"
       caption="sales agents, by accounts converted then referred"
+      guidance={{
+        tellsYou:
+          "which sales agents have actually converted or referred accounts — ranked by recorded conversions, not activity.",
+        next: "review the top agent's recent outreach on /admin/sales-agents and replicate what is working; retire agents with zero conversions.",
+      }}
     >
       {model.measured ? (
         <ul className="flex flex-col gap-2">
@@ -96,6 +101,11 @@ export function LatestSignupsPanel({
       measured={rows.length > 0}
       title="Latest signups"
       caption="most recently created accounts"
+      guidance={{
+        tellsYou:
+          "the newest accounts on the platform, in creation order — each row is a real user record.",
+        next: "spot-check the most recent signup on /admin/users to confirm plan, verification state and referrer are recorded correctly.",
+      }}
       action={
         <Link href="/admin/users" className="type-mono-micro text-aether-muted hover:text-aether-text">
           All users →
@@ -147,6 +157,11 @@ export function RecentAuditPanel({
       measured={rows.length > 0}
       title="Recent admin actions"
       caption="append-only audit trail"
+      guidance={{
+        tellsYou:
+          "the latest entries in the append-only admin audit trail — every privileged action lands here, unedited.",
+        next: "scan for actions you did not perform yourself; anything unexpected warrants an immediate credential review.",
+      }}
       action={
         <Link
           href="/admin/audit-log"

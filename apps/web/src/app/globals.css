@@ -582,3 +582,32 @@ html {
 ::-webkit-scrollbar-thumb:hover {
   background-image: linear-gradient(180deg, #d4b65c, #c9a84c);
 }
+
+
+/*
+ * S-UI-B4-MOBILE / R1.4 — the mobile legibility floor.
+ *
+ * The design system's micro-type roles (.type-section 10px, .type-meta 11px,
+ * .type-mono-micro 11px) and the arbitrary 8–11px utilities are APPROVED on
+ * desktop (beauty verdict: desktop PASS) but were the recorded mobile CONCERN:
+ * "sub-12px text on 13/13 routes". Rather than 560+ per-call-site edits (each
+ * a fresh visual-regression risk on an approved desktop surface), the floor is
+ * enforced once, here, for small viewports only: below 768px every sub-12px
+ * role/utility renders at exactly 12px. Desktop output is byte-identical.
+ *
+ * `!important` is deliberate: these globals compile before the Tailwind
+ * utilities layer, so at equal specificity the 10px utility would win.
+ * Enforced by apps/web/e2e/mobile-matrix.spec.ts (no visible text < 12px at
+ * 390x844 on any primary route).
+ */
+@media (max-width: 767px) {
+  .type-section,
+  .type-meta,
+  .type-mono-micro,
+  .text-\[8px\],
+  .text-\[9px\],
+  .text-\[10px\],
+  .text-\[11px\] {
+    font-size: 12px !important;
+  }
+}

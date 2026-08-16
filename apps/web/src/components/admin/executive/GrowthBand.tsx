@@ -59,6 +59,11 @@ export function GrowthFunnelPanel({ model }: { model: AdminFunnelModel }) {
       measured={model.measured}
       title="Signup → paid milestones"
       caption={model.windowLabel}
+      guidance={{
+        tellsYou:
+          "how many accounts in this window reached each milestone from signup to first payment — each count is a real row, not a projection.",
+        next: "find the largest drop between two adjacent steps and review that step's onboarding surface before touching anything downstream of it.",
+      }}
     >
       {model.measured ? (
         <>
@@ -155,6 +160,11 @@ export function PlanMixPanel({ model }: { model: PlanMixModel }) {
       measured={model.measured}
       title="Plan mix"
       caption={model.windowLabel}
+      guidance={{
+        tellsYou:
+          "which plans current accounts actually sit on in this window — the split of free versus paid tiers as recorded in billing.",
+        next: "if one paid tier dominates, check its limits against usage on /admin/subscriptions before changing pricing or plan copy.",
+      }}
     >
       {model.measured ? (
         <>
@@ -199,6 +209,11 @@ export function SignupTrendPanel({ model }: { model: SeriesModel }) {
       measured={model.measured}
       title="Signups by day"
       caption={model.windowLabel}
+      guidance={{
+        tellsYou:
+          "the daily count of new accounts created in this window — day-over-day movement here is measured, not smoothed.",
+        next: "match any visible spike or drop against the referrer panel and the audit log for the same day to attribute it before acting.",
+      }}
     >
       {model.measured ? (
         <div data-trend-readable={model.rate.readable ? "true" : "false"}>
@@ -231,6 +246,11 @@ export function RunVolumePanel({ model }: { model: SeriesModel }) {
       measured={model.measured}
       title="Agent run volume"
       caption={model.windowLabel}
+      guidance={{
+        tellsYou:
+          "how many agent runs executed per day in this window — this is delivered work and the main driver of LLM spend.",
+        next: "if volume moves without a matching signup change, open /admin/spend and confirm cost per run has not drifted.",
+      }}
     >
       {model.measured ? (
         <div data-trend-readable={model.rate.readable ? "true" : "false"}>

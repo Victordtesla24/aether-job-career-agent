@@ -15,6 +15,7 @@
  * silently becomes a three-tile board tells the reader nothing is wrong.
  */
 import { Spark, useChartMotion } from "../../charts";
+import { DecisionGuidance } from "../../ui/decision-guidance";
 import type { AdminKpiTile } from "../../../lib/admin/executive";
 
 /** Certified tone language — see `lib/admin/executive.ts` › `delta` for why a
@@ -122,6 +123,11 @@ export function KpiBand({ tiles }: { tiles: readonly AdminKpiTile[] }) {
           <KpiTile key={tile.id} tile={tile} index={index} />
         ))}
       </div>
+      {/* R1.2 — one band-level guidance line: the five tiles share a reading. */}
+      <DecisionGuidance
+        tellsYou="the platform's five headline figures for the declared window — every value is measured from the database, and an unmeasured tile says so instead of showing zero."
+        next="read the amber deltas first: a falling headline figure is a prompt to open the matching panel below, not an alarm on its own."
+      />
     </section>
   );
 }

@@ -9,6 +9,7 @@
 import { useEffect, useState } from "react";
 
 import { fetchAdminHealth, type AdminHealth } from "../../lib/api/admin";
+import { DecisionGuidance } from "../ui/decision-guidance";
 
 function statusTone(value: string): string {
   const v = value.toLowerCase();
@@ -45,7 +46,8 @@ export function HealthOverview() {
   const ratePct = rate === null ? "—" : `${(rate * 100).toFixed(1)}%`;
 
   return (
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+    <div>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
       <Card>
         <p className="text-xs uppercase tracking-wide text-aether-muted-dim">Services</p>
         <div className="mt-3 flex flex-wrap gap-2">
@@ -89,6 +91,12 @@ export function HealthOverview() {
         </div>
         <p className="mt-2 text-xs text-aether-muted">{health.cron.detail}</p>
       </Card>
+      </div>
+      {/* R1.2 — one guidance line for the whole health grid. */}
+      <DecisionGuidance
+        tellsYou="live service, agent, LLM and scheduler status straight from the health endpoint — the agent success rate is computed from real run rows, not estimated."
+        next="anything not reading ok is the first thing to investigate: open the audit log and service logs for that component before restarting anything."
+      />
     </div>
   );
 }

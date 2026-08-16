@@ -9,6 +9,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { AdminPageHeader } from "../../../components/admin/admin-shell";
 import { fetchAuditLog, type AuditEntry } from "../../../lib/api/admin";
+import { DecisionGuidance } from "../../../components/ui/decision-guidance";
 import { formatDateTime } from "../../../lib/format";
 
 const PAGE = 50;
@@ -116,6 +117,11 @@ export default function AdminAuditLogPage() {
           </button>
         </div>
       </div>
+      {/* R1.2 — decision affordance for the audit trail. */}
+      <DecisionGuidance
+        tellsYou="every admin mutation ever performed, in an append-only trail with actor, action, target and IP — rows are never edited or deleted."
+        next="verify the most recent entries match actions you or a trusted admin actually took; an unrecognised actor or IP means credentials must be rotated now."
+      />
     </div>
   );
 }

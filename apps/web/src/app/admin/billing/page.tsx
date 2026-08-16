@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { AdminPageHeader } from "../../../components/admin/admin-shell";
 import { ConfirmPanel, FIELD, Panel, PRIMARY_BTN, QUIET_BTN, formatAudExact } from "../../../components/admin/admin-ui";
+import { DecisionGuidance } from "../../../components/ui/decision-guidance";
 import { describeApiError } from "../../../lib/api/client";
 import {
   fetchAdminPlans,
@@ -153,6 +154,11 @@ export default function AdminBillingPage() {
           </div>
         )}
       </Panel>
+      {/* R1.2 — decision affordance for the catalog surface. */}
+      <DecisionGuidance
+        tellsYou="the AUD catalog prices new checkouts will be charged — saving here never reprices an existing subscriber or touches Stripe price IDs."
+        next="before changing a price, check the plan's current subscriber spend on /admin/spend so the new price still covers real LLM cost."
+      />
       <button type="button" onClick={() => void load()} disabled={loading} className={`${QUIET_BTN} mt-4`}>Reload catalog</button>
     </div>
   );
