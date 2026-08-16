@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+import time
 from typing import Any
 
 from app.db import (
@@ -146,10 +147,20 @@ class UserRepository:
         """
 
         def _run(c: Any) -> None:
+            # ``passwordChangedAt`` is stamped from THIS process's clock
+            # (``to_timestamp``), NOT the database's ``now()``: the O-4 check in
+            # ``get_current_user`` compares this stamp against a JWT ``iat``
+            # minted by this same process, and comparing timestamps from two
+            # different clocks re-introduces their skew into the grace window.
+            # A DB clock observed ~0.8s ahead of the API clock falsely 401'd a
+            # login made immediately AFTER the change — for the token's whole
+            # TTL. Same-clock stamping makes the comparison exact; ``updatedAt``
+            # stays on DB ``now()`` (nothing compares it to an API timestamp).
             c.execute(
-                'UPDATE "User" SET "passwordHash"=%s, "passwordChangedAt"=now(),'
+                'UPDATE "User" SET "passwordHash"=%s,'
+                ' "passwordChangedAt"=to_timestamp(%s),'
                 ' "mustChangePassword"=%s, "updatedAt"=now() WHERE "id"=%s',
-                (password_hash, bool(must_change), user_id),
+                (password_hash, time.time(), bool(must_change), user_id),
             )
 
         if cur is not None:

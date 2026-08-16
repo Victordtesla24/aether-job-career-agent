@@ -36,12 +36,14 @@ _ADMIN_ERROR = HTTPException(
 _IAT_GRACE_SECONDS = 1.0
 
 #: Extra slack on top of ``_IAT_GRACE_SECONDS`` in
-#: :func:`session_invalidation_boundary`, absorbing the difference between this
-#: process's clock (which stamps a JWT's ``iat``) and the DATABASE's clock
-#: (which stamps ``passwordChangedAt`` via ``now()``). Without it, a Postgres
-#: server running a fraction of a second behind the API would make an otherwise
-#: sound boundary land just short. Kept small: it is pure added latency on the
-#: one route that waits for it.
+#: :func:`session_invalidation_boundary`. ``passwordChangedAt`` is now stamped
+#: from the API's OWN clock (``UserRepository.set_password`` writes
+#: ``to_timestamp(time.time())``, not DB ``now()``), so the iat comparison no
+#: longer spans two clocks — a DB observed ~0.8s ahead of the API previously ate
+#: most of the grace window and falsely 401'd a login made right after the
+#: change. This margin remains as belt-and-braces for any residual write-path
+#: latency. Kept small: it is pure added latency on the one route that waits
+#: for it.
 _CLOCK_SKEW_MARGIN_SECONDS = 0.25
 
 

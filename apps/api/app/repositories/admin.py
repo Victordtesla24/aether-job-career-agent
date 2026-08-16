@@ -22,6 +22,7 @@ import json
 import logging
 import os
 import sys
+import time
 from typing import Any, Optional
 
 from psycopg2.errors import UniqueViolation
@@ -1079,16 +1080,22 @@ def create_user(
     an ordinary account. Privilege is granted by a separate, deliberate act.
     ``ON CONFLICT DO NOTHING`` + a raise keeps the duplicate-email case an honest
     409 rather than a silently-ignored write.
+
+    ``passwordChangedAt`` is stamped from the API's clock (``to_timestamp``),
+    not DB ``now()`` — same reasoning as ``UserRepository.set_password``: the
+    O-4 iat comparison must not span two clocks, or DB-ahead skew can falsely
+    401 the account's very first login.
     """
     cur.execute(
         '''
         INSERT INTO "User" ("id","email","name","passwordHash","mustChangePassword",
                             "passwordChangedAt","updatedAt")
-        VALUES (%s,%s,%s,%s,%s,now(),now())
+        VALUES (%s,%s,%s,%s,%s,to_timestamp(%s),now())
         ON CONFLICT ("email") DO NOTHING
         RETURNING "id","email","name","createdAt","mustChangePassword"
         ''',
-        (new_id(), email, name, password_hash, bool(must_change_password)),
+        (new_id(), email, name, password_hash, bool(must_change_password),
+         time.time()),
     )
     rows = rows_to_dicts(cur)
     if not rows:
