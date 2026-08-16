@@ -26,6 +26,7 @@ import pytest
 
 from app.agents.sales_agent import (
     SalesAgent,
+    _is_automated_sender,
     append_compliance_footer,
     personalize_template,
     sales_agent_live_scope,
@@ -395,6 +396,86 @@ def test_live_mode_sends_exactly_once(repo, sales_env, monkeypatch):
     assert [s for s in fake2.sent if s["to"] == sender] == []
     rows, total = repo.list_outreach(outcome="sent", limit=200)
     assert sum(1 for r in rows if r["gmailThreadId"] == thread) == 1
+
+
+# ------------------------------------------------- automated senders (F5-001)
+# Root cause of the 2026-08-16 incident: GitHub CI-failure notifications
+# (notifications@github.com) carried the repo name "aether-job-career-agent"
+# in the subject, matched the bare INTEREST_PHRASES token "aether", and — with
+# per-THREAD idempotency — every new CI thread triggered a fresh LIVE reply.
+# The guard must drop automated senders BEFORE classification, lead creation,
+# or any reply, while leaving human senders untouched.
+
+
+@pytest.mark.parametrize(
+    "address",
+    [
+        "notifications@github.com",
+        "noreply@example.com",
+        "no-reply@stripe.com",
+        "do_not_reply@corp.example",
+        "mailer-daemon@googlemail.com",
+        "bounces@amazonses.com",
+        "postmaster@example.org",
+        "autoreply@helpdesk.example",
+    ],
+)
+def test_is_automated_sender_matches_robot_addresses(address):
+    assert _is_automated_sender(address) is True
+
+
+@pytest.mark.parametrize(
+    "address",
+    [
+        "pat.prospect@example.com",
+        "vikram@gmail.com",
+        "sales@acme.io",
+        "founder@startup.dev",
+    ],
+)
+def test_is_automated_sender_leaves_humans_alone(address):
+    assert _is_automated_sender(address) is False
+
+
+def test_automated_sender_skipped_before_lead_or_reply_even_live(
+    repo, sales_env, monkeypatch
+):
+    """LIVE mode, interest-matching text, automated sender → NOTHING happens:
+    no classification outcome, no lead, no outreach row, no send. A human
+    message in the same batch is still processed normally."""
+    human = _email("human")
+    robot = "notifications@github.com"
+    fake = FakeGmail([
+        {
+            # Reproduction of the incident message shape: CI subject contains
+            # the repo name, which contains the interest token "aether".
+            "id": f"m-{uuid.uuid4().hex[:12]}",
+            "threadId": f"t-{uuid.uuid4().hex[:12]}",
+            "from": f"GitHub <{robot}>",
+            "subject": "[aether-job-career-agent] Run failed: CI - main",
+            "text": "Run failed for aether-job-career-agent on main.",
+        },
+        {
+            "id": f"m-{uuid.uuid4().hex[:12]}",
+            "threadId": f"t-{uuid.uuid4().hex[:12]}",
+            "from": f"Human Prospect <{human}>",
+            "subject": "interested in Aether",
+            "text": "I'm interested in Aether — how does pricing work?",
+        },
+    ])
+    agent = _agent_with(repo, fake, monkeypatch)
+    result = agent.run(trigger="manual", dry_run=False)
+
+    assert result["skippedAutomated"] == 1
+    # Robot: no send, no lead, no outreach log row of ANY outcome.
+    assert [s for s in fake.sent if s["to"] == robot] == []
+    assert repo.get_lead_by_email(robot) is None
+    for outcome in ("sent", "dry_run", "blocked", "suppressed"):
+        rows, _ = repo.list_outreach(outcome=outcome, limit=200)
+        assert not any((r["recipient"] or "") == robot for r in rows)
+    # Human in the same batch is unaffected: lead created and replied to once.
+    assert repo.get_lead_by_email(human) is not None
+    assert len([s for s in fake.sent if s["to"] == human]) == 1
 
 
 def test_lifecycle_rate_limit_reads_the_log(repo):

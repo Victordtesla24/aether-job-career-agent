@@ -107,6 +107,40 @@ INTEREST_PHRASES = (
     "aether",
 )
 
+#: F5-001 (Fable 5 adversarial review). Local-part markers of AUTOMATED
+#: senders — CI/notification/bounce robots that can never be a sales lead and
+#: must never receive an auto-reply. Root cause of the 19 live replies sent to
+#: notifications@github.com on 2026-08-16: GitHub CI-failure subjects contain
+#: the repo name ("aether-job-career-agent"), which matched the bare
+#: INTEREST_PHRASES token "aether", and per-THREAD idempotency let every new
+#: CI notification thread trigger a fresh live send. DB suppression of one
+#: address treats the symptom; this guard closes the CLASS by skipping any
+#: automated sender BEFORE classification, lead creation or reply. Checked as
+#: substrings of the sender's local part (fail-safe direction: a skipped rare
+#: human costs one missed auto-reply; a non-skipped robot costs a real email).
+AUTOMATED_SENDER_MARKERS = (
+    "noreply",
+    "no-reply",
+    "no_reply",
+    "donotreply",
+    "do-not-reply",
+    "do_not_reply",
+    "notification",  # also matches "notifications@…" (the GitHub case)
+    "mailer-daemon",
+    "postmaster",
+    "bounce",  # also matches "bounces@…"
+    "autoreply",
+    "auto-reply",
+    "auto_reply",
+)
+
+
+def _is_automated_sender(email: str) -> bool:
+    """True when the address's local part marks it as an automated sender."""
+    local = email.split("@", 1)[0].lower()
+    return any(marker in local for marker in AUTOMATED_SENDER_MARKERS)
+
+
 #: Free plan monthly run cap (mirrors the seeded Free plan) — used only to
 #: decide "near the cap", never to report usage.
 FREE_PLAN_RUN_CAP = 5
@@ -339,6 +373,16 @@ class SalesAgent:
                 continue
             if sender_email == account_email:
                 continue  # our own outbound mail
+            if _is_automated_sender(sender_email):
+                # F5-001: never classify, create leads for, or reply to
+                # automated senders (CI bots, no-reply, bounces, …).
+                logger.info(
+                    "sales-agent: skipping automated sender %s (message %s)",
+                    sender_email,
+                    mid,
+                )
+                result["skippedAutomated"] = result.get("skippedAutomated", 0) + 1
+                continue
             try:
                 msg = gmail.get_message_bodies(mid)
             except GmailError as exc:
@@ -1018,6 +1062,7 @@ class SalesAgent:
             "dryRun": dry_run,
             "liveScope": live_scope,
             "inboundScanned": 0,
+            "skippedAutomated": 0,
             "leadsCreated": 0,
             "sent": 0,
             "dryRunLogged": 0,
