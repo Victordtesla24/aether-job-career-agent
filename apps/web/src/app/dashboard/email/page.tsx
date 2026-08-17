@@ -431,6 +431,8 @@ export default function EmailCenterPage() {
     [inbox, selectedId],
   );
 
+  // Hydrate the textarea when the selected thread changes. Deliberately
+  // omit drafts/inbox from deps so a 30s poll cannot clobber an in-progress edit.
   useEffect(() => {
     if (!selectedId) {
       setDraft("");
@@ -439,7 +441,8 @@ export default function EmailCenterPage() {
     const fromCache = drafts[selectedId];
     const fromInbox = inbox?.messages.find((m) => m.id === selectedId)?.draftReply ?? "";
     setDraft(fromCache || fromInbox || "");
-  }, [selectedId]); // eslint-disable-line react-hooks/exhaustive-deps — do not clobber in-progress edits on poll
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId]);
 
   // The real, full body for the selected thread once fetched (W-13 / QA #2).
   const selectedBody = useMemo(
