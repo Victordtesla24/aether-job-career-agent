@@ -972,3 +972,225 @@ def test_billing_audit_is_honest_when_only_an_api_key_exists_for_claude(
     assert audit["credentialSource"] == "none", audit
     assert audit["authMode"] is None, audit
     assert audit["quotaPath"] == "none", audit
+
+
+# ---------------------------------------------------------------------------
+# CLAUSE 5, round 3 — the PERSISTED provider column must not contradict the
+# model.
+#
+# ``AgentConfig.provider`` is a DERIVED disclosure field, not a user choice:
+# ``resolve_provider(model)`` alone decides who serves and bills a run. But
+# ``PUT /agents/config/{key}`` stored whatever a client declared, and
+# ``conductor.ts`` PREFERS that stored value over the derived one when it labels
+# a run — so a client that mis-derived the provider could persist "this Claude
+# run bills OpenRouter" and have the UI repeat it forever. (The round-3
+# AgentSettingsPanel defect did exactly that for the namespaced spelling.)
+#
+# The FE copy is fixed in
+# apps/web/src/__tests__/agents/agent-settings-panel-sub-quota.test.tsx; this is
+# the ENFORCEMENT half, so no other client can write the same lie. Honest 422 —
+# never a silent rewrite of what the caller claimed.
+# ---------------------------------------------------------------------------
+
+
+def test_declaring_openrouter_for_a_claude_model_is_refused_422(client, auth_headers):
+    """A Claude model is served by the Anthropic subscription, so a config write
+    claiming it bills OpenRouter is false and is refused rather than stored.
+
+    FAILS NOW: the contradiction is persisted verbatim.
+    """
+    r = client.put(
+        "/agents/config/coverLetter",
+        json={"model": _BARE, "provider": "openrouter"},
+        headers=auth_headers,
+    )
+    assert r.status_code == 422, r.text
+    detail = str(r.json().get("detail", "")).lower()
+    assert "provider" in detail and "anthropic" in detail, r.text
+
+
+def test_the_contradiction_is_refused_even_when_the_model_comes_from_the_row(
+    client, auth_headers
+):
+    """The panel sends ``provider`` WITHOUT ``model`` (a partial update), so the
+    guard must resolve the model already pinned on the row — not only the one in
+    the body.
+
+    FAILS NOW: with no ``model`` in the body nothing is compared at all.
+    """
+    seed = client.put(
+        "/agents/config/coverLetter", json={"model": _BARE}, headers=auth_headers
+    )
+    assert seed.status_code == 200, seed.text
+
+    r = client.put(
+        "/agents/config/coverLetter",
+        json={"provider": "openrouter", "thinkingEffort": "low"},
+        headers=auth_headers,
+    )
+    assert r.status_code == 422, r.text
+
+    # ...and the refused write left the row completely untouched.
+    got = client.get("/agents/config/coverLetter", headers=auth_headers)
+    assert got.json()["model"] == _BARE, got.text
+    assert got.json()["provider"] != "openrouter", got.text
+    assert got.json()["thinkingEffort"] != "low", got.text
+
+
+def test_declaring_anthropic_for_a_claude_model_is_accepted(client, auth_headers):
+    """The truthful declaration is stored, so the honest client is unaffected."""
+    r = client.put(
+        "/agents/config/coverLetter",
+        json={"model": _SLASH, "provider": "anthropic"},
+        headers=auth_headers,
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["model"] == _BARE, r.text
+    assert r.json()["provider"] == "anthropic", r.text
+
+
+def test_a_non_claude_model_still_stores_its_declared_openrouter_provider(
+    client, auth_headers
+):
+    """ZERO REGRESSION: the guard is Claude-only. A genuinely OpenRouter-served
+    model keeps declaring — and storing — OpenRouter exactly as before."""
+    r = client.put(
+        "/agents/config/coverLetter",
+        json={"model": "deepseek/deepseek-chat", "provider": "openrouter"},
+        headers=auth_headers,
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["provider"] == "openrouter", r.text
+
+
+# ---------------------------------------------------------------------------
+# CLAUSE 4 + 5, round 3 — the repair must also fix the PROVIDER column.
+#
+# Found in LIVE PRODUCTION during round-3 verification: the owner's
+# `resumeTailoring` row is pinned to `claude-sonnet-4-6` while its `provider`
+# column says `openrouter`, and the repaired `coverLetter` row (model now NULL,
+# so the tier default — itself a Claude id — applies) still says `openrouter`
+# too. Round 2 repaired the MODEL column and left this one, so the row still
+# claims a Claude run bills OpenRouter, and the Agents UI repeats that claim
+# because it prefers the stored provider over its own derivation.
+#
+# `provider` is derived, never chosen, so correcting it to the resolved truth is
+# not a model substitution — the model is untouched. Recorded like every other
+# repair change.
+# ---------------------------------------------------------------------------
+
+
+def _pin_row(user_id: str, agent_key: str, model: str | None, provider: str) -> None:
+    """Seed an AgentConfig row with an explicit provider column."""
+    from app.db import get_connection
+    from app.routers.agents import _ensure_agent_config_schema
+
+    _ensure_agent_config_schema()
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'INSERT INTO "AgentConfig" ("userId","agentKey","model","provider",'
+                '"updatedAt") VALUES (%s,%s,%s,%s,NOW()) '
+                'ON CONFLICT ("userId","agentKey") DO UPDATE SET '
+                '"model" = EXCLUDED."model", "provider" = EXCLUDED."provider"',
+                (user_id, agent_key, model, provider),
+            )
+        conn.commit()
+
+
+def _provider_of(user_id: str, agent_key: str) -> str | None:
+    from app.db import get_connection, rows_to_dicts
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT "provider" FROM "AgentConfig" '
+                'WHERE "userId" = %s AND "agentKey" = %s',
+                (user_id, agent_key),
+            )
+            rows = rows_to_dicts(cur)
+    return rows[0]["provider"] if rows else None
+
+
+def test_repair_corrects_a_claude_rows_openrouter_provider_claim(test_user_id):
+    """The exact live production shape: a Claude pin whose provider column says
+    OpenRouter.
+
+    FAILS NOW: the repair only looks at the model column, so the false provider
+    survives and the UI keeps calling a subscription-served run "OpenRouter".
+    """
+    from app.services.model_pin_repair import repair_claude_model_pins
+
+    _pin_row(test_user_id, "resumeTailoring", _BARE, "openrouter")
+
+    dry = repair_claude_model_pins(apply=False)
+    assert dry["providerCorrected"] >= 1, dry
+    assert _provider_of(test_user_id, "resumeTailoring") == "openrouter", "dry run wrote"
+
+    report = repair_claude_model_pins(apply=True)
+    assert report["providerCorrected"] >= 1, report
+    assert _provider_of(test_user_id, "resumeTailoring") == "anthropic"
+    # The MODEL is untouched — this repairs a derived label, not a choice.
+    from app.db import get_connection, rows_to_dicts
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT "model" FROM "AgentConfig" '
+                'WHERE "userId" = %s AND "agentKey" = %s',
+                (test_user_id, "resumeTailoring"),
+            )
+            assert rows_to_dicts(cur)[0]["model"] == _BARE
+
+    again = repair_claude_model_pins(apply=True)
+    assert again["providerCorrected"] == 0, again
+
+
+def test_repair_corrects_the_provider_when_no_model_is_pinned(test_user_id):
+    """The repaired coverLetter shape: model NULL (so the agent runs its tier
+    default, a Claude id) but provider still says OpenRouter.
+
+    FAILS NOW: rows with a NULL model are not even scanned.
+    """
+    from app.services.model_pin_repair import repair_claude_model_pins
+
+    _pin_row(test_user_id, "coverLetter", None, "openrouter")
+
+    report = repair_claude_model_pins(apply=True)
+
+    assert report["providerCorrected"] >= 1, report
+    assert _provider_of(test_user_id, "coverLetter") == "anthropic"
+
+
+def test_repair_leaves_a_genuine_openrouter_rows_provider_alone(test_user_id):
+    """ZERO REGRESSION: a real OpenRouter pick keeps its real provider."""
+    from app.services.model_pin_repair import repair_claude_model_pins
+
+    _pin_row(test_user_id, "jobDiscovery", _OPENROUTER, "openrouter")
+
+    repair_claude_model_pins(apply=True)
+
+    assert _provider_of(test_user_id, "jobDiscovery") == "openrouter"
+
+
+def test_a_corrected_provider_is_recorded_like_every_other_repair(test_user_id):
+    """No silent edits: the provider correction leaves an audit trace naming the
+    previous value."""
+    from app.db import get_connection, rows_to_dicts
+    from app.services.model_pin_repair import AUDIT_ACTION, repair_claude_model_pins
+
+    _pin_row(test_user_id, "resumeTailoring", _BARE, "openrouter")
+    repair_claude_model_pins(apply=True)
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT "detailJson" FROM "AdminAuditLog" WHERE action = %s '
+                'AND "targetId" = %s',
+                (AUDIT_ACTION, f"{test_user_id}:resumeTailoring"),
+            )
+            rows = rows_to_dicts(cur)
+
+    assert rows, "no audit row for the provider correction"
+    blob = str(rows[-1]["detailJson"])
+    assert "openrouter" in blob and "anthropic" in blob, blob

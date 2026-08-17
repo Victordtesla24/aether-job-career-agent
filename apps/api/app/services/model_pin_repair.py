@@ -21,6 +21,15 @@ What it does to each ``AgentConfig`` row whose ``model`` is a Claude id:
   ADR-ML-3 forbids, so the honest move is to drop the un-servable pin and let
   the documented default apply.
 
+It also repairs the row's ``provider`` COLUMN (MODEL-SUB-QUOTA round 3, found on
+live production rows): a row whose effective model is a Claude id — its pin, or
+the tier default when nothing is pinned — but whose stored ``provider`` says
+something other than ``anthropic`` is claiming a Claude run bills an account it
+never touches, and the Agents UI repeats that claim because it prefers the
+stored value over its own derivation. ``provider`` is DERIVED from the model,
+never chosen, so correcting it is not a substitution: the model is untouched.
+Rows with no model pin are scanned for this reason alone.
+
 One row shape is deliberately left alone: a value equal to that agent's OWN
 seeded ``recommended`` model (the app wrote it; ``_user_model_override`` treats
 it as "no choice made", so it never reaches a model). Clearing it would only
@@ -93,6 +102,7 @@ def repair_claude_model_pins(*, apply: bool = False) -> dict[str, Any]:
         "scanned": 0,
         "normalized": 0,
         "cleared": 0,
+        "providerCorrected": 0,
         "skippedSeedDefaults": 0,
         "applied": bool(apply),
         "changes": [],
@@ -100,50 +110,86 @@ def repair_claude_model_pins(*, apply: bool = False) -> dict[str, Any]:
 
     with get_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute(
-                'SELECT "userId", "agentKey", "model" FROM "AgentConfig" '
-                'WHERE "model" IS NOT NULL AND "model" <> \'\''
-            )
+            # EVERY row, including those with no model pin: a row running its
+            # tier default (a Claude id) can still carry a stale `provider`
+            # column claiming OpenRouter, which is the half round 2 missed.
+            cur.execute('SELECT "userId", "agentKey", "model", "provider" FROM "AgentConfig"')
             rows = rows_to_dicts(cur)
 
     for row in rows:
         current = (row.get("model") or "").strip()
-        if not is_claude_model(current):
-            continue  # a genuine OpenRouter / non-Claude pick — untouched
-        report["scanned"] += 1
-        if current == seeded.get(str(row.get("agentKey")), ""):
-            # The app's own seeded default, inert at run time — not a pin.
-            report["skippedSeedDefaults"] += 1
+        agent_key = str(row.get("agentKey") or "")
+        model_action: str | None = None
+        new_value: str | None = None
+
+        if is_claude_model(current):
+            report["scanned"] += 1
+            if current == seeded.get(agent_key, ""):
+                # The app's own seeded default, inert at run time — not a pin.
+                report["skippedSeedDefaults"] += 1
+            else:
+                bare = normalize_model_id(current)
+                if bare in servable:
+                    if bare != current:
+                        model_action, new_value = "normalized", bare
+                else:
+                    model_action, new_value = "cleared", None
+
+        # The model this row will actually run once the model repair above is
+        # applied: the repaired pin, else the pin as stored, else — for an
+        # unpinned or just-cleared row — the agent's tier default.
+        effective = new_value if model_action else current
+        if not effective:
+            effective = seeded.get(agent_key, "")
+        declared = str(row.get("provider") or "").strip()
+        provider_action = (
+            declared
+            and is_claude_model(effective)
+            and declared.lower() != "anthropic"
+        )
+
+        if not model_action and not provider_action:
             continue
-        bare = normalize_model_id(current)
-        if bare in servable:
-            if bare == current:
-                continue  # already in the routing spelling — nothing to do
-            action, new_value = "normalized", bare
-        else:
-            action, new_value = "cleared", None
-        change = {
+
+        change: dict[str, Any] = {
             "userId": row["userId"],
             "agentKey": row["agentKey"],
-            "from": current,
-            "to": new_value,
-            "action": action,
+            "action": model_action or "providerCorrected",
         }
+        if model_action:
+            change.update({"from": current, "to": new_value})
+            report[model_action] += 1
+            logger.warning(
+                "MODEL-SUB-QUOTA pin repair (%s): user=%s agent=%s model %r -> %r",
+                "applied" if apply else "dry-run",
+                row["userId"], row["agentKey"], current, new_value,
+            )
+        if provider_action:
+            change.update({"providerFrom": declared, "providerTo": "anthropic"})
+            report["providerCorrected"] += 1
+            logger.warning(
+                "MODEL-SUB-QUOTA pin repair (%s): user=%s agent=%s serves Claude "
+                "%r but declared provider %r -> 'anthropic'",
+                "applied" if apply else "dry-run",
+                row["userId"], row["agentKey"], effective, declared,
+            )
         report["changes"].append(change)
-        report[action] += 1
-        logger.warning(
-            "MODEL-SUB-QUOTA pin repair (%s): user=%s agent=%s model %r -> %r",
-            "applied" if apply else "dry-run",
-            row["userId"], row["agentKey"], current, new_value,
-        )
         if not apply:
             continue
+        sets = []
+        params: list[Any] = []
+        if model_action:
+            sets.append('"model" = %s')
+            params.append(new_value)
+        if provider_action:
+            sets.append('"provider" = %s')
+            params.append("anthropic")
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    'UPDATE "AgentConfig" SET "model" = %s, "updatedAt" = NOW() '
+                    f'UPDATE "AgentConfig" SET {", ".join(sets)}, "updatedAt" = NOW() '
                     'WHERE "userId" = %s AND "agentKey" = %s',
-                    (new_value, row["userId"], row["agentKey"]),
+                    (*params, row["userId"], row["agentKey"]),
                 )
             conn.commit()
         # The trace is written OUTSIDE the update transaction deliberately: an
@@ -158,18 +204,31 @@ def repair_claude_model_pins(*, apply: bool = False) -> dict[str, Any]:
                 detail={
                     "agentKey": row["agentKey"],
                     "previousModel": current,
-                    "newModel": new_value,
-                    "action": action,
+                    "newModel": new_value if model_action else current,
+                    "modelAction": model_action,
+                    "previousProvider": declared if provider_action else None,
+                    "newProvider": "anthropic" if provider_action else None,
+                    "action": change["action"],
                     "reason": (
                         "MODEL-SUB-QUOTA: Claude models are served by the "
                         "operator's Anthropic subscription; "
                         + (
                             "the anthropic/ namespace was stripped to the bare id "
-                            "(same model, direct provider)."
-                            if action == "normalized"
+                            "(same model, direct provider). "
+                            if model_action == "normalized"
                             else "this id is not in the app's Anthropic catalog, so "
                             "the pin was cleared to the tier default rather than "
-                            "silently swapped for a different model."
+                            "silently swapped for a different model. "
+                            if model_action == "cleared"
+                            else ""
+                        )
+                        + (
+                            "the stored provider column claimed this Claude run "
+                            f"billed '{declared}', which it never does — the column "
+                            "is derived from the model, so it was corrected to "
+                            "'anthropic'. The MODEL was not changed."
+                            if provider_action
+                            else ""
                         )
                     ),
                     "source": "app.services.model_pin_repair",

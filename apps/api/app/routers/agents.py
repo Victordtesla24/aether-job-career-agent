@@ -72,6 +72,7 @@ from app.services.llm_client import (
     get_last_fallback_reason,
     get_last_served_model,
     get_quota_block_hours,
+    is_claude_model,
     llm_failure_user_message,
     normalize_model_id,
     resolve_provider,
@@ -5243,6 +5244,35 @@ def update_agent_config(
     # setting `model` (a partial update that omits it must not be gated).
     if model_in is not None:
         _validate_agent_model(model_in, user_id, agent_key)
+
+    # MODEL-SUB-QUOTA clause 5: `provider` is a DERIVED disclosure field, not a
+    # user choice — `resolve_provider(model)` alone decides who serves and bills
+    # a run. Stored, though, it is what the Agents UI shows the user (the FE
+    # prefers the persisted value over its own derivation), so a client that
+    # mis-derived it could persist "this Claude run bills OpenRouter" and have
+    # the app repeat that forever about runs the subscription actually funds.
+    # Refused HONESTLY (422) rather than silently rewritten to the truth, so the
+    # caller learns its derivation is wrong instead of being quietly corrected.
+    # Claude-only: every other model keeps storing whatever it declares.
+    if body.provider is not None:
+        declared = str(body.provider).strip().lower()
+        effective_model = (
+            model_in
+            if model_in is not None
+            else ((_config_map(user_id).get(agent_key) or {}).get("model")
+                  or entry["recommended"])
+        )
+        if declared and is_claude_model(effective_model):
+            expected = resolve_provider(effective_model)
+            if declared != expected:
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    f"agent '{agent_key}' runs the Claude model "
+                    f"'{effective_model}', which is served by the operator's "
+                    f"Anthropic subscription — its provider is '{expected}', not "
+                    f"'{declared}'. A Claude run is never billed to OpenRouter or "
+                    "to a metered API key, so that provider was not stored.",
+                )
 
     # Validate a non-empty credentialRef belongs to THIS user (never cross-user).
     cred_ref_update = body.credentialRef

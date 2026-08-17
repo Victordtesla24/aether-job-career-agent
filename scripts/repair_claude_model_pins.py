@@ -11,6 +11,11 @@ serves (SAME model), and a Claude pin naming a model the app's Anthropic
 catalog does not carry is CLEARED to NULL so the tier default applies — never
 silently swapped for a different model. Non-Claude picks are untouched.
 
+It also corrects a row's ``provider`` COLUMN when that row serves a Claude model
+(pinned, or via its tier default) but the column claims some other provider —
+a stored assertion that a Claude run bills an account it never touches. The
+model is not changed by that correction; ``provider`` is derived from it.
+
 DRY RUN IS THE DEFAULT. Without ``--apply`` it performs SELECTs only and prints
 exactly what it would change:
 
@@ -53,10 +58,15 @@ def main() -> int:
 
     report = repair_claude_model_pins(apply=args.apply)
     print(json.dumps(report, indent=2, default=str))
-    if not args.apply and (report["normalized"] or report["cleared"]):
+    pending = (
+        report["normalized"] + report["cleared"] + report["providerCorrected"]
+    )
+    if not args.apply and pending:
         print(
             f"\nDRY RUN — {report['normalized']} would be normalized, "
-            f"{report['cleared']} would be cleared. Re-run with --apply to write.",
+            f"{report['cleared']} would be cleared, "
+            f"{report['providerCorrected']} provider column(s) would be corrected. "
+            "Re-run with --apply to write.",
             file=sys.stderr,
         )
     return 0

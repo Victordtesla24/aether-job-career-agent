@@ -379,7 +379,7 @@ const HOP = {
     mechanism:
       "one synced thread per run; never mutates the Email Agent's triage labels",
     evidence:
-      "apps/api/app/agents/sentiment_analysis_agent.py:13,113; catalog copy apps/api/app/routers/agents.py:359",
+      "apps/api/app/agents/sentiment_analysis_agent.py:13,113; catalog copy apps/api/app/routers/agents.py:361",
     discoveryEvidence:
       "apps/api/app/agents/sentiment_analysis_agent.py:51; catalog copy agents.py:343",
     anchors: [
@@ -398,7 +398,10 @@ const HOP = {
     // (P1-A + B6 + D.524 + B1b + ML-STOPALL-001..004 + interim guards all
     // shift agents.py); anchors unchanged. The provenance re-anchor pass
     // revalidates every citation before the landing gates.
-    evidence: "apps/api/app/routers/agents.py:3931,3963",
+    // MODEL-SUB-QUOTA round 3: re-measured against agents.py again (the
+    // subscription-routing work adds imports + a config guard above these
+    // lines). Anchors unchanged — same code, new offsets.
+    evidence: "apps/api/app/routers/agents.py:3956,3988",
     discoveryEvidence: "apps/api/app/routers/agents.py:3380",
     anchors: [
       "def _pipeline_core(",
@@ -480,7 +483,7 @@ const HOP = {
     // honest-refusal check + its helper were inserted earlier in the file) —
     // re-verified against HEAD, same anchors, new line numbers.
     evidence:
-      "apps/api/app/agents/company_research_agent.py:53,183; narrative opt-in at apps/api/app/routers/agents.py:1820,2433",
+      "apps/api/app/agents/company_research_agent.py:53,183; narrative opt-in at apps/api/app/routers/agents.py:1845,2458",
     discoveryEvidence:
       "apps/api/app/agents/company_research_agent.py:53; narrative opt-in at apps/api/app/routers/agents.py:2020-2027",
     anchors: [
