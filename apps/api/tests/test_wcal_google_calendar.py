@@ -108,6 +108,10 @@ class _Events:
             }
         )
 
+    def list(self, **kwargs: Any) -> _Exec:
+        self._api.listed.append(kwargs)
+        return _Exec({"items": list(self._api.events_items)})
+
 
 class _FreeBusy:
     def __init__(self, api: "_FakeCalendarApi") -> None:
@@ -149,6 +153,8 @@ class _FakeCalendarApi:
         probe_error: Exception | None = None,
     ) -> None:
         self.inserted: list[dict[str, Any]] = []
+        self.listed: list[dict[str, Any]] = []
+        self.events_items: list[dict[str, Any]] = []
         self.freebusy_queries: list[dict[str, Any]] = []
         self.freebusy_payload = {"calendars": {"primary": {"busy": busy or []}}}
         self.time_zone = time_zone
@@ -414,6 +420,30 @@ def test_event_payload_carries_title_company_time_and_job_link(
     assert body["location"] == "Video call"
     assert body["start"]["dateTime"].startswith("2026-09-01T04:00:00")
     assert body["end"]["dateTime"].startswith("2026-09-01T04:45:00")
+
+
+def test_list_events_returns_google_items_not_synthesised(
+    db_session, fake_calendar
+):
+    from app.services.calendar_service import GoogleCalendarService
+
+    uid = _uid()
+    _connect_google(uid, scopes=GMAIL_PLUS_CALENDAR_SCOPES)
+    fake_calendar.events_items = [
+        {
+            "id": "evt-john-black",
+            "summary": "Interview with John Black",
+            "organizer": {"email": "john.black@talent.example.com"},
+        }
+    ]
+    now = datetime.now(timezone.utc)
+    items = GoogleCalendarService(uid).list_events(
+        time_min=now - timedelta(days=1),
+        time_max=now + timedelta(days=14),
+    )
+    assert items[0]["id"] == "evt-john-black"
+    assert fake_calendar.listed, "must actually call events().list"
+    assert fake_calendar.listed[0]["calendarId"] == "primary"
 
 
 # ===========================================================================

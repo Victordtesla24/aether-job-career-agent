@@ -2,9 +2,14 @@
 
 Modes (``run(user_id, mode=...)``):
 
-- ``triage``    — sync recent Gmail threads (when connected) and classify every
-                  ``EmailThread`` into the inbox categories the UI filters on
-                  (priority / followup / auto / all), persisting the label.
+- ``triage``    — sync career/job-search/interview threads from every connected
+                  mailbox (personal mail is hidden, never LLM-labelled), ingest
+                  evidenced interview invites into ``Application.status``, then
+                  classify remaining threads into the inbox categories the UI
+                  filters on (priority / followup / auto / all). For a bounded
+                  set of priority/follow-up recruiter threads it also persists
+                  a fabrication-guarded draft reply for human review. It never
+                  sends.
 - ``draft_reply`` — draft a reply grounded ONLY in the candidate's resume + the
                   incoming thread, checked by :class:`FabricationGuard` so it
                   never invents facts about the candidate.
@@ -13,7 +18,9 @@ Modes (``run(user_id, mode=...)``):
                   evidence grounding + FabricationGuard as ``draft_reply``.
 - ``job_alerts`` — scan EVERY connected mailbox for the candidate's own
                   automated job-alert emails (SEEK, LinkedIn, Indeed, Workforce
-                  Australia, recruitment agencies), extract the individual
+                  Australia, recruitment agencies — including Trash via
+                  ``in:anywhere``, because Gmail's default scope hides most
+                  alerts), extract the individual
                   postings out of them and persist each one as a real ``Job``
                   row through ``JobRepository.create``. Fully deterministic —
                   no LLM call at all (``llm_called=False``). See
@@ -34,6 +41,7 @@ google libraries.
 """
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
@@ -47,17 +55,26 @@ from app.services.fabrication_guard import FabricationGuard
 from app.services.llm_client import LLMClient, LLMFixtureMissingError, get_model
 from app.services.resume_grounding import resolve_user_resume_text
 
+logger = logging.getLogger(__name__)
+
 #: Inbox categories the Email Center filters on (see apps/web email/page.tsx).
 _CATEGORIES = ("priority", "followup", "auto", "all")
 
+#: Cron/triage may auto-DRAFT (never send) this many priority/follow-up
+#: recruiter threads per run. Bounds LLM cost on the 10-minute timer.
+_AUTO_DRAFT_LIMIT = 3
+
 _TRIAGE_SYSTEM = (
-    "You triage a job-seeker's recruiter inbox. For each numbered email, assign "
-    "exactly one category from [priority, followup, auto, all], an integer score "
-    "0-100 for how much the candidate should care, and a one-line reason. "
-    "priority = a recruiter/hiring manager needing a timely response; followup = "
-    "the candidate owes a follow-up; auto = automated/no-reply/newsletter; all = "
-    'anything else. Respond with JSON: {"items": [{"index": 0, "category": '
-    '"priority", "score": 80, "reason": "..."}]}'
+    "You triage a job-seeker's CAREER inbox — recruiter mail, interview invites, "
+    "application receipts, and job alerts only. Personal mail has already been "
+    "removed. For each numbered email, assign exactly one category from "
+    "[priority, followup, auto, all], an integer score 0-100 for how much the "
+    "candidate should care, and a one-line reason. "
+    "priority = a recruiter/hiring manager or interview invite needing a timely "
+    "response; followup = the candidate owes a follow-up; auto = automated "
+    "job-alert/no-reply; all = other professional/career mail. Never invent "
+    "facts. Respond with JSON: {\"items\": [{\"index\": 0, \"category\": "
+    "\"priority\", \"score\": 80, \"reason\": \"...\"}]}"
 )
 
 _REPLY_SYSTEM = (
@@ -101,6 +118,9 @@ class EmailAgentResult:
     approval_id: Optional[str] = None
     approval_status: Optional[str] = None
     flagged: list[str] = field(default_factory=list)
+    #: Recruiter threads that received a persisted review-only draft this run.
+    #: Never a send count — outbound mail stays behind the approval gate.
+    drafted: int = 0
 
 
 @dataclass
@@ -193,11 +213,22 @@ class EmailAgent:
         return self._credentials.is_connected(user_id)
 
     def _threads(self, user_id: str) -> list[dict[str, Any]]:
+        from app.services.gmail_service import (
+            ensure_email_thread_agent_columns,
+            ensure_email_thread_last_message_column,
+        )
+
+        ensure_email_thread_last_message_column()
+        ensure_email_thread_agent_columns()
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    'SELECT id, subject, messages, classification FROM "EmailThread"'
-                    ' WHERE "userId" = %s ORDER BY "createdAt" DESC LIMIT 50',
+                    'SELECT id, subject, messages, classification,'
+                    ' "gmailThreadId", "lastMessageAt", "createdAt",'
+                    ' "draftReply" FROM "EmailThread"'
+                    ' WHERE "userId" = %s'
+                    " AND COALESCE(classification, '') <> 'personal'"
+                    ' ORDER BY COALESCE("lastMessageAt", "createdAt") DESC LIMIT 200',
                     (user_id,),
                 )
                 return rows_to_dicts(cur)
@@ -297,12 +328,47 @@ class EmailAgent:
         raise EmailAgentError(f"Unknown email agent mode '{mode}'")
 
     # --------------------------------------------------------------- triage
+    def _sync_career_mailboxes(self, user_id: str) -> int:
+        """Pull career/job-search threads from every connected inbox.
+
+        Uses ``sync_threads_to_db(query=..., max_results=50)`` — the method
+        test fakes already implement — never a new Gmail method name. One
+        mailbox failing must not abort the others.
+        """
+        from app.services.career_email_filter import CAREER_GMAIL_QUERY
+
+        accounts = self._connected_accounts(user_id)
+        targets: list[str | None]
+        if accounts:
+            targets = [acc.get("id") for acc in accounts]
+        else:
+            targets = [None]
+
+        synced = 0
+        errors: list[str] = []
+        for acc_id in targets:
+            try:
+                synced += int(
+                    self._gmail_for(user_id, account_id=acc_id).sync_threads_to_db(
+                        user_id, query=CAREER_GMAIL_QUERY, max_results=50
+                    )
+                    or 0
+                )
+            except Exception as exc:  # noqa: BLE001 — continue remaining inboxes
+                errors.append(str(exc))
+        if errors and synced == 0:
+            raise RuntimeError(errors[-1])
+        return synced
+
     def _triage(self, user_id: str) -> EmailAgentResult:
+        from app.services.career_email_filter import classify_thread
+        from app.services.interview_ingest import ingest_inbound_for_user
+
         connected = self._is_connected(user_id)
         synced = 0
         if connected:
             try:
-                synced = self._gmail_for(user_id).sync_threads_to_db(user_id)
+                synced = self._sync_career_mailboxes(user_id)
             except Exception as exc:  # noqa: BLE001 — degrade, never crash triage
                 connected = False
                 # Zero-LLM-call no-op: sync failed before any classification.
@@ -314,6 +380,25 @@ class EmailAgent:
                     message=f"Gmail sync failed — reconnect your account. ({exc})",
                 )
         threads = self._threads(user_id)
+        ingest_inbound_for_user(user_id, threads, force_calendar=True)
+        kept: list[dict[str, Any]] = []
+        hidden_ids: list[str] = []
+        for t in threads:
+            if classify_thread(t).keep:
+                kept.append(t)
+            elif t.get("id"):
+                hidden_ids.append(str(t["id"]))
+        if hidden_ids:
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        'UPDATE "EmailThread" SET classification = %s'
+                        ' WHERE "userId" = %s AND id = ANY(%s)'
+                        " AND COALESCE(classification, '') <> 'personal'",
+                        ("personal", user_id, hidden_ids),
+                    )
+                conn.commit()
+        threads = kept[:50]
         if not threads:
             # Zero-LLM-call no-op: nothing to classify (Gmail not connected, or
             # connected with an empty inbox), so the triage prompt is never sent —
@@ -354,6 +439,7 @@ class EmailAgent:
         ensure_email_thread_ai_columns()
         categories: dict[str, int] = {}
         triaged = 0
+        auto_draft_targets: list[tuple[str, str]] = []
         with get_connection() as conn:
             with conn.cursor() as cur:
                 for i, t in enumerate(threads):
@@ -361,6 +447,9 @@ class EmailAgent:
                     category = str(item.get("category", "all")).strip().lower()
                     if category not in _CATEGORIES:
                         category = "all"
+                    verdict = classify_thread(t)
+                    if verdict.is_interview_invite:
+                        category = "priority"
                     categories[category] = categories.get(category, 0) + 1
                     # Persist the REAL per-thread score the LLM returned. When the
                     # model gave no genuine number for this index, aiScore is left
@@ -368,28 +457,64 @@ class EmailAgent:
                     score = self._coerce_score(item.get("score"))
                     if score is None:
                         cur.execute(
-                            'UPDATE "EmailThread" SET "classification" = %s,'
-                            ' "updatedAt" = now() WHERE id = %s AND "userId" = %s',
+                            'UPDATE "EmailThread" SET "classification" = %s'
+                            ' WHERE id = %s AND "userId" = %s',
                             (category, t["id"], user_id),
                         )
                     else:
                         cur.execute(
                             'UPDATE "EmailThread" SET "classification" = %s,'
-                            ' "aiScore" = %s, "updatedAt" = now()'
+                            ' "aiScore" = %s'
                             ' WHERE id = %s AND "userId" = %s',
                             (category, score, t["id"], user_id),
                         )
                     triaged += 1
+                    if (
+                        category in ("priority", "followup")
+                        and t.get("gmailThreadId")
+                        and not str(t.get("draftReply") or "").strip()
+                    ):
+                        auto_draft_targets.append((str(t["id"]), category))
             conn.commit()
+        drafted = self._auto_draft_recruiter_threads(user_id, auto_draft_targets)
+        message = f"Triaged {triaged} emails into {len(categories)} categories."
+        if drafted:
+            message += (
+                f" Auto-drafted {drafted} recruiter "
+                f"{'reply' if drafted == 1 else 'replies'} for review — nothing was sent."
+            )
         return EmailAgentResult(
             mode="triage",
             connected=connected,
             degraded=not connected,
             synced=synced,
             triaged=triaged,
+            drafted=drafted,
             categories=categories,
-            message=f"Triaged {triaged} emails into {len(categories)} categories.",
+            message=message,
         )
+
+    def _auto_draft_recruiter_threads(
+        self, user_id: str, targets: list[tuple[str, str]]
+    ) -> int:
+        """Persist review-only drafts for a bounded set of recruiter threads.
+
+        Never calls ``send``. A missing résumé, missing counterparty message,
+        or missing LLM fixture skips that thread so triage itself still
+        succeeds. Local compose drafts (no ``gmailThreadId``) are not targets.
+        """
+        drafted = 0
+        for thread_id, category in targets[:_AUTO_DRAFT_LIMIT]:
+            mode = "draft_follow_up" if category == "followup" else "draft_reply"
+            try:
+                self._compose_draft(user_id, {"thread_id": thread_id}, mode=mode)
+            except (EmailAgentError, LLMFixtureMissingError, LookupError):
+                continue
+            except Exception:  # noqa: BLE001 — one draft failure must not fail triage
+                continue
+            else:
+                drafted += 1
+        return drafted
 
     # ----------------------------------------------------------- job_alerts
     #: Bounds on the scan window and the per-mailbox message budget. Deliberate
@@ -448,7 +573,17 @@ class EmailAgent:
             return result
 
         jobs = self._job_repository()
-        query = f"newer_than:{days}d"
+        # GAP-EMAIL-05: Gmail's default scope excludes TRASH/SPAM; ~95% of the
+        # operator's job-alert mail lived in Trash. Mining uses in:anywhere.
+        # The human-facing inbox sync stays Inbox-scoped (CAREER_GMAIL_QUERY
+        # does not add in:anywhere) so Trash never pollutes Email Center.
+        query = (
+            f"in:anywhere newer_than:{days}d "
+            "(from:seek.com.au OR from:linkedin.com OR from:indeed.com "
+            "OR from:workforceaustralia.gov.au OR from:jobactive.gov.au "
+            "OR from:michaelpage.com.au OR subject:\"new jobs\" "
+            "OR subject:\"job alert\")"
+        )
         for account in accounts:
             account_id = account.get("id")
             summary: dict[str, Any] = {
@@ -629,12 +764,23 @@ class EmailAgent:
                 draft, flagged = self._draft_once(retry_prompt, corpus, "retry")
             except LLMFixtureMissingError:
                 pass  # keep the first draft; flagged is surfaced honestly below
+        try:
+            from app.services.gmail_service import persist_email_thread_draft
+
+            persist_email_thread_draft(user_id, str(thread_id), draft)
+        except Exception:  # noqa: BLE001 — a persist hiccup must not drop the draft
+            logger.exception(
+                "email_agent_draft_persist_failed user_id=%s thread_id=%s",
+                user_id,
+                thread_id,
+            )
         return EmailAgentResult(
             mode=mode,
             connected=self._is_connected(user_id),
             thread_id=thread_id,
             draft=draft,
             flagged=flagged,
+            drafted=1 if draft else 0,
             message=message,
         )
 
@@ -675,6 +821,16 @@ class EmailAgent:
             "breakdown": raw.get("breakdown", []),
             "summary": str(raw.get("summary", "")),
         }
+        try:
+            from app.services.gmail_service import persist_email_thread_insights
+
+            persist_email_thread_insights(user_id, str(thread_id), insights)
+        except Exception:  # noqa: BLE001 — insights still return even if persist fails
+            logger.exception(
+                "email_agent_insights_persist_failed user_id=%s thread_id=%s",
+                user_id,
+                thread_id,
+            )
         return EmailAgentResult(
             mode="insights",
             connected=self._is_connected(user_id),

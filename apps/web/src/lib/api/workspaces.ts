@@ -120,7 +120,7 @@ export interface EmailMessage {
   company: string;
   subject: string;
   preview: string;
-  category: "priority" | "all" | "followup" | "auto" | "trashed";
+  category: "priority" | "all" | "followup" | "auto" | "trashed" | "personal";
   // REAL per-thread triage score (0-100), or `null` when the thread has never
   // been triaged (MV-email-center-001). Never a fabricated 0 — an un-triaged
   // thread genuinely has no score and the badge shows an em-dash.
@@ -255,7 +255,7 @@ export interface EmailInbox {
     autoDrafted: number;
     sentApproved: number;
     followUpsSent: number;
-    avgResponseHrs: number;
+    avgResponseHrs: number | null;
   };
   followUps: Array<{ company: string; role: string; dueIn: string; status: string }>;
   messages: EmailMessage[];
@@ -267,8 +267,15 @@ export interface EmailInbox {
  *  inline shape (and drifting from it). */
 export type EmailInboxAccount = EmailInbox["accounts"][number];
 
-export const fetchEmailInbox = (options: RequestOptions = {}) =>
-  apiRequest<EmailInbox>("/workspaces/emails/inbox", options);
+export const fetchEmailInbox = (
+  options: RequestOptions & { force?: boolean } = {},
+) => {
+  const { force, ...rest } = options;
+  const path = force
+    ? "/workspaces/emails/inbox?force=true"
+    : "/workspaces/emails/inbox";
+  return apiRequest<EmailInbox>(path, rest);
+};
 
 /**
  * Fetch ONE thread's real, full (untruncated) body on demand (W-13 / QA #2).
