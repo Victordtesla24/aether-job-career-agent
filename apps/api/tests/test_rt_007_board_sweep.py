@@ -101,7 +101,12 @@ class TestSweepProcessesWholeBoard:
     def test_tailoring_job_gets_cover_only_and_goes_first(
         self, db_session, user_id, monkeypatch
     ):
-        stuck = _seed_job(db_session, user_id, status="tailoring", fit=10.0)
+        # Both jobs clear the user's match threshold (AUD-COV-2's gate; the
+        # config-absent bar is 50), so what this test measures is purely the
+        # ORDER: a cover-only completion outranks a better-fitting fresh job.
+        # ``stuck`` deliberately has the LOWER of the two passing scores, which
+        # is the whole point — it still goes first.
+        stuck = _seed_job(db_session, user_id, status="tailoring", fit=55.0)
         fresh = _seed_job(db_session, user_id, status="screening", fit=99.0)
         calls: list[tuple[str, str]] = []
         monkeypatch.setattr(
@@ -134,6 +139,10 @@ class TestSweepProcessesWholeBoard:
             # agent is paused by the user's own AgentConfig. Always present
             # (0 here — nothing was paused on this board).
             "skipped_paused": 0,
+            # AUD-COV-2: eligible jobs autopilot declined to auto-generate for
+            # because they sit below the user's own matchThreshold. Always
+            # present (0 here — this board's only job is already applied to).
+            "skipped_low_fit": 0,
             "needs_continuation": False,
         }
 

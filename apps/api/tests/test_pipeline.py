@@ -138,6 +138,21 @@ def test_pipeline_degrades_gracefully_on_cover_fabrication(monkeypatch):
 
     monkeypatch.setattr("app.agents.matcher_agent.MatcherAgent", _FakeMatcher)
 
+    # AUD-COV-2: the pipeline's cover step is gated on the matcher-chosen job's
+    # FIT. "job-x" is a fabricated id with no `Job` row, so a real read scores it
+    # None — unscored, which is below every bar by construction — and this test
+    # would exercise the fit gate instead of the behaviour it is actually about.
+    # A job the matcher selected always carries a real score (it ranks BY
+    # fitScore), so give the fake one, and keep this unit test DB-free like the
+    # `_record_run` bypass above. The gate itself is pinned by
+    # tests/test_cov2_generation_fit_gate.py.
+    monkeypatch.setattr(
+        "app.services.application_submission.job_fit_score", lambda uid, jid: 90.0
+    )
+    monkeypatch.setattr(
+        "app.services.application_submission.load_agent_config", lambda uid: {}
+    )
+
     out = agents_mod._pipeline_core("u1", {}, budget_seconds=480)
 
     assert out["status"] == "completed"
@@ -177,6 +192,21 @@ def test_pipeline_still_awaits_approval_when_cover_succeeds(monkeypatch):
 
     monkeypatch.setattr("app.agents.matcher_agent.MatcherAgent", _FakeMatcher)
 
+    # AUD-COV-2: the pipeline's cover step is gated on the matcher-chosen job's
+    # FIT. "job-x" is a fabricated id with no `Job` row, so a real read scores it
+    # None — unscored, which is below every bar by construction — and this test
+    # would exercise the fit gate instead of the behaviour it is actually about.
+    # A job the matcher selected always carries a real score (it ranks BY
+    # fitScore), so give the fake one, and keep this unit test DB-free like the
+    # `_record_run` bypass above. The gate itself is pinned by
+    # tests/test_cov2_generation_fit_gate.py.
+    monkeypatch.setattr(
+        "app.services.application_submission.job_fit_score", lambda uid, jid: 90.0
+    )
+    monkeypatch.setattr(
+        "app.services.application_submission.load_agent_config", lambda uid: {}
+    )
+
     out = agents_mod._pipeline_core("u1", {}, budget_seconds=480)
     assert out["status"] == "awaiting_approval"
     assert out["approvalRequired"] is True
@@ -214,6 +244,21 @@ def test_pipeline_degradation_message_honest_when_tailor_also_noops(monkeypatch)
             return {"matched": 1, "top_job_id": "job-x"}
 
     monkeypatch.setattr("app.agents.matcher_agent.MatcherAgent", _FakeMatcher)
+
+    # AUD-COV-2: the pipeline's cover step is gated on the matcher-chosen job's
+    # FIT. "job-x" is a fabricated id with no `Job` row, so a real read scores it
+    # None — unscored, which is below every bar by construction — and this test
+    # would exercise the fit gate instead of the behaviour it is actually about.
+    # A job the matcher selected always carries a real score (it ranks BY
+    # fitScore), so give the fake one, and keep this unit test DB-free like the
+    # `_record_run` bypass above. The gate itself is pinned by
+    # tests/test_cov2_generation_fit_gate.py.
+    monkeypatch.setattr(
+        "app.services.application_submission.job_fit_score", lambda uid, jid: 90.0
+    )
+    monkeypatch.setattr(
+        "app.services.application_submission.load_agent_config", lambda uid: {}
+    )
 
     out = agents_mod._pipeline_core("u1", {}, budget_seconds=480)
     assert out["status"] == "completed"

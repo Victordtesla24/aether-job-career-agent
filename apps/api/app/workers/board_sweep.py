@@ -550,6 +550,194 @@ def _sweep_priority(candidate: dict[str, Any]) -> tuple[int, float, Any]:
     )
 
 
+def sweep_match_threshold(user_id: str) -> float:
+    """This user's own auto-generation bar — ``agentConfig.matchThreshold``.
+
+    AUD-COV-2: the SAME reader the auto-APPLY gate uses
+    (``application_submission.user_match_threshold`` over
+    ``load_agent_config``), so the generation half and the transmission half of
+    "gate on real fit" can never disagree about one user's bar. Missing config
+    falls back to 50, never to 0 (D2, audit wf_9a87f76f-eaa).
+    """
+    from app.services.application_submission import (
+        load_agent_config,
+        user_match_threshold,
+    )
+
+    return user_match_threshold(load_agent_config(user_id))
+
+
+def _clears_fit_bar(candidate: dict[str, Any], threshold: float) -> bool:
+    """Whether autopilot may generate for this job, by the ONE shared rule.
+
+    ``meets_match_threshold`` treats a NULL/unparseable ``fitScore`` as BELOW
+    every bar, which is exactly what AUD-COV-2 requires of an UNSCORED job: no
+    evidence of fit means no automated assertion of fit.
+    """
+    from app.services.application_submission import meets_match_threshold
+
+    return meets_match_threshold(candidate.get("fitScore"), threshold)
+
+
+def _low_fit_candidates(
+    user_id: str, attempted: set[str], threshold: float
+) -> list[dict[str, Any]]:
+    """Eligible, not-yet-attempted, NOT failure-saturated jobs that sit below
+    this user's ``matchThreshold`` (or carry no fitScore at all).
+
+    AUD-COV-2 — THE deviation this function exists to end. The sweep used to
+    walk every eligible job and have ``CoverLetterAgent`` write each one a
+    letter whose deterministic §10.2 hook opens "My background … is a direct
+    match for the <role> role at <company>". For a job the user's own
+    fit-scorer put at 12/100 that opening sentence is simply false, and no
+    human asked for the letter. The auto-APPLY gate already refused to SEND
+    those (``application_submission`` D2); this is the missing half that
+    refuses to WRITE them.
+
+    Saturated jobs are excluded so the two backoffs partition cleanly: a job
+    the cover-failure window is holding back is reported as
+    ``skipped-failures``, a job the fit bar is holding back as
+    ``skipped-low-fit``, and never both.
+    """
+    limit = max_cover_failures()
+    return [
+        candidate
+        for candidate in _candidates_with_failure_counts(user_id, attempted)
+        if candidate["coverFailures"] < limit
+        and not _clears_fit_bar(candidate, threshold)
+    ]
+
+
+#: ``AgentRun.output.reason`` marking an honest "autopilot did not generate
+#: because the job is below this user's match bar" row. One spelling, read by
+#: the idempotence query and written by the recorder below.
+_LOW_FIT_SKIP_REASON = "below_match_threshold"
+
+#: Most low-fit skip ROWS one stretch will write. A first tick over a board
+#: with hundreds of poor-fit jobs would otherwise spend the stretch's whole
+#: wall-clock budget on audit inserts before touching a single job that
+#: actually qualifies. The recorder is idempotent, so the remainder is written
+#: by the following ticks and the set converges; the COUNT reported in the
+#: summary and the tick log is always the true total, never this cap.
+_MAX_LOW_FIT_ROWS_PER_STRETCH = 25
+
+
+def _as_float(value: Any) -> float | None:
+    """``float(value)`` or ``None`` — never raises. Used to compare a stored
+    JSONB number against a live one WITHOUT depending on how Postgres renders
+    it as text (``12`` vs ``12.0``), which string equality would get wrong."""
+    if value is None:
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return None if number != number else number
+
+
+def _already_recorded_low_fit_skips(
+    user_id: str, job_ids: list[str]
+) -> dict[str, tuple[float | None, float | None]]:
+    """``{job_id: (fitScore, matchThreshold)}`` from the MOST RECENT low-fit
+    skip row already recorded for each of the supplied jobs.
+
+    One bounded statement over an explicit id set — the same set-wise idiom
+    ``_letterless_counts`` uses, for the same reason (MON-001: nothing here may
+    scale with the user's whole ``AgentRun`` history per candidate row).
+    """
+    from app.db import get_connection
+
+    if not job_ids:
+        return {}
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                '''
+                SELECT DISTINCT ON (r."jobId")
+                       r."jobId",
+                       r."output"->>'fitScore',
+                       r."output"->>'matchThreshold'
+                FROM "AgentRun" r
+                WHERE r."userId" = %s
+                  AND r."agentName" = 'boardSweep'
+                  AND r."jobId" = ANY(%s)
+                  AND r."output"->>'reason' = %s
+                ORDER BY r."jobId", r."createdAt" DESC
+                ''',
+                (user_id, job_ids, _LOW_FIT_SKIP_REASON),
+            )
+            return {
+                row[0]: (_as_float(row[1]), _as_float(row[2]))
+                for row in cur.fetchall()
+            }
+
+
+def _record_low_fit_skips(
+    user_id: str, candidates: list[dict[str, Any]], threshold: float
+) -> int:
+    """Persist one honest, zero-cost ``boardSweep`` AgentRun per low-fit job —
+    ONCE per (fitScore, matchThreshold) state. Returns rows written.
+
+    WHY A ROW AT ALL: without one the user sees autopilot simply skip half
+    their board with nothing in "Recent runs" explaining why — the exact
+    "autopilot goes quiet with no in-app explanation" complaint the
+    cover-failure suppression already had to answer. The row names the job,
+    the score, the bar, and what the user can do about it.
+
+    WHY ONLY ON STATE CHANGE: the cron ticks every ~10 minutes forever, and a
+    low-fit job stays eligible forever, so re-recording an UNCHANGED skip every
+    tick would reproduce ML-W-19's measured pathology (76 rows per job per 24h)
+    with a different label. A re-score or a threshold change is genuinely new
+    information and does record a fresh row.
+
+    WHY ``boardSweep`` AND NOT ``coverLetter``: a ``coverLetter`` row is read
+    by the cover-failure backoff and by every "did this job get a letter"
+    surface. This run produced no letter and attempted none, so recording it
+    under the sweep's own agent name (the name ``_record_spend_cap_stop``
+    already uses for autopilot's own honest rows) keeps it out of those
+    counts by construction rather than by predicate discipline.
+    """
+    from app.repositories.agent_run import AgentRunRepository
+    from app.services.application_submission import low_fit_skip_message
+
+    if not candidates:
+        return 0
+    seen = _already_recorded_low_fit_skips(
+        user_id, [candidate["id"] for candidate in candidates]
+    )
+    runs = AgentRunRepository()
+    written = 0
+    for candidate in candidates:
+        if written >= _MAX_LOW_FIT_ROWS_PER_STRETCH:
+            break
+        fit = _as_float(candidate.get("fitScore"))
+        if seen.get(candidate["id"]) == (fit, threshold):
+            continue
+        run = runs.start(
+            user_id,
+            "boardSweep",
+            {
+                "job_id": candidate["id"],
+                "reason": _LOW_FIT_SKIP_REASON,
+                "systemRun": True,
+            },
+        )
+        runs.finish(
+            run["id"],
+            "completed",
+            output={
+                "skipped": True,
+                "reason": _LOW_FIT_SKIP_REASON,
+                "fitScore": fit,
+                "matchThreshold": threshold,
+                "message": low_fit_skip_message(fit, threshold),
+            },
+            cost_usd=0.0,
+        )
+        written += 1
+    return written
+
+
 def _saturated_job_ids(user_id: str, attempted: set[str]) -> list[str]:
     """Ids of eligible jobs that are CURRENTLY skipped solely due to the cover
     failure backoff (they have ``max_cover_failures()``+ letterless coverLetter
@@ -636,7 +824,9 @@ def _earliest_suppression_expiry(user_id: str, job_ids: list[str]) -> str | None
     return min(expiries).replace(microsecond=0).isoformat()
 
 
-def _next_target(user_id: str, attempted: set[str]) -> dict[str, str] | None:
+def _next_target(
+    user_id: str, attempted: set[str], threshold: float | None = None
+) -> dict[str, str] | None:
     """The next job to process: cover-only completions first (finish work a
     prior stretch started), then full runs by fitScore descending.
 
@@ -660,12 +850,23 @@ def _next_target(user_id: str, attempted: set[str]) -> dict[str, str] | None:
     priority order, but the cost of one statement no longer scales with
     (eligible jobs) x (that user's AgentRun history), which is what the hosted
     5 s statement timeout was cancelling on every tick.
+
+    AUD-COV-2: a job below this user's ``agentConfig.matchThreshold`` — or
+    carrying no ``fitScore`` at all — is EXCLUDED here too. The gate belongs in
+    SELECTION rather than at the dispatch site so a poor-fit job can never
+    consume a stretch's job-cap slot, its deadline, or an ``attempted`` entry:
+    autopilot does not write a "direct match" letter for a role the user's own
+    fit-scorer rejected. ``threshold`` defaults to a fresh read of the user's
+    own bar; callers already holding it pass it to avoid re-reading per
+    iteration.
     """
     limit = max_cover_failures()
+    threshold = sweep_match_threshold(user_id) if threshold is None else threshold
     eligible = [
         candidate
         for candidate in _candidates_with_failure_counts(user_id, attempted)
         if candidate["coverFailures"] < limit
+        and _clears_fit_bar(candidate, threshold)
     ]
     if not eligible:
         return None
@@ -676,7 +877,9 @@ def _next_target(user_id: str, attempted: set[str]) -> dict[str, str] | None:
     }
 
 
-def _remaining_eligible_count(user_id: str, attempted: set[str]) -> int:
+def _remaining_eligible_count(
+    user_id: str, attempted: set[str], threshold: float | None = None
+) -> int:
     """Eligible jobs this stretch has NOT attempted yet.
 
     CRITICAL-3 requirement 4 ("never silently swallow"): when the stretch
@@ -684,9 +887,16 @@ def _remaining_eligible_count(user_id: str, attempted: set[str]) -> int:
     number goes into the summary and the log so an aborted stretch can never be
     mistaken for a finished board — the old code broke out with no record of
     how much it left behind.
+
+    AUD-COV-2: the fit bar is applied here too. A job the gate would never have
+    dispatched is not work the abort abandoned, so counting it would overstate
+    what was left behind — the mirror image of the dishonesty this counter
+    exists to prevent. The SQL twin of ``meets_match_threshold``: ``>=`` the
+    user's bar, and NULL (unscored) fails it.
     """
     from app.db import get_connection
 
+    threshold = sweep_match_threshold(user_id) if threshold is None else threshold
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -699,13 +909,15 @@ def _remaining_eligible_count(user_id: str, attempted: set[str]) -> int:
                      OR (j."status" IN ('screening','matched')
                          AND j."fitScore" IS NOT NULL)
                       )
+                  AND j."fitScore" IS NOT NULL
+                  AND j."fitScore" >= %s
                   AND j."status" NOT IN ('applied','archived')
                   AND NOT EXISTS (
                         SELECT 1 FROM "Application" a
                         WHERE a."jobId" = j."id" AND a."userId" = j."userId"
                       )
                 ''',
-                (user_id, list(attempted) or ["-"]),
+                (user_id, list(attempted) or ["-"], threshold),
             )
             row = cur.fetchone()
     return row[0] if row else 0
@@ -956,8 +1168,29 @@ def sweep_user_stretch(
         # distinct bucket from "failures" (nothing went wrong) and from
         # "skipped_failures" (unrelated to cover-failure saturation).
         "skipped_paused": 0,
+        # AUD-COV-2: eligible jobs this stretch refused to auto-generate for
+        # because they sit below the user's own matchThreshold (or are
+        # unscored). Its own bucket for the same reason "skipped_paused" is:
+        # nothing failed, and nothing is being backed off — the user's stated
+        # fit bar simply said no.
+        "skipped_low_fit": 0,
     }
     llm_outages = 0
+    # AUD-COV-2. Read ONCE per stretch (the bar cannot change mid-stretch in
+    # any way that should retroactively re-open a job) and threaded into every
+    # target selection below, so the whole stretch judges every job against one
+    # value instead of re-reading the config per iteration.
+    threshold = sweep_match_threshold(user_id)
+    low_fit = _low_fit_candidates(user_id, attempted, threshold)
+    summary["skipped_low_fit"] = len(low_fit)
+    if low_fit:
+        recorded = _record_low_fit_skips(user_id, low_fit, threshold)
+        logger.info(
+            "board-sweep %s: %d eligible job(s) NOT auto-generated — below the "
+            "user's match threshold of %s (or unscored); %d newly recorded as "
+            "honest skips",
+            user_id, len(low_fit), threshold, recorded,
+        )
 
     def _abort_on_llm(llm_exc: Any, job_id: str) -> None:
         """Record + log an abort caused by an upstream LLM refusal.
@@ -971,7 +1204,9 @@ def sweep_user_stretch(
             "llm-unavailable" if getattr(llm_exc, "retryable", True)
             else f"llm-{failure_class}"
         )
-        summary["suppressed"] = _remaining_eligible_count(user_id, attempted)
+        summary["suppressed"] = _remaining_eligible_count(
+            user_id, attempted, threshold
+        )
         logger.warning(
             "board-sweep %s: ABORTING stretch after job %s — upstream LLM "
             "failure class=%s retryable=%s; %d eligible job(s) suppressed "
@@ -992,7 +1227,7 @@ def sweep_user_stretch(
         if breach is not None:
             _stop_on_spend_cap(summary, user_id, breach)
             break
-        target = _next_target(user_id, attempted)
+        target = _next_target(user_id, attempted, threshold)
         if target is None:
             # Distinguish "board truly complete" from "all remaining jobs
             # are failure-saturated" — the latter means the sweep is NOT
@@ -1006,6 +1241,16 @@ def sweep_user_stretch(
                 summary["suppression_expiry"] = _earliest_suppression_expiry(
                     user_id, saturated_ids
                 )
+            elif summary["skipped_low_fit"]:
+                # AUD-COV-2: same honesty rule as ``skipped-failures`` — the
+                # board is NOT complete, autopilot is declining to write
+                # "direct match" letters for roles the user's own bar rejects.
+                # Reported distinctly so a quiet autopilot is never mistaken
+                # for a finished one (and, unlike the LLM aborts, this is not
+                # an ``llm-*`` reason, so ``needs_continuation`` stays False —
+                # re-enqueuing would find the identical jobs still below the
+                # identical bar).
+                summary["reason"] = "skipped-low-fit"
             else:
                 summary["reason"] = "board-complete"
             break
@@ -1080,7 +1325,9 @@ def sweep_user_stretch(
             # not an ``llm-*`` string, so ``needs_continuation`` stays False and
             # nothing reads this as an upstream outage.
             summary["reason"] = "resume-no-bullets"
-            summary["suppressed"] = _remaining_eligible_count(user_id, attempted)
+            summary["suppressed"] = _remaining_eligible_count(
+                user_id, attempted, threshold
+            )
             logger.warning(
                 "board-sweep %s: ABORTING stretch after job %s — resume input "
                 "error (NOT an LLM failure; circuit untouched); %d eligible "

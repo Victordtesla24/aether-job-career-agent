@@ -49,6 +49,8 @@ import {
 } from "../../../lib/api/agents";
 import {
   agentOutputGaps,
+  autopilotSkipMessage,
+  autopilotSkipped,
   isInFlight,
   isLiveRun,
   isStalledRun,
@@ -1354,6 +1356,20 @@ export default function AgentsPage() {
                         // "Unavailable" treatment the dashboard feed already
                         // uses for this exact run shape.
                         <span className="text-aether-muted">Unavailable</span>
+                      ) : autopilotSkipped(run) ? (
+                        // AUD-COV-2: an autopilot low-fit skip is recorded
+                        // status='completed' (nothing failed — the user's own
+                        // match threshold said no), but a green "completed"
+                        // here is indistinguishable from a sweep that actually
+                        // generated something. Same neutral treatment the
+                        // letterless degrade above gets, with the backend's own
+                        // sentence as the tooltip.
+                        <span
+                          className="text-aether-muted"
+                          title={autopilotSkipMessage(run) || undefined}
+                        >
+                          Skipped
+                        </span>
                       ) : isStalledRun(run, now) ? (
                         // CRITICAL-2: never print the raw "running" for a row
                         // whose worker is gone — that word is what convinced
@@ -1389,10 +1405,20 @@ export default function AgentsPage() {
                         clamped, never truncated away. */}
                     <td className="max-w-[280px] text-[11px] leading-[1.45] text-aether-muted-dim">
                       <span
-                        title={humanizeActivityMessage(run.error) || undefined}
+                        title={
+                          humanizeActivityMessage(run.error) ||
+                          autopilotSkipMessage(run) ||
+                          undefined
+                        }
                         className="line-clamp-1 block"
                       >
-                        {humanizeActivityMessage(run.error) || "—"}
+                        {/* AUD-COV-2: a low-fit skip has no `error` (nothing
+                            went wrong), so this notes column would read "—"
+                            and leave the row unexplained. Fall back to the
+                            skip's own recorded sentence. */}
+                        {humanizeActivityMessage(run.error) ||
+                          autopilotSkipMessage(run) ||
+                          "—"}
                       </span>
                     </td>
                     <td className="max-w-[340px]">

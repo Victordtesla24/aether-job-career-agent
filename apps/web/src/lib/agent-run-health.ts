@@ -59,6 +59,38 @@ export function coverLetterDegraded(run: AgentRun): boolean {
   return out.coverLetterUnavailable === true;
 }
 
+/** True when an autopilot (`boardSweep`) run is an honest SKIP rather than work
+ * done (AUD-COV-2).
+ *
+ * The board-sweep autopilot does not auto-generate a cover letter for a job
+ * below the user's own `agentConfig.matchThreshold` (or one that has never been
+ * fit-scored) — writing a "direct match" opener for a role the fit-scorer
+ * rejected is a claim the evidence does not support. It records that decision
+ * as a zero-cost `boardSweep` run with `output.skipped = true`, which is
+ * `completed` on purpose: nothing failed, and a red row for a correct refusal
+ * would be dishonest the other way (the same reasoning GAP-P4-002 applied to
+ * the cover-letter guard degrade above).
+ *
+ * But `completed` alone would let the run count as work produced, so — exactly
+ * like `coverLetterDegraded` — the shape is named here once and read by both
+ * `runProducedOutput` and the runs table's status cell. `=== true`, never a
+ * truthy coercion, matching the strictness of the SQL and of the degrade check
+ * above so no unrelated output shape can be misread as a skip. */
+export function autopilotSkipped(run: AgentRun): boolean {
+  if (run.agentName !== "boardSweep") return false;
+  const out = run.output ?? {};
+  return out.skipped === true;
+}
+
+/** The autopilot's own sentence explaining a skip, or `""` when the run is not
+ * one. Quoted verbatim by the UI rather than restated, so the reason a user
+ * reads is the reason the backend recorded. */
+export function autopilotSkipMessage(run: AgentRun): string {
+  if (!autopilotSkipped(run)) return "";
+  const message = (run.output ?? {}).message;
+  return typeof message === "string" ? message : "";
+}
+
 /** `queued` / `running` — the statuses that claim work is still happening. */
 export function isInFlight(run: Pick<AgentRun, "status">): boolean {
   return run.status === "running" || run.status === "queued";
@@ -209,9 +241,14 @@ export const STALLED_RUN_ADVICE =
  * A `completed` run counts, EXCEPT a letterless coverLetter degrade, which is
  * recorded `completed` on purpose (the guard working is not a failure) but
  * produced no artefact. Anything queued/running/failed produced nothing yet.
+ *
+ * AUD-COV-2 adds the second such shape for the identical reason: an autopilot
+ * low-fit SKIP is `completed` on purpose and produced nothing.
  */
 export function runProducedOutput(run: AgentRun): boolean {
-  return run.status === "completed" && !coverLetterDegraded(run);
+  return (
+    run.status === "completed" && !coverLetterDegraded(run) && !autopilotSkipped(run)
+  );
 }
 
 export interface AgentOutputGap {

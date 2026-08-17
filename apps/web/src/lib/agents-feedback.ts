@@ -101,6 +101,32 @@ export function pipelineCompletionNotice(response: Record<string, unknown>): Not
     };
   }
 
+  // AUD-COV-2: the pipeline chose the job itself, so its cover step is
+  // AUTO-generation and is gated on the user's own `agentConfig.matchThreshold`.
+  // Below the bar (or unscored) no letter is written — and this branch must
+  // exist, because without it the run falls through to the "no jobs matched
+  // yet" notice below, which would be flatly false: a job WAS matched and the
+  // resume WAS tailored. The server's own sentence is quoted verbatim rather
+  // than restated here, so the reason the user reads is the reason the backend
+  // recorded.
+  const lowFitSkip = byAgent.get("coverLetter");
+  if (lowFitSkip?.reason === "below_match_threshold") {
+    const tailorClause =
+      changes > 0
+        ? `and your resume was tailored (${changes} changes)`
+        : "and no verifiable resume changes were applied";
+    const reason =
+      typeof lowFitSkip.message === "string" && lowFitSkip.message
+        ? lowFitSkip.message
+        : "No cover letter was auto-generated: this role is below your match threshold.";
+    return {
+      kind: "info",
+      text: `Pipeline complete — ${matched} jobs matched (${scored} newly scored) ${tailorClause}${target}. ${reason}`,
+      href: "/dashboard/cover-letters",
+      hrefLabel: "open the Cover Letter studio →",
+    };
+  }
+
   if (response.approvalRequired) {
     return {
       kind: "success",

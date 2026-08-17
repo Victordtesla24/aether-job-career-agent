@@ -43,6 +43,13 @@ export interface CoverLetterRunResult {
   coverLetterUnavailable?: boolean;
   reason?: string;
   message?: string;
+  // AUD-COV-2: an honest low-fit disclosure travelling BESIDE a letter that
+  // was generated anyway — the job scored below the user's own
+  // `agentConfig.matchThreshold`, or was never fit-scored, and she asked for
+  // the letter explicitly (autopilot refuses to auto-generate for these).
+  // Empty string / absent whenever the job clears her bar. Never part of the
+  // letter body a real employer reads.
+  fit_disclosure?: string;
 }
 
 export async function runCoverLetterAgent(
