@@ -140,6 +140,7 @@ export interface EmailMessage {
   // inbox load never triggers 64 LLM calls.
   intelligence: EmailIntelligence | null;
   draftReply: string;
+  unread?: boolean;
 }
 
 /**
@@ -248,6 +249,7 @@ export interface EmailInbox {
     // Optional because the shape predates them.
     actionRequired?: boolean;
     note?: string | null;
+    lastSyncedAt?: string | null;
   }>;
   stats: {
     received: number;

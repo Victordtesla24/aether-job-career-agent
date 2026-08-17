@@ -815,7 +815,16 @@ export default function EmailCenterPage() {
                   ) : null}
                   {/* Never claim an unread count for an inbox we can no longer read. */}
                   {isConnected ? (
-                    <span className="mono text-[10px] text-aether-muted-dim">{a.unread} unread</span>
+                    <span
+                      className="mono text-[10px] text-aether-muted-dim"
+                      title={
+                        a.lastSyncedAt
+                          ? `Last synced ${formatReceivedAt(a.lastSyncedAt)}`
+                          : "Unread career-inbox threads"
+                      }
+                    >
+                      {a.unread} unread
+                    </span>
                   ) : null}
                 </button>
                 {/* Deliberately a label, not a per-account button: Google's consent
@@ -1148,7 +1157,16 @@ export default function EmailCenterPage() {
                       }`}
                   >
                     <div className="flex items-center justify-between gap-2">
-                      <p className="truncate text-xs font-semibold">{m.from}</p>
+                      <p className="flex min-w-0 items-center gap-1.5 truncate text-xs font-semibold">
+                        {m.unread ? (
+                          <span
+                            data-testid="email-unread-dot"
+                            title="Unread"
+                            className="h-1.5 w-1.5 shrink-0 rounded-full bg-aether-coral"
+                          />
+                        ) : null}
+                        <span className="truncate">{m.from}</span>
+                      </p>
                       <span
                         className={`mono flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-[10px] font-bold ${scoreColor(m.score)}`}
                         title={badge.scored ? `Intelligence score ${badge.text}` : "Not analyzed yet — run AI Triage"}
@@ -1447,8 +1465,8 @@ export default function EmailCenterPage() {
               </p>
             ) : null}
             <div className="space-y-2.5">
-              {inbox.followUps.map((f) => (
-                <div key={`${f.company}-${f.role}`} className="rounded-xl border border-white/10 bg-white/5 p-3">
+              {inbox.followUps.map((f, idx) => (
+                <div key={`${f.company}-${f.role}-${idx}`} className="rounded-xl border border-white/10 bg-white/5 p-3">
                   <p className="text-xs font-semibold">
                     {f.role} · {f.company}
                   </p>
