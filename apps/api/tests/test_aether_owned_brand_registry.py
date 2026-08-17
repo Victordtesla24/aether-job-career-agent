@@ -29,6 +29,7 @@ EXPECTED_KINDS = {
     "founder_digest",
     "notification_digest",
     "trial_ending",
+    "sales_outreach",
     "business_card",
     "document",
 }
@@ -53,6 +54,86 @@ def _assert_gilt_bulletproof(html: str) -> None:
     assert "<style" not in lowered
     assert "<link" not in lowered
     assert "aether" in lowered
+
+
+_CATALOGUE_PLAN = {
+    "id": "starter",
+    "name": "Starter",
+    "priceAudMonthly": 19,
+    "priceAudAnnual": 190,
+    "runsPerMonth": 25,
+}
+
+
+def test_catalogue_kinds_are_exactly_document_kinds() -> None:
+    from app.services.brand_documents import DOCUMENT_KINDS
+
+    assert set(DOCUMENT_KINDS) == EXPECTED_KINDS
+
+
+def test_every_catalogue_kind_renders_gilt_and_honours_img_allow_list() -> None:
+    from app.services.brand_documents import DOCUMENT_KINDS, render_document
+
+    for kind, meta in DOCUMENT_KINDS.items():
+        html = render_document(
+            kind, plan=_CATALOGUE_PLAN if meta["needsPlan"] else None
+        )
+        lowered = html.lower()
+        assert "#c9a84c" in lowered, kind
+        assert "#08080a" in lowered, kind
+        assert "<style" not in lowered, kind
+        assert "<link" not in lowered, kind
+        if meta.get("allowsImg"):
+            assert "<img" in lowered, (
+                f"{kind} is on the img allow-list but rendered no <img>"
+            )
+        else:
+            assert "<img" not in lowered, (
+                f"{kind} is not on the img allow-list but rendered an <img>"
+            )
+
+
+def test_sales_outreach_preview_is_the_live_gmail_wrapper() -> None:
+    from app.agents.sales_agent import append_compliance_footer
+    from app.services.brand_documents import render_document
+    from app.services.sales_branding import render_sales_outreach_html
+
+    html = render_document("sales_outreach")
+    live = render_sales_outreach_html(
+        "{{subject}}",
+        append_compliance_footer("Hi {{name}},\n\n{{body}}"),
+    )
+    assert html == live
+    assert "{{name}}" in html
+    assert "{{subject}}" in html
+    assert "{{body}}" in html
+    assert "unsubscribe" in html.lower()
+    assert "<img" in html.lower()
+
+
+def test_founder_digest_preview_and_live_share_one_builder() -> None:
+    from app.services.email_branding import (
+        FOUNDER_DIGEST_STATS,
+        build_founder_digest_bodies,
+        build_founder_digest_preview_bodies,
+    )
+
+    preview_html, _preview_text = build_founder_digest_preview_bodies()
+    values = {key: f"v-{key}" for _label, key in FOUNDER_DIGEST_STATS}
+    live_html, live_text = build_founder_digest_bodies(
+        date="2026-08-17",
+        values=values,
+        admin_url="https://example.test/admin",
+    )
+    for label, key in FOUNDER_DIGEST_STATS:
+        assert label in preview_html
+        assert label in live_html
+        token = "{{" + key + "}}"
+        assert token in preview_html
+        assert f"v-{key}" in live_html
+        assert f"v-{key}" in live_text
+    assert "<img" not in preview_html.lower()
+    assert "<img" not in live_html.lower()
 
 
 def test_registry_is_the_single_brand_catalogue(client, admin_headers) -> None:

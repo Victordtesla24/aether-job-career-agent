@@ -943,5 +943,35 @@ Rules of engagement unchanged: locks (git/deploy/test), runbook deploys, append-
 - `apps/api/app/services/email_branding.py`, `brand_documents.py`, `branded_artefacts.py` (new), `routers/auth.py` (non-fatal welcome send), `routers/billing.py` (lifecycle mail after commit), `routers/approvals.py` (notification-digest chrome)
 - `apps/api/tests/test_design_system_canonical.py`, `test_subscriber_welcome.py`, `test_aether_owned_brand_registry.py`, plus targeted updates to `test_sales_agent.py` / `test_brand_email_adoption.py`
 - `apps/web/src/app/admin/sales-agent/page.tsx` (brand-tab copy), `apps/web/src/components/charts/tokens.ts` (DS path)
-**Brand catalogue:** password_reset, founder_digest, notification_digest, trial_ending, business_card, document added to the Brand tab; Stripe lifecycle + auto-reply previews are the live `email_branding` send. Carve-out unchanged: candidate → employer Gmail.
+**Brand catalogue:** password_reset, founder_digest, notification_digest, trial_ending, business_card, document, **sales_outreach** on the Brand tab; Stripe lifecycle + auto-reply previews are the live `email_branding` send. Carve-out unchanged: candidate → employer Gmail.
 **Deploy:** will stash foreign WIP before any production build/restart so uncommitted email/interview work cannot ship.
+**Continuation 2026-08-17T12:00Z — automated email catalogue.** Brand-tab kind `sales_outreach` is the live `render_sales_outreach_html` Gmail wrapper. Founder digest preview and live send share `build_founder_digest_bodies`. Designer fill-in: `design/templates/email.html`. Does not touch SESSION EC / SESSION NW files.
+
+---
+
+## SESSION EC — 2026-08-17T11:50Z — Email Center + Email Agent (score sort, product mail, agent graph)
+
+**By:** Cursor Grok session. Email-center files only; does not take design/sales/branding WIP.
+**Scope claimed:**
+- `apps/api/app/services/career_email_filter.py`, `gmail_service.py`, `apps/api/app/agents/email_agent.py`, `apps/api/app/routers/workspaces.py`, `apps/api/app/routers/agents.py` (charter enrichedBy + honest emailAgent metrics/tip only)
+- `apps/web/src/app/dashboard/email/page.tsx` + email-center tests
+- Matching pytest under `apps/api/tests/test_career_email_filter.py`, `test_email_center_career_inbox.py`, `test_email_agent.py`, `test_gm2_email_agents_findings.py`
+**Does not touch:** `aether.env`, design-system WIP, sales-agent, branding, `opengaps.md` billing ledger.
+**Deploy:** claim a window here before restarting `aether-api` / `aether-web` / `aether-worker`. Autodeploy will abort on foreign WIP — expected.
+**Safety:** never auto-send; never pipe career inbox into Sales Agent; `aiScore` stays nullable.
+
+---
+
+## SESSION NW — 2026-08-17T12:10Z — Networking CRM honesty + freshness + agent hand-off
+
+**By:** Cursor Grok session. Independent adversarial review then fix of `/dashboard/networking`.
+**Scope claimed:**
+- `apps/api/app/services/networking_insights.py` (new)
+- `apps/api/app/routers/networking.py` (upsert, refresh-from-inbox)
+- `apps/api/app/routers/workspaces.py` **only** `networking_summary()` — not email_inbox (SESSION EC)
+- `apps/api/app/routers/analytics.py` additive `GET /analytics/networking`
+- `apps/api/app/agents/sales_agent.py` additive `_run_network_nurture` + one call from `run()` (does not revert branding hunks)
+- `apps/web/src/app/dashboard/networking/**`, `apps/web/src/lib/api/networking.ts`, `workspaces.ts` networking types, `analytics.ts` networking schema
+- Matching tests under `apps/api/tests/test_networking*.py`, `test_workspaces.py`, `test_gmail_contact_import.py`, `test_linkedin_contact_import.py`, networking vitest
+**Does not touch:** `email_agent.py`, `career_email_filter.py`, `gmail_service.py`, Email Center page, `aether.env`, `opengaps.md`.
+**Deploy:** stash foreign WIP (email/sales branding) before restart; claim window here.

@@ -598,12 +598,15 @@ def test_campaign_crud(client, admin_headers):
 def test_branded_email_preserves_compliance_footer_verbatim():
     """§6 hard gate survives templating: the branded HTML must contain the
     full compliance footer text (escaped), and never the raw placeholder."""
-    from app.services.sales_branding import render_branded_email, split_compliance_footer
+    from app.services.sales_branding import (
+        render_sales_outreach_html,
+        split_compliance_footer,
+    )
 
     body = append_compliance_footer(
         personalize_template("Hi {{name}},\n\nTry Aether today.", "Alex")
     )
-    html = render_branded_email("Welcome", body)
+    html = render_sales_outreach_html("Welcome", body)
     assert "{{name}}" not in html
     assert "Hi Alex," in html
     assert "operated by Vikram Sarkar" in html
@@ -865,7 +868,7 @@ def test_brand_documents_registry_lists_kinds_plans_and_assets(
         "payment_failed", "cancellation_confirmed",
         "subscriber_welcome",
         "password_reset", "founder_digest", "notification_digest",
-        "trial_ending", "business_card", "document",
+        "trial_ending", "sales_outreach", "business_card", "document",
     }
     plan_ids = {p["id"] for p in data["plans"]}
     assert {"free", "starter", "pro", "power"} <= plan_ids
