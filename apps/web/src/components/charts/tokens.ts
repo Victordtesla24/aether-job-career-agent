@@ -1,7 +1,7 @@
 /**
  * Chart-kit design tokens — the validated obsidian-and-gilt palette
  * (UI-BRAND run, RULINGS.md R-VIZ; DS ground truth
- * `/home/ubuntu/aether_design_system/tokens/colors.css`).
+ * `design/aether-design-system/tokens/colors.css`).
  *
  * R-VIZ was validated with the dataviz-skill colour validator in dark mode
  * against BOTH the page ground #08080A and the card ground #0F0F12, including

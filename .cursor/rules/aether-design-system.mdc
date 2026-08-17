@@ -1,0 +1,21 @@
+---
+description: Default Aether Career design system for every artefact — obsidian and gilt.
+alwaysApply: true
+---
+
+# Aether Career design system (always on)
+
+The default design system for this repository is the vendored Claude zip:
+
+`design/aether-design-system/`
+
+Before creating or restyling UI, email, markdown, HTML, SVG, PDF chrome, admin documents, charts, or README/marketing blocks:
+
+1. Read `design/aether-design-system/readme.md` (and `SKILL.md`).
+2. Use tokens from `design/aether-design-system/tokens/colors.css` — gilt `#C9A84C`, ink `#08080A`, sapphire `#3E5A8C`.
+3. Type: AB Marquee (display), AB Sans (body), JetBrains Mono (data).
+4. No emoji. No coral `#FF6B35`. No electric indigo `#4F46E5`. Gold is never a status colour (warn is copper `#C8873A`).
+5. Aether-owned email: `apps/api/app/services/email_branding.py` (Brand-tab preview is the live send). Generated docs: `apps/api/app/services/branded_artefacts.py` or `design/templates/artefact.html`. All templates live under Sales Agent → Brand, including the business card.
+6. Do not gilt-brand the candidate's application email to an employer.
+
+Product restatement: `design/DESIGN.md`. Agent contract: `AGENTS.md`.

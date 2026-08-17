@@ -175,16 +175,24 @@ export function providerLabel(
 }
 
 /**
- * Which provider an id bills to, by the server's rule (resolve_provider):
- * a `/` in the id is an OpenRouter id; a bare `claude-*` is direct Anthropic.
- * Anything else is unknown here — the server decides, and this returns null
- * rather than guessing on the user's bill.
+ * Which provider an id bills to, by the server's rule (`resolve_provider`).
+ *
+ * MODEL-SUB-QUOTA (OWNER DIRECTIVE 2026-08-17): ANY Claude id — bare
+ * `claude-*` OR namespaced `anthropic/claude-*` — is served by the operator's
+ * Anthropic subscription. Both spellings name one model, so both label as
+ * Anthropic; labelling the namespaced form "OpenRouter" would tell the user
+ * their Claude run billed to an account it never touched.
+ *
+ * Every OTHER `vendor/model` id is an OpenRouter id, unchanged. Anything else
+ * is unknown here — the server decides, and this returns null rather than
+ * guessing on the user's bill. Kept in lockstep with the API rule by
+ * `__tests__/agents/conductor-logic.test.ts`.
  */
 export function providerFromModelId(model: string | null | undefined): string | null {
   const id = (model ?? "").trim();
   if (!id) return null;
+  if (/^(?:anthropic\/)?claude-/i.test(id)) return "anthropic";
   if (id.includes("/")) return "openrouter";
-  if (/^claude-/i.test(id)) return "anthropic";
   return null;
 }
 

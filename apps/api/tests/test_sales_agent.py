@@ -863,6 +863,9 @@ def test_brand_documents_registry_lists_kinds_plans_and_assets(
     assert kinds == {
         "invoice", "auto_reply", "subscription_confirmed",
         "payment_failed", "cancellation_confirmed",
+        "subscriber_welcome",
+        "password_reset", "founder_digest", "notification_digest",
+        "trial_ending", "business_card", "document",
     }
     plan_ids = {p["id"] for p in data["plans"]}
     assert {"free", "starter", "pro", "power"} <= plan_ids

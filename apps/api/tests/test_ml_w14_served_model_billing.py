@@ -190,7 +190,12 @@ def test_anthropic_transport_also_reports_the_served_model(monkeypatch, tmp_path
         served_model_capture,
     )
 
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-api03-test")
+    # MODEL-SUB-QUOTA (OWNER DIRECTIVE 2026-08-17): a Claude model is served
+    # ONLY by the Anthropic SUBSCRIPTION token, never a metered api_key — so
+    # the credential this test stands the transport up with is the oat token.
+    # The SUBJECT (the Anthropic transport reports its served model) is
+    # unchanged, and every assertion below is untouched.
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-oat01-served-model-test")
     monkeypatch.delenv("AETHER_LLM_API_KEY", raising=False)
     body = {
         "model": "claude-sonnet-4-5-20250929",

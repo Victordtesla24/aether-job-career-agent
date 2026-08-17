@@ -81,23 +81,40 @@ def test_blank_override_is_a_noop(monkeypatch):
 
 
 def test_openrouter_catalog_ids_route_to_openrouter_not_direct_anthropic():
-    """Billing-separation fix (adversarial-review FAIL): OpenRouter namespaces
-    every model as ``vendor/model`` and bills them itself — so an
-    ``anthropic/claude-…`` id picked from the OpenRouter catalog MUST route to
-    OpenRouter, NOT the direct-Anthropic account. Only a BARE ``claude-…`` native
-    id routes to direct Anthropic."""
+    """Billing separation: an id picked from the OpenRouter catalog bills through
+    OpenRouter — the credential it was chosen with — and never crosses to the
+    direct-Anthropic account.
+
+    SCOPE NARROWED (MODEL-SUB-QUOTA, OWNER DIRECTIVE 2026-08-17). This test used
+    to include ``anthropic/claude-…`` ids in the "bills OpenRouter" set. It no
+    longer does: a Claude model is served by the operator's Anthropic
+    subscription in BOTH spellings, because buying the same model twice was the
+    defect the directive names. The separation this test exists to protect is
+    otherwise untouched — every NON-Claude vendor/model id still bills through
+    OpenRouter, which is what the remaining assertions pin. The Claude half is
+    pinned by ``test_model_sub_quota.py``.
+    """
     # Bare native ids -> direct anthropic (unchanged).
     assert resolve_provider("claude-opus-4-8") == "anthropic"
     assert resolve_provider("claude-sonnet-4-6") == "anthropic"
-    # Any vendor/model (slashed) id -> openrouter, INCLUDING anthropic/* .
-    assert resolve_provider("anthropic/claude-opus-4.8") == "openrouter"
-    assert resolve_provider("anthropic/claude-sonnet-4.6") == "openrouter"
+    # Any NON-Claude vendor/model (slashed) id -> openrouter.
     assert resolve_provider("openai/gpt-5.6-sol") == "openrouter"
     assert resolve_provider("deepseek/deepseek-v4-pro") == "openrouter"
+    assert resolve_provider("qwen/qwen3-235b-a22b:free") == "openrouter"
+    # The ``anthropic/`` namespace alone does NOT capture a non-Claude model
+    # OpenRouter serves under it — only the Claude ids move.
+    assert resolve_provider("anthropic/some-non-claude-model") == "openrouter"
+    # Both Claude spellings -> the subscription (MODEL-SUB-QUOTA).
+    assert resolve_provider("anthropic/claude-opus-4.8") == "anthropic"
+    assert resolve_provider("anthropic/claude-sonnet-4.6") == "anthropic"
     # End-to-end through the override context.
-    with user_model_context("anthropic/claude-opus-4.8"):
+    with user_model_context("deepseek/deepseek-v4-pro"):
         assert resolve_provider(get_model("REASONING")) == "openrouter"
     with user_model_context("claude-opus-4-8"):
+        assert resolve_provider(get_model("REASONING")) == "anthropic"
+    with user_model_context("anthropic/claude-opus-4.8"):
+        # …and the override context hands back the BARE id it will be called by.
+        assert get_model("REASONING") == "claude-opus-4.8"
         assert resolve_provider(get_model("REASONING")) == "anthropic"
 
 

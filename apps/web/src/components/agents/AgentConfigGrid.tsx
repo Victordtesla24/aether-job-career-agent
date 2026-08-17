@@ -280,6 +280,13 @@ function AgentCard({
           // the flag so deterministic agents still lock.
           overridable={agent.modelOverridable ?? agent.recommended !== "deterministic"}
           catalogProvider={isOrchestratorRole ? "anthropic" : "openrouter"}
+          // MODEL-SUB-QUOTA (OWNER DIRECTIVE 2026-08-17): the Claude models the
+          // operator's Anthropic subscription serves, offered in their own group
+          // on every OpenRouter-fed card. `orchestratorModels` IS the Anthropic
+          // catalog (already fetched once for the Orchestrator role), so this
+          // reuses it rather than fetching a second copy. The Orchestrator card
+          // is fed that catalog as its main list, so it passes none here.
+          subscriptionModels={isOrchestratorRole ? null : orchestratorModels}
           onSelect={(model) => onSelectModel(agent.key, model)}
         />
       ) : (

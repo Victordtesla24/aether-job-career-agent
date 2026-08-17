@@ -636,6 +636,11 @@ def _execute_email_send(
             raise HTTPException(
                 http_status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)
             ) from exc
+    html_body = None
+    if payload.get("kind") == "notification_digest":
+        from app.services.email_branding import build_notification_digest_bodies
+
+        html_body, _branded = build_notification_digest_bodies(subject, body)
     from app.services.gmail_service import (
         GmailAuthError,
         GmailError,
@@ -654,6 +659,7 @@ def _execute_email_send(
             thread_id=payload.get("gmail_thread_id"),
             in_reply_to=payload.get("in_reply_to"),
             attachments=attachments,
+            html_body=html_body,
         )
     except (GmailAuthError, GmailNotConnectedError):
         raise HTTPException(

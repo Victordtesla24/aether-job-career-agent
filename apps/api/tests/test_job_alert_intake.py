@@ -311,10 +311,11 @@ def test_scan_window_is_bounded_and_passed_to_gmail(test_user_id):
     gmail = _FakeGmailFactory({"acct-primary": mailbox, "acct-secondary": _FakeMailbox([])})
     agent = EmailAgent(credentials=_FakeCredentials(_accounts()), gmail=gmail)
     agent.run(test_user_id, mode="job_alerts")
-    assert mailbox.queries == ["newer_than:7d"]
+    assert mailbox.queries[0].startswith("in:anywhere newer_than:7d")
+    assert "from:seek.com.au" in mailbox.queries[0]
     # Out-of-range values are clamped, never trusted verbatim.
     agent.run(test_user_id, mode="job_alerts", days=9999)
-    assert mailbox.queries[-1] == "newer_than:30d"
+    assert mailbox.queries[-1].startswith("in:anywhere newer_than:30d")
 
 
 def test_only_alert_messages_have_their_body_fetched(test_user_id):

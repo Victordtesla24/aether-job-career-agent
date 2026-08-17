@@ -1,4 +1,4 @@
-# EMAIL-SETUP — enabling self-service password reset (O-4)
+# EMAIL-SETUP — outbound mail (password reset, welcome, Stripe lifecycle)
 
 **Status:** code-complete. The ONE remaining step is an operator input — pick
 a provider below, set its env vars, restart the API. Nothing else changes.
@@ -6,13 +6,16 @@ a provider below, set its env vars, restart the API. Nothing else changes.
 ## Why this exists
 
 `POST /auth/forgot-password` and `POST /auth/reset-password` are live in
-every environment today. Without an outbound-email provider configured, the
-flow still works end-to-end and is still safe (anti-enumeration, hashed
-single-use tokens, rate-limited) — it just cannot **deliver** the reset link,
-so `/forgot-password` honestly tells the visitor self-service reset isn't
-enabled yet and points them at support instead of claiming an email was
-sent. Setting ONE of the two env-var groups below turns that on with no code
-change and no restart of anything except the API process.
+every environment today, and `POST /auth/register` sends the branded
+subscriber welcome when a provider is configured. Stripe webhooks send the
+same Brand-tab templates (subscription confirmed, payment failed,
+cancellation, trial ending) after billing has committed. Without an outbound-email
+provider configured, those flows still work end-to-end and are still safe
+(anti-enumeration, hashed single-use tokens, rate-limited; registration
+and billing never depend on mail) — they just cannot **deliver** the message, so
+`/forgot-password` honestly tells the visitor self-service reset isn't
+enabled yet. Setting ONE of the two env-var groups below turns delivery
+on with no code change and no restart of anything except the API process.
 
 ## Pick ONE provider
 

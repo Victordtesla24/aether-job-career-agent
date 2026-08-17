@@ -32,6 +32,45 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _send_subscriber_welcome(user: dict[str, Any]) -> None:
+    """Send the obsidian-and-gilt welcome email when outbound mail is live.
+
+    No-ops when email is unconfigured. Looks up the live Free plan row so the
+    quota in the email is catalog truth, not a hardcoded number.
+    """
+    from app.repositories.billing import PlanRepository
+    from app.services import email_sender
+    from app.services.email_branding import build_subscriber_welcome_bodies
+    from app.services.stripe_gateway import app_base_url
+
+    if not email_sender.is_configured():
+        return
+    plan = PlanRepository().get("free")
+    if plan is None:
+        logger.warning(
+            "subscriber welcome skipped: Free plan catalog row is missing"
+        )
+        return
+    html, text = build_subscriber_welcome_bodies(
+        name=user.get("name"),
+        plan_name=str(plan["name"]),
+        runs_per_month=int(plan["runsPerMonth"]),
+        dashboard_url=f"{app_base_url()}/dashboard",
+    )
+    sent = email_sender.send_email(
+        user["email"],
+        "Your Aether account is ready",
+        text,
+        html_body=html,
+    )
+    if not sent:
+        logger.info(
+            "subscriber welcome: provider configured but send failed for "
+            "userId=%s — see docs/delivery/EMAIL-SETUP.md",
+            user["id"],
+        )
+
+
 class RegisterRequest(BaseModel):
     email: EmailStr
     password: str
@@ -140,6 +179,16 @@ def register(
                 "created and is simply unattributed.",
                 exc_info=True,
             )
+    # Branded welcome email — same non-fatal shape as referral attribution.
+    # A mail-provider outage must never block someone creating an account.
+    try:
+        _send_subscriber_welcome(user)
+    except Exception:  # noqa: BLE001 — never block a registration
+        logger.warning(
+            "Subscriber welcome email failed for a new account; the account "
+            "was created.",
+            exc_info=True,
+        )
     return UserResponse(id=user["id"], email=user["email"], createdAt=user["createdAt"])
 
 

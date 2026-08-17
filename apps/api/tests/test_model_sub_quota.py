@@ -1,0 +1,1196 @@
+"""MODEL-SUB-QUOTA — every Claude request is served by the operator's Anthropic
+subscription, never by an API key and never through OpenRouter.
+
+OWNER DIRECTIVE (2026-08-17, binding, verbatim intent):
+
+    "I want all the claude requests to use my Anthropic Pro Subscription quota
+     instead of consuming extra credits via an API_KEY including for openrouter."
+
+DEVIATION THIS FILE PINS OUT OF EXISTENCE. ``resolve_provider`` used a pure
+slash heuristic: ANY ``vendor/model`` id billed through OpenRouter, so a
+``anthropic/claude-…`` pick (the owner's ``coverLetter`` AgentConfig was pinned
+exactly that: ``anthropic/claude-opus-5``) burned OpenRouter credits to serve a
+Claude model, while the identical bare ``claude-…`` id was served free by the
+subscription. The two forms name the SAME model — routing them to different
+billing accounts was the defect.
+
+WHAT "ALIGNED" MEANS (the six clauses, one section each below):
+
+1. NORMALIZATION AT THE ROUTING SEAM — ``^claude-`` or ``^anthropic/claude-``
+   (case-insensitive) resolves ``provider='anthropic'`` and is served via the
+   native Messages API with the ``anthropic/`` namespace STRIPPED to the bare
+   id. Same model, direct provider — NOT a substitution (ADR-ML-3 intact). The
+   slash rule is untouched for every non-Claude id.
+2. OPENROUTER HARD GUARD — the OpenRouter request builder REFUSES a Claude
+   model outright, so no code path can burn OpenRouter credit on Claude even if
+   routing were bypassed.
+3. CREDENTIAL PIN — a Claude request resolves the DB ``ProviderCredential``
+   ``provider=anthropic authMode=oauth_token`` row (production shape: ``.env``
+   carries NO ``ANTHROPIC_API_KEY``); with no Anthropic credential the run
+   fails HONESTLY and fires ZERO HTTP — never a reroute to OpenRouter.
+4. SAVE-TIME VALIDATION + DATA REPAIR — the per-agent save normalizes
+   ``anthropic/claude-X`` -> ``claude-X`` and rejects an unknown Claude id 422
+   (never a silent swap); the repair script normalizes existing AgentConfig
+   rows and CLEARS (never substitutes) a pin whose bare id is not in the
+   catalog, recording each change.
+5. DISCLOSURE — no picker path offers a Claude id that would route OpenRouter:
+   the curated OpenRouter catalog carries no ``anthropic/claude-*`` row.
+6. PROOF — the billing audit for a Claude run reports
+   ``provider=anthropic``/``authMode=oauth_token``.
+
+Every test here is written RED-first against the pre-fix tree; outbound HTTP is
+always a monkeypatched ``httpx.post`` — these tests never touch the network.
+"""
+from __future__ import annotations
+
+import copy
+
+import pytest
+
+from app.repositories.provider_credential import ProviderCredentialRepository
+from app.services import credential_vault as vault
+from app.services.llm_client import (
+    LLMClient,
+    LLMUnavailableError,
+    build_anthropic_request,
+    resolve_provider,
+    user_model_context,
+)
+
+#: A real id from the app's static Anthropic catalog, in both spellings.
+_BARE = "claude-opus-4-8"
+_SLASH = "anthropic/claude-opus-4-8"
+#: A Claude id the Anthropic catalog does NOT offer (the owner's live pin).
+_UNKNOWN_SLASH = "anthropic/claude-opus-5"
+_UNKNOWN_BARE = "claude-opus-5"
+#: A genuine OpenRouter model — the slash rule must be unchanged for it.
+_OPENROUTER = "deepseek/deepseek-v4-pro"
+
+_OAT = "sk-ant-oat01-model-sub-quota-test-token"
+
+_GOOD_JSON = '{"hook_reason": "x", "body": "a\\n\\nb"}'
+
+
+class _Resp:
+    """Minimal httpx.Response stand-in (status_code / text / json())."""
+
+    def __init__(self, status_code: int, text: str, payload: dict | None = None) -> None:
+        self.status_code = status_code
+        self.text = text
+        self._payload = payload if payload is not None else {}
+
+    def json(self) -> dict:
+        return self._payload
+
+
+def _anthropic_ok(content: str) -> _Resp:
+    """A native Messages API 200 (NOT the OpenAI-compatible shape)."""
+    return _Resp(
+        200,
+        content,
+        {"content": [{"type": "text", "text": content}], "stop_reason": "end_turn"},
+    )
+
+
+@pytest.fixture(autouse=True)
+def _vault_key(monkeypatch):
+    monkeypatch.setenv("AETHER_CREDENTIAL_KEY", vault.generate_key())
+
+
+@pytest.fixture(autouse=True)
+def _clean_provider_credentials():
+    """``ProviderCredential`` is created lazily and is NOT in the truncate list."""
+    from app.db import get_connection
+    from app.repositories import provider_credential as pc_module
+
+    yield
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute('DROP TABLE IF EXISTS "ProviderCredential"')
+        conn.commit()
+    pc_module._table_ready = False
+
+
+@pytest.fixture()
+def subscription_env(monkeypatch):
+    """PRODUCTION SHAPE: an OpenRouter key present, and the ONLY Anthropic
+    credential is the deployment-wide ``oauth_token`` DB row (no
+    ``ANTHROPIC_API_KEY`` anywhere — mirrors the served ``.env``)."""
+    for var in (
+        "ANTHROPIC_API_KEY", "AETHER_LLM_API_KEY", "AETHER_LLM_BASE_URL",
+        "CLAUDE_CODE_OAUTH_TOKEN", "ABACUS_API_KEY",
+    ):
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test-not-a-real-key")
+    ProviderCredentialRepository().upsert(
+        "anthropic", auth_mode="oauth_token", secret=_OAT
+    )
+    return None
+
+
+@pytest.fixture()
+def no_anthropic_credential_env(monkeypatch):
+    """OpenRouter is fully configured; Anthropic has NO credential at all."""
+    for var in (
+        "ANTHROPIC_API_KEY", "AETHER_LLM_API_KEY", "AETHER_LLM_BASE_URL",
+        "CLAUDE_CODE_OAUTH_TOKEN", "ABACUS_API_KEY",
+    ):
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test-not-a-real-key")
+    return None
+
+
+def _install_transport(monkeypatch, responder):
+    """Record every outgoing request and answer via ``responder(url, payload)``."""
+    import httpx
+
+    sent: list[dict] = []
+
+    def _post(url, **kwargs):  # noqa: ANN001 — httpx.post signature
+        payload = kwargs.get("json") or {}
+        sent.append(
+            {
+                "url": url,
+                "json": copy.deepcopy(payload),
+                "headers": dict(kwargs.get("headers") or {}),
+            }
+        )
+        return responder(url, payload)
+
+    monkeypatch.setattr(httpx, "post", _post)
+    return sent
+
+
+def _pin(user_id: str, agent_key: str, model: str) -> None:
+    """Seed an ``AgentConfig.model`` row directly — the shapes below are the
+    LEGACY ones the save endpoint now rejects, so they cannot be written
+    through the API."""
+    from app.db import get_connection
+    from app.routers.agents import _ensure_agent_config_schema
+
+    _ensure_agent_config_schema()
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'INSERT INTO "AgentConfig" ("userId","agentKey","model","updatedAt") '
+                "VALUES (%s,%s,%s,NOW()) "
+                'ON CONFLICT ("userId","agentKey") '
+                'DO UPDATE SET "model" = EXCLUDED."model"',
+                (user_id, agent_key, model),
+            )
+        conn.commit()
+
+
+# ---------------------------------------------------------------------------
+# CLAUSE 1 — normalization at the routing seam
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "model",
+    [
+        _BARE,
+        _SLASH,
+        "claude-sonnet-4-6",
+        "anthropic/claude-sonnet-4-6",
+        "ANTHROPIC/Claude-Opus-4-8",  # case-insensitive
+        "  anthropic/claude-haiku-4-5  ",  # whitespace-tolerant
+        _UNKNOWN_SLASH,
+    ],
+)
+def test_every_claude_spelling_resolves_to_the_anthropic_subscription(model):
+    """OWNER DIRECTIVE: a Claude model is a Claude model in BOTH spellings, and
+    both must be served by the subscription.
+
+    FAILS NOW for every ``anthropic/claude-…`` row: today's slash heuristic
+    returns ``'openrouter'`` for them, which is the exact "extra credits" path
+    the directive forbids.
+    """
+    assert resolve_provider(model) == "anthropic", model
+
+
+@pytest.mark.parametrize(
+    "model",
+    [
+        _OPENROUTER,
+        "qwen/qwen3-235b-a22b:free",
+        "openai/gpt-5.6-sol",
+        "x-ai/grok-4",
+        # NOT a Claude id — the ``anthropic/`` namespace alone must not capture
+        # a non-Claude model OpenRouter happens to serve under it.
+        "anthropic/some-non-claude-model",
+    ],
+)
+def test_non_claude_slash_ids_still_route_to_openrouter(model):
+    """ZERO-REGRESSION PIN: the slash rule is unchanged for everything else."""
+    assert resolve_provider(model) == "openrouter", model
+
+
+def test_normalize_model_id_strips_only_the_anthropic_claude_namespace():
+    """The ``anthropic/`` prefix is stripped to the bare id — same model, direct
+    provider. Nothing else in the id is touched, and no other id is rewritten
+    (a rewrite that changed the MODEL would be an ADR-ML-3 substitution)."""
+    from app.services.llm_client import normalize_model_id
+
+    assert normalize_model_id(_SLASH) == _BARE
+    assert normalize_model_id("ANTHROPIC/Claude-Opus-4-8") == "Claude-Opus-4-8"
+    assert normalize_model_id(_UNKNOWN_SLASH) == _UNKNOWN_BARE
+    # Already bare / not Claude / empty -> returned unchanged (stripped only).
+    assert normalize_model_id(_BARE) == _BARE
+    assert normalize_model_id(_OPENROUTER) == _OPENROUTER
+    assert normalize_model_id("anthropic/some-non-claude-model") == (
+        "anthropic/some-non-claude-model"
+    )
+    assert normalize_model_id("") == ""
+    assert normalize_model_id(None) == ""  # type: ignore[arg-type]
+
+
+def test_slash_claude_run_hits_the_native_anthropic_api_with_the_bare_id(
+    monkeypatch, subscription_env, tmp_path
+):
+    """THE keystone end-to-end assertion (clauses 1 + 3 together).
+
+    A user-chosen ``anthropic/claude-opus-4-8`` must produce EXACTLY ONE
+    request, to ``api.anthropic.com/v1/messages``, carrying the BARE model id
+    and the subscription's ``oauth_token`` headers.
+
+    FAILS NOW: the request goes to ``openrouter.ai/api/v1/chat/completions``
+    with the slash id and the OpenRouter bearer key — the owner's credits.
+    """
+    sent = _install_transport(monkeypatch, lambda url, p: _anthropic_ok(_GOOD_JSON))
+    llm = LLMClient(mode="auto", fixture_dir=tmp_path)
+
+    with user_model_context(_SLASH):
+        out = llm.complete("cover_letter", "sys", "usr", model=_SLASH)
+
+    assert out == _GOOD_JSON
+    assert len(sent) == 1, sent
+    assert "api.anthropic.com" in sent[0]["url"], sent[0]["url"]
+    assert "openrouter" not in sent[0]["url"].lower(), sent[0]["url"]
+    # The anthropic/ namespace is stripped for the API call — same model.
+    assert sent[0]["json"]["model"] == _BARE, sent[0]["json"]
+    # Subscription transport: Bearer + the oauth beta header, never x-api-key.
+    headers = {k.lower(): v for k, v in sent[0]["headers"].items()}
+    assert headers.get("authorization") == f"Bearer {_OAT}", sorted(headers)
+    assert headers.get("anthropic-beta") == "oauth-2025-04-20", sorted(headers)
+    assert "x-api-key" not in headers, sorted(headers)
+
+
+def test_non_claude_pick_still_bills_openrouter_end_to_end(
+    monkeypatch, subscription_env, tmp_path
+):
+    """ZERO-REGRESSION PIN (the other side of clause 1): a deliberate
+    OpenRouter pick still goes to OpenRouter with the OpenRouter key."""
+    sent = _install_transport(
+        monkeypatch,
+        lambda url, p: _Resp(200, _GOOD_JSON,
+                             {"choices": [{"message": {"content": _GOOD_JSON}}]}),
+    )
+    llm = LLMClient(mode="auto", fixture_dir=tmp_path)
+
+    with user_model_context(_OPENROUTER):
+        out = llm.complete("cover_letter", "sys", "usr", model=_OPENROUTER)
+
+    assert out == _GOOD_JSON
+    assert len(sent) == 1, sent
+    assert "openrouter.ai" in sent[0]["url"], sent[0]["url"]
+    assert sent[0]["json"]["model"] == _OPENROUTER
+
+
+# ---------------------------------------------------------------------------
+# CLAUSE 2 — OpenRouter hard guard (belt and braces)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("model", [_BARE, _SLASH, "claude-haiku-4-5", _UNKNOWN_SLASH])
+def test_openrouter_request_builder_refuses_any_claude_model(model):
+    """Even with routing bypassed, no OpenRouter body can carry a Claude model.
+
+    FAILS NOW: the builder happily builds a Claude request against the
+    OpenRouter credential.
+    """
+    from app.services.llm_client import (
+        ClaudeOnOpenRouterError,
+        ProviderCredentialResolution,
+        _build_openrouter_request,
+    )
+
+    cred = ProviderCredentialResolution(
+        "openrouter", "api_key", "sk-or-test", None, "environment"
+    )
+    with pytest.raises(ClaudeOnOpenRouterError) as exc:
+        _build_openrouter_request(model, "sys", "usr", 0.7, cred)
+    msg = str(exc.value)
+    assert model.strip() in msg, msg
+    assert "anthropic" in msg.lower(), msg
+
+
+def test_openrouter_builder_guard_leaves_non_claude_models_alone():
+    """ZERO-REGRESSION PIN: the guard is Claude-only."""
+    from app.services.llm_client import (
+        ProviderCredentialResolution,
+        _build_openrouter_request,
+    )
+
+    cred = ProviderCredentialResolution(
+        "openrouter", "api_key", "sk-or-test", None, "environment"
+    )
+    req = _build_openrouter_request(_OPENROUTER, "sys", "usr", 0.7, cred)
+    assert req["json"]["model"] == _OPENROUTER
+
+
+# ---------------------------------------------------------------------------
+# CLAUSE 3 — credential pin: oauth subscription, or an honest failure
+# ---------------------------------------------------------------------------
+
+
+def test_claude_request_resolves_the_oauth_subscription_row_not_an_api_key(
+    subscription_env,
+):
+    """Production shape: the DB oauth row is the sole Anthropic credential and
+    IS what a Claude request resolves."""
+    from app.services.llm_client import resolve_user_credential
+
+    cred = resolve_user_credential(resolve_provider(_SLASH), None, None)
+    assert cred is not None
+    assert cred.provider == "anthropic"
+    assert cred.auth_mode == "oauth_token"
+    assert cred.source == "database"
+
+
+def test_claude_run_without_the_subscription_row_fails_honestly_and_fires_no_http(
+    monkeypatch, no_anthropic_credential_env, tmp_path
+):
+    """No Anthropic credential must NOT become an OpenRouter Claude call.
+
+    The run fails honestly (``LLMUnavailableError`` -> the llm_unavailable 503
+    surface) with ZERO outbound requests — never a silent fallback onto the
+    OpenRouter credential that is sitting right there.
+    """
+    sent = _install_transport(
+        monkeypatch,
+        lambda url, p: _Resp(200, _GOOD_JSON,
+                             {"choices": [{"message": {"content": _GOOD_JSON}}]}),
+    )
+    llm = LLMClient(mode="auto", fixture_dir=tmp_path)
+
+    with pytest.raises(LLMUnavailableError):
+        with user_model_context(_SLASH):
+            llm.complete("cover_letter", "sys", "usr", model=_SLASH)
+
+    assert sent == [], f"a Claude run reached the network without Anthropic: {sent}"
+
+
+def test_build_anthropic_request_is_reachable_for_the_bare_id(subscription_env):
+    """The transport half of the pin: the bare id builds a valid Messages
+    request against the oauth credential (no api-key header)."""
+    req = build_anthropic_request(
+        _BARE, "sys", "usr", auth_mode="oauth_token", secret=_OAT
+    )
+    assert req["url"].endswith("/v1/messages")
+    assert req["json"]["model"] == _BARE
+    assert req["headers"]["authorization"] == f"Bearer {_OAT}"
+
+
+# ---------------------------------------------------------------------------
+# CLAUSE 3 (round 2) — an Anthropic API KEY is not eligible to serve Claude.
+#
+# REVIEWER REJECTION (round 1, verbatim): the pin checked only
+# ``cred.provider != 'anthropic'`` and never ``cred.auth_mode``, so a
+# pre-existing user-owned or deployment-wide Anthropic **api_key** credential —
+# reachable via ``PUT /agents/user/providers/anthropic/credential`` — resolved
+# AHEAD of the oauth_token subscription row and passed the pin unchallenged. A
+# Claude run could therefore silently bill a metered API key: the exact outcome
+# the owner directive ("instead of consuming extra credits via an API_KEY")
+# forbids.
+#
+# The rule these tests pin: for a Claude model the ONLY eligible credential is
+# an Anthropic ``oauth_token`` (the subscription). An api_key credential is
+# SKIPPED at every resolution step — per-agent credentialRef, the user's own
+# row, the deployment-wide row, the legacy env var — so resolution falls
+# through to the subscription; with no subscription anywhere the run fails
+# honestly and fires ZERO HTTP.
+# ---------------------------------------------------------------------------
+
+_API_KEY = "sk-ant-api03-model-sub-quota-test-key"
+
+
+def _clear_anthropic_env(monkeypatch) -> None:
+    for var in (
+        "ANTHROPIC_API_KEY", "AETHER_LLM_API_KEY", "AETHER_LLM_BASE_URL",
+        "CLAUDE_CODE_OAUTH_TOKEN", "ABACUS_API_KEY",
+    ):
+        monkeypatch.delenv(var, raising=False)
+
+
+def _claude_run_or_error(monkeypatch, tmp_path, *, user_id=None, agent_key="coverLetter"):
+    """Dispatch one Claude run; return ``(outcome, sent_requests)``.
+
+    ``outcome`` is the completion text, or the raised exception.
+    """
+    from app.services.llm_client import user_credential_context
+
+    sent = _install_transport(monkeypatch, lambda url, p: _anthropic_ok(_GOOD_JSON))
+    llm = LLMClient(mode="auto", fixture_dir=tmp_path)
+    try:
+        if user_id is None:
+            with user_model_context(_SLASH):
+                return llm.complete("cover_letter", "sys", "usr", model=_SLASH), sent
+        with user_model_context(_SLASH), user_credential_context(user_id, agent_key):
+            return llm.complete("cover_letter", "sys", "usr", model=_SLASH), sent
+    except Exception as exc:  # noqa: BLE001 — the outcome under test
+        return exc, sent
+
+
+def test_claude_auth_mode_filter_names_oauth_only_and_only_for_claude():
+    """The rule as data: a Claude id restricts resolution to ``oauth_token``;
+    every other id is unrestricted (``None``) so nothing else changes.
+
+    FAILS NOW: no such filter exists.
+    """
+    from app.services.llm_client import CLAUDE_AUTH_MODES, claude_auth_mode_filter
+
+    assert CLAUDE_AUTH_MODES == frozenset({"oauth_token"})
+    for model in (_BARE, _SLASH, _UNKNOWN_SLASH, "ANTHROPIC/Claude-Opus-4-8"):
+        assert claude_auth_mode_filter(model) == CLAUDE_AUTH_MODES, model
+    for model in (_OPENROUTER, "anthropic/some-non-claude-model", "qwen/qwen3", ""):
+        assert claude_auth_mode_filter(model) is None, model
+
+
+def test_deployment_anthropic_api_key_row_is_not_eligible_to_serve_claude(
+    monkeypatch, tmp_path
+):
+    """A deployment-wide Anthropic **api_key** row is metered API billing, so it
+    may not serve a Claude run at all — resolution returns an honest ``None``.
+
+    FAILS NOW: the row resolves and the run bills the API key.
+    """
+    from app.services.llm_client import CLAUDE_AUTH_MODES, resolve_user_credential
+
+    _clear_anthropic_env(monkeypatch)
+    ProviderCredentialRepository().upsert(
+        "anthropic", auth_mode="api_key", secret=_API_KEY
+    )
+
+    assert (
+        resolve_user_credential(
+            "anthropic", None, None, require_auth_modes=CLAUDE_AUTH_MODES
+        )
+        is None
+    )
+    # ... and the unrestricted resolution is UNCHANGED (zero regression).
+    unrestricted = resolve_user_credential("anthropic", None, None)
+    assert unrestricted is not None and unrestricted.auth_mode == "api_key"
+
+
+def test_claude_run_on_an_api_key_only_deployment_fails_honestly_and_fires_no_http(
+    monkeypatch, tmp_path
+):
+    """The seam-level twin of the test above: no subscription => honest failure,
+    never a metered-API-key Claude call and never an OpenRouter reroute.
+
+    FAILS NOW: the run succeeds against ``x-api-key`` — the owner pays twice.
+    """
+    _clear_anthropic_env(monkeypatch)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test-not-a-real-key")
+    ProviderCredentialRepository().upsert(
+        "anthropic", auth_mode="api_key", secret=_API_KEY
+    )
+
+    outcome, sent = _claude_run_or_error(monkeypatch, tmp_path)
+
+    assert isinstance(outcome, LLMUnavailableError), outcome
+    assert sent == [], f"a Claude run reached the network on an API key: {sent}"
+
+
+def test_ambient_anthropic_api_key_env_never_serves_claude(monkeypatch, tmp_path):
+    """The legacy env source is filtered too — ``ANTHROPIC_API_KEY`` is a
+    metered key whatever it is set on.
+
+    FAILS NOW: the env key resolves and serves the run.
+    """
+    _clear_anthropic_env(monkeypatch)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", _API_KEY)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test-not-a-real-key")
+
+    outcome, sent = _claude_run_or_error(monkeypatch, tmp_path)
+
+    assert isinstance(outcome, LLMUnavailableError), outcome
+    assert sent == [], f"a Claude run reached the network on an API key: {sent}"
+
+
+def test_an_env_oauth_token_is_still_eligible(monkeypatch):
+    """Contrast guard: the filter selects on AUTH MODE, not on the source. A
+    subscription token supplied through the legacy env var is still a
+    subscription and still serves."""
+    from app.services.llm_client import CLAUDE_AUTH_MODES, resolve_credential
+
+    _clear_anthropic_env(monkeypatch)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", _OAT)
+
+    res = resolve_credential("anthropic", require_auth_modes=CLAUDE_AUTH_MODES)
+    assert res is not None
+    assert res.auth_mode == "oauth_token"
+    assert res.source == "environment"
+
+
+def test_a_users_own_api_key_is_skipped_so_the_subscription_serves_claude(
+    monkeypatch, tmp_path, client, auth_headers, test_user_id
+):
+    """THE rejected scenario, end to end: the user has their OWN Anthropic
+    api_key credential (resolved FIRST today) while the operator subscription
+    row also exists. The Claude run must be served by the SUBSCRIPTION.
+
+    FAILS NOW: the user's api_key wins resolution and bills metered credits.
+    """
+    from app.repositories.user_provider_credential import (
+        UserProviderCredentialRepository,
+    )
+
+    _clear_anthropic_env(monkeypatch)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test-not-a-real-key")
+    UserProviderCredentialRepository().upsert(
+        test_user_id, "anthropic", auth_mode="api_key", secret=_API_KEY
+    )
+    ProviderCredentialRepository().upsert(
+        "anthropic", auth_mode="oauth_token", secret=_OAT
+    )
+
+    outcome, sent = _claude_run_or_error(monkeypatch, tmp_path, user_id=test_user_id)
+
+    assert outcome == _GOOD_JSON, outcome
+    assert len(sent) == 1, sent
+    assert "api.anthropic.com" in sent[0]["url"], sent[0]["url"]
+    headers = {k.lower(): v for k, v in sent[0]["headers"].items()}
+    assert headers.get("authorization") == f"Bearer {_OAT}", sorted(headers)
+    assert "x-api-key" not in headers, sorted(headers)
+    assert _API_KEY not in str(sent), "the user's metered API key was sent"
+
+
+def test_a_users_own_api_key_alone_cannot_serve_claude(
+    monkeypatch, tmp_path, client, auth_headers, test_user_id
+):
+    """With NO subscription anywhere, a user-owned Anthropic api_key does not
+    become the payer of last resort — the run fails honestly, zero HTTP.
+
+    FAILS NOW: the user's api_key serves the run.
+    """
+    from app.repositories.user_provider_credential import (
+        UserProviderCredentialRepository,
+    )
+
+    _clear_anthropic_env(monkeypatch)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test-not-a-real-key")
+    UserProviderCredentialRepository().upsert(
+        test_user_id, "anthropic", auth_mode="api_key", secret=_API_KEY
+    )
+
+    outcome, sent = _claude_run_or_error(monkeypatch, tmp_path, user_id=test_user_id)
+
+    assert isinstance(outcome, LLMUnavailableError), outcome
+    assert sent == [], f"a Claude run reached the network on an API key: {sent}"
+
+
+def test_a_per_agent_credential_ref_to_an_api_key_is_skipped_for_claude(
+    monkeypatch, tmp_path, client, auth_headers, test_user_id
+):
+    """The third resolution seam: ``AgentConfig.credentialRef`` pinned at an
+    api_key credential must not smuggle metered billing into a Claude run.
+
+    FAILS NOW: the credentialRef branch returns the api_key credential first.
+    """
+    from app.repositories.user_provider_credential import (
+        UserProviderCredentialRepository,
+    )
+
+    _clear_anthropic_env(monkeypatch)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test-not-a-real-key")
+    monkeypatch.setattr(
+        "app.services.llm_client._lookup_agent_credential_ref",
+        lambda user_id, agent_key: "cred-ref-1",
+    )
+    monkeypatch.setattr(
+        UserProviderCredentialRepository,
+        "get_secret_by_id",
+        lambda self, ref, user_id: {
+            "provider": "anthropic", "authMode": "api_key",
+            "secret": _API_KEY, "baseUrl": None,
+        },
+    )
+    ProviderCredentialRepository().upsert(
+        "anthropic", auth_mode="oauth_token", secret=_OAT
+    )
+
+    outcome, sent = _claude_run_or_error(monkeypatch, tmp_path, user_id=test_user_id)
+
+    assert outcome == _GOOD_JSON, outcome
+    assert len(sent) == 1, sent
+    headers = {k.lower(): v for k, v in sent[0]["headers"].items()}
+    assert headers.get("authorization") == f"Bearer {_OAT}", sorted(headers)
+    assert _API_KEY not in str(sent), "the pinned metered API key was sent"
+
+
+def test_the_pin_refuses_an_api_key_credential_even_if_resolution_is_bypassed(
+    monkeypatch, tmp_path
+):
+    """Belt-and-braces: with the resolver forced to hand back an Anthropic
+    api_key credential, the seam pin still refuses the Claude run.
+
+    FAILS NOW: the pin only compares ``cred.provider``, so an api_key sails
+    through and the run bills metered credits.
+    """
+    from app.services.llm_client import ProviderCredentialResolution
+
+    _clear_anthropic_env(monkeypatch)
+    monkeypatch.setattr(
+        "app.services.llm_client.resolve_user_credential",
+        lambda provider, user_id=None, agent_key=None, **kw: (
+            ProviderCredentialResolution(
+                "anthropic", "api_key", _API_KEY, None, "database"
+            )
+        ),
+    )
+
+    outcome, sent = _claude_run_or_error(monkeypatch, tmp_path)
+
+    assert isinstance(outcome, LLMUnavailableError), outcome
+    assert sent == [], f"a Claude run reached the network on an API key: {sent}"
+
+
+def test_a_non_claude_openrouter_run_is_untouched_by_the_auth_mode_filter(
+    monkeypatch, tmp_path
+):
+    """ZERO-REGRESSION PIN: the filter is Claude-only, so an OpenRouter model
+    still resolves and spends its own ``api_key`` credential exactly as before.
+    """
+    from app.services.llm_client import resolve_user_credential
+
+    _clear_anthropic_env(monkeypatch)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test-not-a-real-key")
+
+    sent = _install_transport(
+        monkeypatch,
+        lambda url, p: _Resp(200, _GOOD_JSON,
+                             {"choices": [{"message": {"content": _GOOD_JSON}}]}),
+    )
+    llm = LLMClient(mode="auto", fixture_dir=tmp_path)
+    with user_model_context(_OPENROUTER):
+        assert llm.complete(
+            "cover_letter", "sys", "usr", model=_OPENROUTER
+        ) == _GOOD_JSON
+    assert len(sent) == 1 and "openrouter" in sent[0]["url"], sent
+
+    cred = resolve_user_credential("openrouter", None, None)
+    assert cred is not None and cred.auth_mode == "api_key"
+
+
+def test_billing_audit_of_a_claude_run_names_the_subscription_not_a_users_api_key(
+    monkeypatch, client, auth_headers, test_user_id
+):
+    """CLAUSE 6. The audit must name the credential that will ACTUALLY serve —
+    otherwise a run served by the subscription is recorded as metered API usage.
+
+    FAILS NOW: ``_billing_audit`` resolves without the Claude filter, so with a
+    user api_key present it records ``authMode='api_key'``.
+    """
+    from app.repositories.user_provider_credential import (
+        UserProviderCredentialRepository,
+    )
+    from app.routers.agents import _billing_audit
+
+    _clear_anthropic_env(monkeypatch)
+    UserProviderCredentialRepository().upsert(
+        test_user_id, "anthropic", auth_mode="api_key", secret=_API_KEY
+    )
+    ProviderCredentialRepository().upsert(
+        "anthropic", auth_mode="oauth_token", secret=_OAT
+    )
+    _pin(test_user_id, "coverLetter", _BARE)
+
+    audit, provider = _billing_audit(test_user_id, "coverLetter")
+
+    assert provider == "anthropic", audit
+    assert audit["provider"] == "anthropic", audit
+    assert audit["authMode"] == "oauth_token", audit
+    assert audit["credentialSource"] == "database", audit
+    assert audit["quotaPath"] == "subscription_quota", audit
+
+
+# ---------------------------------------------------------------------------
+# CLAUSE 4 — save-time normalization + validation, and the data repair
+# ---------------------------------------------------------------------------
+
+
+def test_saving_a_slash_claude_pin_persists_the_bare_id(client, auth_headers):
+    """A user (or a legacy client) saving ``anthropic/claude-opus-4-8`` gets the
+    SAME model, pinned in the form that routes to the subscription.
+
+    FAILS NOW: the slash id is persisted verbatim and would route OpenRouter.
+    """
+    put = client.put(
+        "/agents/config/coverLetter", json={"model": _SLASH}, headers=auth_headers
+    )
+    assert put.status_code == 200, put.text
+    assert put.json()["model"] == _BARE, put.text
+    got = client.get("/agents/config/coverLetter", headers=auth_headers)
+    assert got.json()["model"] == _BARE, got.text
+
+
+def test_saving_an_unknown_claude_id_is_rejected_422_never_substituted(
+    client, auth_headers
+):
+    """An id the Anthropic catalog does not offer is an honest 422 — the app
+    must never quietly pin a DIFFERENT model instead (ADR-ML-3)."""
+    for bad in (_UNKNOWN_SLASH, _UNKNOWN_BARE):
+        r = client.put(
+            "/agents/config/coverLetter", json={"model": bad}, headers=auth_headers
+        )
+        assert r.status_code == 422, f"{bad} -> {r.status_code}: {r.text}"
+        assert "model" in str(r.json().get("detail", "")).lower(), r.text
+    # And nothing was written: the agent keeps its previous (default) model.
+    got = client.get("/agents/config/coverLetter", headers=auth_headers)
+    assert got.json()["model"] not in (_UNKNOWN_SLASH, _UNKNOWN_BARE), got.text
+
+
+def test_repair_normalizes_known_pins_and_clears_unknown_ones(
+    client, auth_headers, test_user_id
+):
+    """The one-time idempotent repair for rows written BEFORE this fix.
+
+    ``anthropic/claude-opus-4-8`` -> ``claude-opus-4-8`` (same model, now
+    subscription-routed). ``anthropic/claude-opus-5`` (not in the catalog — the
+    owner's live pin) -> CLEARED to NULL so the tier default (a
+    subscription-served Claude) applies; never a silent swap to a different
+    model. Re-running changes nothing.
+    """
+    from app.services.model_pin_repair import repair_claude_model_pins
+
+    _pin(test_user_id, "coverLetter", _UNKNOWN_SLASH)
+    _pin(test_user_id, "resumeTailoring", _SLASH)
+    _pin(test_user_id, "jobDiscovery", _OPENROUTER)
+
+    report = repair_claude_model_pins(apply=True)
+    assert report["normalized"] >= 1, report
+    assert report["cleared"] >= 1, report
+
+    def _model(agent_key: str):
+        r = client.get(f"/agents/config/{agent_key}", headers=auth_headers)
+        assert r.status_code == 200, r.text
+        return r.json()["model"]
+
+    assert _model("resumeTailoring") == _BARE
+    # Cleared -> the response falls back to the catalog default, which is a
+    # subscription-served Claude id, NOT the un-catalogued pin.
+    assert _model("coverLetter") != _UNKNOWN_SLASH
+    assert _model("coverLetter") != _UNKNOWN_BARE
+    # A genuine OpenRouter pick is untouched.
+    assert _model("jobDiscovery") == _OPENROUTER
+
+    # Idempotent: a second run has nothing left to do.
+    again = repair_claude_model_pins(apply=True)
+    assert again["normalized"] == 0 and again["cleared"] == 0, again
+
+
+def test_repair_records_every_change_it_makes(client, auth_headers, test_user_id):
+    """A cleared pin is never silent — each change leaves an audit trace."""
+    from app.db import get_connection, rows_to_dicts
+    from app.services.model_pin_repair import repair_claude_model_pins
+
+    _pin(test_user_id, "coverLetter", _UNKNOWN_SLASH)
+    repair_claude_model_pins(apply=True)
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT "action", "detailJson" FROM "AdminAuditLog" '
+                "WHERE \"action\" = 'agent_model_pin_repair'"
+            )
+            rows = rows_to_dicts(cur)
+    assert rows, "the repair recorded no trace of the pin it cleared"
+    blob = str(rows)
+    assert _UNKNOWN_SLASH in blob, blob
+
+
+def test_repair_dry_run_changes_nothing(client, auth_headers, test_user_id):
+    """``apply=False`` reports what it WOULD do and writes nothing."""
+    from app.db import get_connection, rows_to_dicts
+    from app.services.model_pin_repair import repair_claude_model_pins
+
+    _pin(test_user_id, "resumeTailoring", _SLASH)
+    report = repair_claude_model_pins(apply=False)
+    assert report["normalized"] == 1, report
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT "model" FROM "AgentConfig" WHERE "userId" = %s AND "agentKey" = %s',
+                (test_user_id, "resumeTailoring"),
+            )
+            rows = rows_to_dicts(cur)
+    assert rows[0]["model"] == _SLASH, "a dry run mutated the row"
+
+
+def test_the_agents_own_seeded_default_is_accepted_not_422d(client, auth_headers):
+    """A client echoing back the value the app itself rendered must not be
+    rejected. ``storyExtraction``'s seeded ``recommended`` is a Claude id the
+    Anthropic catalog does not carry — but the app wrote it, and
+    ``_user_model_override`` treats a stored value equal to it as "no choice
+    made", so it never reaches a model. 422-ing our own default would be
+    nonsense; an arbitrary unknown Claude id is still rejected (test above).
+    """
+    from app.routers.agents import _CATALOG_BY_KEY
+
+    seeded = _CATALOG_BY_KEY["storyExtraction"]["recommended"]
+    assert seeded.startswith("claude-"), seeded  # the case this guards
+    r = client.put(
+        "/agents/config/storyExtraction", json={"model": seeded}, headers=auth_headers
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["model"] == seeded
+
+
+def test_repair_leaves_a_seeded_default_row_untouched(client, auth_headers, test_user_id):
+    """The repair reports it, and changes nothing: clearing a seed would render
+    the identical value again from the catalog — a change that changes nothing.
+    """
+    from app.db import get_connection, rows_to_dicts
+    from app.routers.agents import _CATALOG_BY_KEY
+    from app.services.model_pin_repair import repair_claude_model_pins
+
+    seeded = _CATALOG_BY_KEY["storyExtraction"]["recommended"]
+    _pin(test_user_id, "storyExtraction", seeded)
+
+    report = repair_claude_model_pins(apply=True)
+    assert report["skippedSeedDefaults"] >= 1, report
+    assert report["cleared"] == 0, report
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT "model" FROM "AgentConfig" WHERE "userId" = %s AND "agentKey" = %s',
+                (test_user_id, "storyExtraction"),
+            )
+            rows = rows_to_dicts(cur)
+    assert rows[0]["model"] == seeded
+
+
+def test_a_legacy_slash_pin_still_in_the_db_is_normalized_at_read_time(
+    client, auth_headers, test_user_id
+):
+    """Belt-and-braces for a row written before the repair runs: the run path
+    reads it through the same normalization, so it can never route OpenRouter."""
+    from app.routers.agents import _user_model_override
+
+    _pin(test_user_id, "coverLetter", _SLASH)
+    assert _user_model_override(test_user_id, "coverLetter") == _BARE
+
+
+# ---------------------------------------------------------------------------
+# CLAUSE 5 — disclosure: no picker path offers a Claude id that bills OpenRouter
+# ---------------------------------------------------------------------------
+
+
+def test_curated_openrouter_catalog_offers_no_claude_models():
+    """The picker's OpenRouter catalog must not carry a Claude row — those are
+    offered under the Anthropic (subscription) group instead, and picking one
+    here would now be routed away from OpenRouter anyway (confusing + wrong)."""
+    from app.services.llm_client import _curate_openrouter_models
+
+    raw = [
+        {"id": "anthropic/claude-opus-4.8", "name": "Claude Opus 4.8",
+         "pricing": {"prompt": "0.000015", "completion": "0.000075"},
+         "context_length": 200000},
+        {"id": "anthropic/claude-sonnet-5", "name": "Claude Sonnet 5",
+         "pricing": {"prompt": "0.000003", "completion": "0.000015"},
+         "context_length": 200000},
+        {"id": _OPENROUTER, "name": "DeepSeek V4 Pro",
+         "pricing": {"prompt": "0.0000005", "completion": "0.000002"},
+         "context_length": 128000},
+    ]
+    ids = [m["id"] for m in _curate_openrouter_models(raw)]
+    assert _OPENROUTER in ids, ids
+    assert not [i for i in ids if "claude" in i.lower()], ids
+
+
+def test_anthropic_catalog_still_offers_the_claude_models(client, auth_headers):
+    """The Claude models remain offerable — via the Anthropic catalog, which is
+    what the subscription serves."""
+    r = client.get("/agents/providers/anthropic/models", headers=auth_headers)
+    assert r.status_code == 200, r.text
+    ids = [m["id"] for m in r.json()["models"]]
+    assert _BARE in ids, ids
+    assert not [i for i in ids if "/" in i], ids
+
+
+# ---------------------------------------------------------------------------
+# CLAUSE 6 — proof: the billing audit names the subscription
+# ---------------------------------------------------------------------------
+
+
+def test_billing_audit_for_a_claude_pin_reports_anthropic_oauth(
+    client, auth_headers, test_user_id, subscription_env
+):
+    """The disclosure the reviewer reads on a dispatched run.
+
+    FAILS NOW for a slash pin: the audit reports ``provider='openrouter'``.
+    """
+    from app.routers.agents import _billing_audit
+
+    _pin(test_user_id, "coverLetter", _SLASH)
+    audit, provider = _billing_audit(test_user_id, "coverLetter")
+    assert provider == "anthropic", audit
+    assert audit["provider"] == "anthropic", audit
+    assert audit["authMode"] == "oauth_token", audit
+    assert audit["credentialSource"] == "database", audit
+    # A subscription-served run is NOT metered API usage — the audit says so.
+    assert audit["quotaPath"] == "subscription_quota", audit
+
+
+def test_billing_audit_is_honest_when_only_an_api_key_exists_for_claude(
+    monkeypatch, client, auth_headers, test_user_id
+):
+    """The other half of clause 6: with an api_key as the ONLY Anthropic
+    credential the Claude run cannot be served at all, so the audit must record
+    NO credential — not a metered key that will never be spent.
+
+    FAILS NOW: the audit reports ``authMode='api_key'`` / ``metered_api``.
+    """
+    from app.repositories.user_provider_credential import (
+        UserProviderCredentialRepository,
+    )
+    from app.routers.agents import _billing_audit
+
+    _clear_anthropic_env(monkeypatch)
+    UserProviderCredentialRepository().upsert(
+        test_user_id, "anthropic", auth_mode="api_key", secret=_API_KEY
+    )
+    _pin(test_user_id, "coverLetter", _BARE)
+
+    audit, provider = _billing_audit(test_user_id, "coverLetter")
+
+    assert provider == "anthropic", audit
+    assert audit["credentialSource"] == "none", audit
+    assert audit["authMode"] is None, audit
+    assert audit["quotaPath"] == "none", audit
+
+
+# ---------------------------------------------------------------------------
+# CLAUSE 5, round 3 — the PERSISTED provider column must not contradict the
+# model.
+#
+# ``AgentConfig.provider`` is a DERIVED disclosure field, not a user choice:
+# ``resolve_provider(model)`` alone decides who serves and bills a run. But
+# ``PUT /agents/config/{key}`` stored whatever a client declared, and
+# ``conductor.ts`` PREFERS that stored value over the derived one when it labels
+# a run — so a client that mis-derived the provider could persist "this Claude
+# run bills OpenRouter" and have the UI repeat it forever. (The round-3
+# AgentSettingsPanel defect did exactly that for the namespaced spelling.)
+#
+# The FE copy is fixed in
+# apps/web/src/__tests__/agents/agent-settings-panel-sub-quota.test.tsx; this is
+# the ENFORCEMENT half, so no other client can write the same lie. Honest 422 —
+# never a silent rewrite of what the caller claimed.
+# ---------------------------------------------------------------------------
+
+
+def test_declaring_openrouter_for_a_claude_model_is_refused_422(client, auth_headers):
+    """A Claude model is served by the Anthropic subscription, so a config write
+    claiming it bills OpenRouter is false and is refused rather than stored.
+
+    FAILS NOW: the contradiction is persisted verbatim.
+    """
+    r = client.put(
+        "/agents/config/coverLetter",
+        json={"model": _BARE, "provider": "openrouter"},
+        headers=auth_headers,
+    )
+    assert r.status_code == 422, r.text
+    detail = str(r.json().get("detail", "")).lower()
+    assert "provider" in detail and "anthropic" in detail, r.text
+
+
+def test_the_contradiction_is_refused_even_when_the_model_comes_from_the_row(
+    client, auth_headers
+):
+    """The panel sends ``provider`` WITHOUT ``model`` (a partial update), so the
+    guard must resolve the model already pinned on the row — not only the one in
+    the body.
+
+    FAILS NOW: with no ``model`` in the body nothing is compared at all.
+    """
+    seed = client.put(
+        "/agents/config/coverLetter", json={"model": _BARE}, headers=auth_headers
+    )
+    assert seed.status_code == 200, seed.text
+
+    r = client.put(
+        "/agents/config/coverLetter",
+        json={"provider": "openrouter", "thinkingEffort": "low"},
+        headers=auth_headers,
+    )
+    assert r.status_code == 422, r.text
+
+    # ...and the refused write left the row completely untouched.
+    got = client.get("/agents/config/coverLetter", headers=auth_headers)
+    assert got.json()["model"] == _BARE, got.text
+    assert got.json()["provider"] != "openrouter", got.text
+    assert got.json()["thinkingEffort"] != "low", got.text
+
+
+def test_declaring_anthropic_for_a_claude_model_is_accepted(client, auth_headers):
+    """The truthful declaration is stored, so the honest client is unaffected."""
+    r = client.put(
+        "/agents/config/coverLetter",
+        json={"model": _SLASH, "provider": "anthropic"},
+        headers=auth_headers,
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["model"] == _BARE, r.text
+    assert r.json()["provider"] == "anthropic", r.text
+
+
+def test_a_non_claude_model_still_stores_its_declared_openrouter_provider(
+    client, auth_headers
+):
+    """ZERO REGRESSION: the guard is Claude-only. A genuinely OpenRouter-served
+    model keeps declaring — and storing — OpenRouter exactly as before."""
+    r = client.put(
+        "/agents/config/coverLetter",
+        json={"model": "deepseek/deepseek-chat", "provider": "openrouter"},
+        headers=auth_headers,
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["provider"] == "openrouter", r.text
+
+
+# ---------------------------------------------------------------------------
+# CLAUSE 4 + 5, round 3 — the repair must also fix the PROVIDER column.
+#
+# Found in LIVE PRODUCTION during round-3 verification: the owner's
+# `resumeTailoring` row is pinned to `claude-sonnet-4-6` while its `provider`
+# column says `openrouter`, and the repaired `coverLetter` row (model now NULL,
+# so the tier default — itself a Claude id — applies) still says `openrouter`
+# too. Round 2 repaired the MODEL column and left this one, so the row still
+# claims a Claude run bills OpenRouter, and the Agents UI repeats that claim
+# because it prefers the stored provider over its own derivation.
+#
+# `provider` is derived, never chosen, so correcting it to the resolved truth is
+# not a model substitution — the model is untouched. Recorded like every other
+# repair change.
+# ---------------------------------------------------------------------------
+
+
+def _pin_row(user_id: str, agent_key: str, model: str | None, provider: str) -> None:
+    """Seed an AgentConfig row with an explicit provider column."""
+    from app.db import get_connection
+    from app.routers.agents import _ensure_agent_config_schema
+
+    _ensure_agent_config_schema()
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'INSERT INTO "AgentConfig" ("userId","agentKey","model","provider",'
+                '"updatedAt") VALUES (%s,%s,%s,%s,NOW()) '
+                'ON CONFLICT ("userId","agentKey") DO UPDATE SET '
+                '"model" = EXCLUDED."model", "provider" = EXCLUDED."provider"',
+                (user_id, agent_key, model, provider),
+            )
+        conn.commit()
+
+
+def _provider_of(user_id: str, agent_key: str) -> str | None:
+    from app.db import get_connection, rows_to_dicts
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT "provider" FROM "AgentConfig" '
+                'WHERE "userId" = %s AND "agentKey" = %s',
+                (user_id, agent_key),
+            )
+            rows = rows_to_dicts(cur)
+    return rows[0]["provider"] if rows else None
+
+
+def test_repair_corrects_a_claude_rows_openrouter_provider_claim(test_user_id):
+    """The exact live production shape: a Claude pin whose provider column says
+    OpenRouter.
+
+    FAILS NOW: the repair only looks at the model column, so the false provider
+    survives and the UI keeps calling a subscription-served run "OpenRouter".
+    """
+    from app.services.model_pin_repair import repair_claude_model_pins
+
+    _pin_row(test_user_id, "resumeTailoring", _BARE, "openrouter")
+
+    dry = repair_claude_model_pins(apply=False)
+    assert dry["providerCorrected"] >= 1, dry
+    assert _provider_of(test_user_id, "resumeTailoring") == "openrouter", "dry run wrote"
+
+    report = repair_claude_model_pins(apply=True)
+    assert report["providerCorrected"] >= 1, report
+    assert _provider_of(test_user_id, "resumeTailoring") == "anthropic"
+    # The MODEL is untouched — this repairs a derived label, not a choice.
+    from app.db import get_connection, rows_to_dicts
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT "model" FROM "AgentConfig" '
+                'WHERE "userId" = %s AND "agentKey" = %s',
+                (test_user_id, "resumeTailoring"),
+            )
+            assert rows_to_dicts(cur)[0]["model"] == _BARE
+
+    again = repair_claude_model_pins(apply=True)
+    assert again["providerCorrected"] == 0, again
+
+
+def test_repair_corrects_the_provider_when_no_model_is_pinned(test_user_id):
+    """The repaired coverLetter shape: model NULL (so the agent runs its tier
+    default, a Claude id) but provider still says OpenRouter.
+
+    FAILS NOW: rows with a NULL model are not even scanned.
+    """
+    from app.services.model_pin_repair import repair_claude_model_pins
+
+    _pin_row(test_user_id, "coverLetter", None, "openrouter")
+
+    report = repair_claude_model_pins(apply=True)
+
+    assert report["providerCorrected"] >= 1, report
+    assert _provider_of(test_user_id, "coverLetter") == "anthropic"
+
+
+def test_repair_leaves_a_genuine_openrouter_rows_provider_alone(test_user_id):
+    """ZERO REGRESSION: a real OpenRouter pick keeps its real provider."""
+    from app.services.model_pin_repair import repair_claude_model_pins
+
+    _pin_row(test_user_id, "jobDiscovery", _OPENROUTER, "openrouter")
+
+    repair_claude_model_pins(apply=True)
+
+    assert _provider_of(test_user_id, "jobDiscovery") == "openrouter"
+
+
+def test_a_corrected_provider_is_recorded_like_every_other_repair(test_user_id):
+    """No silent edits: the provider correction leaves an audit trace naming the
+    previous value."""
+    from app.db import get_connection, rows_to_dicts
+    from app.services.model_pin_repair import AUDIT_ACTION, repair_claude_model_pins
+
+    _pin_row(test_user_id, "resumeTailoring", _BARE, "openrouter")
+    repair_claude_model_pins(apply=True)
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT "detailJson" FROM "AdminAuditLog" WHERE action = %s '
+                'AND "targetId" = %s',
+                (AUDIT_ACTION, f"{test_user_id}:resumeTailoring"),
+            )
+            rows = rows_to_dicts(cur)
+
+    assert rows, "no audit row for the provider correction"
+    blob = str(rows[-1]["detailJson"])
+    assert "openrouter" in blob and "anthropic" in blob, blob

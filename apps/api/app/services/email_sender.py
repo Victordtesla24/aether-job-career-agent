@@ -1,9 +1,9 @@
 """Outbound transactional email — minimal provider abstraction (O-4).
 
-There is no outbound-email infrastructure anywhere else in this codebase
-(``app/services/gmail_service.py`` is OAuth access to a USER's own inbox, not
-a channel Aether can send FROM — see the finding this module closes,
-``apps/api/app/routers/billing.py::_handle_trial_will_end``'s docstring).
+Aether-owned mail (password reset, subscriber welcome, Stripe lifecycle)
+goes through this module. ``app.services.gmail_service.py`` is OAuth access
+to a USER's own inbox — used for candidate-authored mail and for the
+notification digest after the user approves it.
 
 Exactly ONE of two providers is selected by which env vars are present,
 checked in this fixed order:

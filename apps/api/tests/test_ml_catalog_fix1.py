@@ -319,9 +319,13 @@ def test_per_agent_model_persists_independently_round_trip(client, auth_headers)
         json={"model": "deepseek/deepseek-chat"}, headers=auth_headers,
     )
     assert put1.status_code == 200, put1.text
+    # MODEL-SUB-QUOTA: a Claude pick is stored (and read back) in the BARE
+    # spelling that routes to the operator's Anthropic subscription — the same
+    # model, never a substitution. Sent here in OpenRouter's namespaced form to
+    # pin that normalization end-to-end alongside the per-agent contract.
     put2 = client.put(
         "/agents/config/coverLetter",
-        json={"model": "anthropic/claude-opus"}, headers=auth_headers,
+        json={"model": "anthropic/claude-opus-4-8"}, headers=auth_headers,
     )
     assert put2.status_code == 200, put2.text
 
@@ -329,13 +333,13 @@ def test_per_agent_model_persists_independently_round_trip(client, auth_headers)
     get1 = client.get("/agents/config/resumeTailoring", headers=auth_headers)
     get2 = client.get("/agents/config/coverLetter", headers=auth_headers)
     assert get1.json()["model"] == "deepseek/deepseek-chat"
-    assert get2.json()["model"] == "anthropic/claude-opus"
+    assert get2.json()["model"] == "claude-opus-4-8"
 
     user_id = client.get("/auth/me", headers=auth_headers).json()["id"]
     tailor_override = _user_model_override(user_id, "tailor")
     cover_override = _user_model_override(user_id, "coverLetter")
     assert tailor_override == "deepseek/deepseek-chat"
-    assert cover_override == "anthropic/claude-opus"
+    assert cover_override == "claude-opus-4-8"
     # THE per-agent (not provider-global) assertion.
     assert tailor_override != cover_override, (
         "two different agents resolved to the SAME model — the override "

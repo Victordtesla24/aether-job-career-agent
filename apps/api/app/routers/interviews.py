@@ -516,6 +516,17 @@ def create_interview(
             )
         conn.commit()
 
+    from app.services.interview_ingest import promote_application_to_interview
+
+    try:
+        promote_application_to_interview(uid, body.application_id)
+    except Exception:  # noqa: BLE001 — interview row already exists; never 500 the create
+        logger.exception(
+            "promote_application_to_interview failed interview_id=%s application_id=%s",
+            interview_id,
+            body.application_id,
+        )
+
     # W-CAL: the real Google Calendar write. It runs AFTER the row exists so a
     # calendar problem can never lose the interview the user just scheduled,
     # and its outcome is reported verbatim — an honest refusal here is a

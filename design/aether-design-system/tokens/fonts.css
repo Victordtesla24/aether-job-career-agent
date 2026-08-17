@@ -1,0 +1,14 @@
+/* Self-hosted brand faces, inherited verbatim from the AB Entertainment baseline.
+   AB Marquee = display (all-caps stencil). AB Sans = body/UI (full lowercase).
+   JetBrains Mono is loaded from Google Fonts by consuming pages — the baseline
+   ships no monospace and Aether's numerals require a tabular data face. */
+@font-face{font-family:"AB Marquee";src:url("../fonts/AB-Marquee-Light.ttf") format("truetype");font-weight:300;font-style:normal;font-display:swap}
+@font-face{font-family:"AB Marquee";src:url("../fonts/AB-Marquee-Regular.ttf") format("truetype");font-weight:400;font-style:normal;font-display:swap}
+@font-face{font-family:"AB Marquee";src:url("../fonts/AB-Marquee-Medium.ttf") format("truetype");font-weight:500;font-style:normal;font-display:swap}
+@font-face{font-family:"AB Marquee";src:url("../fonts/AB-Marquee-Bold.ttf") format("truetype");font-weight:700;font-style:normal;font-display:swap}
+@font-face{font-family:"AB Marquee";src:url("../fonts/AB-Marquee-Black.ttf") format("truetype");font-weight:900;font-style:normal;font-display:swap}
+@font-face{font-family:"AB Sans";src:url("../fonts/AB-Sans-Light.ttf") format("truetype");font-weight:300;font-style:normal;font-display:swap}
+@font-face{font-family:"AB Sans";src:url("../fonts/AB-Sans-Regular.ttf") format("truetype");font-weight:400;font-style:normal;font-display:swap}
+@font-face{font-family:"AB Sans";src:url("../fonts/AB-Sans-Medium.ttf") format("truetype");font-weight:500;font-style:normal;font-display:swap}
+@font-face{font-family:"AB Sans";src:url("../fonts/AB-Sans-Bold.ttf") format("truetype");font-weight:700;font-style:normal;font-display:swap}
+@font-face{font-family:"AB Sans";src:url("../fonts/AB-Sans-Black.ttf") format("truetype");font-weight:900;font-style:normal;font-display:swap}

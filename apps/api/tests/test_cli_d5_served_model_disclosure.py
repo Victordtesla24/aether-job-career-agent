@@ -36,9 +36,17 @@ from app.routers.agents import _record_run
 #: The cheap OpenRouter model the default env chain actually routes to.
 _CHEAP_PRIMARY = "deepseek/deepseek-v4-pro"
 _CHEAP_FALLBACK = "deepseek/deepseek-v4-flash"
-#: What the plan copy advertises (an OpenRouter-catalog Claude id — slash form,
-#: so it bills through OpenRouter and needs no Anthropic credential here).
-_ADVERTISED_CLAUDE = "anthropic/claude-sonnet-4.5"
+#: What the plan copy advertises: a premium OpenRouter-catalog model, so it
+#: bills through OpenRouter and needs no Anthropic credential here.
+#:
+#: MODEL-SUB-QUOTA (OWNER DIRECTIVE 2026-08-17): this was
+#: ``anthropic/claude-sonnet-4.5``. A Claude id in ANY spelling is now served by
+#: the operator's Anthropic subscription over the native Messages API, so it
+#: cannot stand in for "an advertised model the OpenRouter chain serves
+#: something else instead of". The requested-vs-served disclosure this file
+#: pins is unchanged; the sibling test below covers the bare-claude/anthropic
+#: provider half.
+_ADVERTISED_PREMIUM = "x-ai/grok-4"
 _FREE_SERVED = "qwen/qwen3-235b-a22b:free"
 
 
@@ -165,7 +173,7 @@ def test_the_disclosure_is_persisted_on_the_run_row_the_ui_reads(
 # ---------------------------------------------------------------------------
 
 
-def test_advertised_claude_served_free_model_distinguishes_requested_vs_served(
+def test_advertised_premium_served_free_model_distinguishes_requested_vs_served(
     monkeypatch, openrouter_env, tmp_path, client, auth_headers, test_user_id
 ):
     """The configured (advertised) model is a Claude id; the provider actually
@@ -173,12 +181,12 @@ def test_advertised_claude_served_free_model_distinguishes_requested_vs_served(
     ``requestedModel``, the truth as ``servedModel`` (+ provider), and
     ``model`` must be the served id — never the configured lie."""
     ensure_user_billing(test_user_id)
-    monkeypatch.setenv("AETHER_MODEL_REASONING", _ADVERTISED_CLAUDE)
+    monkeypatch.setenv("AETHER_MODEL_REASONING", _ADVERTISED_PREMIUM)
     _install_transport(monkeypatch, lambda m: _ok("Dear Hiring Manager, ...", _FREE_SERVED))
 
     out = _run_cover_letter(tmp_path, test_user_id)
 
-    assert out["requestedModel"] == _ADVERTISED_CLAUDE
+    assert out["requestedModel"] == _ADVERTISED_PREMIUM
     assert out["servedModel"] == _FREE_SERVED
     assert out["servedProvider"] == "openrouter"
     assert out["model"] == _FREE_SERVED, (

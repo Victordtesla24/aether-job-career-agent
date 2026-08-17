@@ -1565,3 +1565,19 @@ production deploy/smoke evidence across three increments
 choice behind existing env keys and an internal in-process cache; removing or swapping the provider
 requires no schema change, and the per-row contract degrades every row to its existing honest
 `connected: false` state by construction whenever the provider is unset.
+
+---
+
+## D-0043 — Claude Aether Career Design System is the default for every artefact
+**Date:** 2026-08-17 · **Author:** Design-system defaulting session · **Status:** Adopted
+
+**Context.** The live app already shipped obsidian & gilt tokens (`globals.css`, `tailwind.config.ts`, `email_branding.py`), but the Claude design-system zip lived outside the repo, `design/DESIGN.md` and the README still advertised coral `#FF6B35`, the static wireframes still painted the 2026-07 palette, and agents had no always-on instruction to use the system when creating markdown, email, or HTML artefacts. Brand endorsement was therefore a coincidence of whoever last touched a file.
+
+**Decision.**
+1. **Canonical system.** `design/aether-design-system/` (the Claude zip, also stored as `Aether-Design-System.zip`) is the default design system for every artefact this product creates. `design/DESIGN.md` is a short restatement; if they disagree, the design system wins.
+2. **Agent load path.** `AGENTS.md`, `CLAUDE.md`, `.cursor/rules/aether-design-system.mdc` (`alwaysApply: true`), and `.claude/skills/aether-career-agent-design/SKILL.md` all require a read of the system before creating UI, email, markdown, HTML, SVG, charts, or docs.
+3. **Email.** New-account welcome is a first-class Aether-owned template (`email_branding.build_subscriber_welcome_bodies`), previewed in the admin Sales Agent Brand tab as `subscriber_welcome`, and sent non-fatally from `POST /auth/register` when outbound mail is configured. Password reset and founder digest already used this renderer.
+4. **Retired palette.** Coral `#FF6B35` and electric indigo `#4F46E5` are not current brand. D-0002's "coral accent" clause is superseded for colour only; the 12-item sidebar decision still stands.
+5. **Carve-outs unchanged.** Candidate→employer application email, and the employer-facing résumé/cover-letter *page*, stay the candidate's voice — gilt branding there would leak the tool.
+
+**Consequences.** New artefacts that introduce coral/indigo, emoji-as-icon, or a parallel palette fail `tests/test_design_system_canonical.py`. Historical delivery ADRs that mention coral remain historical; they are not rewritten.

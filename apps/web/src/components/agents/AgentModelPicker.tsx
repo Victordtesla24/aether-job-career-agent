@@ -72,6 +72,7 @@ export default function AgentModelPicker({
   saving,
   overridable = true,
   catalogProvider = "openrouter",
+  subscriptionModels = null,
   onSelect,
 }: {
   agentKey: string;
@@ -92,6 +93,14 @@ export default function AgentModelPicker({
   // dishonestly wrong for that one card (ADR-ML-3 — never mislead about which
   // credential a choice bills against).
   catalogProvider?: "openrouter" | "anthropic";
+  // MODEL-SUB-QUOTA (OWNER DIRECTIVE 2026-08-17): the Claude models the
+  // operator's Anthropic subscription serves. They are listed in their OWN
+  // group ABOVE the OpenRouter tiers — never mixed into them — because
+  // choosing one bills a completely different account (the subscription, at no
+  // per-token OpenRouter cost). The OpenRouter catalog itself no longer carries
+  // any Claude row, so this group is the only place a Claude model is offered
+  // on a normal agent card.
+  subscriptionModels?: ProviderModel[] | null;
   onSelect: (model: string) => void;
 }) {
   const [query, setQuery] = useState("");
@@ -110,6 +119,19 @@ export default function AgentModelPicker({
   const capped = filtered.slice(0, DISPLAY_CAP);
   const hidden = filtered.length - capped.length;
   const groups = useMemo(() => groupModelsByTier(capped), [capped]);
+
+  // MODEL-SUB-QUOTA: the subscription-served Claude models, filtered by the
+  // SAME search/tier controls so the group behaves like every other one, and
+  // never capped away — the list is three models, not a catalog. Only shown on
+  // a card fed the OpenRouter catalog: the Orchestrator card is already fed
+  // Anthropic's catalog directly, so showing it twice would be noise.
+  const subscriptionGroup = useMemo(
+    () =>
+      catalogProvider === "openrouter" && subscriptionModels
+        ? filterModels(subscriptionModels, query, tier)
+        : [],
+    [catalogProvider, subscriptionModels, query, tier],
+  );
 
   useLayoutEffect(() => setMounted(true), []);
 
@@ -229,9 +251,11 @@ export default function AgentModelPicker({
                 </span>
               ) : (
                 <span>
-                  These models come from the OpenRouter catalog — choosing one routes
-                  this agent&apos;s runs through OpenRouter and bills to your OpenRouter
-                  account. Anthropic models never route through OpenRouter.
+                  Claude models are served by the operator&apos;s Anthropic
+                  subscription — they are grouped separately below and never
+                  route through OpenRouter. Every other model here comes from the
+                  OpenRouter catalog: choosing one routes this agent&apos;s runs
+                  through OpenRouter and bills to your OpenRouter account.
                 </span>
               )}
             </p>
@@ -282,7 +306,7 @@ export default function AgentModelPicker({
                   </select>
                 </div>
 
-                {groups.length === 0 ? (
+                {groups.length === 0 && subscriptionGroup.length === 0 ? (
                   <p
                     data-testid={`agent-model-empty-${agentKey}`}
                     className="px-1 py-2 text-center text-[11px] text-aether-muted"
@@ -293,6 +317,61 @@ export default function AgentModelPicker({
                   </p>
                 ) : (
                   <div className="max-h-[42vh] space-y-2 overflow-y-auto pr-0.5">
+                    {subscriptionGroup.length > 0 ? (
+                      <div data-testid={`agent-model-group-anthropic-${agentKey}`}>
+                        <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.06em] text-aether-coral">
+                          Anthropic — your subscription
+                        </p>
+                        <ul className="space-y-1">
+                          {subscriptionGroup.map((m) => {
+                            const selected = m.id === currentModel;
+                            const ctx = formatContextLength(m.contextLength);
+                            return (
+                              <li key={m.id}>
+                                <button
+                                  type="button"
+                                  data-testid={`model-option-${m.id}`}
+                                  data-selected={selected || undefined}
+                                  aria-pressed={selected}
+                                  disabled={saving}
+                                  onClick={() => onSelect(m.id)}
+                                  className={`w-full rounded-md border px-2 py-1 text-left outline-none transition-colors duration-[var(--dur-fast)] focus-visible:ring-2 focus-visible:ring-aether-coral/70 disabled:opacity-60 ${
+                                    selected
+                                      ? "border-aether-coral/50 bg-aether-coral/10"
+                                      : "border-hairline bg-surface-1 hover:border-hairline-strong hover:bg-surface-3"
+                                  }`}
+                                >
+                                  <div className="flex min-w-0 items-center justify-between gap-1.5">
+                                    <span className="min-w-0 truncate text-[12px] font-medium text-white">
+                                      {m.name}
+                                    </span>
+                                    {selected ? (
+                                      <i
+                                        className="fa-solid fa-circle-check shrink-0 text-[10px] text-aether-coral"
+                                        aria-label="current model"
+                                      />
+                                    ) : null}
+                                  </div>
+                                  <div className="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 font-mono text-[10px] tabular-nums text-aether-muted">
+                                    {/* The published list price is shown so the
+                                        choice is comparable, with the honest
+                                        note that this one is served by the
+                                        subscription rather than metered here. */}
+                                    <span className="break-words">
+                                      {formatModelPrice(m.promptPerM, m.completionPerM)}
+                                    </span>
+                                    {ctx ? <span className="break-words">{ctx}</span> : null}
+                                    <span className="break-words text-aether-coral">
+                                      served on the Anthropic subscription
+                                    </span>
+                                  </div>
+                                </button>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </div>
+                    ) : null}
                     {groups.map((g) => (
                       <div key={g.tier}>
                         <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.06em] text-aether-muted-dim">

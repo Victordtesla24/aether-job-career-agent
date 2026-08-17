@@ -1,14 +1,14 @@
 <div align="center">
 
-# 🔮 AETHER
+# AETHER
 
 ### The career agent that never lies on your behalf
 
-[![Production](https://img.shields.io/badge/Production-Live_v0.2.0-10B981?style=for-the-badge&logo=vercel&logoColor=white)](https://5cb5f0620.abacusai.cloud)
-[![Agents](https://img.shields.io/badge/Agents-22_on_3_maps-4F46E5?style=for-the-badge&logo=probot&logoColor=white)](#-the-22-agent-orchestration-map)
-[![Honesty](https://img.shields.io/badge/Fabrication_guard-Measured,_not_claimed-FF6B35?style=for-the-badge&logo=shieldsdotio&logoColor=white)](#-why-honesty-is-the-product)
-[![Billing](https://img.shields.io/badge/Billing-Stripe_(4_tiers,_AUD)-635BFF?style=for-the-badge&logo=stripe&logoColor=white)](docs/subscription/billing-architecture.md)
-[![License](https://img.shields.io/badge/License-Private-EF4444?style=for-the-badge&logo=lock&logoColor=white)]()
+[![Production](https://img.shields.io/badge/Production-Live_v0.2.0-6FAF8D?style=for-the-badge&logo=vercel&logoColor=white)](https://5cb5f0620.abacusai.cloud)
+[![Agents](https://img.shields.io/badge/Agents-22_on_3_maps-3E5A8C?style=for-the-badge&logo=probot&logoColor=white)](#the-22-agent-orchestration-map)
+[![Honesty](https://img.shields.io/badge/Fabrication_guard-Measured,_not_claimed-C9A84C?style=for-the-badge&logo=shieldsdotio&logoColor=08080A)](#why-honesty-is-the-product)
+[![Billing](https://img.shields.io/badge/Billing-Stripe_(4_tiers,_AUD)-C9A84C?style=for-the-badge&logo=stripe&logoColor=08080A)](docs/subscription/billing-architecture.md)
+[![License](https://img.shields.io/badge/License-Private-B9544B?style=for-the-badge&logo=lock&logoColor=white)]()
 
 <br/>
 
@@ -16,13 +16,13 @@
 
 <br/>
 
-[Why honesty](#-why-honesty-is-the-product) · [Agent map](#-the-22-agent-orchestration-map) · [Production](#-production-status) · [Architecture](#️-architecture-as-deployed) · [Model choice](#-model-choice-per-agent-live-catalog) · [Roadmap](#️-roadmap--in-progress) · [Local dev](#-local-development)
+[Why honesty](#why-honesty-is-the-product) · [Agent map](#the-22-agent-orchestration-map) · [Production](#production-status) · [Architecture](#architecture-as-deployed) · [Model choice](#model-choice-per-agent-live-catalog) · [Roadmap](#roadmap--in-progress) · [Local dev](#local-development)
 
 ---
 
 </div>
 
-## 🎯 Why honesty is the product
+## Why honesty is the product
 
 Every AI career tool promises to make you look better. Aether's premise is the opposite one: **the only durable advantage is that nothing it sends on your behalf can be contradicted.** An embellished bullet is not a small win — it is a landmine you carry into an interview you were not prepared to defend.
 
@@ -30,7 +30,7 @@ So the guarantee is not a policy paragraph. It is four mechanisms you can watch 
 
 **1. A fabrication guard that visibly refuses.** Résumé tailoring is content-only, and every proposed rewrite must be entailed by your own résumé and story bank. Anything unsupported is reverted rather than shipped, and the guard's verdicts are a reported metric — the compliance agent answers for a "zero unverifiable claims shipped" threshold on the orchestration map. On a real production run the guard **rejected 7 of 11 proposed rewrites**: the mechanism firing on live user data, not in a test fixture. A guard that strict means many runs show only a small ATS lift, or none. That is the honest shape of the tradeoff, and Aether states it in-product rather than burying it in an average.
 
-**2. Résumé fidelity measured from the artifact, never asserted.** After a tailored résumé is rendered, Aether re-extracts the produced file and verifies each intended change actually survived into it. Every résumé carries a `formatFidelity` report — method, confidence, and the changes it can prove landed. A change the renderer dropped is named as dropped. The approval screen reasons from that measured report; when the report is still in flight or unavailable, it says so instead of claiming "layout preserved". *(Completeness hardening is in progress — see [Roadmap](#️-roadmap--in-progress).)*
+**2. Résumé fidelity measured from the artifact, never asserted.** After a tailored résumé is rendered, Aether re-extracts the produced file and verifies each intended change actually survived into it. Every résumé carries a `formatFidelity` report — method, confidence, and the changes it can prove landed. A change the renderer dropped is named as dropped. The approval screen reasons from that measured report; when the report is still in flight or unavailable, it says so instead of claiming "layout preserved". *(Completeness hardening is in progress — see [Roadmap](#roadmap--in-progress).)*
 
 **3. Market data cross-checked against its own source.** The Analytics "Market vs. You" rows quote live Adzuna Australia figures and cite exactly what was measured. An independent audit re-queried Adzuna directly, outside the app: the app showed **3,901 postings** (as-of 01:27:10Z) against **3,907** on a fresh independent pull ~57 minutes later — 0.15% drift, explained by a moving market inside the cache TTL — and a mean advertised salary of **A$119,711** against **A$119,668** live. The one row with no honest source stays permanently disconnected: no external interview-conversion benchmark provider exists for any market, so that row says so rather than inventing a comparison. A failed refetch is cached as *nothing*, never as the old numbers behind a fresh timestamp.
 
@@ -38,7 +38,7 @@ So the guarantee is not a policy paragraph. It is four mechanisms you can watch 
 
 **No outcome promises anywhere.** Aether does not predict interviews or offers, and its progress score says so in its own methodology text: it measures your submitted volume, your interview conversion and your average fit score — and a signal with no data reads "not measured" rather than counting as a zero.
 
-## 🤖 The 22-agent orchestration map
+## The 22-agent orchestration map
 
 The fleet is the product's signature, and it is deliberately **not** a black box. `/dashboard/agents` opens on an Orchestration view that draws all **22 catalog agents across three maps** — because one dense graph would misrepresent what they are:
 
@@ -52,7 +52,7 @@ Each node carries its real state: last run time, a live pulse while running, the
 
 The map renders as a semantic DOM/SVG graph **first**; a lazily-loaded three.js layer sits on top as pure enhancement (accessibility is the base, not the fallback, and the WebGL bundle is on none of the app's other routes until you open this one). Beside the maps: a live run monitor, per-agent performance panels, provider connections, and the per-agent model picker below.
 
-## 🚦 Production Status
+## Production Status
 
 Live at **https://5cb5f0620.abacusai.cloud** — `{"status":"ok","version":"0.2.0"}`, verified this session. `main` is at `fab6d75` with CI green.
 
@@ -72,7 +72,7 @@ Since 2026-08-13 the project has run a continuous launch program: a monitoring l
 | **Measured résumé fidelity** | Live — fidelity derived from the produced file and surfaced to every consumer, including the approval screen's reasoning | `apps/api/app/services/resume_format.py`, `apps/api/app/services/format_verification.py` |
 | **Live market data in Analytics** — Adzuna AU postings + mean advertised salary, per-row provenance, 6h never-stale cache, fail-closed per row | Live; independently cross-checked (above) | `uat/reports/evidence/market-perf/i4/audit-d/` |
 | **Async generation, quota + spend caps** — `tailor`/`coverLetter`/pipeline enqueue (202) and poll via an ARQ worker; atomic reserve-before-run, refund on failure, honest 429; mid-job cap-crossing stops honestly | Live; bounded DB pool held under a 40-request burst with zero 5xx | `docs/subscription/billing-architecture.md`, `uat/reports/evidence/market-perf/s-fix/` |
-| **Per-agent live model catalog** — searchable, budget-tier-grouped picker over OpenRouter's live catalog, honest locks where an override would no-op | Live — see [Model choice](#-model-choice-per-agent-live-catalog) | `docs/subscription/model-catalog.md` |
+| **Per-agent live model catalog** — searchable, budget-tier-grouped picker over OpenRouter's live catalog, honest locks where an override would no-op | Live — see [Model choice](#model-choice-per-agent-live-catalog) | `docs/subscription/model-catalog.md` |
 | **Subscription billing** — 4 tiers (Free/Starter/Pro/Power) in AUD, Stripe Checkout + customer portal, transaction-safe idempotent webhook | Live and audited: Managed Payments with automatic tax, an active AU registration, all 6 prices exact to the cent across Stripe ↔ database ↔ pricing page, and an exact 8-event match between the webhook endpoint and its handler | `uat/reports/evidence/market-perf/s-pay/` |
 
 **Test suites.** Frontend: **1,125 passed / 154 files** at the current `main` tip (2026-08-14). Backend: the closing-gate full run recorded **2,784 passed / 1 skipped** with 2 failures, which were resolved by a reviewed test-only reconciliation and a 35-test targeted proof; the gate was certified green by composition rather than by re-running an unchanged production tree. Both figures carry their date because they move every day.
@@ -84,7 +84,7 @@ Since 2026-08-13 the project has run a continuous launch program: a monitoring l
 3. **GST/ABN representation** — the ABN is configured; the final tax-display adjudication is deferred to the real invoice produced by that first live purchase.
 4. **A second Gmail consent** — exercises the multi-inbox path end-to-end.
 
-## ✨ What Aether does
+## What Aether does
 
 | Area | Live behaviour |
 |---|---|
@@ -98,7 +98,7 @@ Since 2026-08-13 the project has run a continuous launch program: a monitoring l
 | **Billing & quota** | Monthly run quota per tier, atomic reserve-before-run, USD spend cap, honest 429 with an upgrade path |
 | **Admin** | User and spend visibility, per-user spend caps, suspend, signup toggle, append-only audit log |
 
-## 🏗️ Architecture (as deployed)
+## Architecture (as deployed)
 
 A **pnpm + Turborepo monorepo** on a single VM behind nginx — not the Kubernetes/multi-cloud topology in the original design PDFs, which remain in `docs/architecture/` as design-time reference only.
 
@@ -124,7 +124,7 @@ systemd timers
 - **Secrets:** environment variables only; credential material encrypted at rest (Fernet); nothing sensitive in process argv or logs.
 - **Deploy:** unit files, the backup and auto-deploy scripts, and the nginx vhost live in-repo under `deploy/`; the newer units (`aether-backup`, `aether-autodeploy`) and the vhost are symlinked from `/etc` so their runtime setup is version-controlled, while the original `aether-api` / `aether-web` / `aether-worker` / `aether-discovery` units remain copies installed under `/etc/systemd/system`. Procedure and rollback: [`docs/delivery/DEPLOYMENT-RUNBOOK.md`](docs/delivery/DEPLOYMENT-RUNBOOK.md).
 
-## 🧠 Model choice (per-agent, live catalog)
+## Model choice (per-agent, live catalog)
 
 Every LLM-backed agent card on `/dashboard/agents` carries its own searchable, budget-tier-grouped model picker over OpenRouter's live catalog. The choice is saved **per agent**, not as one global default, and is what that agent actually runs on next time.
 
@@ -137,7 +137,7 @@ Every LLM-backed agent card on `/dashboard/agents` carries its own searchable, b
 
 Full behavioural reference: [`docs/subscription/model-catalog.md`](docs/subscription/model-catalog.md).
 
-## 🛠️ Technology stack (deployed)
+## Technology stack (deployed)
 
 | Layer | Technology |
 |---|---|
@@ -154,7 +154,7 @@ Full behavioural reference: [`docs/subscription/model-catalog.md`](docs/subscrip
 
 > The original enterprise design (LangGraph, Pinecone/Weaviate, BullMQ, EKS, Terraform, Langfuse/Grafana) lives in the architecture PDFs as reference. It is **not** the deployed stack.
 
-## 🗺️ Roadmap — in progress
+## Roadmap — in progress
 
 Named honestly: these are **not shipped**, and nothing above depends on them.
 
@@ -163,11 +163,13 @@ Named honestly: these are **not shipped**, and nothing above depends on them.
 - **Résumé completeness hardening.** Fidelity is measured today, but a live verification on a real baseline caught the reflow renderer dropping whole sections while the fidelity checks tracked only edits. The fix — renderer completeness plus whole-document verification — is in flight and gates closure of the résumé path.
 - **Monitoring residuals.** Open, low-severity items stay listed in the ledger with their severity rather than being quietly dropped.
 
-## 🎨 Design system
+## Design system
 
-17 high-fidelity wireframes (dark, glassmorphism, coral accent `#FF6B35`) in [`design/screens/`](design/screens/) — open any `.html` in a browser — with the language spec in [`design/DESIGN.md`](design/DESIGN.md). That count is **wireframes**, deliberately smaller than the 34 live app routes: several routes (every `/admin/*` sub-page, `/login`, `/signup`) were built without a dedicated wireframe. The in-flight UI recreation above supersedes parts of this system; where they disagree, the live app is the truth.
+The default design system is the vendored Claude zip at [`design/aether-design-system/`](design/aether-design-system/readme.md) — obsidian grounds (`#08080A`), gilt accent (`#C9A84C`), royal sapphire (`#3E5A8C`) for agent cues. Product restatement: [`design/DESIGN.md`](design/DESIGN.md). Agents load it via `AGENTS.md`, `CLAUDE.md`, and `.cursor/rules/aether-design-system.mdc`.
 
-## 🧑‍💻 Local development
+Static wireframes in [`design/screens/`](design/screens/) follow the same palette. That count is **wireframes**, deliberately smaller than the live app routes: several routes (every `/admin/*` sub-page, `/login`, `/signup`) were built without a dedicated wireframe. Where a wireframe and the live app disagree, the live app is the truth. The 2026-07 coral-and-indigo language is retired.
+
+## Local development
 
 ```bash
 # Node 20+, pnpm 11
@@ -198,11 +200,11 @@ Selected environment variables beyond the core DB/LLM/Stripe/admin/Gmail set:
 | `AETHER_REDIS_URL` / `AETHER_REDIS_PASSWORD` | ARQ queue backend (loopback-only) |
 | `AETHER_SYSTEM_RUN_SECRET` | Shared secret for the header that lets the discovery timer bypass the paywall for `scout`/`fitScorer` only |
 | `AETHER_APPROVAL_MAX_AGE_DAYS` | Age past which an approved application will not auto-submit and must be reconfirmed (default 7) |
-| `AETHER_EMAIL_API_KEY` | Outbound email provider key (password reset); absent ⇒ honest degraded state |
+| `AETHER_EMAIL_API_KEY` | Outbound email provider key (password reset + subscriber welcome); absent ⇒ honest degraded state |
 | `ADZUNA_APP_ID` / `ADZUNA_APP_KEY` | Live market benchmarks; absent ⇒ every market row reports `connected: false` |
 | `AETHER_JOB_STALE_SECONDS` | Staleness window before a polled non-terminal background job is watchdog-failed and refunded |
 
-## 📂 Repository structure
+## Repository structure
 
 ```
 aether-job-career-agent/
@@ -211,7 +213,7 @@ aether-job-career-agent/
 │   │   └── app/workers/    # ARQ task runner + bounded apply sweep — aether-worker.service
 │   └── web/        # Next.js 14 frontend (app/, components/, lib/)
 ├── packages/db/    # schema of record (src/schema.prisma)
-├── design/         # DESIGN.md + 17 screen wireframes
+├── design/         # aether-design-system (canonical), DESIGN.md, gilt wireframes, artefact template
 ├── deploy/         # systemd units, timers, nginx vhost, backup + auto-deploy scripts (symlinked into /etc)
 ├── docs/
 │   ├── delivery/       # gate-verified delivery record, ADRs, runbook, email setup
@@ -226,7 +228,7 @@ aether-job-career-agent/
 └── turbo.json · pnpm-workspace.yaml
 ```
 
-## 📜 Delivery history
+## Delivery history
 
 Full, gate-verified history in [`docs/delivery/`](docs/delivery/) and the evidence trees under `uat/reports/evidence/`:
 

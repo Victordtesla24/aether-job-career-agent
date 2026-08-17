@@ -75,3 +75,46 @@ def build_poster(title: str, message: str, cta: str) -> tuple[dict[str, str], st
     """Return normalized source, stable hash, and deterministic SVG."""
     payload = poster_input(title, message, cta)
     return payload, input_hash(payload), render_poster(payload)
+
+
+def render_business_card_svg() -> str:
+    """90mm × 50mm calling card at 300 dpi-ish (1063 × 591 viewBox).
+
+    Self-contained SVG: no external images, so the Brand-tab preview and a
+    print shop both see the same obsidian-and-gilt lockup. Contact lines are
+    merge fields — this is a template, not a fabricated sample person.
+    """
+    g = BRAND
+    url = "5cb5f0620.abacusai.cloud"
+    return f'''<svg xmlns="http://www.w3.org/2000/svg" width="1050" height="600" viewBox="0 0 1050 600" role="img" aria-labelledby="card-title card-desc">
+  <title id="card-title">Aether Career Job Agent business card</title>
+  <desc id="card-desc">Obsidian ground, gilt wordmark, merge-field contact lines.</desc>
+  <defs>
+    <linearGradient id="card-gilt" x1="0" x2="1"><stop stop-color="{g['goldDark']}"/><stop offset=".38" stop-color="{g['gold']}"/><stop offset=".62" stop-color="{g['goldPale']}"/><stop offset="1" stop-color="{g['gold']}"/></linearGradient>
+  </defs>
+  <rect width="1050" height="600" fill="{g['bg']}"/>
+  <rect x="28" y="28" width="994" height="544" fill="{g['surface']}" stroke="{g['gold']}" stroke-opacity=".28"/>
+  <rect x="28" y="28" width="994" height="8" fill="url(#card-gilt)"/>
+  <rect x="28" y="564" width="994" height="8" fill="url(#card-gilt)"/>
+  <text x="72" y="160" fill="{g['gold']}" font-family="Georgia, 'Times New Roman', serif" font-size="42" font-weight="700" letter-spacing="14">AETHER</text>
+  <text x="72" y="198" fill="{g['cream']}" fill-opacity=".55" font-family="Arial, Helvetica, sans-serif" font-size="16" font-weight="700" letter-spacing="4">CAREERAI AGENT</text>
+  <line x1="72" y1="228" x2="360" y2="228" stroke="{g['gold']}" stroke-opacity=".35"/>
+  <text x="72" y="300" fill="{g['cream']}" font-family="Georgia, 'Times New Roman', serif" font-size="28" font-weight="700">{{{{name}}}}</text>
+  <text x="72" y="342" fill="{g['gold']}" font-family="Arial, Helvetica, sans-serif" font-size="16" letter-spacing="2">{{{{role}}}}</text>
+  <text x="72" y="420" fill="{g['cream']}" fill-opacity=".78" font-family="Arial, Helvetica, sans-serif" font-size="16">{{{{email}}}}</text>
+  <text x="72" y="452" fill="{g['cream']}" fill-opacity=".78" font-family="Arial, Helvetica, sans-serif" font-size="16">{{{{phone}}}}</text>
+  <text x="72" y="520" fill="{g['gold']}" font-family="Arial, Helvetica, sans-serif" font-size="14" letter-spacing="1">{url}</text>
+</svg>'''
+
+
+def render_business_card_preview_html() -> str:
+    """HTML wrapper so the Brand-tab iframe can show the SVG on ink."""
+    svg = render_business_card_svg()
+    return (
+        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\">"
+        "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
+        "<title>Aether business card</title></head>"
+        f"<body style=\"margin:0;padding:48px 16px;background-color:{BRAND['bg']};"
+        'text-align:center;">'
+        f"{svg}</body></html>"
+    )
