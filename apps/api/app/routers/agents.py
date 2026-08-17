@@ -6302,6 +6302,23 @@ def anthropic_oauth_refresh(current_user: AdminUser) -> dict[str, Any]:
 def agent_stats(current_user: CurrentUser) -> dict[str, Any]:
     """Real aggregate stats derived from AgentRun history (no hardcoded values)."""
     runs = AgentRunRepository().list_recent(current_user["id"], limit=200)
+    all_runs = runs
+    # STORM-1: a paused-episode row (board_sweep._record_paused_skip_episode)
+    # records that autopilot SKIPPED work while the user had an agent stopped.
+    # No model was asked anything, so it is not a task, not a success and not a
+    # failure — it belongs in NEITHER side of the ratio. That is the one way it
+    # differs from the letterless cover degrade below, which WAS a real attempt
+    # and so stays in the denominator.
+    def _is_skip_row(run: dict[str, Any]) -> bool:
+        out = run.get("output") or {}
+        if isinstance(out, str):
+            try:
+                out = json.loads(out)
+            except (ValueError, TypeError):
+                return False
+        return isinstance(out, dict) and out.get("skipped") is True
+    skipped = sum(1 for r in all_runs if _is_skip_row(r))
+    runs = [r for r in all_runs if not _is_skip_row(r)]
     total = len(runs)
     completed = 0
     degraded = 0
@@ -6352,6 +6369,10 @@ def agent_stats(current_user: CurrentUser) -> dict[str, Any]:
         ),
         "successRate": success_rate,
         "degradedCount": degraded,
+        # STORM-1: runs autopilot deliberately did NOT perform because the user
+        # had the agent stopped. Reported so the number is visible rather than
+        # silently dropped — it is excluded from every ratio above.
+        "skippedCount": skipped,
         "taskCount": total,
     }
 
