@@ -285,6 +285,11 @@ const MANUAL_STEP_LABELS: Readonly<Record<string, string>> = {
   no_automatable_channel: "No automatic submission path exists for this posting yet",
   submit_control_not_found: "Aether filled the form but could not find its submit button",
   no_confirmation: "Aether submitted the form but the site did not confirm it",
+  // SUB-007: the two honest halves the single `no_confirmation` code used to
+  // hide. They lead the user to different actions, so they get different
+  // words — and neither of them ever reads as "applied".
+  submitted_unconfirmed: "Submitted — but the site never confirmed it received it",
+  form_rejected: "The site rejected the form — nothing was submitted",
   // ORCHESTRATOR RULING U5-F3: an ASSISTED channel is not a failure — the
   // artifacts are done and only the click is the user's.
   assisted_manual_submit: "Ready to submit — this platform needs your click",

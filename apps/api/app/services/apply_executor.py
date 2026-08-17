@@ -44,6 +44,7 @@ import os
 import re
 import shutil
 import tempfile
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Iterable
@@ -1808,27 +1809,42 @@ def playwright_form_submitter(
                         page.screenshot(path=str(screenshot), full_page=True)
                         raise
                 before_url = page.url
+                # SUB-007: probe the form's own state BEFORE the click — the
+                # submit control's armed/disabled state, the errors already on
+                # screen and any confirmation wording the form page itself
+                # carries. Post-submit classification compares against this, so
+                # "the site rejected the form" and "the site took it silently"
+                # can never collapse into the same verdict again.
+                before_probe = _submit_state_probe(page) if apply_url else {}
                 submitted = _activate_submit(page)
                 page.wait_for_timeout(1500)
-                confirmation = (
-                    _confirmation_signal(page, before_url) if apply_url else None
+                post_submit = (
+                    classify_post_submit(page, before_url, before_probe=before_probe)
+                    if apply_url
+                    else None
                 )
+                classification = (
+                    post_submit.classification if post_submit else POST_SUBMIT_NOT_CLASSIFIED
+                )
+                confirmation = post_submit.confirmation if post_submit else None
                 page.screenshot(path=str(screenshot), full_page=True)
-                if apply_url and submitted and confirmation is None:
+                if (
+                    apply_url
+                    and submitted
+                    and post_submit is not None
+                    and post_submit.classification != POST_SUBMIT_CONFIRMED
+                ):
                     # LIVE mode demands PROOF, not a click. Without a
                     # confirmation page (or a navigation away from the form),
                     # we do not know the employer received anything — and
                     # "clicked submit" is not "applied". The screenshot above
-                    # captures whatever the page is actually showing (usually
-                    # its own validation errors) so the user can act on it.
+                    # captures whatever the page is actually showing so the
+                    # user can act on it, and the reason code now says WHICH
+                    # of the honest non-receipt endings this was (rejected /
+                    # submitted-unconfirmed / unreadable).
                     raise ManualStepRequired(
-                        "no_confirmation",
-                        (
-                            "Aether filled and submitted this application but "
-                            "the site showed no confirmation, so it will not "
-                            "claim the application was received. Check the "
-                            "screenshot and finish it on the site if needed."
-                        ),
+                        post_submit.reason or MANUAL_STEP_NO_CONFIRMATION,
+                        post_submit.detail,
                     )
                 destination = (
                     page.url
@@ -1860,6 +1876,9 @@ def playwright_form_submitter(
                 "capturedAt": datetime.now(timezone.utc).isoformat(),
                 "submitted": submitted,
                 "confirmation": confirmation,
+                "classification": classification,
+                "submitStateBefore": before_probe or None,
+                "submitStateAfter": post_submit.probe_after if post_submit else None,
                 "commitVerified": verify_commit,
                 "fieldsFilled": filled,
                 "fieldsNotFilled": unfilled,
@@ -1871,6 +1890,7 @@ def playwright_form_submitter(
     return {
         "submitted": submitted,
         "confirmation": confirmation,
+        "classification": classification,
         "evidencePath": str(screenshot),
         "destination": destination,
         "filled": filled,
@@ -1925,49 +1945,400 @@ def fetch_apply_page(apply_url: str) -> str:
 #: Text an ATS shows once it has actually taken the application. Matching one
 #: of these (or navigating away from the form) is the only thing that counts as
 #: proof in live mode — a click is an attempt, not a receipt.
-_CONFIRMATION_TEXT = re.compile(
-    r"thank you for (applying|your application)"
-    r"|application (has been )?(received|submitted|sent)"
-    r"|we(?:'|\u2019)?ve received your application"
-    r"|successfully (submitted|applied)"
-    r"|your application (is|has been) (in|complete|submitted)",
+#:
+#: SUB-007 widened this from five phrasings to the shapes the major ATSs
+#: actually ship (Greenhouse "Thanks for applying", Lever/Workable "We have
+#: received your application", Workday "You have successfully submitted your
+#: application", iCIMS "Your submission has been received", Taleo "Thank you
+#: for taking the time to apply", BambooHR "Application complete"...). Every
+#: phrasing below has a fixture in
+#: ``apps/api/tests/test_sub007_confirmation_classification.py``.
+#:
+#: The list stays deliberately CONSERVATIVE about what counts as proof: a
+#: phrase a form page can carry BEFORE anything is submitted ("Thank you for
+#: your interest in careers at Acme", "Submit your application below") is not
+#: in it, and the plural or negated forms an employer uses for something else
+#: ("Applications received after 5pm...", "Application not submitted") must
+#: not match. A false positive here would stamp ``transmittedAt`` on an
+#: application no employer ever received.
+_CONFIRMATION_PHRASES: tuple[str, ...] = (
+    # "Thank you / Thanks for applying | for your application | for submitting"
+    r"thank(?:s| you)(?: very much| so much)? for "
+    r"(?:applying|your application|your submission"
+    r"|submitting(?: your)?(?: application| details)?"
+    r"|taking the time to apply)",
+    # "(Your) application (has been|was|is) (successfully) received/submitted/..."
+    r"(?:your |the )?application(?: form)?"
+    r"(?: has been| have been| was| is| been| now)?"
+    r"(?: successfully)? "
+    r"(?:received|submitted|sent|registered|recorded|complete|completed)",
+    # "We have received / we've received / we received your application"
+    r"we(?:'|’)?(?:ve)?(?: have| had)? ?(?:received|got) your "
+    r"(?:application|submission)",
+    r"we (?:have|now have) your (?:application|submission)",
+    # "successfully submitted/applied/sent" and "submitted successfully"
+    r"successfully (?:submitted|applied|sent)",
+    r"(?:submitted|sent|applied) successfully",
+    r"you(?:'|’)?ve (?:successfully )?(?:applied|submitted)",
+    r"you have (?:successfully )?(?:applied|submitted)",
+    # "Your application/submission is in / complete / under review / on its way"
+    r"your (?:application|submission) (?:is|has been) "
+    r"(?:in|complete|completed|on its way|under review|being reviewed"
+    r"|with (?:the|our) (?:hiring |recruiting )?team)",
+    r"your submission (?:has been |was )?(?:received|recorded)",
+)
+_CONFIRMATION_TEXT = re.compile("|".join(_CONFIRMATION_PHRASES), re.I)
+
+#: The submit controls the executor knows how to activate — shared by the click
+#: and by the pre/post-click state probe, so the probe always reports on the
+#: SAME control that was (or would have been) clicked.
+_SUBMIT_SELECTORS: tuple[str, ...] = (
+    'button[type="submit"]',
+    'input[type="submit"]',
+    "button:has-text('Submit application')",
+    "button:has-text('Submit Application')",
+    "button:has-text('Submit')",
+)
+
+#: Elements an ATS uses to mark a field or a form as rejected. Only VISIBLE
+#: matches count (every one of these is routinely present-but-hidden in the
+#: markup of a clean form), and ``aria-invalid="true"`` is matched explicitly
+#: so the far more common ``aria-invalid="false"`` never reads as an error.
+_ERROR_MARKER_SELECTORS: tuple[str, ...] = (
+    '[role="alert"]',
+    '[aria-invalid="true"]',
+    '[data-error="true"]',
+    ".error-message",
+    ".field-error",
+    ".form-error",
+    ".invalid-feedback",
+    '[class*="errorMessage"]',
+    '[class*="error-message"]',
+)
+
+#: Validation wording for forms that render their errors with no marker at all
+#: (the Ashby capture in the CLI-SUB-005 evidence does exactly this).
+_VALIDATION_ERROR_TEXT = re.compile(
+    r"missing entry for required field[^\n]*"
+    r"|this field is required"
+    r"|(?:please|you must) "
+    r"(?:enter|complete|fill|select|choose|correct|provide|answer)[^\n]*"
+    r"|there (?:were|was|are|is) \d+ errors?[^\n]*"
+    r"|(?:\d+ )?(?:field|question)s? (?:is|are) required"
+    r"|required fields? (?:missing|not completed)"
+    r"|application not submitted[^\n]*",
     re.I,
 )
 
+_PROBE_TIMEOUT_MS = 800
+_PROBE_MAX_ERRORS = 5
 
-def _confirmation_signal(page: Any, before_url: str) -> str | None:
-    """Proof the employer's site accepted the submission, or ``None``."""
+#: The four honest endings of a submit click. NOTHING but ``confirmed`` may
+#: ever be recorded as transmitted, and no other outcome is ever upgraded into
+#: it later — an unproven application stays unproven.
+POST_SUBMIT_CONFIRMED = "confirmed"
+POST_SUBMIT_UNCONFIRMED = "submitted_unconfirmed"
+POST_SUBMIT_REJECTED = "rejected"
+POST_SUBMIT_UNKNOWN = "unknown"
+
+#: Replay mode (a page handed to the executor rather than opened live) never
+#: reaches a real employer, so there is no post-submit page to classify. It is
+#: labelled explicitly rather than left blank — an absent classification must
+#: never be mistaken for a confirmed one.
+POST_SUBMIT_NOT_CLASSIFIED = "replay_not_classified"
+
+#: Manual-step reason codes the non-confirmed endings record. They are DISTINCT
+#: on purpose: "the site refused this form and told us why" and "the site took
+#: the form but never said so" need different words on the card and lead the
+#: user to different actions. ``no_confirmation`` (the pre-SUB-007 catch-all)
+#: survives as the reason for a genuinely unreadable page.
+MANUAL_STEP_SUBMITTED_UNCONFIRMED = "submitted_unconfirmed"
+MANUAL_STEP_FORM_REJECTED = "form_rejected"
+MANUAL_STEP_NO_CONFIRMATION = "no_confirmation"
+
+#: Post-submit classification -> the manual-step reason it is recorded under.
+#: ``confirmed`` is deliberately absent: it is the only ending that is NOT a
+#: manual step.
+_MANUAL_STEP_FOR_CLASSIFICATION: dict[str, str] = {
+    POST_SUBMIT_UNCONFIRMED: MANUAL_STEP_SUBMITTED_UNCONFIRMED,
+    POST_SUBMIT_REJECTED: MANUAL_STEP_FORM_REJECTED,
+    POST_SUBMIT_UNKNOWN: MANUAL_STEP_NO_CONFIRMATION,
+}
+
+
+@dataclass(frozen=True)
+class PostSubmitOutcome:
+    """What the page said after the submit click — classified, never guessed.
+
+    ``classification`` is one of the four ``POST_SUBMIT_*`` constants.
+    ``reason``/``detail`` are the manual-step reason code and the user-facing
+    sentence for every ending that is NOT ``confirmed`` (``reason`` is ``None``
+    exactly when the outcome is confirmed). ``probe_before``/``probe_after``
+    are the raw submit-state probes the verdict was derived from; they go into
+    the evidence sidecar so an audit can re-derive it.
+    """
+
+    classification: str
+    confirmation: str | None
+    reason: str | None
+    detail: str
+    probe_before: dict[str, Any]
+    probe_after: dict[str, Any]
+
+
+def _submit_state_probe(page: Any) -> dict[str, Any]:
+    """The form's own acceptance state: submit control, errors, form presence.
+
+    Run BEFORE the click and again after it, so the classification compares two
+    observed states instead of inferring an outcome from one. Every read is
+    defensive: a page that navigated out from under us answers nothing, and
+    "unreadable" must never masquerade as "clean" (an unreadable submit control
+    reads as NOT enabled, never as armed).
+
+    Keys: ``submitPresent``/``submitEnabled`` (the ledger's disabled-submit
+    probe), ``errors`` (visible validation text), ``markers`` (the error-marker
+    selectors that matched visibly), ``formPresent``, ``confirmationText`` (a
+    confirmation phrase ALREADY on the page — proof of nothing afterwards).
+    """
+    submit_present = False
+    submit_enabled = False
+    for selector in _SUBMIT_SELECTORS:
+        try:
+            control = page.locator(selector).first
+            if control.count() == 0:
+                continue
+            submit_present = True
+            try:
+                submit_enabled = bool(control.is_enabled(timeout=_PROBE_TIMEOUT_MS))
+            except Exception:  # noqa: BLE001 — unreadable is not "armed"
+                submit_enabled = False
+            break
+        except Exception:  # noqa: BLE001 — try the next control shape
+            continue
+
+    errors: list[str] = []
+    markers: list[str] = []
+    for selector in _ERROR_MARKER_SELECTORS:
+        try:
+            nodes = page.locator(selector)
+            count = min(int(nodes.count()), _PROBE_MAX_ERRORS)
+        except Exception:  # noqa: BLE001
+            continue
+        for index in range(count):
+            try:
+                node = nodes.nth(index)
+                if not node.is_visible(timeout=_PROBE_TIMEOUT_MS):
+                    continue
+                text = (node.inner_text(timeout=_PROBE_TIMEOUT_MS) or "").strip()
+            except Exception:  # noqa: BLE001
+                continue
+            if selector not in markers:
+                markers.append(selector)
+            if text and text[:200] not in errors:
+                errors.append(text[:200])
+
     try:
-        if page.url and page.url != before_url:
-            return f"navigated to {page.url}"
-    except Exception:  # noqa: BLE001 — a dead page proves nothing
+        body = page.inner_text("body", timeout=_PROBE_TIMEOUT_MS) or ""
+    except Exception:  # noqa: BLE001
+        body = ""
+    for match in _VALIDATION_ERROR_TEXT.finditer(body):
+        text = match.group(0).strip()[:200]
+        if text and text not in errors:
+            errors.append(text)
+        if len(errors) >= _PROBE_MAX_ERRORS:
+            break
+
+    try:
+        form_present = int(page.locator("form").count()) > 0
+    except Exception:  # noqa: BLE001
+        form_present = False
+
+    confirmation_match = _CONFIRMATION_TEXT.search(body)
+    return {
+        "submitPresent": submit_present,
+        "submitEnabled": submit_enabled,
+        "errors": errors,
+        "markers": markers,
+        "formPresent": form_present,
+        "confirmationText": confirmation_match.group(0) if confirmation_match else None,
+    }
+
+
+def _navigated_away(page: Any, before_url: str) -> str | None:
+    """The URL the click moved the browser to, or ``None`` if it did not move.
+
+    A movement is evidence that the submit was ACCEPTED (the form is gone), and
+    nothing more — see :func:`_confirmation_signal` for why that is not the
+    same thing as proof the employer received an application.
+    """
+    try:
+        current = page.url
+    except Exception:  # noqa: BLE001 — a dead page tells us nothing
         return None
+    if current and current != before_url:
+        return str(current)
+    return None
+
+
+def _confirmation_signal(
+    page: Any, before_url: str, *, seen_before: str | None = None
+) -> str | None:
+    """The employer's OWN words saying it has the application, or ``None``.
+
+    SUB-007 honesty floor: a bare navigation is not one of those words. The
+    pre-SUB-007 version returned ``"navigated to <url>"`` as proof, so any
+    post-click redirect — to a login wall, an error page, a session-expired
+    screen, the careers home page — was recorded as a confirmed transmission.
+    Movement is now only evidence that the form was ACCEPTED (it feeds the
+    ``submitted_unconfirmed`` ending in :func:`classify_post_submit`); the
+    ``confirmed`` ending requires a recognised confirmation PHRASE, and where
+    the click did navigate, the destination is quoted alongside the phrase so
+    the evidence names both facts.
+
+    ``seen_before`` is the confirmation phrase the PRE-CLICK probe already
+    found on the form page. Plenty of application pages head themselves
+    "Thanks for applying to Acme — complete the form below", and text that was
+    there before the click proves nothing about after it, so an identical match
+    is ignored (a different, later phrase still counts).
+    """
+    stale = (seen_before or "").strip().lower()
     for _ in range(8):
         try:
             body = page.inner_text("body", timeout=1000)
         except Exception:  # noqa: BLE001
             body = ""
         match = _CONFIRMATION_TEXT.search(body or "")
-        if match:
-            return match.group(0)
+        if match and match.group(0).strip().lower() != stale:
+            phrase = match.group(0)
+            destination = _navigated_away(page, before_url)
+            return f"{phrase} (at {destination[:120]})" if destination else phrase
         try:
-            if page.url and page.url != before_url:
-                return f"navigated to {page.url}"
             page.wait_for_timeout(1000)
         except Exception:  # noqa: BLE001
             break
     return None
 
 
+def classify_post_submit(
+    page: Any, before_url: str, *, before_probe: dict[str, Any]
+) -> PostSubmitOutcome:
+    """Read the page after the submit click and name what actually happened.
+
+    SUB-007. Four endings, never collapsed into one:
+
+    * ``confirmed`` — the page printed a recognised confirmation phrase that
+      was not already there, and no new validation error came with it. The ONLY
+      ending that may be recorded as a transmission.
+    * ``rejected`` — visible validation errors or error markers came up (or
+      were already up with the submit still armed). The form was refused:
+      nothing was sent, and the employer's own error text goes to the user.
+    * ``submitted_unconfirmed`` — the submit was ACCEPTED as far as the page
+      shows (no errors, and the browser navigated away, or the form is gone, or
+      its submit control went from armed to disabled) but the site never said it
+      received anything. The honest middle ground: an attempt with no receipt,
+      recorded as a manual step and NEVER as a transmission.
+    * ``unknown`` — the page did not move at all. Aether knows nothing and says
+      so (the pre-SUB-007 ``no_confirmation`` wording).
+
+    Errors beat a confirmation phrase: a page showing BOTH is not a receipt.
+    A NAVIGATION is not a confirmation either — it lands in
+    ``submitted_unconfirmed``, because the page a submit redirects to is just
+    as often a login wall or an error screen as a thank-you.
+    """
+    confirmation = _confirmation_signal(
+        page, before_url, seen_before=before_probe.get("confirmationText")
+    )
+    after = _submit_state_probe(page)
+    before_errors = list(before_probe.get("errors") or [])
+    before_markers = list(before_probe.get("markers") or [])
+    new_errors = [err for err in after["errors"] if err not in before_errors]
+    new_markers = [mark for mark in after["markers"] if mark not in before_markers]
+    # A rejection is claimed only from text that READS like validation (or from
+    # an error marker the click brought up). Employer pages carry plenty of
+    # standing `role="alert"` chrome — a cookie banner is not a refused form,
+    # and quoting one back at the user as "the site rejected this" would be its
+    # own small fabrication.
+    validation_now = [err for err in after["errors"] if _VALIDATION_ERROR_TEXT.search(err)]
+    new_validation = [err for err in new_errors if _VALIDATION_ERROR_TEXT.search(err)]
+    rejected_signal = bool(
+        new_validation
+        or new_markers
+        or (validation_now and after["submitPresent"] and after["submitEnabled"])
+    )
+
+    if confirmation and not rejected_signal:
+        return PostSubmitOutcome(
+            classification=POST_SUBMIT_CONFIRMED,
+            confirmation=confirmation,
+            reason=None,
+            detail=f"The site confirmed the application: {confirmation}",
+            probe_before=before_probe,
+            probe_after=after,
+        )
+
+    if rejected_signal:
+        quoted = "; ".join(new_validation or validation_now or new_errors)[:400]
+        return PostSubmitOutcome(
+            classification=POST_SUBMIT_REJECTED,
+            confirmation=None,
+            reason=MANUAL_STEP_FORM_REJECTED,
+            detail=(
+                "The site REJECTED this application form, so nothing was "
+                "submitted"
+                + (f' — it is showing: "{quoted}". ' if quoted else ". ")
+                + "Open the posting, fix the flagged answers and submit it "
+                "yourself."
+            ),
+            probe_before=before_probe,
+            probe_after=after,
+        )
+
+    destination = _navigated_away(page, before_url)
+    accepted_shape = (
+        destination is not None
+        or not after["formPresent"]
+        or not after["submitPresent"]
+        or (bool(before_probe.get("submitEnabled")) and not after["submitEnabled"])
+    )
+    if accepted_shape:
+        return PostSubmitOutcome(
+            classification=POST_SUBMIT_UNCONFIRMED,
+            confirmation=None,
+            reason=MANUAL_STEP_SUBMITTED_UNCONFIRMED,
+            detail=(
+                "Aether filled and submitted this application and the form was "
+                "accepted with no validation errors"
+                + (
+                    f" (the site moved to {destination[:120]})"
+                    if destination
+                    else ""
+                )
+                + ", but the site showed no confirmation — so Aether will NOT "
+                "claim the employer received it. Check the screenshot and "
+                "confirm on the site."
+            ),
+            probe_before=before_probe,
+            probe_after=after,
+        )
+
+    return PostSubmitOutcome(
+        classification=POST_SUBMIT_UNKNOWN,
+        confirmation=None,
+        reason=MANUAL_STEP_NO_CONFIRMATION,
+        detail=(
+            "Aether filled and submitted this application but the site showed "
+            "no confirmation and no error, so it will not claim the "
+            "application was received. Check the screenshot and finish it on "
+            "the site if needed."
+        ),
+        probe_before=before_probe,
+        probe_after=after,
+    )
+
+
 def _activate_submit(page: Any) -> bool:
     """Click the form's OWN submit control. ``False`` if there is none."""
-    for selector in (
-        'button[type="submit"]',
-        'input[type="submit"]',
-        "button:has-text('Submit application')",
-        "button:has-text('Submit Application')",
-        "button:has-text('Submit')",
-    ):
+    for selector in _SUBMIT_SELECTORS:
         try:
             control = page.locator(selector).first
             if control.count() == 0:
@@ -2117,6 +2488,31 @@ def execute_site_application(
             "submit_control_not_found",
             "The application form exposed no submit control — nothing was submitted.",
         )
+    classification = outcome.get("classification")
+    if classification is not None and classification not in (
+        POST_SUBMIT_CONFIRMED,
+        POST_SUBMIT_NOT_CLASSIFIED,
+    ):
+        # SUB-007 honesty floor, enforced at the RECORDING site as well as
+        # inside the submitter. ``_record_site_transmission`` below is the one
+        # place that stamps ``transmittedAt``, so the rule "nothing is recorded
+        # as transmitted unless the page confirmed it" is checked here too,
+        # rather than resting on the submitter having raised. Any submitter
+        # that reports an unconfirmed ending and still returns writes a manual
+        # step with THAT ending's reason — never a transmission, and never an
+        # upgrade to one.
+        reason = _MANUAL_STEP_FOR_CLASSIFICATION.get(
+            str(classification), MANUAL_STEP_NO_CONFIRMATION
+        )
+        detail = (
+            "The employer's site never confirmed it received this application "
+            f"(post-submit state: {classification}), so Aether recorded a "
+            "manual step instead of a submission. Check the evidence "
+            "screenshot and finish it on the site."
+        )
+        record_manual_step(user_id, application_id, reason, detail)
+        repo.release_execution(approval_id, user_id)
+        raise ManualStepRequired(reason, detail)
     evidence_path = str(outcome.get("evidencePath") or "")
     if outcome.get("mode") == "replay":
         # A replay filled and screenshotted a page that was handed to us rather
@@ -2146,6 +2542,10 @@ def execute_site_application(
         "destination": outcome.get("destination"),
         "mode": outcome.get("mode"),
         "confirmation": outcome.get("confirmation"),
+        # SUB-007: only a ``confirmed`` classification ever reaches here in
+        # live mode — every other post-submit ending raised ManualStepRequired
+        # above and wrote a manual step instead of a transmission.
+        "classification": outcome.get("classification"),
         "fieldsFilled": outcome.get("filled") or [],
         "fieldsNotFilled": outcome.get("unfilled") or [],
     }
