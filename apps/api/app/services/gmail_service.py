@@ -19,6 +19,7 @@ import os
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
+from email.utils import parsedate_to_datetime
 from email.mime.base import MIMEBase
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -36,6 +37,13 @@ logger = logging.getLogger(__name__)
 #: the next free id, 723.
 _EMAIL_COLS_LOCK = 7420240716
 _EMAIL_AI_COLS_LOCK = 7420240723
+#: Additive lastMessageAt (career-inbox recency). Distinct from 7420260821
+#: (answer_bank).
+_EMAIL_LAST_MSG_LOCK = 7420260822
+#: Additive draftReply / draftReplyAt / aiInsights — the Email Agent writes
+#: these so the Email Center can show a reviewable draft and persisted
+#: intelligence without re-calling the model. Distinct from lastMessageAt.
+_EMAIL_AGENT_COLS_LOCK = 7420260823
 
 #: Gmail caps a single message at 25 MB (attachments + body, pre-base64).
 _MAX_MESSAGE_BYTES = 25 * 1024 * 1024
@@ -51,7 +59,7 @@ _FALLBACK_EXPIRY_MINUTES = 55
 #: PER connected account, so re-running it on every page load put ~11s of Gmail
 #: I/O inline in the request path (W-6). Within this window the stored
 #: ``EmailThread`` copy is served as-is — no Gmail call at all.
-_DEFAULT_SYNC_TTL_SECONDS = 120
+_DEFAULT_SYNC_TTL_SECONDS = 30
 
 #: Bounded fan-out for the per-thread detail fetch. Small on purpose: Gmail
 #: per-user rate limits are shared across the whole account, and each worker
@@ -303,6 +311,121 @@ def ensure_email_thread_ai_columns() -> None:
     _ai_cols_ready = True
 
 
+_last_msg_col_ready = False
+
+
+def ensure_email_thread_last_message_column() -> None:
+    """Idempotently add ``lastMessageAt`` — the Gmail message time used to
+    sort the Email Center latest-first. Distinct from ``createdAt`` (row
+    insert) and ``updatedAt`` (triage stamps), both of which previously
+    destroyed recency order."""
+    global _last_msg_col_ready
+    if _last_msg_col_ready:
+        return
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT count(*) FROM information_schema.columns"
+                " WHERE table_name = 'EmailThread'"
+                " AND table_schema = ANY(current_schemas(false))"
+                " AND column_name = 'lastMessageAt'"
+            )
+            row = cur.fetchone()
+            if row and row[0] == 1:
+                _last_msg_col_ready = True
+                return
+            cur.execute("SELECT pg_advisory_xact_lock(%s)", (_EMAIL_LAST_MSG_LOCK,))
+            cur.execute(
+                'ALTER TABLE "EmailThread"'
+                ' ADD COLUMN IF NOT EXISTS "lastMessageAt" timestamptz'
+            )
+            cur.execute(
+                'CREATE INDEX IF NOT EXISTS "idx_emailthread_last_message"'
+                ' ON "EmailThread" ("userId", "lastMessageAt" DESC)'
+            )
+        conn.commit()
+    _last_msg_col_ready = True
+
+
+_agent_cols_ready = False
+
+
+def ensure_email_thread_agent_columns() -> None:
+    """Idempotently add columns the Email Agent persists for the Email Center.
+
+    * ``draftReply`` / ``draftReplyAt`` — fabrication-guarded reply text the
+      human reviews before the send gate. Never implies the mail was sent.
+    * ``aiInsights`` — on-demand intelligence JSON so a reload does not
+      pretend the thread was never analyzed.
+    """
+    global _agent_cols_ready
+    if _agent_cols_ready:
+        return
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT count(*) FROM information_schema.columns"
+                " WHERE table_name = 'EmailThread'"
+                " AND table_schema = ANY(current_schemas(false))"
+                " AND column_name IN ('draftReply', 'draftReplyAt', 'aiInsights')"
+            )
+            row = cur.fetchone()
+            if row and row[0] == 3:
+                _agent_cols_ready = True
+                return
+            cur.execute("SELECT pg_advisory_xact_lock(%s)", (_EMAIL_AGENT_COLS_LOCK,))
+            cur.execute(
+                'ALTER TABLE "EmailThread"'
+                ' ADD COLUMN IF NOT EXISTS "draftReply" text'
+            )
+            cur.execute(
+                'ALTER TABLE "EmailThread"'
+                ' ADD COLUMN IF NOT EXISTS "draftReplyAt" timestamptz'
+            )
+            cur.execute(
+                'ALTER TABLE "EmailThread"'
+                ' ADD COLUMN IF NOT EXISTS "aiInsights" jsonb'
+            )
+        conn.commit()
+    _agent_cols_ready = True
+
+
+def persist_email_thread_draft(
+    user_id: str, thread_id: str, draft: str
+) -> None:
+    """Store a reviewable draft on the thread. Does not send. Does not stamp
+    ``updatedAt`` (recency is ``lastMessageAt``)."""
+    ensure_email_thread_agent_columns()
+    body = (draft or "").strip()
+    if not body:
+        return
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'UPDATE "EmailThread" SET "draftReply" = %s, "draftReplyAt" = now()'
+                ' WHERE id = %s AND "userId" = %s',
+                (body, thread_id, user_id),
+            )
+        conn.commit()
+
+
+def persist_email_thread_insights(
+    user_id: str, thread_id: str, insights: dict[str, Any]
+) -> None:
+    """Persist on-demand intelligence so a reload is honest."""
+    import json as _json
+
+    ensure_email_thread_agent_columns()
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'UPDATE "EmailThread" SET "aiInsights" = %s::jsonb'
+                ' WHERE id = %s AND "userId" = %s',
+                (_json.dumps(insights), thread_id, user_id),
+            )
+        conn.commit()
+
+
 def _header(headers: list[dict[str, str]], name: str) -> str:
     for h in headers:
         if h.get("name", "").lower() == name.lower():
@@ -365,6 +488,51 @@ def _decode_bodies(payload: dict[str, Any]) -> tuple[str, str]:
 
     walk(payload or {})
     return found.get("text/plain", ""), found.get("text/html", "")
+
+
+def _payload_has_calendar(payload: dict[str, Any]) -> bool:
+    """True when the MIME tree carries a real calendar invite (ICS)."""
+
+    def walk(part: dict[str, Any]) -> bool:
+        mime = (part.get("mimeType") or "").lower()
+        filename = (part.get("filename") or "").lower()
+        if mime in ("text/calendar", "application/ics") or filename.endswith(".ics"):
+            return True
+        for sub in part.get("parts") or []:
+            if walk(sub):
+                return True
+        return False
+
+    return walk(payload or {})
+
+
+def _parse_received_at(internal_date: Any, date_header: str) -> datetime:
+    """Gmail's own receive timestamp, falling back to the Date header."""
+    if internal_date not in (None, ""):
+        try:
+            return datetime.fromtimestamp(int(internal_date) / 1000.0, tz=timezone.utc)
+        except (TypeError, ValueError, OSError, OverflowError):
+            pass
+    if date_header:
+        try:
+            parsed = parsedate_to_datetime(date_header)
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            return parsed.astimezone(timezone.utc)
+        except (TypeError, ValueError, OverflowError):
+            pass
+    return datetime.now(timezone.utc)
+
+
+def _classification_for_sync(existing: Optional[str], verdict: Any) -> str:
+    """Deterministic career class, without erasing a real LLM triage bucket."""
+    if not getattr(verdict, "keep", False):
+        return "personal"
+    if getattr(verdict, "is_interview_invite", False):
+        return "priority"
+    if existing in ("priority", "followup", "auto"):
+        return existing
+    return str(getattr(verdict, "category", None) or "all")
 
 
 class GmailService:
@@ -668,8 +836,12 @@ class GmailService:
     def _normalize_thread(full: dict[str, Any]) -> dict[str, Any]:
         messages = full.get("messages", []) or []
         latest = messages[-1] if messages else {}
-        headers = latest.get("payload", {}).get("headers", [])
+        payload = latest.get("payload", {}) or {}
+        headers = payload.get("headers", [])
         display, addr = _split_address(_header(headers, "From"))
+        date_header = _header(headers, "Date")
+        received_dt = _parse_received_at(latest.get("internalDate"), date_header)
+        has_cal = _payload_has_calendar(payload)
         return {
             "gmailThreadId": full.get("id"),
             "gmailMessageId": latest.get("id"),
@@ -677,8 +849,10 @@ class GmailService:
             "from": display,
             "fromEmail": addr,
             "snippet": latest.get("snippet", ""),
-            "body": _decode_body(latest.get("payload", {})) or latest.get("snippet", ""),
-            "receivedAt": _header(headers, "Date"),
+            "body": _decode_body(payload) or latest.get("snippet", ""),
+            "receivedAt": date_header,
+            "receivedAtDt": received_dt,
+            "hasCalendarInvite": has_cal,
             "labelIds": latest.get("labelIds", []),
             "messageCount": len(messages),
         }
@@ -934,6 +1108,9 @@ class GmailService:
         constructed ``GmailService(uid)`` can call ``.sync_threads_to_db()``."""
         user_id = user_id or self._user_id
         ensure_email_thread_gmail_columns()
+        ensure_email_thread_last_message_column()
+        from app.services.career_email_filter import classify_career_email
+
         # list_threads loads credentials, which resolves the concrete account id
         # so each synced thread is tagged with the inbox it came from (GAP-D2).
         threads = self.list_threads(query=query, max_results=max_results)
@@ -944,6 +1121,15 @@ class GmailService:
                 for t in threads:
                     import json as _json
 
+                    received_dt = t.get("receivedAtDt") or datetime.now(timezone.utc)
+                    verdict = classify_career_email(
+                        subject=t.get("subject") or "",
+                        sender=t.get("from") or "",
+                        sender_email=t.get("fromEmail") or "",
+                        body=t.get("body") or "",
+                        label_ids=t.get("labelIds") or [],
+                        has_calendar_invite=bool(t.get("hasCalendarInvite")),
+                    )
                     messages = _json.dumps(
                         [
                             {
@@ -951,22 +1137,27 @@ class GmailService:
                                 "body": t["body"],
                                 "from": t["from"],
                                 "fromEmail": t["fromEmail"],
-                                "createdAt": t["receivedAt"],
+                                "createdAt": received_dt.isoformat(),
+                                "hasCalendarInvite": bool(t.get("hasCalendarInvite")),
                             }
                         ]
                     )
                     cur.execute(
-                        'SELECT id FROM "EmailThread"'
+                        'SELECT id, classification FROM "EmailThread"'
                         ' WHERE "userId" = %s AND "gmailThreadId" = %s',
                         (user_id, t["gmailThreadId"]),
                     )
                     existing = rows_to_dicts(cur)
+                    classification = _classification_for_sync(
+                        existing[0].get("classification") if existing else None,
+                        verdict,
+                    )
                     if existing:
                         cur.execute(
                             'UPDATE "EmailThread" SET "subject" = %s, "messages" = %s::jsonb,'
                             ' "gmailMessageId" = %s, "labels" = %s,'
                             ' "gmailAccountId" = COALESCE(%s, "gmailAccountId"),'
-                            ' "updatedAt" = now()'
+                            ' "lastMessageAt" = %s, "classification" = %s'
                             ' WHERE id = %s',
                             (
                                 t["subject"],
@@ -974,6 +1165,8 @@ class GmailService:
                                 t["gmailMessageId"],
                                 t["labelIds"],
                                 account_id,
+                                received_dt,
+                                classification,
                                 existing[0]["id"],
                             ),
                         )
@@ -982,8 +1175,10 @@ class GmailService:
                             'INSERT INTO "EmailThread"'
                             ' ("id", "userId", "subject", "messages", "gmailThreadId",'
                             '  "gmailMessageId", "labels", "gmailAccountId",'
+                            '  "classification", "lastMessageAt",'
                             '  "createdAt", "updatedAt")'
-                            ' VALUES (%s, %s, %s, %s::jsonb, %s, %s, %s, %s, now(), now())',
+                            ' VALUES (%s, %s, %s, %s::jsonb, %s, %s, %s, %s,'
+                            '  %s, %s, now(), now())',
                             (
                                 new_id(),
                                 user_id,
@@ -993,6 +1188,8 @@ class GmailService:
                                 t["gmailMessageId"],
                                 t["labelIds"],
                                 account_id,
+                                classification,
+                                received_dt,
                             ),
                         )
                     written += 1
@@ -1004,3 +1201,15 @@ class GmailService:
             except Exception:  # noqa: BLE001 — a sync-status write must never fail the sync
                 pass
         return written
+
+    def sync_career_threads_to_db(
+        self, user_id: str | None = None, max_results: int = 50
+    ) -> int:
+        """Sync only career/job-search/calendar-invite mail into EmailThread."""
+        from app.services.career_email_filter import CAREER_GMAIL_QUERY
+
+        return self.sync_threads_to_db(
+            user_id=user_id,
+            query=CAREER_GMAIL_QUERY,
+            max_results=max_results,
+        )

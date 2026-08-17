@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Scheduled email agent (B5): every 2 hours the systemd timer
+# Scheduled email agent (B5): every 10 minutes the systemd timer
 # `aether-email-agent.timer` runs this script, which authenticates against the
 # local API and runs the Email Agent's SAFE, non-outbound modes:
 #

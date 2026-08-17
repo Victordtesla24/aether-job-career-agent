@@ -10,6 +10,7 @@ import logging
 import threading
 import time
 import zipfile
+from datetime import datetime, timedelta, timezone
 from typing import Annotated, Any
 
 from email_validator import EmailNotValidError, validate_email
@@ -462,12 +463,95 @@ def _email_activity_stats(uid: str) -> dict[str, int]:
         return {"autoDrafted": 0, "followUpsSent": 0, "sentApproved": 0}
 
 
+def _inbox_intelligence(raw: Any) -> dict[str, Any] | None:
+    """Return persisted insights only when they include a real numeric score.
+
+    A missing or non-numeric score stays ``None`` (honest 'not analyzed'),
+    never a fabricated 0.
+    """
+    if not isinstance(raw, dict):
+        return None
+    score = raw.get("score")
+    if not isinstance(score, (int, float)):
+        return None
+    breakdown = raw.get("breakdown")
+    return {
+        "score": int(score),
+        "breakdown": breakdown if isinstance(breakdown, list) else [],
+        "summary": str(raw.get("summary") or ""),
+    }
+
+
+def _unread_by_account(uid: str) -> dict[str, int]:
+    """Career-inbox unread counts per Gmail account from stored UNREAD labels.
+
+    Personal threads are excluded. Degrades to {} rather than 500-ing the inbox.
+    """
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT "gmailAccountId", count(*)
+                    FROM "EmailThread"
+                    WHERE "userId" = %s
+                      AND COALESCE(classification, '') <> 'personal'
+                      AND labels IS NOT NULL
+                      AND 'UNREAD' = ANY(labels)
+                    GROUP BY "gmailAccountId"
+                    """,
+                    (uid,),
+                )
+                return {
+                    str(row[0]): int(row[1] or 0)
+                    for row in cur.fetchall()
+                    if row[0]
+                }
+    except Exception:  # noqa: BLE001 — unread is best-effort
+        return {}
+
+
+def _thread_recency(thread: dict[str, Any], latest: dict[str, Any]) -> datetime:
+    """Newest-message time for latest-first sort. Never uses triage stamps."""
+    stamp = thread.get("lastMessageAt")
+    if isinstance(stamp, datetime):
+        return stamp if stamp.tzinfo else stamp.replace(tzinfo=timezone.utc)
+    raw = latest.get("createdAt") or thread.get("createdAt")
+    if isinstance(raw, datetime):
+        return raw if raw.tzinfo else raw.replace(tzinfo=timezone.utc)
+    if raw:
+        text = str(raw)
+        try:
+            if text.endswith("Z"):
+                text = text[:-1] + "+00:00"
+            parsed = datetime.fromisoformat(text)
+            return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+        except ValueError:
+            pass
+    return datetime.min.replace(tzinfo=timezone.utc)
+
+
+def _received_at_iso(thread: dict[str, Any], latest: dict[str, Any]) -> str:
+    recency = _thread_recency(thread, latest)
+    if recency.year <= 1:
+        return ""
+    return recency.astimezone(timezone.utc).isoformat()
+
+
+def _ingest_inbound_interviews(uid: str, threads: list[dict[str, Any]]) -> None:
+    """Best-effort: calendar events + Gmail interview invites → analytics."""
+    from app.services.interview_ingest import ingest_inbound_for_user
+
+    ingest_inbound_for_user(uid, threads)
+
+
 @router.get("/emails/inbox")
 def email_inbox(
     current_user: CurrentUser,
     limit: int = Query(default=50, ge=1, le=200),
     thread_id: str | None = Query(default=None),
     full: bool = Query(default=False),
+    force: bool = Query(default=False),
 ) -> dict[str, Any]:
     """Email Command Center — real EmailThread records from the database.
 
@@ -526,21 +610,24 @@ def email_inbox(
                     backoff_account_ids = frozenset()
 
         for acc in account_rows:
-            # W-6 TTL gate: one sync is threads().list() + up to 25
-            # threads().get() round-trips PER account (~11s inline in this
-            # request with 2 accounts connected). Inside the freshness window
-            # the stored EmailThread rows are already current, so this request
-            # makes ZERO Gmail calls and serves them straight from the DB. A
-            # sync that fails never stamps lastSyncedAt, so a broken account is
-            # retried on the next request rather than being cached as "fresh".
-            if is_email_sync_fresh(acc.get("lastSyncedAt")):
+            # W-6 TTL gate: one sync is threads().list() + up to 50
+            # threads().get() round-trips PER account. Inside the freshness
+            # window the stored EmailThread rows are already current, so this
+            # request makes ZERO Gmail calls unless `force=true` (Sync Now).
+            # A sync that fails never stamps lastSyncedAt, so a broken account
+            # is retried on the next request rather than being cached as "fresh".
+            if not force and is_email_sync_fresh(acc.get("lastSyncedAt")):
                 continue
             acc_id = acc.get("id")
             if acc_id in backoff_account_ids:
                 auth_failed_account_ids.add(acc_id)
                 continue
             try:
-                GmailService(uid, account_id=acc_id).sync_threads_to_db()
+                from app.services.career_email_filter import CAREER_GMAIL_QUERY
+
+                GmailService(uid, account_id=acc_id).sync_threads_to_db(
+                    query=CAREER_GMAIL_QUERY, max_results=50
+                )
             except GmailError:
                 # Covers GmailAuthError/GmailNotConnectedError AND the plain
                 # GmailError a real Google 403 ("insufficientPermissions" /
@@ -583,12 +670,16 @@ def email_inbox(
     # additive aiScore column; ensure they exist even for a user who has never
     # connected/triaged (so the query never references a missing column).
     from app.services.gmail_service import (
+        ensure_email_thread_agent_columns,
         ensure_email_thread_ai_columns,
         ensure_email_thread_gmail_columns,
+        ensure_email_thread_last_message_column,
     )
 
     ensure_email_thread_gmail_columns()
     ensure_email_thread_ai_columns()
+    ensure_email_thread_last_message_column()
+    ensure_email_thread_agent_columns()
 
     # A specific thread_id targets exactly one thread (the detail panel's
     # on-demand full-body fetch) and always gets its full body, regardless of
@@ -604,7 +695,9 @@ def email_inbox(
                     """
                     SELECT et.id, et.subject, et.messages, et.classification,
                            et."aiScore",
-                           et."createdAt", et."applicationId", et."gmailAccountId",
+                           et."createdAt", et."lastMessageAt", et."applicationId",
+                           et."gmailAccountId", et."gmailThreadId", et."gmailMessageId",
+                           et."draftReply", et."aiInsights", et.labels,
                            c.name AS contact_name, c.company AS contact_company,
                            c.email AS contact_email,
                            ga."accountEmail" AS source_account
@@ -620,7 +713,9 @@ def email_inbox(
                     """
                     SELECT et.id, et.subject, et.messages, et.classification,
                            et."aiScore",
-                           et."createdAt", et."applicationId", et."gmailAccountId",
+                           et."createdAt", et."lastMessageAt", et."applicationId",
+                           et."gmailAccountId", et."gmailThreadId", et."gmailMessageId",
+                           et."draftReply", et."aiInsights", et.labels,
                            c.name AS contact_name, c.company AS contact_company,
                            c.email AS contact_email,
                            ga."accountEmail" AS source_account
@@ -628,10 +723,11 @@ def email_inbox(
                     LEFT JOIN "Contact" c ON et."contactId" = c.id
                     LEFT JOIN "GmailAccount" ga ON et."gmailAccountId" = ga."id"
                     WHERE et."userId" = %s
-                    ORDER BY et."updatedAt" DESC
+                    AND COALESCE(et.classification, '') <> 'personal'
+                    ORDER BY COALESCE(et."lastMessageAt", et."createdAt") DESC
                     LIMIT %s
                     """,
-                    (uid, limit),
+                    (uid, max(limit * 4, 200)),
                 )
             threads = rows_to_dicts(cur)
 
@@ -640,7 +736,9 @@ def email_inbox(
             # — W-13 must not silently make a large inbox's counters wrong.
             cur.execute(
                 """
-                SELECT count(*) AS total,
+                SELECT count(*) FILTER (
+                         WHERE COALESCE(classification, '') <> 'personal'
+                       ) AS total,
                        count(*) FILTER (
                          WHERE classification IN ('priority', 'followup')
                        ) AS recruiter_emails
@@ -651,16 +749,60 @@ def email_inbox(
             )
             totals_row = cur.fetchone()
 
+    if thread_id is None:
+        _ingest_inbound_interviews(uid, threads)
+
+    from app.services.career_email_filter import classify_thread
+
+    scored: list[tuple[datetime, dict[str, Any], dict[str, Any], Any]] = []
+    hidden_ids: list[str] = []
+    for t in threads:
+        msgs = t.get("messages") or []
+        latest = msgs[-1] if isinstance(msgs, list) and msgs else {}
+        if not isinstance(latest, dict):
+            latest = {}
+        verdict = classify_thread(t, latest)
+        if thread_id is None and not verdict.keep:
+            if t.get("id"):
+                hidden_ids.append(str(t["id"]))
+            continue
+        scored.append((_thread_recency(t, latest), t, latest, verdict))
+    scored.sort(key=lambda row: row[0], reverse=True)
+    if thread_id is None:
+        scored = scored[:limit]
+
+    if hidden_ids:
+        # Persist the hide so stats.received and the next poll's SQL window
+        # stop counting personal mail the classifier already rejected.
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    'UPDATE "EmailThread" SET classification = %s'
+                    ' WHERE "userId" = %s AND id = ANY(%s)'
+                    " AND COALESCE(classification, '') <> 'personal'",
+                    ("personal", uid, hidden_ids),
+                )
+                cur.execute(
+                    """
+                    SELECT count(*) FILTER (
+                             WHERE COALESCE(classification, '') <> 'personal'
+                           ) AS total,
+                           count(*) FILTER (
+                             WHERE classification IN ('priority', 'followup')
+                           ) AS recruiter_emails
+                    FROM "EmailThread"
+                    WHERE "userId" = %s
+                    """,
+                    (uid,),
+                )
+                totals_row = cur.fetchone()
+            conn.commit()
+
     total = int((totals_row[0] if totals_row else 0) or 0)
     recruiter_emails = int((totals_row[1] if totals_row else 0) or 0)
 
     messages = []
-    for t in threads:
-        msgs = t.get("messages") or []
-        if isinstance(msgs, list) and msgs:
-            latest = msgs[-1]
-        else:
-            latest = {}
+    for _recency, t, latest, verdict in scored:
         full_body = latest.get("body") or ""
         preview = full_body[:120]
         # Honest, explicit marker (MF-1, wave-3.5 adversarial review) — never a
@@ -677,6 +819,12 @@ def email_inbox(
         # back to that before ever admitting "Unknown".
         msg_from = latest.get("from") or ""
         msg_from_email = latest.get("fromEmail") or ""
+        category = t.get("classification") or "all"
+        if verdict.keep and verdict.category:
+            if verdict.is_interview_invite:
+                category = "priority"
+            elif category in (None, "all", "personal"):
+                category = verdict.category
         messages.append({
             "id": t["id"],
             "from": t.get("contact_name") or msg_from or msg_from_email or "Unknown",
@@ -684,14 +832,14 @@ def email_inbox(
             "company": t.get("contact_company") or "",
             "subject": t.get("subject") or "(no subject)",
             "preview": preview,
-            "category": t.get("classification") or "all",
+            "category": category,
             # REAL per-thread triage score (MV-email-center-001), or null when the
             # thread has never been triaged — never a fabricated 0. Deep
             # intelligence (breakdown + summary) and draft replies are computed
             # ON DEMAND by the client via POST /agents/email/run, so the inbox
             # load stays one query (never 64 LLM calls).
             "score": t.get("aiScore"),
-            "receivedAt": str(t["createdAt"])[:10] if t.get("createdAt") else "",
+            "receivedAt": _received_at_iso(t, latest),
             "account": t.get("source_account") or "",
             # Truncated to the same `preview` snippet for the bounded LIST
             # response (W-13 / QA #2: was 723KB / 148 full bodies on every
@@ -700,11 +848,26 @@ def email_inbox(
             # hatch.
             "body": full_body if include_full_body else preview,
             "bodyTruncated": is_truncated,
-            "intelligence": None,
-            "draftReply": "",
+            "intelligence": _inbox_intelligence(t.get("aiInsights")),
+            "draftReply": str(t.get("draftReply") or ""),
         })
 
     activity = _email_activity_stats(uid)
+    unread_map = _unread_by_account(uid)
+    follow_ups = [
+        {
+            "company": m["company"] or m["from"],
+            "role": m["subject"],
+            "dueIn": (
+                "Draft ready for review"
+                if (m.get("draftReply") or "").strip()
+                else "Needs a follow-up draft"
+            ),
+            "status": "draft" if (m.get("draftReply") or "").strip() else "queued",
+        }
+        for m in messages
+        if m.get("category") == "followup"
+    ]
 
     # One entry per connected inbox (for the account switcher). Falls back to a
     # single not-connected placeholder so the UI can prompt the first connect.
@@ -721,7 +884,7 @@ def email_inbox(
                 "provider": "Gmail",
                 "status": "needs_reauth" if needs_reauth else "connected",
                 "isPrimary": bool(acc.get("isPrimary")),
-                "unread": 0,
+                "unread": unread_map.get(str(acc.get("id") or ""), 0),
                 "actionRequired": needs_reauth,
                 "note": (
                     "Gmail authorization expired or was revoked — "
@@ -751,9 +914,9 @@ def email_inbox(
             "autoDrafted": activity["autoDrafted"],
             "sentApproved": activity["sentApproved"],
             "followUpsSent": activity["followUpsSent"],
-            "avgResponseHrs": 0,
+            "avgResponseHrs": None,
         },
-        "followUps": [],
+        "followUps": follow_ups,
         "messages": messages,
         "recruiterProfile": None,
     }
