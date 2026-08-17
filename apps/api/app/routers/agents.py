@@ -66,6 +66,7 @@ from app.services.llm_client import (
     _infer_anthropic_auth_mode,
     circuit_block_error,
     classify_llm_failure,
+    claude_auth_mode_filter,
     get_accumulated_usage,
     get_active_credential_env_var,
     get_last_fallback_reason,
@@ -675,9 +676,16 @@ def _billing_audit(user_id: str, agent_name: str) -> tuple[dict[str, Any], str |
 
     Returns ``(audit, provider)``. Deterministic (non-LLM) agents have no
     provider and record ``{'quotaPath': 'none'}``. For LLM agents the audit
-    names the credential source, authMode and provider; the ``quotaPath`` is
-    ``metered_api`` for every supported credential (consumer subscription OAuth
-    was removed for compliance — GAP-AUTH-001).
+    names the credential source, authMode and provider.
+
+    ``quotaPath`` is ``subscription_quota`` when the resolved credential is the
+    operator's Anthropic subscription token (``authMode=oauth_token``) — the
+    ONLY credential a Claude run may spend (MODEL-SUB-QUOTA) and one that draws
+    the Pro/Max subscription, not metered credits — and ``metered_api`` for
+    every other supported credential. The legacy in-app consumer OAuth flow
+    stays removed for compliance (GAP-AUTH-001); this is the pasted Claude Code
+    token added by GAP-P7-DEF-A, which really is subscription-funded, so
+    labelling it ``metered_api`` was a false disclosure.
     """
     # ML-U1X-b: a backend that makes no metered LLM call has no billing
     # provenance to name — including a ROLE backend (supervisor) that carries an
@@ -692,7 +700,15 @@ def _billing_audit(user_id: str, agent_name: str) -> tuple[dict[str, Any], str |
         return {"quotaPath": "none"}, None
     provider = resolve_provider(model)
     try:
-        cred = resolve_user_credential(provider, user_id, agent_name)
+        # MODEL-SUB-QUOTA clause 6: resolve through the SAME filter the live
+        # call uses (``llm_client._call_live``), or the audit would name a
+        # credential that will never serve this run — e.g. a user's Anthropic
+        # api_key recorded as the payer of a Claude run the operator's
+        # subscription actually funds. The audit must describe the real one.
+        cred = resolve_user_credential(
+            provider, user_id, agent_name,
+            require_auth_modes=claude_auth_mode_filter(model),
+        )
     except Exception:  # noqa: BLE001 — audit must never break a run
         cred = None
     if cred is None:
@@ -702,10 +718,18 @@ def _billing_audit(user_id: str, agent_name: str) -> tuple[dict[str, Any], str |
             provider,
         )
     # Consumer subscription OAuth is removed (GAP-AUTH-001): every supported
-    # credential (api_key / env) bills as metered API usage.
+    # credential (api_key / env) bills as metered API usage. The one exception
+    # is the operator's Anthropic SUBSCRIPTION token — the only credential a
+    # Claude run may spend (MODEL-SUB-QUOTA) — which draws the Pro/Max
+    # subscription quota, not metered credits, and is labelled as such.
+    quota_path = (
+        "subscription_quota"
+        if provider == "anthropic" and cred.auth_mode == "oauth_token"
+        else "metered_api"
+    )
     return (
         {"credentialSource": cred.source, "authMode": cred.auth_mode,
-         "provider": provider, "quotaPath": "metered_api"},
+         "provider": provider, "quotaPath": quota_path},
         provider,
     )
 

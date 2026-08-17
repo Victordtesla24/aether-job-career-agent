@@ -930,6 +930,32 @@ def normalize_model_id(model: str | None) -> str:
     return m
 
 
+#: The ONLY Anthropic ``authMode`` permitted to serve a CLAUDE model.
+#:
+#: OWNER DIRECTIVE (MODEL-SUB-QUOTA, 2026-08-17): "all the claude requests [must]
+#: use my Anthropic Pro Subscription quota **instead of consuming extra credits
+#: via an API_KEY** including for openrouter". ``oauth_token`` IS the
+#: subscription (the operator's ``claude setup-token`` / admin PKCE session);
+#: ``api_key`` is metered Anthropic API billing — a second bill for a model the
+#: subscription already covers, which is exactly what the directive forbids.
+#: ``subscription_oauth`` is the legacy, already-unusable form (ADR-P7-01).
+#:
+#: Kept as DATA beside the routing seam so the rule and every enforcement point
+#: are one thing.
+CLAUDE_AUTH_MODES = frozenset({"oauth_token"})
+
+
+def claude_auth_mode_filter(model: str | None) -> frozenset[str] | None:
+    """The auth modes allowed to serve ``model`` — ``None`` means unrestricted.
+
+    Claude-only by construction: every non-Claude id keeps the shipped
+    resolution order byte for byte (an OpenRouter model still spends its own
+    ``api_key`` credential), so this narrows exactly one model family and
+    nothing else.
+    """
+    return CLAUDE_AUTH_MODES if is_claude_model(model) else None
+
+
 class ClaudeOnOpenRouterError(RuntimeError):
     """A Claude model reached the OpenRouter transport. Never expected.
 
@@ -1061,8 +1087,24 @@ OPERATOR_SCOPED_AGENT_KEYS = frozenset({"supervisor"})
 _SUBSCRIPTION_AUTH_MODES = frozenset({"oauth_token", "subscription_oauth"})
 
 
+def _auth_mode_permitted(
+    auth_mode: str, require_auth_modes: "frozenset[str] | None"
+) -> bool:
+    """Whether ``auth_mode`` satisfies a caller's auth-mode restriction.
+
+    ``None`` (the default everywhere) means unrestricted — the shipped
+    behaviour. The one caller that restricts is a CLAUDE run
+    (:data:`CLAUDE_AUTH_MODES`), which may be served ONLY by the operator's
+    subscription token.
+    """
+    return require_auth_modes is None or auth_mode in require_auth_modes
+
+
 def resolve_credential(
-    provider: str, *, allow_operator_subscription: bool = True
+    provider: str,
+    *,
+    allow_operator_subscription: bool = True,
+    require_auth_modes: "frozenset[str] | None" = None,
 ) -> "ProviderCredentialResolution | None":
     """Resolve ``provider``'s credential: DB row FIRST, then legacy env fallback.
 
@@ -1074,6 +1116,15 @@ def resolve_credential(
     CONSUMER SUBSCRIPTION token is skipped, falling through to the env fallback
     and then to an honest ``None``. A deployment-wide API KEY is untouched by
     this: that is metered API billing and stays exactly as it shipped.
+
+    ``require_auth_modes`` (default ``None`` — unrestricted, so every
+    pre-existing caller is again unchanged) is the MODEL-SUB-QUOTA clause-3
+    filter: a candidate whose ``authMode`` is not listed is SKIPPED (not
+    rerouted, not rewritten), so resolution falls through to the next source and
+    finally to an honest ``None``. A Claude run passes
+    :data:`CLAUDE_AUTH_MODES`, which makes an Anthropic **api_key** — metered
+    billing for a model the operator's subscription already covers — ineligible
+    at every source: the deployment row, and both legacy env vars.
     """
     # 1. Encrypted DB credential (the in-UI configured path) wins.
     try:
@@ -1093,6 +1144,15 @@ def resolve_credential(
                 "operator subscription credential for '%s' is not available to "
                 "user-content generation; falling through to a provider-scoped "
                 "source", provider,
+            )
+            row = None
+        elif not _auth_mode_permitted(auth_mode, require_auth_modes):
+            # MODEL-SUB-QUOTA clause 3: this row cannot serve THIS request (a
+            # Claude model may only be served by the subscription token). Skip
+            # it — never rewrite the request onto it, never reroute.
+            logger.info(
+                "deployment '%s' credential (authMode=%s) is not eligible for "
+                "this request; falling through", provider, auth_mode,
             )
             row = None
         # A pre-existing subscription_oauth row is no longer usable (GAP-AUTH-001):
@@ -1125,14 +1185,18 @@ def resolve_credential(
         direct = os.environ.get("AETHER_LLM_API_KEY")
         if direct and "anthropic.com" in base:
             mode = _infer_anthropic_auth_mode(direct)
-            if _resolution_is_supported("anthropic", mode):
+            if _resolution_is_supported("anthropic", mode) and _auth_mode_permitted(
+                mode, require_auth_modes
+            ):
                 return ProviderCredentialResolution(
                     "anthropic", mode, direct, base, "environment"
                 )
         key = os.environ.get("ANTHROPIC_API_KEY")
         if key:
             mode = _infer_anthropic_auth_mode(key)
-            if _resolution_is_supported("anthropic", mode):
+            if _resolution_is_supported("anthropic", mode) and _auth_mode_permitted(
+                mode, require_auth_modes
+            ):
                 return ProviderCredentialResolution(
                     "anthropic", mode, key, None, "environment"
                 )
@@ -1141,6 +1205,14 @@ def resolve_credential(
     # Strictly provider-scoped — the generic AETHER_LLM_* pair may hold a legacy
     # Anthropic token pointed at api.anthropic.com; handing that to the OpenRouter
     # path is exactly the cross-provider billing crossover ADR-PC-2 forbids.
+    #
+    # Every OpenRouter env source below is an ``api_key``. A caller that
+    # restricted the auth modes and did not list ``api_key`` (a Claude run,
+    # which cannot reach here anyway since Claude resolves provider=anthropic)
+    # gets the honest ``None`` instead — belt-and-braces, so the restriction
+    # cannot be satisfied by a source it was meant to exclude.
+    if not _auth_mode_permitted("api_key", require_auth_modes):
+        return None
     or_key = os.environ.get("OPENROUTER_API_KEY")
     if or_key:
         return ProviderCredentialResolution(
@@ -1252,7 +1324,11 @@ def _user_is_admin(user_id: str) -> bool:
 
 
 def resolve_user_credential(
-    provider: str, user_id: str | None = None, agent_key: str | None = None
+    provider: str,
+    user_id: str | None = None,
+    agent_key: str | None = None,
+    *,
+    require_auth_modes: "frozenset[str] | None" = None,
 ) -> "ProviderCredentialResolution | None":
     """Resolve ``provider``'s credential for a specific user, honestly & scoped.
 
@@ -1291,9 +1367,20 @@ def resolve_user_credential(
 
     Both rules are one-directional and neither introduces a new provider path:
     the no-cross-provider invariant is untouched.
+
+    ``require_auth_modes`` (MODEL-SUB-QUOTA clause 3, default ``None`` =
+    unrestricted so every pre-existing caller is unchanged) narrows WHICH
+    credential may serve THIS request. A candidate whose ``authMode`` is not
+    listed is skipped at EVERY step above — per-agent ``credentialRef``, the
+    user's own row, the deployment-wide row, legacy env — so resolution falls
+    through to the next source and finally to an honest ``None``. A Claude run
+    passes :data:`CLAUDE_AUTH_MODES`: a user-owned or deployment-wide Anthropic
+    **api_key** (metered billing for a model the operator's subscription already
+    covers) can therefore never be the credential a Claude run spends, which is
+    the owner directive stated as code.
     """
     if agent_key in OPERATOR_SCOPED_AGENT_KEYS:
-        return resolve_credential(provider)
+        return resolve_credential(provider, require_auth_modes=require_auth_modes)
     if user_id:
         # Refresh-before-expiry hook (ML-agents-cred-002, ADR-ML-2a DECISION-1b).
         # When a deployment-wide Anthropic subscription OAuth session exists and
@@ -1329,6 +1416,7 @@ def resolve_user_credential(
                     and got.get("provider") == provider
                     and got.get("secret")
                     and _resolution_is_supported(provider, got["authMode"])
+                    and _auth_mode_permitted(got["authMode"], require_auth_modes)
                 ):
                     return ProviderCredentialResolution(
                         provider, got["authMode"], got["secret"],
@@ -1347,6 +1435,7 @@ def resolve_user_credential(
             got
             and got.get("secret")
             and _resolution_is_supported(provider, got["authMode"])
+            and _auth_mode_permitted(got["authMode"], require_auth_modes)
         ):
             return ProviderCredentialResolution(
                 provider, got["authMode"], got["secret"],
@@ -1359,7 +1448,7 @@ def resolve_user_credential(
     # scoped it OFF is lifted, and a runaway is bounded per-user by the quota +
     # spend cap in ``agents._record_run`` (which fires before the model call),
     # not by withholding the credential. OpenRouter is never reached from here.
-    return resolve_credential(provider)
+    return resolve_credential(provider, require_auth_modes=require_auth_modes)
 
 
 def _is_operator_scoped_run() -> bool:
@@ -2018,6 +2107,16 @@ def verify_resolved_credential(
     """Real minimal round-trip against an already-resolved credential.
 
     Returns ``(ok, status, detail)``; ``ok`` is True only on a genuine 2xx.
+
+    SCOPE NOTE (MODEL-SUB-QUOTA). This path deliberately does NOT apply the
+    Claude subscription-only filter: it is a health check of the credential the
+    operator/user just pasted, answering "does THIS secret work?", and its
+    ``max_tokens=1`` ping must therefore go out on THAT secret — filtering it
+    would report a valid Anthropic API key as broken. It serves no user content
+    and produces no generation, so it is not one of the "claude requests" the
+    owner directive routes to the subscription; every credential that actually
+    SERVES a run passes through :meth:`LLMClient._call_live`, which does filter
+    and pin.
     """
     import httpx
 
@@ -3293,24 +3392,50 @@ class LLMClient:
                     expires_at=block.get("expiresAt"),
                     reason=block.get("reason") or "subscription_quota_exceeded",
                 )
-        cred = resolve_user_credential(provider, ctx_user_id, ctx_agent_key)
+        # MODEL-SUB-QUOTA clause 3: for a Claude model the resolver is narrowed
+        # to the SUBSCRIPTION auth mode, so an Anthropic api_key credential
+        # (user-owned, deployment-wide or ambient env) is skipped at every step
+        # rather than silently billed. `None` for every other model = the
+        # shipped resolution order, unchanged.
+        claude_modes = claude_auth_mode_filter(model_id)
+        cred = resolve_user_credential(
+            provider, ctx_user_id, ctx_agent_key, require_auth_modes=claude_modes
+        )
         if cred is None:
+            if claude_modes is not None:
+                raise RuntimeError(
+                    f"model '{model_id}' is a Claude model, and a Claude run is "
+                    "served ONLY by the operator's Anthropic subscription "
+                    "credential (authMode=oauth_token). No such credential "
+                    "resolved. An Anthropic API key is deliberately NOT eligible "
+                    "(OWNER DIRECTIVE, MODEL-SUB-QUOTA: the subscription quota "
+                    "instead of extra metered credits), and the request is NOT "
+                    "rerouted to OpenRouter. Connect the Claude subscription "
+                    "token in the Agents panel to restore Claude runs."
+                )
             raise RuntimeError(
                 f"No credential configured for provider '{provider}' "
                 f"(model '{model_id}'). Add a {provider} credential in the Agents "
                 "panel or its server env key. The request will NOT be rerouted to "
                 "another provider — billing separation is enforced."
             )
-        # MODEL-SUB-QUOTA credential pin: a Claude model is served by the
-        # Anthropic credential or by NOTHING. A resolution that came back
-        # holding another provider's secret would be a bug, not a fallback —
-        # refuse here rather than let it reach a transport.
-        if is_claude_model(model_id) and cred.provider != "anthropic":
+        # MODEL-SUB-QUOTA credential pin (belt-and-braces to the filter above):
+        # a Claude model is served by the Anthropic SUBSCRIPTION credential or
+        # by NOTHING. A resolution that came back holding another provider's
+        # secret — or Anthropic's own METERED api_key — would be a bug, not a
+        # fallback, so it is refused here rather than reaching a transport.
+        # Checked on both axes because provider alone was not enough: an
+        # `anthropic`/`api_key` credential passes a provider-only pin and bills
+        # exactly the metered account the directive exists to avoid.
+        if claude_modes is not None and (
+            cred.provider != "anthropic" or cred.auth_mode not in claude_modes
+        ):
             raise RuntimeError(
                 f"model '{model_id}' is a Claude model but the resolved credential "
-                f"is for provider '{cred.provider}'. Claude runs are served only by "
-                "the Anthropic credential (the operator's subscription) — the "
-                "request is refused rather than billed to another account."
+                f"is provider='{cred.provider}' authMode='{cred.auth_mode}'. Claude "
+                "runs are served only by the operator's Anthropic subscription "
+                f"(authMode in {sorted(claude_modes)}) — the request is refused "
+                "rather than billed to a metered API key or another account."
             )
         if provider == "anthropic":
             req = build_anthropic_request(

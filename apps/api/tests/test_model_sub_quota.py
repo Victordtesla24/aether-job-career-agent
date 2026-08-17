@@ -393,6 +393,330 @@ def test_build_anthropic_request_is_reachable_for_the_bare_id(subscription_env):
 
 
 # ---------------------------------------------------------------------------
+# CLAUSE 3 (round 2) — an Anthropic API KEY is not eligible to serve Claude.
+#
+# REVIEWER REJECTION (round 1, verbatim): the pin checked only
+# ``cred.provider != 'anthropic'`` and never ``cred.auth_mode``, so a
+# pre-existing user-owned or deployment-wide Anthropic **api_key** credential —
+# reachable via ``PUT /agents/user/providers/anthropic/credential`` — resolved
+# AHEAD of the oauth_token subscription row and passed the pin unchallenged. A
+# Claude run could therefore silently bill a metered API key: the exact outcome
+# the owner directive ("instead of consuming extra credits via an API_KEY")
+# forbids.
+#
+# The rule these tests pin: for a Claude model the ONLY eligible credential is
+# an Anthropic ``oauth_token`` (the subscription). An api_key credential is
+# SKIPPED at every resolution step — per-agent credentialRef, the user's own
+# row, the deployment-wide row, the legacy env var — so resolution falls
+# through to the subscription; with no subscription anywhere the run fails
+# honestly and fires ZERO HTTP.
+# ---------------------------------------------------------------------------
+
+_API_KEY = "sk-ant-api03-model-sub-quota-test-key"
+
+
+def _clear_anthropic_env(monkeypatch) -> None:
+    for var in (
+        "ANTHROPIC_API_KEY", "AETHER_LLM_API_KEY", "AETHER_LLM_BASE_URL",
+        "CLAUDE_CODE_OAUTH_TOKEN", "ABACUS_API_KEY",
+    ):
+        monkeypatch.delenv(var, raising=False)
+
+
+def _claude_run_or_error(monkeypatch, tmp_path, *, user_id=None, agent_key="coverLetter"):
+    """Dispatch one Claude run; return ``(outcome, sent_requests)``.
+
+    ``outcome`` is the completion text, or the raised exception.
+    """
+    from app.services.llm_client import user_credential_context
+
+    sent = _install_transport(monkeypatch, lambda url, p: _anthropic_ok(_GOOD_JSON))
+    llm = LLMClient(mode="auto", fixture_dir=tmp_path)
+    try:
+        if user_id is None:
+            with user_model_context(_SLASH):
+                return llm.complete("cover_letter", "sys", "usr", model=_SLASH), sent
+        with user_model_context(_SLASH), user_credential_context(user_id, agent_key):
+            return llm.complete("cover_letter", "sys", "usr", model=_SLASH), sent
+    except Exception as exc:  # noqa: BLE001 — the outcome under test
+        return exc, sent
+
+
+def test_claude_auth_mode_filter_names_oauth_only_and_only_for_claude():
+    """The rule as data: a Claude id restricts resolution to ``oauth_token``;
+    every other id is unrestricted (``None``) so nothing else changes.
+
+    FAILS NOW: no such filter exists.
+    """
+    from app.services.llm_client import CLAUDE_AUTH_MODES, claude_auth_mode_filter
+
+    assert CLAUDE_AUTH_MODES == frozenset({"oauth_token"})
+    for model in (_BARE, _SLASH, _UNKNOWN_SLASH, "ANTHROPIC/Claude-Opus-4-8"):
+        assert claude_auth_mode_filter(model) == CLAUDE_AUTH_MODES, model
+    for model in (_OPENROUTER, "anthropic/some-non-claude-model", "qwen/qwen3", ""):
+        assert claude_auth_mode_filter(model) is None, model
+
+
+def test_deployment_anthropic_api_key_row_is_not_eligible_to_serve_claude(
+    monkeypatch, tmp_path
+):
+    """A deployment-wide Anthropic **api_key** row is metered API billing, so it
+    may not serve a Claude run at all — resolution returns an honest ``None``.
+
+    FAILS NOW: the row resolves and the run bills the API key.
+    """
+    from app.services.llm_client import CLAUDE_AUTH_MODES, resolve_user_credential
+
+    _clear_anthropic_env(monkeypatch)
+    ProviderCredentialRepository().upsert(
+        "anthropic", auth_mode="api_key", secret=_API_KEY
+    )
+
+    assert (
+        resolve_user_credential(
+            "anthropic", None, None, require_auth_modes=CLAUDE_AUTH_MODES
+        )
+        is None
+    )
+    # ... and the unrestricted resolution is UNCHANGED (zero regression).
+    unrestricted = resolve_user_credential("anthropic", None, None)
+    assert unrestricted is not None and unrestricted.auth_mode == "api_key"
+
+
+def test_claude_run_on_an_api_key_only_deployment_fails_honestly_and_fires_no_http(
+    monkeypatch, tmp_path
+):
+    """The seam-level twin of the test above: no subscription => honest failure,
+    never a metered-API-key Claude call and never an OpenRouter reroute.
+
+    FAILS NOW: the run succeeds against ``x-api-key`` — the owner pays twice.
+    """
+    _clear_anthropic_env(monkeypatch)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test-not-a-real-key")
+    ProviderCredentialRepository().upsert(
+        "anthropic", auth_mode="api_key", secret=_API_KEY
+    )
+
+    outcome, sent = _claude_run_or_error(monkeypatch, tmp_path)
+
+    assert isinstance(outcome, LLMUnavailableError), outcome
+    assert sent == [], f"a Claude run reached the network on an API key: {sent}"
+
+
+def test_ambient_anthropic_api_key_env_never_serves_claude(monkeypatch, tmp_path):
+    """The legacy env source is filtered too — ``ANTHROPIC_API_KEY`` is a
+    metered key whatever it is set on.
+
+    FAILS NOW: the env key resolves and serves the run.
+    """
+    _clear_anthropic_env(monkeypatch)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", _API_KEY)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test-not-a-real-key")
+
+    outcome, sent = _claude_run_or_error(monkeypatch, tmp_path)
+
+    assert isinstance(outcome, LLMUnavailableError), outcome
+    assert sent == [], f"a Claude run reached the network on an API key: {sent}"
+
+
+def test_an_env_oauth_token_is_still_eligible(monkeypatch):
+    """Contrast guard: the filter selects on AUTH MODE, not on the source. A
+    subscription token supplied through the legacy env var is still a
+    subscription and still serves."""
+    from app.services.llm_client import CLAUDE_AUTH_MODES, resolve_credential
+
+    _clear_anthropic_env(monkeypatch)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", _OAT)
+
+    res = resolve_credential("anthropic", require_auth_modes=CLAUDE_AUTH_MODES)
+    assert res is not None
+    assert res.auth_mode == "oauth_token"
+    assert res.source == "environment"
+
+
+def test_a_users_own_api_key_is_skipped_so_the_subscription_serves_claude(
+    monkeypatch, tmp_path, client, auth_headers, test_user_id
+):
+    """THE rejected scenario, end to end: the user has their OWN Anthropic
+    api_key credential (resolved FIRST today) while the operator subscription
+    row also exists. The Claude run must be served by the SUBSCRIPTION.
+
+    FAILS NOW: the user's api_key wins resolution and bills metered credits.
+    """
+    from app.repositories.user_provider_credential import (
+        UserProviderCredentialRepository,
+    )
+
+    _clear_anthropic_env(monkeypatch)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test-not-a-real-key")
+    UserProviderCredentialRepository().upsert(
+        test_user_id, "anthropic", auth_mode="api_key", secret=_API_KEY
+    )
+    ProviderCredentialRepository().upsert(
+        "anthropic", auth_mode="oauth_token", secret=_OAT
+    )
+
+    outcome, sent = _claude_run_or_error(monkeypatch, tmp_path, user_id=test_user_id)
+
+    assert outcome == _GOOD_JSON, outcome
+    assert len(sent) == 1, sent
+    assert "api.anthropic.com" in sent[0]["url"], sent[0]["url"]
+    headers = {k.lower(): v for k, v in sent[0]["headers"].items()}
+    assert headers.get("authorization") == f"Bearer {_OAT}", sorted(headers)
+    assert "x-api-key" not in headers, sorted(headers)
+    assert _API_KEY not in str(sent), "the user's metered API key was sent"
+
+
+def test_a_users_own_api_key_alone_cannot_serve_claude(
+    monkeypatch, tmp_path, client, auth_headers, test_user_id
+):
+    """With NO subscription anywhere, a user-owned Anthropic api_key does not
+    become the payer of last resort — the run fails honestly, zero HTTP.
+
+    FAILS NOW: the user's api_key serves the run.
+    """
+    from app.repositories.user_provider_credential import (
+        UserProviderCredentialRepository,
+    )
+
+    _clear_anthropic_env(monkeypatch)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test-not-a-real-key")
+    UserProviderCredentialRepository().upsert(
+        test_user_id, "anthropic", auth_mode="api_key", secret=_API_KEY
+    )
+
+    outcome, sent = _claude_run_or_error(monkeypatch, tmp_path, user_id=test_user_id)
+
+    assert isinstance(outcome, LLMUnavailableError), outcome
+    assert sent == [], f"a Claude run reached the network on an API key: {sent}"
+
+
+def test_a_per_agent_credential_ref_to_an_api_key_is_skipped_for_claude(
+    monkeypatch, tmp_path, client, auth_headers, test_user_id
+):
+    """The third resolution seam: ``AgentConfig.credentialRef`` pinned at an
+    api_key credential must not smuggle metered billing into a Claude run.
+
+    FAILS NOW: the credentialRef branch returns the api_key credential first.
+    """
+    from app.repositories.user_provider_credential import (
+        UserProviderCredentialRepository,
+    )
+
+    _clear_anthropic_env(monkeypatch)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test-not-a-real-key")
+    monkeypatch.setattr(
+        "app.services.llm_client._lookup_agent_credential_ref",
+        lambda user_id, agent_key: "cred-ref-1",
+    )
+    monkeypatch.setattr(
+        UserProviderCredentialRepository,
+        "get_secret_by_id",
+        lambda self, ref, user_id: {
+            "provider": "anthropic", "authMode": "api_key",
+            "secret": _API_KEY, "baseUrl": None,
+        },
+    )
+    ProviderCredentialRepository().upsert(
+        "anthropic", auth_mode="oauth_token", secret=_OAT
+    )
+
+    outcome, sent = _claude_run_or_error(monkeypatch, tmp_path, user_id=test_user_id)
+
+    assert outcome == _GOOD_JSON, outcome
+    assert len(sent) == 1, sent
+    headers = {k.lower(): v for k, v in sent[0]["headers"].items()}
+    assert headers.get("authorization") == f"Bearer {_OAT}", sorted(headers)
+    assert _API_KEY not in str(sent), "the pinned metered API key was sent"
+
+
+def test_the_pin_refuses_an_api_key_credential_even_if_resolution_is_bypassed(
+    monkeypatch, tmp_path
+):
+    """Belt-and-braces: with the resolver forced to hand back an Anthropic
+    api_key credential, the seam pin still refuses the Claude run.
+
+    FAILS NOW: the pin only compares ``cred.provider``, so an api_key sails
+    through and the run bills metered credits.
+    """
+    from app.services.llm_client import ProviderCredentialResolution
+
+    _clear_anthropic_env(monkeypatch)
+    monkeypatch.setattr(
+        "app.services.llm_client.resolve_user_credential",
+        lambda provider, user_id=None, agent_key=None, **kw: (
+            ProviderCredentialResolution(
+                "anthropic", "api_key", _API_KEY, None, "database"
+            )
+        ),
+    )
+
+    outcome, sent = _claude_run_or_error(monkeypatch, tmp_path)
+
+    assert isinstance(outcome, LLMUnavailableError), outcome
+    assert sent == [], f"a Claude run reached the network on an API key: {sent}"
+
+
+def test_a_non_claude_openrouter_run_is_untouched_by_the_auth_mode_filter(
+    monkeypatch, tmp_path
+):
+    """ZERO-REGRESSION PIN: the filter is Claude-only, so an OpenRouter model
+    still resolves and spends its own ``api_key`` credential exactly as before.
+    """
+    from app.services.llm_client import resolve_user_credential
+
+    _clear_anthropic_env(monkeypatch)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-or-test-not-a-real-key")
+
+    sent = _install_transport(
+        monkeypatch,
+        lambda url, p: _Resp(200, _GOOD_JSON,
+                             {"choices": [{"message": {"content": _GOOD_JSON}}]}),
+    )
+    llm = LLMClient(mode="auto", fixture_dir=tmp_path)
+    with user_model_context(_OPENROUTER):
+        assert llm.complete(
+            "cover_letter", "sys", "usr", model=_OPENROUTER
+        ) == _GOOD_JSON
+    assert len(sent) == 1 and "openrouter" in sent[0]["url"], sent
+
+    cred = resolve_user_credential("openrouter", None, None)
+    assert cred is not None and cred.auth_mode == "api_key"
+
+
+def test_billing_audit_of_a_claude_run_names_the_subscription_not_a_users_api_key(
+    monkeypatch, client, auth_headers, test_user_id
+):
+    """CLAUSE 6. The audit must name the credential that will ACTUALLY serve —
+    otherwise a run served by the subscription is recorded as metered API usage.
+
+    FAILS NOW: ``_billing_audit`` resolves without the Claude filter, so with a
+    user api_key present it records ``authMode='api_key'``.
+    """
+    from app.repositories.user_provider_credential import (
+        UserProviderCredentialRepository,
+    )
+    from app.routers.agents import _billing_audit
+
+    _clear_anthropic_env(monkeypatch)
+    UserProviderCredentialRepository().upsert(
+        test_user_id, "anthropic", auth_mode="api_key", secret=_API_KEY
+    )
+    ProviderCredentialRepository().upsert(
+        "anthropic", auth_mode="oauth_token", secret=_OAT
+    )
+    _pin(test_user_id, "coverLetter", _BARE)
+
+    audit, provider = _billing_audit(test_user_id, "coverLetter")
+
+    assert provider == "anthropic", audit
+    assert audit["provider"] == "anthropic", audit
+    assert audit["authMode"] == "oauth_token", audit
+    assert audit["credentialSource"] == "database", audit
+    assert audit["quotaPath"] == "subscription_quota", audit
+
+
+# ---------------------------------------------------------------------------
 # CLAUSE 4 — save-time normalization + validation, and the data repair
 # ---------------------------------------------------------------------------
 
@@ -618,3 +942,33 @@ def test_billing_audit_for_a_claude_pin_reports_anthropic_oauth(
     assert audit["provider"] == "anthropic", audit
     assert audit["authMode"] == "oauth_token", audit
     assert audit["credentialSource"] == "database", audit
+    # A subscription-served run is NOT metered API usage — the audit says so.
+    assert audit["quotaPath"] == "subscription_quota", audit
+
+
+def test_billing_audit_is_honest_when_only_an_api_key_exists_for_claude(
+    monkeypatch, client, auth_headers, test_user_id
+):
+    """The other half of clause 6: with an api_key as the ONLY Anthropic
+    credential the Claude run cannot be served at all, so the audit must record
+    NO credential — not a metered key that will never be spent.
+
+    FAILS NOW: the audit reports ``authMode='api_key'`` / ``metered_api``.
+    """
+    from app.repositories.user_provider_credential import (
+        UserProviderCredentialRepository,
+    )
+    from app.routers.agents import _billing_audit
+
+    _clear_anthropic_env(monkeypatch)
+    UserProviderCredentialRepository().upsert(
+        test_user_id, "anthropic", auth_mode="api_key", secret=_API_KEY
+    )
+    _pin(test_user_id, "coverLetter", _BARE)
+
+    audit, provider = _billing_audit(test_user_id, "coverLetter")
+
+    assert provider == "anthropic", audit
+    assert audit["credentialSource"] == "none", audit
+    assert audit["authMode"] is None, audit
+    assert audit["quotaPath"] == "none", audit
