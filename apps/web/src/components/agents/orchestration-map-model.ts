@@ -124,7 +124,7 @@ export function relativeRunLabel(iso: string | null, now: number): string | null
  * TWO SOURCES, AND WHY BOTH ARE NEEDED (U-AX-V4 / S-UI-1 review finding 1).
  *
  * 1. `runs` — `GET /agents/runs`, a GLOBAL window (default `limit=50`) shared
- *    by all 22 agents, newest-first. Richer per row: it carries `heartbeatAt`,
+ *    by all 22 agent cards, newest-first. Richer per row: it carries `heartbeatAt`,
  *    which is the only positive evidence that a long run is genuinely alive.
  *    But one busy agent can push every other agent out of a 50-row window, and
  *    an agent missing from the window is NOT an agent that has not run.

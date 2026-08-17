@@ -422,6 +422,33 @@ _BACKEND_TO_KEY = {a["backend"]: a["key"] for a in AGENT_CATALOG if a["backend"]
 #: so stat displays name the primary agent, not whichever facet sorted last.
 _BACKEND_TO_KEY["fitScorer"] = "matchScoring"
 
+
+def honest_catalog_counts() -> dict[str, int]:
+    """The honest basis behind every agent count this product shows.
+
+    AUD-AGENT-4. :data:`AGENT_CATALOG` is a list of CARDS, not of agents: one
+    deterministic engine (``fitScorer``) is presented as THREE cards — Match
+    Scoring, ATS Optimization and Skill Gap — so ``len(AGENT_CATALOG)`` has
+    never been a count of agents. ``GET /agents/catalog`` transmitted only that
+    length (as ``counts.total``) and every surface rendered it as "22 agents",
+    which counted one engine three times and padded the product's headline
+    number.
+
+    BOTH facts are computed here and BOTH are transmitted, so no screen has to
+    guess which number it is holding:
+
+    ``engines``  distinct implemented backends — the agents that actually exist.
+    ``cards``    catalog entries — what the configuration grid renders.
+
+    Cards with no backend are roadmap entries: they are counted as cards (they
+    are on screen) and never as engines (nothing runs behind them).
+    """
+    return {
+        "engines": len({a["backend"] for a in AGENT_CATALOG if a.get("backend")}),
+        "cards": len(AGENT_CATALOG),
+    }
+
+
 #: Canonical agent registry — every DISTINCT implemented agent, DERIVED from the
 #: catalog rather than hardcoded (F-3, PROD-VERIFY-5A).
 #:
@@ -5039,10 +5066,17 @@ def agent_catalog(current_user: CurrentUser) -> dict[str, Any]:
                 "last_run": run["createdAt"].isoformat() if run else None,
             }
         )
+    # AUD-AGENT-4: ``engines`` and ``cards`` are the two honest numbers (see
+    # ``honest_catalog_counts``). ``total`` is retained on the wire because it
+    # is what older clients read, and it has always been the CARD total — never
+    # an agent count. Clients must render the pair, not ``total`` alone.
+    scale = honest_catalog_counts()
     return {
         "agents": agents,
         "counts": {
             "total": len(agents),
+            "engines": scale["engines"],
+            "cards": scale["cards"],
             "active": active,
             "paused": paused,
             "error": error,

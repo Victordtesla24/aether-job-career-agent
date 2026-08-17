@@ -5,7 +5,7 @@
  * S-UI-1 §4.1).
  *
  * ── WHY THIS PAGE IS TABBED ────────────────────────────────────────────────
- * The page conflates three jobs — *connect providers*, *configure 22 agents*,
+ * The page conflates three jobs — *connect providers*, *configure 22 agent cards*,
  * *watch the system run* — and used to present all three in one ~6 400px
  * scroll, ordered worst-first: provider config occupied the first ~1 700px and
  * the orchestration content (the product's actual differentiator) sat at
@@ -91,6 +91,7 @@ import ProviderConnections from "../../../components/agents/ProviderConnections"
 import ModelPicker from "../../../components/agents/ModelPicker";
 import ProviderConfigModal from "../../../components/agents/ProviderConfigModal";
 import AgentConfigGrid from "../../../components/agents/AgentConfigGrid";
+import { catalogScaleLabel, honestAgentCount } from "../../../components/agents/catalog-counts";
 import AgentStatsRow from "../../../components/agents/AgentStats";
 import LowCreditBanner from "../../../components/agents/LowCreditBanner";
 import TestRunModal from "../../../components/agents/TestRunModal";
@@ -233,7 +234,7 @@ export default function AgentsPage() {
   // proxy) — `null` before the first read resolves, so the banner stays
   // hidden rather than flashing "unavailable" during initial load.
   const [credits, setCredits] = useState<OpenRouterCredits | null>(null);
-  // U-AX item 5: all 22 catalog agents in their defined workflow map(s),
+  // U-AX item 5: all 22 catalog agent cards in their defined workflow map(s),
   // honest real-vs-planned status. Loaded independently so its own failure
   // never blanks the rest of the console.
   const [orchestrationMap, setOrchestrationMap] = useState<OrchestrationMapData | null>(null);
@@ -268,6 +269,9 @@ export default function AgentsPage() {
       setRuns(runList);
     } catch (e) {
       setNotice(runErrorNotice(e, "Loading agents"));
+      // AUD-AGENT-4: no `engines`/`cards` here on purpose — the catalog did
+      // not load, so its scale is UNKNOWN and the header states no count at
+      // all. Zeroes would claim this product has no agents.
       setCatalog((prev) => prev ?? { agents: [], counts: { total: 0, active: 0, paused: 0, error: 0 } });
     }
   }, []);
@@ -857,7 +861,13 @@ export default function AgentsPage() {
   // asserted about an agent absent from the window.
   const outputGaps = agentOutputGaps(runs, now);
 
-  const agentCount = catalog?.counts.total ?? 0;
+  // AUD-AGENT-4 — the subline used to read `${catalog.counts.total} agents`,
+  // i.e. the CARD total, which counts the one fitScorer engine three times
+  // (Match Scoring + ATS Optimization + Skill Gap). Both server-computed
+  // numbers are stated instead ("N engines powering M cards"), and the tab
+  // badge — labelled "Agents" — carries the engine count alone.
+  const catalogScale = catalogScaleLabel(catalog?.counts);
+  const engineCount = honestAgentCount(catalog?.counts);
   const providerCount = providers?.length ?? 0;
   // OpenRouter carries the live 300+ model catalog the picker browses; other
   // providers expose only a small static list via the card select above.
@@ -896,12 +906,12 @@ export default function AgentsPage() {
     () =>
       TAB_ITEMS.map((t) =>
         t.value === "agents"
-          ? { ...t, count: catalog ? catalog.counts.total : null }
+          ? { ...t, count: engineCount }
           : t.value === "providers"
             ? { ...t, count: providers ? providers.length : null }
             : t,
       ),
-    [catalog, providers],
+    [engineCount, providers],
   );
 
   /** Inactive panels stay mounted (see the file header) but are removed from
@@ -924,8 +934,9 @@ export default function AgentsPage() {
         <div className="min-w-0">
           {/* Rule 3 — the ONE saturated gesture on this fold. */}
           <h1 className="ag-title">Manage Agents</h1>
-          <p className="ag-subline mt-1.5 font-mono text-aether-muted-dim">
-            {agentCount} agents · {providerCount} AI providers · configure models &amp; connections
+          <p data-testid="agents-subline" className="ag-subline mt-1.5 font-mono text-aether-muted-dim">
+            {catalogScale ? `${catalogScale} · ` : ""}
+            {providerCount} AI providers · configure models &amp; connections
           </p>
         </div>
         {/* S-UI §4.1: ONE primary action (coral). Everything else is a ghost of

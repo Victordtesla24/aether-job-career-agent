@@ -4,7 +4,7 @@
  * GET /analytics/agent-policy — the SAME deterministic rigor tier every real
  * agent obeys (`app.services.quality_policy.resolve_policy_for_user`), why it
  * is what it is, and per-agent last-run visibility.
- * GET /agents/orchestration-map — all 22 catalog agents placed into one or
+ * GET /agents/orchestration-map — all 22 catalog agent cards placed into one or
  * more end-to-end workflow maps, honest real-vs-planned status.
  *
  * Both schemas are deliberately permissive on the server's optional/extra

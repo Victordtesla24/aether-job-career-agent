@@ -640,7 +640,7 @@ function NodeCard({
         </span>
 
         {/* U-AX-V4 (binding): the card itself states WHEN this agent last ran,
-            relatively — the defect it transfers from was 18/22 agents reading
+            relatively — the defect it transfers from was 18/22 agent cards reading
             "No runs recorded yet." while the payload knew otherwise. A planned
             agent gets no line at all: it has nothing to be late for. */}
         {isPlanned ? null : (
