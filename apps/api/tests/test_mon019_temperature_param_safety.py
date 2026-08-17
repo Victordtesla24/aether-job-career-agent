@@ -41,7 +41,16 @@ from app.services.llm_client import (
     user_model_context,
 )
 
-_CHOSEN = "anthropic/claude-fable-5"
+#: The user's deliberately chosen OpenRouter model for these tests.
+#:
+#: MODEL-SUB-QUOTA (OWNER DIRECTIVE 2026-08-17): this was
+#: ``anthropic/claude-fable-5``. A Claude id in ANY spelling is now served by
+#: the operator's Anthropic subscription over the native Messages API, whose
+#: builder omits ``temperature`` outright — so a Claude id can no longer reach
+#: the OpenAI-compatible body this file is about. The scenario is unchanged:
+#: ADR-ML-4 notes 50+ OpenRouter-served entries that use native params instead
+#: of ``temperature``, and one of those is what a user picks here.
+_CHOSEN = "mistralai/mistral-large-3"
 _FALLBACK = "deepseek/deepseek-v4-flash"
 
 #: Verbatim provider body from the production log (api.log:3817), the signature

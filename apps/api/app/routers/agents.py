@@ -72,6 +72,7 @@ from app.services.llm_client import (
     get_last_served_model,
     get_quota_block_hours,
     llm_failure_user_message,
+    normalize_model_id,
     resolve_provider,
     resolve_user_credential,
     served_model_capture,
@@ -2193,7 +2194,13 @@ def _user_model_override(user_id: str, agent_name: str) -> "str | None":
                 )
                 row = cur.fetchone()
                 if row and (row[0] or "").strip():
-                    chosen = row[0].strip()
+                    # MODEL-SUB-QUOTA: a pin written BEFORE the save-time
+                    # normalization may still hold OpenRouter's
+                    # ``anthropic/claude-…`` spelling. Read it through the SAME
+                    # normalizer the routing seam uses, so a legacy row can
+                    # never be the one path that still bills OpenRouter for a
+                    # Claude model. Same model — only the namespace is dropped.
+                    chosen = normalize_model_id(row[0])
                     if chosen != default_model:  # a real per-agent change
                         return chosen
                 if is_role:
@@ -2215,7 +2222,7 @@ def _user_model_override(user_id: str, agent_name: str) -> "str | None":
                 )
                 row = cur.fetchone()
                 if row and (row[0] or "").strip():
-                    return row[0].strip()
+                    return normalize_model_id(row[0])
     except Exception:  # noqa: BLE001 — preference read is best-effort, never fatal
         return None
     return None
@@ -5095,22 +5102,42 @@ _MODEL_VALIDATION_SENTINELS = frozenset({"deterministic"})
 _LIVE_CATALOG_PROVIDERS = frozenset({"openrouter"})
 
 
-def _validate_agent_model(model: str, user_id: str) -> None:
-    """Reject a ``model`` id that is not offered by the live catalog of the
-    provider it would bill through (ML-catalog-004 / §3.1.3).
+def _validate_agent_model(model: str, user_id: str, agent_key: str | None = None) -> None:
+    """Reject a ``model`` id that is not offered by the catalog of the provider
+    it would bill through (ML-catalog-004 / §3.1.3, MODEL-SUB-QUOTA clause 4).
 
-    Accepts the ``deterministic`` sentinel, any id present in that provider's
-    live catalog, and any direct-Anthropic (bare ``claude-…``) id — those route
-    to a curated static shortlist that is deliberately NOT treated as an
-    exhaustive allowlist. When the live catalog cannot be consulted right now
-    (cold cache — validation never opens a network connection, ``allow_fetch``
-    is False) the id is accepted rather than rejected on a transient gap; a
-    genuinely wrong id then fails honestly at call time (matching the
-    ``_user_model_override`` "no silent substitution" contract). Never applies a
-    hardcoded model allowlist.
+    Accepts the ``deterministic`` sentinel and any id present in that provider's
+    catalog. Two catalogs, two different kinds of list:
+
+    * OPENROUTER — a genuine LIVE, exhaustive list. When it cannot be consulted
+      right now (cold cache — validation never opens a network connection,
+      ``allow_fetch`` is False) the id is accepted rather than rejected on a
+      transient gap; a genuinely wrong id then fails honestly at call time
+      (matching the ``_user_model_override`` "no silent substitution" contract).
+    * ANTHROPIC — the app's OWN curated catalog of the Claude models it can
+      route (:data:`llm_client._STATIC_MODEL_CATALOG`). MODEL-SUB-QUOTA makes
+      this list load-bearing: every Claude pin is now served by the operator's
+      subscription through the native Messages API, and an id that catalog does
+      not carry is one the app cannot serve. Rejecting it 422 is the honest
+      answer — the alternative is a pin that dies at run time, and quietly
+      swapping in a NEARBY Claude model would be exactly the silent
+      substitution ADR-ML-3 forbids. (This is a departure from §3.1.3's
+      "never reject on the static shortlist", which was written when a bare
+      claude id was a rare hand-typed thing rather than the system default.)
+
+    An agent's OWN seeded ``recommended`` value is accepted unconditionally. It
+    is not a user choice — it is what the app itself wrote into the catalog row
+    and renders when nothing is pinned, and ``_user_model_override`` deliberately
+    treats a stored value equal to it as "no choice made" (the phantom seed), so
+    it never reaches a model. 422-ing a client that echoes back the value we
+    showed it would be rejecting our own default.
+
+    Never applies a hardcoded model allowlist beyond those two catalogs.
     """
     m = (model or "").strip()
     if not m or m in _MODEL_VALIDATION_SENTINELS:
+        return
+    if agent_key and m == (_CATALOG_BY_KEY.get(agent_key, {}).get("recommended") or ""):
         return
     from app.services.llm_client import (
         ModelCatalogError,
@@ -5119,6 +5146,16 @@ def _validate_agent_model(model: str, user_id: str) -> None:
     )
 
     provider = resolve_provider(m)
+    if provider == "anthropic":
+        catalog = list_provider_models("anthropic", user_id, allow_fetch=False)
+        if any((row.get("id") == m) for row in catalog):
+            return
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            f"model '{m}' is not one of the Claude models this app can serve on "
+            "your Anthropic subscription — choose one from the Anthropic catalog "
+            f"({', '.join(str(r.get('id')) for r in catalog)}).",
+        )
     if provider not in _LIVE_CATALOG_PROVIDERS:
         return
     try:
@@ -5168,12 +5205,20 @@ def update_agent_config(
     user_id = current_user["id"]
     _ensure_agent_config_schema()
 
-    # Validate a chosen model against the live catalog (ML-catalog-004): an id
-    # no provider offers is rejected 422 rather than silently persisted and then
-    # failing opaquely at run time. Only runs when the caller is actually
+    # MODEL-SUB-QUOTA clause 4: normalize BEFORE validating and persisting, so a
+    # Claude pick is stored in the spelling that routes to the operator's
+    # Anthropic subscription. ``anthropic/claude-opus-4-8`` -> ``claude-opus-4-8``
+    # is the same model on its own vendor's API, not a substitution; every other
+    # id (including a non-Claude ``anthropic/…``) is untouched.
+    model_in = (
+        normalize_model_id(body.model) if body.model is not None else None
+    )
+    # Validate a chosen model against its provider's catalog (ML-catalog-004): an
+    # id no provider offers is rejected 422 rather than silently persisted and
+    # then failing opaquely at run time. Only runs when the caller is actually
     # setting `model` (a partial update that omits it must not be gated).
-    if body.model is not None:
-        _validate_agent_model(body.model, user_id)
+    if model_in is not None:
+        _validate_agent_model(model_in, user_id, agent_key)
 
     # Validate a non-empty credentialRef belongs to THIS user (never cross-user).
     cred_ref_update = body.credentialRef
@@ -5197,7 +5242,7 @@ def update_agent_config(
             enabled = row0.get("enabled", True) if body.enabled is None else body.enabled
             model = (
                 (row0.get("model") if existing else entry["recommended"])
-                if body.model is None else body.model
+                if model_in is None else model_in
             )
             provider = row0.get("provider") if body.provider is None else body.provider
             auth_mode = row0.get("authMode") if body.authMode is None else body.authMode

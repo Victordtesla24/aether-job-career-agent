@@ -50,17 +50,23 @@ def test_put_config_persists_temperature_and_thinking(client, auth_headers):
 
 
 def test_partial_update_merges_over_existing(client, auth_headers):
-    client.put(
+    # MODEL-SUB-QUOTA: the model here is incidental (this test is about the
+    # partial-update MERGE), but it must be a real id — a Claude pin is now
+    # validated against the Anthropic catalog the operator's subscription can
+    # actually serve, so the previous placeholder ``claude-sonnet-5`` is
+    # honestly rejected 422 rather than persisted and left to fail at run time.
+    first = client.put(
         "/agents/config/coverLetter",
-        json={"temperature": 0.3, "model": "claude-sonnet-5"}, headers=auth_headers,
+        json={"temperature": 0.3, "model": "claude-sonnet-4-6"}, headers=auth_headers,
     )
+    assert first.status_code == 200, first.text
     client.put(
         "/agents/config/coverLetter",
         json={"thinkingEffort": "low"}, headers=auth_headers,
     )
     got = client.get("/agents/config/coverLetter", headers=auth_headers).json()
     assert got["temperature"] == 0.3
-    assert got["model"] == "claude-sonnet-5"
+    assert got["model"] == "claude-sonnet-4-6"
     assert got["thinkingEffort"] == "low"
 
 

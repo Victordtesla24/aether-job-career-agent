@@ -825,15 +825,22 @@ def get_model(tier: str = "REASONING") -> str:
     ``AETHER_MODEL_<TIER>`` env default. Provider routing downstream is still
     derived purely from the resolved model id (:func:`resolve_provider`), so the
     user's choice can never cross the anthropic/openrouter billing boundary.
+
+    MODEL-SUB-QUOTA: whatever the source (per-run override, env default, code
+    default), a Claude id is returned in its BARE form — the spelling that
+    routes to the operator's Anthropic subscription. Same model either way; only
+    the redundant OpenRouter namespace is dropped (:func:`normalize_model_id`).
     """
     tier_key = tier.upper()
     if tier_key in _USER_OVERRIDABLE_TIERS:
         override = _user_model_context.get()
         if override:
-            return override
-    return os.environ.get(
-        f"AETHER_MODEL_{tier_key}",
-        _DEFAULT_MODEL_BY_TIER.get(tier_key, FALLBACK_MODEL),
+            return normalize_model_id(override)
+    return normalize_model_id(
+        os.environ.get(
+            f"AETHER_MODEL_{tier_key}",
+            _DEFAULT_MODEL_BY_TIER.get(tier_key, FALLBACK_MODEL),
+        )
     )
 
 
@@ -881,25 +888,89 @@ def get_anthropic_max_tokens() -> int:
         return 4096
 
 
+#: A CLAUDE model id in either spelling the app can be handed: the direct
+#: native id (``claude-opus-4-8``) or OpenRouter's namespaced form
+#: (``anthropic/claude-opus-4-8``). Case-insensitive because a picker/catalog
+#: id, an env default and a hand-typed pin do not agree on case. The
+#: ``anthropic/`` namespace ALONE is deliberately not enough — OpenRouter could
+#: serve a non-Claude model under it, and that model is genuinely OpenRouter's.
+_CLAUDE_MODEL_RE = re.compile(r"^(?:anthropic/)?claude-", re.IGNORECASE)
+
+#: The OpenRouter namespace stripped from a Claude id to reach the direct
+#: Anthropic Messages API. Stripping the NAMESPACE is not a model change — the
+#: remaining id names the same model, served by its own vendor (ADR-ML-3 is
+#: about serving a DIFFERENT model, which this never does).
+_ANTHROPIC_NAMESPACE_RE = re.compile(r"^anthropic/", re.IGNORECASE)
+
+
+def is_claude_model(model: str | None) -> bool:
+    """Whether ``model`` names a Claude model in EITHER spelling.
+
+    OWNER DIRECTIVE (MODEL-SUB-QUOTA, 2026-08-17): "all the claude requests
+    [must] use my Anthropic Pro Subscription quota instead of consuming extra
+    credits via an API_KEY including for openrouter". The two spellings name one
+    model, so they must resolve to one provider — the subscription.
+    """
+    return bool(_CLAUDE_MODEL_RE.match((model or "").strip()))
+
+
+def normalize_model_id(model: str | None) -> str:
+    """The id the app actually calls a model by, at the routing seam.
+
+    For a Claude id in OpenRouter's namespaced spelling this strips the
+    ``anthropic/`` prefix so the native Messages API receives the bare id it
+    understands (``anthropic/claude-opus-4-8`` -> ``claude-opus-4-8``). SAME
+    model, direct provider — never a substitution. Every other id (including a
+    non-Claude ``anthropic/…`` model, which really is OpenRouter's) is returned
+    unchanged apart from surrounding whitespace.
+    """
+    m = (model or "").strip()
+    if is_claude_model(m):
+        return _ANTHROPIC_NAMESPACE_RE.sub("", m, count=1)
+    return m
+
+
+class ClaudeOnOpenRouterError(RuntimeError):
+    """A Claude model reached the OpenRouter transport. Never expected.
+
+    Belt-and-braces for the MODEL-SUB-QUOTA directive: :func:`resolve_provider`
+    already sends every Claude id to the direct Anthropic path, so this is the
+    second, independent wall — raised INSTEAD of building a request, so no code
+    path (a future caller that bypasses routing, a hand-built chain) can spend
+    OpenRouter credit on a model the operator's subscription serves.
+    """
+
+
 def resolve_provider(model: str) -> str:
     """Map a model id to its billing provider: ``'anthropic'`` or ``'openrouter'``.
 
-    OpenRouter namespaces EVERY model it serves as ``vendor/model``
-    (``anthropic/claude-…``, ``deepseek/…``, ``openai/…``), and those are
-    OpenRouter-billed. A DIRECT-Anthropic native id is bare ``claude-…`` (no
-    slash). So the presence of a ``/`` means OpenRouter; only a bare
-    ``claude-…``/``anthropic…`` id routes to the direct Anthropic API.
+    ONE model id resolves to ONE provider and one credential source.
 
-    Billing-separation fix (GAP-P7-MODEL-CHOICE-001, adversarial-review finding):
-    a model a user picked from the OpenRouter catalog whose id happens to start
-    ``anthropic/…`` MUST bill through OpenRouter — the credential they chose it
-    with — NOT the direct-Anthropic account. The old ``startswith('anthropic/')``
-    heuristic silently crossed that boundary for the 15 ``anthropic/*`` OpenRouter
-    catalog entries. Pure function so the router, verify endpoint and transport
-    all agree on one resolution.
+    * ANY Claude id — bare ``claude-…`` OR namespaced ``anthropic/claude-…`` —
+      resolves ``'anthropic'`` and is served DIRECTLY by the operator's Anthropic
+      subscription (MODEL-SUB-QUOTA, OWNER DIRECTIVE 2026-08-17). The two
+      spellings name the same model; routing them to different billing accounts
+      is what made a Claude pick silently consume OpenRouter credit.
+    * Every other ``vendor/model`` id is OpenRouter-served and OpenRouter-billed
+      — the slash rule is UNCHANGED for them (``deepseek/…``, ``qwen/…``,
+      ``openai/…``, and even a hypothetical non-Claude ``anthropic/…`` model,
+      which OpenRouter really would be serving).
+
+    HISTORY. The prior rule was slash-first: any namespaced id billed through
+    OpenRouter, which was the correct answer to GAP-P7-MODEL-CHOICE-001's
+    question ("bill the credential the user chose the model with") but the wrong
+    answer to the owner's: a Claude model must never be bought twice. The
+    billing separation that fix protects is intact — nothing here reroutes a
+    NON-Claude model, and the credential for an anthropic-resolved model is
+    still strictly the Anthropic one (no cross-provider fallback, ADR-PC-2).
+
+    Pure function so the router, verify endpoint and transport all agree on one
+    resolution.
     """
     m = (model or "").strip().lower()
-    if "/" in m:  # any vendor/model id is an OpenRouter-served, OpenRouter-billed model
+    if is_claude_model(m):
+        return "anthropic"
+    if "/" in m:  # any other vendor/model id is OpenRouter-served + billed
         return "openrouter"
     if m.startswith("claude-") or m.startswith("anthropic"):
         return "anthropic"
@@ -1825,7 +1896,20 @@ def _build_openrouter_request(
     Nothing else changes: same prompts, same temperature, same strict-JSON
     contract, same downstream fabrication/entailment guards. The shaping is
     transport-level only.
+
+    HARD GUARD (MODEL-SUB-QUOTA, OWNER DIRECTIVE 2026-08-17). A Claude model
+    never reaches this builder: it raises :class:`ClaudeOnOpenRouterError`
+    before a request exists, so no caller — present or future — can spend
+    OpenRouter credit on a model the operator's Anthropic subscription serves.
+    :func:`resolve_provider` already prevents this; the guard exists so a
+    bypassed or hand-built chain cannot.
     """
+    if is_claude_model(model):
+        raise ClaudeOnOpenRouterError(
+            f"model '{(model or '').strip()}' is a Claude model and must be served "
+            "by the direct anthropic provider on the operator's subscription — "
+            "an OpenRouter request for it is refused (MODEL-SUB-QUOTA)."
+        )
     base = (cred.base_url or "https://openrouter.ai/api/v1").rstrip("/")
     body: dict[str, Any] = {
         "model": model,
@@ -2433,6 +2517,12 @@ def _curate_openrouter_models(raw: list[dict[str, Any]]) -> list[dict[str, Any]]
     Excludes the small set of ids in ``_OPENROUTER_PROVEN_BROKEN_IDS`` (ADR-ML-4)
     — models proven permanently unable to serve a chat completion for this key —
     by exact id match only.
+
+    Also excludes every ``anthropic/claude-*`` row (MODEL-SUB-QUOTA, OWNER
+    DIRECTIVE 2026-08-17). Those models ARE offered — under the Anthropic
+    catalog, which the operator's subscription serves — and picking one here
+    would now be routed away from OpenRouter anyway, so listing them in the
+    OpenRouter catalog with an OpenRouter price would be a disclosure lie.
     """
     out: list[dict[str, Any]] = []
     for m in raw:
@@ -2440,6 +2530,8 @@ def _curate_openrouter_models(raw: list[dict[str, Any]]) -> list[dict[str, Any]]
         if not mid:
             continue
         if mid in _OPENROUTER_PROVEN_BROKEN_IDS:
+            continue
+        if is_claude_model(mid):
             continue
         pricing = m.get("pricing") or {}
         try:
@@ -3172,7 +3264,12 @@ class LLMClient:
         """
         import httpx
 
-        model_id = model or get_model("REASONING")
+        # MODEL-SUB-QUOTA: normalise AT the routing seam, so provider
+        # resolution, the request body, the served-model disclosure and the cost
+        # record all name the SAME id. For a Claude model this strips
+        # OpenRouter's ``anthropic/`` namespace to the bare id the native
+        # Messages API understands — same model, direct provider.
+        model_id = normalize_model_id(model or get_model("REASONING"))
         provider = resolve_provider(model_id)
         ctx = _user_cred_context.get()
         ctx_user_id = ctx[0] if ctx else None
@@ -3203,6 +3300,17 @@ class LLMClient:
                 f"(model '{model_id}'). Add a {provider} credential in the Agents "
                 "panel or its server env key. The request will NOT be rerouted to "
                 "another provider — billing separation is enforced."
+            )
+        # MODEL-SUB-QUOTA credential pin: a Claude model is served by the
+        # Anthropic credential or by NOTHING. A resolution that came back
+        # holding another provider's secret would be a bug, not a fallback —
+        # refuse here rather than let it reach a transport.
+        if is_claude_model(model_id) and cred.provider != "anthropic":
+            raise RuntimeError(
+                f"model '{model_id}' is a Claude model but the resolved credential "
+                f"is for provider '{cred.provider}'. Claude runs are served only by "
+                "the Anthropic credential (the operator's subscription) — the "
+                "request is refused rather than billed to another account."
             )
         if provider == "anthropic":
             req = build_anthropic_request(
