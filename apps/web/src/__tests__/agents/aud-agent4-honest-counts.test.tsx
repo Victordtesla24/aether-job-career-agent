@@ -14,17 +14,31 @@
  *
  * and the "Agents" tab badge carried the same padded total.
  *
+ * ROUND 2 — THE THIRD SURFACE, ON THE SAME SCREEN. The first round left the
+ * Orchestration tab (the DEFAULT tab of this very page) rendering
+ * `{model.stages.reduce((n, s) => n + s.nodes.length, 0)} agents` in each
+ * workflow map's header. The "Fit Scoring" stage lists four cards, three of
+ * which are the one `fitScorer` backend, so that header was padded by exactly
+ * the triple-count this finding names — and none of round 1's tests could see
+ * it (they scanned the hero subline, the grid header and the tab badge). The
+ * map header now renders the SERVER's per-map `counts.engines` /
+ * `counts.cards` as the same dual disclosure.
+ *
  * WHAT THESE TESTS PIN.
  *   1. the dual disclosure is DERIVED, not written: "N engines powering M
  *      cards" comes from the SERVER's `counts.engines` / `counts.cards`;
  *   2. a payload with no honest basis produces NO count — never the padded
  *      total, which is the fabrication this fix removes;
- *   3. both surfaces render the pair and neither renders "N agents";
+ *   3. all THREE surfaces render the pair and none renders "N agents": the
+ *      hero subline, the Agent Configuration header, and every workflow map
+ *      header in the Orchestration tab;
  *   4. the tab badge labelled "Agents" carries the ENGINE count;
  *   5. the conductor's own "Run everything (N agents / M cards)" label is
- *      untouched and still server-derived, so the two screens agree.
+ *      untouched and still server-derived, so the two screens agree;
+ *   6. `buildMapModel` takes the map's scale from the SERVER payload and never
+ *      recomputes it from the nodes it was handed.
  */
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next/link", () => ({
@@ -74,6 +88,13 @@ vi.mock("../../components/agents/api", async (importOriginal) => {
   };
 });
 
+const fetchOrchestrationMapMock = vi.hoisted(() => vi.fn());
+
+vi.mock("../../lib/api/agentPolicy", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../lib/api/agentPolicy")>();
+  return { ...actual, fetchOrchestrationMap: fetchOrchestrationMapMock };
+});
+
 import AgentsPage from "../../app/dashboard/agents/page";
 import type { Catalog, CatalogAgent } from "../../components/agents/api";
 import {
@@ -82,6 +103,11 @@ import {
   honestAgentCount,
 } from "../../components/agents/catalog-counts";
 import { runEverythingLabel } from "../../components/agents/conductor";
+import { buildMapModel } from "../../components/agents/orchestration-map-model";
+import type {
+  OrchestrationMapData,
+  OrchestrationMapEntry,
+} from "../../lib/api/agentPolicy";
 import type { OrchestrationPlan } from "../../lib/api/orchestrationPlan";
 
 afterEach(() => {
@@ -217,7 +243,125 @@ function mockLoad() {
     lastRefreshedAt: null,
     stale: false,
   });
+  // No maps unless a test supplies them — the Orchestration tab then renders
+  // nothing rather than a half-built section.
+  fetchOrchestrationMapMock.mockResolvedValue({ maps: [] });
 }
+
+// ---------------------------------------------------------------------------
+// 6 + 3(third surface). The Orchestration tab — the SAME screen, round 2
+// ---------------------------------------------------------------------------
+
+function mapAgent(agentKey: string, backend: string | null, name: string) {
+  return {
+    agentKey,
+    name,
+    backend,
+    status: (backend ? "real" : "planned") as "real" | "planned",
+    runnable: Boolean(backend),
+    metricsConsumed: [],
+    thresholds: [],
+    lastRunPolicyTier: null,
+    lastRunAt: null,
+    lastRunStatus: null,
+    trend: null,
+  };
+}
+
+/**
+ * FOUR cards, TWO engines — the production padding in miniature.
+ *
+ * "Fit Scoring" holds the three `fitScorer` facets exactly as
+ * `_ORCHESTRATION_MAPS` does, so a header that sums nodes says "4 agents"
+ * while the truth is two engines. The wrong number is unmistakable.
+ */
+const PIPELINE_ENTRY: OrchestrationMapEntry = {
+  key: "application-pipeline",
+  name: "Application Pipeline",
+  subtitle: null,
+  counts: { engines: 2, cards: 4 },
+  stages: [
+    { stage: "Discovery", agents: [mapAgent("jobDiscovery", "scout", "Job Discovery Agent")] },
+    {
+      stage: "Fit Scoring",
+      agents: [
+        mapAgent("matchScoring", "fitScorer", "Match Scoring Agent"),
+        mapAgent("atsOptimization", "fitScorer", "ATS Optimization Agent"),
+        mapAgent("skillGap", "fitScorer", "Skill Gap Agent"),
+      ],
+    },
+  ],
+};
+
+describe("AUD-AGENT-4 — a workflow map's scale is the server's, not a node sum", () => {
+  it("carries the payload's engines/cards, not the count of nodes it holds", () => {
+    const model = buildMapModel(PIPELINE_ENTRY, [], Date.now());
+    const nodeTotal = model.stages.reduce((n, s) => n + s.nodes.length, 0);
+
+    expect(nodeTotal).toBe(4);
+    expect(model.scale).toEqual({ engines: 2, cards: 4 });
+    // The old header rendered `nodeTotal` as "agents". It never can again.
+    expect(model.scale?.engines).not.toBe(nodeTotal);
+  });
+
+  it("transmits, never recomputes — it tracks the server even when they differ", () => {
+    const model = buildMapModel(
+      { ...PIPELINE_ENTRY, counts: { engines: 7, cards: 9 } },
+      [],
+      Date.now(),
+    );
+    expect(model.scale).toEqual({ engines: 7, cards: 9 });
+  });
+
+  it("states NO scale when the server sent no honest basis", () => {
+    const legacy = { ...PIPELINE_ENTRY };
+    delete (legacy as { counts?: unknown }).counts;
+    expect(buildMapModel(legacy, [], Date.now()).scale).toBeNull();
+  });
+});
+
+describe("AUD-AGENT-4 — the Orchestration tab claims no standalone agents", () => {
+  it("renders the map header as the server-derived dual disclosure", async () => {
+    mockLoad();
+    fetchOrchestrationMapMock.mockResolvedValue({
+      maps: [PIPELINE_ENTRY],
+    } as OrchestrationMapData);
+    render(<AgentsPage />);
+
+    const section = await screen.findByTestId("orchestration-map-application-pipeline");
+    const scale = within(section).getByTestId(
+      "orchestration-map-scale-application-pipeline",
+    );
+    expect(scale.textContent).toContain("2 engines powering 4 cards");
+  });
+
+  it("never says 'N agents' anywhere in the map it renders", async () => {
+    mockLoad();
+    fetchOrchestrationMapMock.mockResolvedValue({
+      maps: [PIPELINE_ENTRY],
+    } as OrchestrationMapData);
+    render(<AgentsPage />);
+
+    const section = await screen.findByTestId("orchestration-map-application-pipeline");
+    const text = section.textContent ?? "";
+    // Both candidate claims are named literally: "4 agents" is the node sum
+    // this fix removes, "2 agents" would be the engine count relabelled as a
+    // standalone agent count instead of disclosed as one half of a pair.
+    // (A regex is deliberately NOT used here: `textContent` concatenates
+    // sibling nodes with no separator, so "…4 agentsRun workflow" defeats a
+    // trailing \b and the assertion would silently never fire.)
+    expect(text).not.toContain("4 agents");
+    expect(text).not.toContain("2 agents");
+    expect(text).toContain("2 engines powering 4 cards");
+
+    // Including the run control's own tooltip, which is not rendered text.
+    const run = within(section).getByTestId(
+      "orchestration-run-workflow-application-pipeline",
+    );
+    const title = run.getAttribute("title") ?? "";
+    expect(title).not.toMatch(/\d+\s+(?:\S+\s+){0,2}agents?\b/i);
+  });
+});
 
 describe("AUD-AGENT-4 — the Agents screen never claims a padded agent count", () => {
   it("renders the dual disclosure in the hero subline and the grid header", async () => {

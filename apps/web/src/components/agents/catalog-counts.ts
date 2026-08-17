@@ -26,9 +26,22 @@ import type { Catalog } from "./api";
 
 export type CatalogCounts = Catalog["counts"];
 
+/**
+ * Anything carrying the server's honest basis.
+ *
+ * Two endpoints compute it — `GET /agents/catalog` for the whole product and
+ * `GET /agents/orchestration-map` per workflow map — and both are stated with
+ * the SAME words by the helpers below, so the Agents tab and the Orchestration
+ * tab of one screen cannot describe their scale in two different vocabularies.
+ */
+export interface HonestScale {
+  engines?: number | null;
+  cards?: number | null;
+}
+
 /** The two server-computed numbers, or `null` when the server sent neither. */
 export function catalogScale(
-  counts: CatalogCounts | null | undefined,
+  counts: HonestScale | null | undefined,
 ): { engines: number; cards: number } | null {
   if (!counts) return null;
   const { engines, cards } = counts;
@@ -43,7 +56,7 @@ export function catalogScale(
  * agents" is precisely the claim that went wrong, and a reader who sees the
  * pair always knows which number is which.
  */
-export function catalogScaleLabel(counts: CatalogCounts | null | undefined): string | null {
+export function catalogScaleLabel(counts: HonestScale | null | undefined): string | null {
   const scale = catalogScale(counts);
   if (!scale) return null;
   const engines = `${scale.engines} engine${scale.engines === 1 ? "" : "s"}`;
@@ -56,6 +69,6 @@ export function catalogScaleLabel(counts: CatalogCounts | null | undefined): str
  *
  * This is the only number a surface labelled "agents" may show.
  */
-export function honestAgentCount(counts: CatalogCounts | null | undefined): number | null {
+export function honestAgentCount(counts: HonestScale | null | undefined): number | null {
   return catalogScale(counts)?.engines ?? null;
 }

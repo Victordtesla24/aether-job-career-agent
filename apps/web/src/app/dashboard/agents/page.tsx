@@ -782,7 +782,9 @@ export default function AgentsPage() {
     if (
       typeof window !== "undefined" &&
       !window.confirm(
-        `Pause all ${enabled.length} enabled agent${enabled.length === 1 ? "" : "s"}? ` +
+        // AUD-AGENT-4: these are catalog CARDS (facet cards of one engine
+        // included), not distinct agents — the confirm says what it counts.
+        `Pause all ${enabled.length} enabled agent card${enabled.length === 1 ? "" : "s"}? ` +
           "They will stop being scheduled. Runs already in progress finish on their own.",
       )
     ) {
@@ -810,7 +812,9 @@ export default function AgentsPage() {
     } else {
       setNotice({
         kind: "error",
-        text: `Paused ${enabled.length - failed} of ${enabled.length} agents; ${failed} could not be paused. Try again.`,
+        text:
+          `Paused ${enabled.length - failed} of ${enabled.length} agent cards; ` +
+          `${failed} could not be paused. Try again.`,
       });
     }
   };

@@ -123,10 +123,23 @@ export const OrchestrationMapStageSchema = z.object({
 
 export type OrchestrationMapStage = z.infer<typeof OrchestrationMapStageSchema>;
 
+/**
+ * AUD-AGENT-4 — the map's own honest scale, computed server-side
+ * (`honest_map_counts`): `engines` = distinct implemented backends placed in
+ * this map, `cards` = nodes it renders. Optional because a server predating
+ * the fix sends neither; when they are missing the header states NO scale
+ * rather than summing its nodes, which is the padded number itself.
+ */
+export const OrchestrationMapCountsSchema = z.object({
+  engines: z.number(),
+  cards: z.number(),
+});
+
 export const OrchestrationMapEntrySchema = z.object({
   key: z.string(),
   name: z.string(),
   subtitle: z.string().nullish(),
+  counts: OrchestrationMapCountsSchema.nullish(),
   stages: z.array(OrchestrationMapStageSchema).default([]),
 });
 

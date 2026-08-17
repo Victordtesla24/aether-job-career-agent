@@ -133,7 +133,13 @@ export function pipelineCompletionNotice(response: Record<string, unknown>): Not
  * the pause silently failed.
  */
 export function stopAllAgentsNotice(pausedCount: number, runningCount: number): Notice {
-  const base = `Paused ${pausedCount} agent${pausedCount === 1 ? "" : "s"}. New runs are blocked.`;
+  // AUD-AGENT-4: `pausedCount` counts the CARDS whose toggle was flipped, and
+  // three of those cards are one `fitScorer` engine — so this says cards. The
+  // enforcement claim is unchanged and still true either way: pausing any card
+  // blocks the runs it owns.
+  const base = `Paused ${pausedCount} agent card${
+    pausedCount === 1 ? "" : "s"
+  }. New runs are blocked.`;
   if (runningCount > 0) {
     return {
       kind: "success",

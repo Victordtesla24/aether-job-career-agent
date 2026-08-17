@@ -15,6 +15,7 @@ import os
 import re
 import secrets
 import time
+from collections.abc import Iterable
 from dataclasses import asdict, is_dataclass
 from typing import Any, Callable
 
@@ -447,6 +448,30 @@ def honest_catalog_counts() -> dict[str, int]:
         "engines": len({a["backend"] for a in AGENT_CATALOG if a.get("backend")}),
         "cards": len(AGENT_CATALOG),
     }
+
+
+def honest_map_counts(agent_keys: Iterable[str]) -> dict[str, int]:
+    """The same honest basis as :func:`honest_catalog_counts`, per WORKFLOW MAP.
+
+    AUD-AGENT-4, round 2. The orchestration screen draws one panel per map and
+    its header stated a scale. That header summed the map's NODES, and a node
+    is a CARD: the "Fit Scoring" stage lists ``matchScoring``,
+    ``atsOptimization`` and ``skillGap``, which are three faces of the single
+    ``fitScorer`` engine, so the header claimed 12 agents for a pipeline of 10.
+    Exactly the padding this finding names, on the same screen as the catalog
+    surfaces its first half fixed.
+
+    So the server computes the map's scale too, and transmits BOTH numbers:
+    the header states them as a pair ("N engines powering M cards") rather than
+    picking one and calling it agents. Duplicate keys within a map collapse —
+    a card placed twice is still one card.
+
+    Keys with no catalog entry are ignored (the map builder drops them from the
+    payload as well, so counting them would describe nodes nobody can see).
+    """
+    keys = [k for k in dict.fromkeys(agent_keys) if k in _CATALOG_BY_KEY]
+    backends = {b for b in (_CATALOG_BY_KEY[k].get("backend") for k in keys) if b}
+    return {"engines": len(backends), "cards": len(keys)}
 
 
 #: Canonical agent registry — every DISTINCT implemented agent, DERIVED from the
@@ -4565,9 +4590,11 @@ def orchestration_map(current_user: CurrentUser) -> dict[str, Any]:
     maps: list[dict[str, Any]] = []
     for map_key, map_name, subtitle, stages in _ORCHESTRATION_MAPS:
         stage_payload = []
+        mapped_keys: list[str] = []
         for stage_name, agent_keys in stages:
             known = [k for k in agent_keys if k in _CATALOG_BY_KEY]
             placed.update(known)
+            mapped_keys.extend(known)
             stage_payload.append(
                 {"stage": stage_name, "agents": [entry_for(k) for k in known]}
             )
@@ -4577,6 +4604,10 @@ def orchestration_map(current_user: CurrentUser) -> dict[str, Any]:
                 "name": map_name,
                 "subtitle": subtitle,
                 "stages": stage_payload,
+                # AUD-AGENT-4: the map's own honest scale, so its header states
+                # the server's arithmetic instead of summing nodes (which
+                # counts one engine once per facet card).
+                "counts": honest_map_counts(mapped_keys),
             }
         )
 
@@ -4599,6 +4630,7 @@ def orchestration_map(current_user: CurrentUser) -> dict[str, Any]:
                         "agents": [entry_for(k) for k in unmapped],
                     }
                 ],
+                "counts": honest_map_counts(unmapped),
             }
         )
     return {"maps": maps}
