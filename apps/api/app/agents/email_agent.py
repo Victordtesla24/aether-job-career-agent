@@ -361,7 +361,10 @@ class EmailAgent:
         return synced
 
     def _triage(self, user_id: str) -> EmailAgentResult:
-        from app.services.career_email_filter import classify_thread
+        from app.services.career_email_filter import (
+            classify_thread,
+            should_auto_draft_reply,
+        )
         from app.services.interview_ingest import ingest_inbound_for_user
 
         connected = self._is_connected(user_id)
@@ -448,7 +451,12 @@ class EmailAgent:
                     if category not in _CATEGORIES:
                         category = "all"
                     verdict = classify_thread(t)
-                    if verdict.is_interview_invite:
+                    if verdict.category == "auto":
+                        # Job alerts / robots stay Auto — the LLM must not
+                        # promote GitHub CI or LinkedIn alerts into Priority
+                        # and then auto-draft a recruiter reply.
+                        category = "auto"
+                    elif verdict.is_interview_invite:
                         category = "priority"
                     categories[category] = categories.get(category, 0) + 1
                     # Persist the REAL per-thread score the LLM returned. When the
@@ -469,10 +477,19 @@ class EmailAgent:
                             (category, score, t["id"], user_id),
                         )
                     triaged += 1
+                    latest = t.get("messages") or []
+                    latest_msg = latest[-1] if isinstance(latest, list) and latest else {}
+                    if not isinstance(latest_msg, dict):
+                        latest_msg = {}
                     if (
                         category in ("priority", "followup")
                         and t.get("gmailThreadId")
                         and not str(t.get("draftReply") or "").strip()
+                        and should_auto_draft_reply(
+                            verdict,
+                            sender=str(latest_msg.get("from") or ""),
+                            sender_email=str(latest_msg.get("fromEmail") or ""),
+                        )
                     ):
                         auto_draft_targets.append((str(t["id"]), category))
             conn.commit()

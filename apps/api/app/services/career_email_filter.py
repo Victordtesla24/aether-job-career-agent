@@ -29,23 +29,38 @@ CAREER_GMAIL_QUERY = (
     "OR greenhouse.io OR lever.co OR ashbyhq.com OR icims.com "
     "OR smartrecruiters.com OR myworkday.com OR workday.com "
     "OR taleo.net OR successfactors.com OR workablemail.com "
-    "OR greenhouse-mail.com OR jobs.lever.co) "
+    "OR greenhouse-mail.com OR jobs.lever.co OR robertwalters.com "
+    "OR robertwalters.com.au) "
     "OR subject:(interview OR interviewer OR recruiter OR recruiting "
     "OR hiring OR \"job offer\" OR \"phone screen\" OR \"talent acquisition\" "
-    "OR application OR availability OR \"job alert\" OR \"new jobs\" "
-    "OR \"are you interested\" OR \"opportunity\"))"
+    "OR \"job alert\" OR \"new jobs\" OR \"are you interested\" "
+    "OR \"daily rate\" OR \"job application\"))"
 )
 
+# Bare "job" / "career" / "application" / "opportunity" / "role" match product
+# names (aether-job-career-agent GitHub mail) and court "applications". Keep
+# collocations that actually mean job-search mail.
 _CAREER_SIGNAL = re.compile(
-    r"\b("
-    r"interview(?:er|ing|s)?|recruiter|recruiting|hiring|hire|"
-    r"job\s*(?:alert|offer|search|application)?|opening|vacanc(?:y|ies)|"
-    r"career|talent(?:\s+acquisition)?|staffing|headhunt|"
-    r"phone\s*screen|screening\s+call|availability|"
-    r"application|applicant|candidacy|shortlist|"
-    r"position|role\b|opportunity|cv\b|r[eé]sum[eé]|"
-    r"greenhouse|lever\b|workday|ashby|icims|seek\b|indeed|linkedin"
-    r")\b",
+    r"("
+    r"\binterview(?:er|ing|s)?\b|"
+    r"\brecruiter\b|\brecruiting\b|\bhiring\b|\bheadhunt|"
+    r"\btalent(?:\s+acquisition)?\b|\bstaffing\b|"
+    r"\bjob[\s-]*(?:alert|offer|search|application|opening)s?\b|"
+    r"\b(?:new|matching)\s+jobs\b|"
+    r"\bjobs\b|"
+    r"\bvacanc(?:y|ies)\b|"
+    r"\bphone\s*screen\b|\bscreening\s+call\b|"
+    r"your application (?:for|was|has been)|"
+    r"application was successfully submitted|"
+    r"\bapplicant\b|\bcandidacy\b|\bshortlist\b|"
+    r"\b(?:cv|r[eé]sum[eé])\b|"
+    r"\bare you (?:open|interested)\b|"
+    r"\bopen to a chat\b|"
+    r"\bdaily rate\b|"
+    r"\b(?:the|this|a)\s+role\b|"
+    r"greenhouse|lever\.co|workday|ashby|icims|linkedin|"
+    r"\bindeed\b|\bseek\.com"
+    r")",
     re.IGNORECASE,
 )
 
@@ -69,6 +84,15 @@ _PERSONAL_SIGNAL = re.compile(
     re.IGNORECASE,
 )
 
+#: Courts / tribunals win over a coincidental "application"/"interview" token.
+_STRONG_PERSONAL = re.compile(
+    r"\b("
+    r"tenanc(?:y|ies)|residential\s+tenanc|hearing\s+reminder|"
+    r"vcat|tribunal|court\s+listing"
+    r")\b",
+    re.IGNORECASE,
+)
+
 _PERSONAL_DOMAINS = frozenset(
     {
         "courts.vic.gov.au",
@@ -88,6 +112,7 @@ _CAREER_DOMAINS = (
     "linkedin.com",
     "indeed.com",
     "seek.com",
+    "seek.com.au",
     "greenhouse.io",
     "greenhouse-mail.com",
     "lever.co",
@@ -100,6 +125,32 @@ _CAREER_DOMAINS = (
     "successfactors.com",
     "workablemail.com",
     "jobs.workablemail.com",
+    "robertwalters.com",
+    "robertwalters.com.au",
+)
+
+#: Developer tooling and consumer marketing — never the career inbox, even
+#: when a subject happens to contain "job", "career", or "interview ingest".
+_NOISE_DOMAINS = frozenset(
+    {
+        "github.com",
+        "users.noreply.github.com",
+        "gitlab.com",
+        "bitbucket.org",
+        "vercel.com",
+        "netlify.com",
+        "cursor.com",
+        "e.wemoney.com.au",
+        "wemoney.com.au",
+    }
+)
+
+_NOISE_LOCAL_PARTS = frozenset(
+    {
+        "customersolutions",
+        "customer-solutions",
+        "customersuccess",
+    }
 )
 
 _AUTO_SENDER = re.compile(
@@ -128,6 +179,24 @@ def _haystack(*parts: Any) -> str:
     return " ".join(str(p or "") for p in parts)
 
 
+def _is_career_domain(domain: str) -> bool:
+    return any(domain == d or domain.endswith("." + d) for d in _CAREER_DOMAINS)
+
+
+def _is_noise_sender(sender_email: str, sender: str = "") -> bool:
+    email = (sender_email or "").strip().lower()
+    domain = _domain(email)
+    if domain in _NOISE_DOMAINS or any(domain.endswith("." + d) for d in _NOISE_DOMAINS):
+        return True
+    local = email.split("@", 1)[0] if "@" in email else ""
+    if local in _NOISE_LOCAL_PARTS:
+        return True
+    blob = f"{sender} {email}".lower()
+    if "cursor[bot]" in blob or "github-actions" in blob:
+        return True
+    return False
+
+
 def classify_career_email(
     *,
     subject: str = "",
@@ -146,17 +215,29 @@ def classify_career_email(
             reason="local draft — never auto-hidden",
         )
 
+    if _is_noise_sender(sender_email, sender):
+        return CareerMailVerdict(
+            keep=False,
+            category="personal",
+            reason="developer tooling / marketing — not career mail",
+        )
+
     text = _haystack(subject, sender, sender_email, body)
     domain = _domain(sender_email)
-    career = bool(_CAREER_SIGNAL.search(text)) or any(
-        domain == d or domain.endswith("." + d) for d in _CAREER_DOMAINS
-    )
-    personal = bool(_PERSONAL_SIGNAL.search(text)) or domain in _PERSONAL_DOMAINS
+    if domain in _PERSONAL_DOMAINS or bool(_STRONG_PERSONAL.search(text)):
+        return CareerMailVerdict(
+            keep=False,
+            category="personal",
+            reason="personal / non-career mail",
+        )
+
+    career = bool(_CAREER_SIGNAL.search(text)) or _is_career_domain(domain)
+    personal = bool(_PERSONAL_SIGNAL.search(text))
     interview = bool(_INTERVIEW_INVITE.search(text)) or (
         has_calendar_invite and career
     )
 
-    if interview and not personal:
+    if interview:
         return CareerMailVerdict(
             keep=True,
             category="priority",
@@ -164,7 +245,7 @@ def classify_career_email(
             is_interview_invite=True,
         )
 
-    if has_calendar_invite and career and not personal:
+    if has_calendar_invite and career:
         return CareerMailVerdict(
             keep=True,
             category="priority",
@@ -229,3 +310,28 @@ def classify_thread(thread: dict[str, Any], latest: dict[str, Any] | None = None
         has_calendar_invite=has_cal,
         is_local_draft=thread_is_local_draft(thread),
     )
+
+
+def should_auto_draft_reply(
+    verdict: CareerMailVerdict,
+    *,
+    sender: str = "",
+    sender_email: str = "",
+) -> bool:
+    """True only for human recruiter / hiring-manager threads.
+
+    Never auto-draft job alerts, calendar-notification robots, GitHub, or
+    other noise — those are not counterparties a candidate replies to.
+    Auto-draft is review-only; this helper never authorises a send.
+    """
+    if not verdict.keep or verdict.category == "auto":
+        return False
+    if _is_noise_sender(sender_email, sender):
+        return False
+    if _AUTO_SENDER.search(sender_email or "") or _AUTO_SENDER.search(sender or ""):
+        return False
+    return verdict.is_interview_invite or verdict.category in {
+        "priority",
+        "followup",
+        "all",
+    }

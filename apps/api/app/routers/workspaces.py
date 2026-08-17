@@ -436,11 +436,18 @@ def _email_activity_stats(uid: str) -> dict[str, int]:
                 cur.execute(
                     """
                     SELECT
-                      (SELECT count(*) FROM "AgentRun"
-                         WHERE "userId" = %(uid)s AND "agentName" = 'emailAgent'
-                           AND "status" = 'completed'
-                           AND "input"->>'mode' IN ('draft_reply','draft_follow_up')
-                           AND "createdAt" >= now() - interval '7 days') AS auto_drafted,
+                      GREATEST(
+                        (SELECT count(*) FROM "AgentRun"
+                           WHERE "userId" = %(uid)s AND "agentName" = 'emailAgent'
+                             AND "status" = 'completed'
+                             AND "input"->>'mode' IN ('draft_reply','draft_follow_up')
+                             AND "createdAt" >= now() - interval '7 days'),
+                        (SELECT count(*) FROM "EmailThread"
+                           WHERE "userId" = %(uid)s
+                             AND COALESCE(classification, '') <> 'personal'
+                             AND COALESCE("draftReply", '') <> ''
+                             AND "draftReplyAt" >= now() - interval '7 days')
+                      ) AS auto_drafted,
                       (SELECT count(*) FROM "AgentRun"
                          WHERE "userId" = %(uid)s AND "agentName" = 'emailAgent'
                            AND "status" = 'completed'
@@ -821,10 +828,14 @@ def email_inbox(
         msg_from_email = latest.get("fromEmail") or ""
         category = t.get("classification") or "all"
         if verdict.keep and verdict.category:
-            if verdict.is_interview_invite:
+            if verdict.category == "auto":
+                category = "auto"
+            elif verdict.is_interview_invite:
                 category = "priority"
             elif category in (None, "all", "personal"):
                 category = verdict.category
+        labels = t.get("labels") or []
+        unread = any(str(x).upper() == "UNREAD" for x in (labels or []))
         messages.append({
             "id": t["id"],
             "from": t.get("contact_name") or msg_from or msg_from_email or "Unknown",
@@ -850,24 +861,32 @@ def email_inbox(
             "bodyTruncated": is_truncated,
             "intelligence": _inbox_intelligence(t.get("aiInsights")),
             "draftReply": str(t.get("draftReply") or ""),
+            "unread": unread,
         })
 
     activity = _email_activity_stats(uid)
     unread_map = _unread_by_account(uid)
-    follow_ups = [
-        {
-            "company": m["company"] or m["from"],
-            "role": m["subject"],
-            "dueIn": (
-                "Draft ready for review"
-                if (m.get("draftReply") or "").strip()
-                else "Needs a follow-up draft"
-            ),
-            "status": "draft" if (m.get("draftReply") or "").strip() else "queued",
-        }
-        for m in messages
-        if m.get("category") == "followup"
-    ]
+    follow_ups: list[dict[str, str]] = []
+    seen_followups: set[tuple[str, str]] = set()
+    for m in messages:
+        if m.get("category") != "followup":
+            continue
+        key = (str(m.get("subject") or ""), str(m.get("fromEmail") or m.get("from") or ""))
+        if key in seen_followups:
+            continue
+        seen_followups.add(key)
+        follow_ups.append(
+            {
+                "company": m["company"] or m["from"],
+                "role": m["subject"],
+                "dueIn": (
+                    "Draft ready for review"
+                    if (m.get("draftReply") or "").strip()
+                    else "Needs a follow-up draft"
+                ),
+                "status": "draft" if (m.get("draftReply") or "").strip() else "queued",
+            }
+        )
 
     # One entry per connected inbox (for the account switcher). Falls back to a
     # single not-connected placeholder so the UI can prompt the first connect.
@@ -878,6 +897,17 @@ def email_inbox(
             # attempt (above) already proved the stored token is dead. Never
             # report "connected" when a live auth check just failed.
             needs_reauth = acc.get("id") in auth_failed_account_ids
+            synced_raw = acc.get("lastSyncedAt")
+            if isinstance(synced_raw, datetime):
+                synced_iso = (
+                    synced_raw.astimezone(timezone.utc).isoformat()
+                    if synced_raw.tzinfo
+                    else synced_raw.replace(tzinfo=timezone.utc).isoformat()
+                )
+            elif synced_raw:
+                synced_iso = str(synced_raw)
+            else:
+                synced_iso = None
             accounts.append({
                 "id": acc.get("id"),
                 "email": acc.get("accountEmail") or "",
@@ -886,6 +916,7 @@ def email_inbox(
                 "isPrimary": bool(acc.get("isPrimary")),
                 "unread": unread_map.get(str(acc.get("id") or ""), 0),
                 "actionRequired": needs_reauth,
+                "lastSyncedAt": synced_iso,
                 "note": (
                     "Gmail authorization expired or was revoked — "
                     "reconnect your account to resume syncing."
@@ -902,6 +933,7 @@ def email_inbox(
                 "status": "not_connected",
                 "isPrimary": False,
                 "unread": 0,
+                "lastSyncedAt": None,
                 "note": "Connect your Gmail account to see your inbox here.",
             }
         ]

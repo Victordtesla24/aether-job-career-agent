@@ -129,3 +129,100 @@ def test_keeps_local_drafts_even_without_career_keywords():
         is_local_draft=True,
     )
     assert verdict.keep is True
+
+
+def test_hides_github_pr_even_when_subject_says_interview_ingest():
+    """Live leak: notifications@github.com for aether-job-career-agent PRs
+    matched bare job/career/interview tokens and sat above recruiter mail."""
+    verdict = _v(
+        subject="[Victordtesla24/aether-job-career-agent] fix: career-only "
+        "Email Center with persisted AI drafts and interview ingest (PR #16)",
+        sender="cursor[bot]",
+        sender_email="notifications@github.com",
+        body="You can view, comment on, or merge this pull request.",
+    )
+    assert verdict.keep is False
+    assert verdict.is_interview_invite is False
+
+
+def test_hides_consumer_promo_with_no_job_signal():
+    verdict = _v(
+        subject="Hi Vikram, tell us about your electric vehicle and get $5!",
+        sender="Team WeMoney",
+        sender_email="hello@e.wemoney.com.au",
+        body="Complete our survey about your car.",
+    )
+    assert verdict.keep is False
+
+
+def test_hides_vcat_even_when_body_says_application():
+    """Court 'application' must not outrank the personal-institution signal."""
+    verdict = _v(
+        subject="Hearing reminder for 25/32 Queens Road",
+        sender="Residential Tenancies",
+        sender_email="renting@courts.vic.gov.au",
+        body="Your application for a residential tenancies hearing is listed.",
+    )
+    assert verdict.keep is False
+    assert verdict.category == "personal"
+
+
+def test_hides_seek_customer_solutions_without_job_alert():
+    verdict = _v(
+        subject="RE: Integration request - SEEK",
+        sender="Customer Solutions Team",
+        sender_email="customersolutions@seek.com.au",
+        body="Thanks for your integration request.",
+    )
+    assert verdict.keep is False
+
+
+def test_keeps_daily_rate_recruiter_thread():
+    verdict = _v(
+        subject="Re: Scrum Master Opportunity (Daily Rate)",
+        sender="Vic",
+        sender_email="recruiter@talent.example.com",
+        body="This daily rate contract starts next month.",
+    )
+    assert verdict.keep is True
+
+
+def test_auto_draft_skips_calendar_notification_and_github():
+    from app.services.career_email_filter import should_auto_draft_reply
+
+    invite = _v(
+        subject="Interview: Adan & Vikram (Project Manager @ Next Business Energy)",
+        sender="John Black",
+        sender_email="john.black@robertwalters.com.au",
+        body="John Black has invited you to an interview.",
+        has_calendar_invite=True,
+    )
+    assert should_auto_draft_reply(
+        invite,
+        sender="John Black",
+        sender_email="john.black@robertwalters.com.au",
+    )
+
+    calendar = _v(
+        subject="Notification: Phone Interview: Vikram & Adan @ Fri Aug 7",
+        sender="Google Calendar",
+        sender_email="calendar-notification@google.com",
+        body="Interview with Adan",
+        has_calendar_invite=True,
+    )
+    assert calendar.keep is True
+    assert should_auto_draft_reply(
+        calendar,
+        sender="Google Calendar",
+        sender_email="calendar-notification@google.com",
+    ) is False
+
+
+def test_career_gmail_query_omits_bare_application_and_opportunity():
+    from app.services.career_email_filter import CAREER_GMAIL_QUERY
+
+    q = CAREER_GMAIL_QUERY.lower()
+    assert "opportunity" not in q
+    assert " or application " not in f" {q} "
+    assert "job application" in q
+    assert "interview" in q

@@ -305,5 +305,38 @@ def test_inbox_unread_counts_unread_labels_not_personal(
         data = _inbox(client, auth_headers)
         match = next(a for a in data["accounts"] if a["email"] == "unread@gmail.com")
         assert match["unread"] == 1
+        card = next(m for m in data["messages"] if m["id"] == tid)
+        assert card["unread"] is True
     finally:
         repo.disconnect(test_user_id)
+
+
+def test_inbox_hides_github_notifications(
+    client, auth_headers, test_user_id, db_session
+):
+    now = datetime.now(timezone.utc)
+    _seed_gmail_thread(
+        db_session,
+        test_user_id,
+        subject="[Victordtesla24/aether-job-career-agent] interview ingest (PR #16)",
+        sender="cursor[bot]",
+        sender_email="notifications@github.com",
+        body="You can view, comment on, or merge this pull request.",
+        received_at=now,
+        classification="priority",
+    )
+    invite_id = _seed_gmail_thread(
+        db_session,
+        test_user_id,
+        subject="Interview: Adan & Vikram (Project Manager @ Next Business Energy)",
+        sender="John Black",
+        sender_email="john.black@robertwalters.com.au",
+        body="John Black has invited you to an interview.",
+        received_at=now - timedelta(minutes=1),
+        classification="all",
+    )
+    data = _inbox(client, auth_headers)
+    subjects = [m["subject"] for m in data["messages"]]
+    assert invite_id in [m["id"] for m in data["messages"]]
+    assert all("github.com" not in (m.get("fromEmail") or "") for m in data["messages"])
+    assert all("aether-job-career-agent" not in s for s in subjects)
