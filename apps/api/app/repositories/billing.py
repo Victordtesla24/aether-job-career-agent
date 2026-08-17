@@ -39,6 +39,15 @@ _BILLING_LOCK = 7420240719
 #: The RATIFIED tier catalog (ADR-P6-PRICING). Tuple order:
 #: (id, name, priceAudMonthly, priceAudAnnual, runsPerMonth, modelTier,
 #:  spendCapUsdMonthly, sortOrder).
+#:
+#: AUD-MON-1 / ruling D4: a plan enforces EXACTLY ``runsPerMonth`` and
+#: ``spendCapUsdMonthly`` (both copied into UsageQuota and checked atomically in
+#: ``UsageQuotaRepository.reserve``). ``modelTier`` is an INERT legacy column —
+#: nothing reads it to route models or gate capabilities, and no API transmits
+#: it any more (``app.routers.billing``). It is retained only because the DDL
+#: here is additive-only (ADR-TR-1: never DROP/ALTER); per-plan feature or model
+#: gating is DEFERRED, not shipped. Do not reintroduce it into any payload
+#: unless it becomes something code actually enforces.
 RATIFIED_PLANS: tuple[tuple[Any, ...], ...] = (
     ("free", "Free", 0, None, 5, "light", 1.00, 0),
     ("starter", "Starter", 19, 179, 30, "standard", 5.00, 1),

@@ -17,11 +17,19 @@ const GstBreakdownSchema = z.object({
   net: z.number(),
 });
 
+/**
+ * AUD-MON-1: the public plan catalog carries ONLY the two facts the backend
+ * enforces — the monthly agent-run quota (`runsPerMonth`) and the monthly AI
+ * spend cap (`spendCapUsdMonthly`), plus `features` bullets derived from them
+ * server-side (apps/api/app/routers/billing.py `_enforced_facts`). The old
+ * unenforced `modelTier` label is gone from the payload, so it is gone from
+ * this contract too; per-plan feature/model gating is deferred, not shipped.
+ */
 export const PlanSchema = z.object({
   id: z.string(),
   name: z.string(),
-  modelTier: z.string(),
   runsPerMonth: z.number(),
+  spendCapUsdMonthly: z.number(),
   monthly: GstBreakdownSchema,
   annual: GstBreakdownSchema.nullable(),
   features: z.array(z.string()),
@@ -116,9 +124,9 @@ export const EntitlementViewSchema = z.object({
 export type EntitlementView = z.infer<typeof EntitlementViewSchema>;
 
 export const SubscriptionStateSchema = z.object({
-  plan: z
-    .object({ id: z.string(), name: z.string(), modelTier: z.string() })
-    .nullable(),
+  // AUD-MON-1: identity only — the backend no longer transmits the unenforced
+  // `modelTier` label here either (the enforced numbers live in `quota`).
+  plan: z.object({ id: z.string(), name: z.string() }).nullable(),
   status: z.string().nullable(),
   interval: z.string().nullable(),
   currentPeriodEnd: z.string().nullable(),
