@@ -115,6 +115,29 @@ describe("ProviderConfigModal", () => {
     expect(billing).toMatch(/subscription/i);
   });
 
+  it("tells the truth about which Anthropic credential serves Claude (MODEL-SUB-QUOTA)", () => {
+    // OWNER DIRECTIVE 2026-08-17: every Claude model is served by the Claude
+    // subscription token, never by an Anthropic API key and never through
+    // OpenRouter. The copy used to promise that an API key would bill Anthropic
+    // API credits for "runs on Anthropic models" — under the enforced routing
+    // that promise is false, so this pins the corrected disclosure.
+    render(
+      <ProviderConfigModal
+        provider={anthropic}
+        onClose={vi.fn()}
+        onSaved={vi.fn()}
+        onNotice={vi.fn()}
+      />,
+    );
+    const apiKeyHint = document.body.textContent ?? "";
+    expect(apiKeyHint).toMatch(/will not run them|not run them/i);
+    expect(apiKeyHint).not.toMatch(/Runs on Anthropic models bill to your Anthropic API credits/i);
+
+    const billing = screen.getByTestId("provider-config-billing").textContent ?? "";
+    expect(billing).toMatch(/Claude models run on your Claude Pro\/Max subscription quota/i);
+    expect(billing).toMatch(/never through OpenRouter/i);
+  });
+
   it("masks the secret input (password type)", () => {
     render(
       <ProviderConfigModal

@@ -84,8 +84,19 @@ def _full_raw_catalog() -> list[dict]:
             "moonshotai/kimi-k3",
             pricing={"prompt": "0.0000005", "completion": "0.0000015"},
         ),
-        # --- anthropic-via-openrouter, NO 'temperature' in supported_parameters:
+        # --- honest chat model with NO 'temperature' in supported_parameters:
         # proves the fix is not a dishonest temperature-capability filter ---
+        _raw_row(
+            "mistralai/mistral-large-3",
+            pricing={"prompt": "0.000002", "completion": "0.000006"},
+            supported_parameters=["max_tokens", "tools", "top_p"],
+        ),
+        # --- a Claude model OpenRouter also serves. MODEL-SUB-QUOTA (OWNER
+        # DIRECTIVE 2026-08-17): every Claude request is served by the
+        # operator's Anthropic subscription, so this row must NOT be offered
+        # here — it is offered under the Anthropic catalog instead. This is a
+        # BILLING rule keyed on the model's identity, not a capability filter
+        # (the row above pins that distinction). ---
         _raw_row(
             "anthropic/claude-sonnet-5",
             pricing={"prompt": "0.000003", "completion": "0.000015"},
@@ -129,10 +140,16 @@ def test_curation_keeps_transient_and_honest_models():
     ids = {m["id"] for m in out}
     assert "deepseek/deepseek-v4-pro" in ids, "transient-failing model must NOT be filtered"
     assert "moonshotai/kimi-k3" in ids, "transient-failing model must NOT be filtered"
-    assert "anthropic/claude-sonnet-5" in ids, (
+    assert "mistralai/mistral-large-3" in ids, (
         "an honest chat model lacking 'temperature' in supported_parameters "
         "must not be dropped — that would be a dishonest capability filter, "
         "not the proven-broken-id denylist ADR-ML-4 authorizes"
+    )
+    assert "anthropic/claude-sonnet-5" not in ids, (
+        "MODEL-SUB-QUOTA: a Claude model must not be offered in the OpenRouter "
+        "catalog — it is served by the operator's Anthropic subscription and "
+        "is offered under the Anthropic catalog, so listing it here with an "
+        "OpenRouter price would be a disclosure lie"
     )
     assert "openrouter/free-model-x" in ids, "free model must survive curation"
 

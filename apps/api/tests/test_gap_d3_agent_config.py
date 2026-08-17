@@ -50,17 +50,23 @@ def test_put_config_persists_temperature_and_thinking(client, auth_headers):
 
 
 def test_partial_update_merges_over_existing(client, auth_headers):
-    client.put(
+    # MODEL-SUB-QUOTA: the model here is incidental (this test is about the
+    # partial-update MERGE), but it must be a real id — a Claude pin is now
+    # validated against the Anthropic catalog the operator's subscription can
+    # actually serve, so the previous placeholder ``claude-sonnet-5`` is
+    # honestly rejected 422 rather than persisted and left to fail at run time.
+    first = client.put(
         "/agents/config/coverLetter",
-        json={"temperature": 0.3, "model": "claude-sonnet-5"}, headers=auth_headers,
+        json={"temperature": 0.3, "model": "claude-sonnet-4-6"}, headers=auth_headers,
     )
+    assert first.status_code == 200, first.text
     client.put(
         "/agents/config/coverLetter",
         json={"thinkingEffort": "low"}, headers=auth_headers,
     )
     got = client.get("/agents/config/coverLetter", headers=auth_headers).json()
     assert got["temperature"] == 0.3
-    assert got["model"] == "claude-sonnet-5"
+    assert got["model"] == "claude-sonnet-4-6"
     assert got["thinkingEffort"] == "low"
 
 
@@ -119,17 +125,43 @@ def test_credential_ref_must_belong_to_user(client, auth_headers):
 def test_billing_audit_records_api_key_metered_path(
     client, auth_headers, test_user_id, monkeypatch
 ):
-    # Consumer subscription OAuth was removed (GAP-AUTH-001): the only supported
-    # Anthropic credential is an API key, and it always audits as metered_api.
-    monkeypatch.setenv("AETHER_MODEL_REASONING", "claude-haiku-4-5")
+    """An api_key credential audits as the metered path.
+
+    CONTRACT UPDATE (MODEL-SUB-QUOTA, OWNER DIRECTIVE 2026-08-17): this used to
+    be asserted with an ANTHROPIC api_key on a ``claude-haiku-4-5`` run. A
+    Claude model may no longer be served by an api_key at all — it is
+    subscription-only — so an Anthropic api_key would now audit as "no
+    credential", which is the truth, not the metered path. The metered-api_key
+    path itself is UNCHANGED and is pinned here on the provider that genuinely
+    has one: OpenRouter. The Claude/subscription side is pinned in
+    tests/test_model_sub_quota.py.
+    """
+    monkeypatch.setenv("AETHER_MODEL_REASONING", "deepseek/deepseek-v4-pro")
     repo = UserProviderCredentialRepository()
 
     repo.upsert(
-        test_user_id, "anthropic", auth_mode="api_key", secret="sk-ant-api-key0002",
+        test_user_id, "openrouter", auth_mode="api_key", secret="sk-or-key0002",
     )
     out = _record_run(test_user_id, "tailor", {"job_id": "j"}, _tailor_stub)
     assert out["billingAudit"]["authMode"] == "api_key"
     assert out["billingAudit"]["quotaPath"] == "metered_api"
+    assert out["billingAudit"]["provider"] == "openrouter"
+
+
+def test_billing_audit_records_the_subscription_path_for_a_claude_run(
+    client, auth_headers, test_user_id, monkeypatch
+):
+    """The other half of the same seam: a Claude run resolves the Anthropic
+    SUBSCRIPTION token and is audited as subscription quota, not metered API
+    usage (MODEL-SUB-QUOTA clause 6)."""
+    monkeypatch.setenv("AETHER_MODEL_REASONING", "claude-haiku-4-5")
+    UserProviderCredentialRepository().upsert(
+        test_user_id, "anthropic", auth_mode="oauth_token",
+        secret="sk-ant-oat01-gap-d3-subscription",
+    )
+    out = _record_run(test_user_id, "tailor", {"job_id": "j"}, _tailor_stub)
+    assert out["billingAudit"]["authMode"] == "oauth_token"
+    assert out["billingAudit"]["quotaPath"] == "subscription_quota"
     assert out["billingAudit"]["provider"] == "anthropic"
 
 
@@ -138,9 +170,13 @@ def test_billing_audit_persisted_to_agent_run(
 ):
     from app.db import get_connection
 
+    # MODEL-SUB-QUOTA: a Claude run is served by the subscription token, so the
+    # persisted audit names that credential. The SUBJECT of this test —
+    # billingAuditJson is written to the AgentRun row — is unchanged.
     monkeypatch.setenv("AETHER_MODEL_REASONING", "claude-haiku-4-5")
     UserProviderCredentialRepository().upsert(
-        test_user_id, "anthropic", auth_mode="api_key", secret="sk-ant-api-persist9",
+        test_user_id, "anthropic", auth_mode="oauth_token",
+        secret="sk-ant-oat01-gap-d3-persist9",
     )
     out = _record_run(test_user_id, "tailor", {"job_id": "j"}, _tailor_stub)
     run_id = out["run_id"]
@@ -151,7 +187,7 @@ def test_billing_audit_persisted_to_agent_run(
             )
             audit = cur.fetchone()[0]
     assert audit is not None
-    assert audit["authMode"] == "api_key"
+    assert audit["authMode"] == "oauth_token"
 
 
 def test_deterministic_agent_billing_audit_is_none(client, auth_headers, test_user_id):

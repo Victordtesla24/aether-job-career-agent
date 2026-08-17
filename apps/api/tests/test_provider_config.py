@@ -95,14 +95,18 @@ class TestProviderRouting:
         assert resolve_provider("claude-haiku-4-5") == "anthropic"
 
     def test_anthropic_namespace_routes_to_openrouter(self):
-        # Billing-separation fix (adversarial-review, GAP-P7-MODEL-CHOICE-001):
-        # OpenRouter namespaces every model it serves as ``vendor/model`` and
-        # bills them itself, so an ``anthropic/…`` id (an OpenRouter catalog entry)
-        # must route to OpenRouter — NOT the direct-Anthropic account. Only a bare
-        # ``claude-…`` native id (see test above) routes to direct Anthropic. The
-        # app never uses an ``anthropic/`` prefix for a direct-Anthropic model.
-        assert resolve_provider("anthropic/claude-3.5-sonnet") == "openrouter"
-        assert resolve_provider("anthropic/claude-opus-4.8") == "openrouter"
+        # An ``anthropic/…`` id that is NOT a Claude model really is one
+        # OpenRouter serves and bills, so it keeps routing there — the
+        # billing separation GAP-P7-MODEL-CHOICE-001 established.
+        assert resolve_provider("anthropic/some-non-claude-model") == "openrouter"
+
+    def test_namespaced_claude_routes_to_the_anthropic_subscription(self):
+        # MODEL-SUB-QUOTA (OWNER DIRECTIVE 2026-08-17): a Claude model is served
+        # by the operator's Anthropic subscription in BOTH spellings. The
+        # namespaced form used to route to OpenRouter, which bought the same
+        # model a second time out of OpenRouter credit.
+        assert resolve_provider("anthropic/claude-3.5-sonnet") == "anthropic"
+        assert resolve_provider("anthropic/claude-opus-4.8") == "anthropic"
 
     def test_everything_else_routes_to_openrouter(self):
         assert resolve_provider("gpt-4o") == "openrouter"

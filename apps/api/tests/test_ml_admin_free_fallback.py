@@ -188,14 +188,21 @@ def test_anthropic_402_is_not_reclassified(monkeypatch, tmp_path):
     pull an OpenRouter free model into an Anthropic-billed run)."""
     from app.services.llm_client import InsufficientCreditsError
 
-    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-api03-test")
+    # MODEL-SUB-QUOTA (OWNER DIRECTIVE 2026-08-17): a Claude model is served
+    # ONLY by the Anthropic SUBSCRIPTION token. With an api_key here the run
+    # would now be refused BEFORE the transport, so the 402 this test exists to
+    # classify would never be reached — the credential is an oat token so the
+    # request really is made and really does come back 402.
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-oat01-anthropic-402-test")
     monkeypatch.delenv("AETHER_LLM_API_KEY", raising=False)
-    _install_transport(monkeypatch, lambda model: _Resp(402, "payment required"))
+    sent = _install_transport(monkeypatch, lambda model: _Resp(402, "payment required"))
     llm = LLMClient(mode="live", fixture_dir=tmp_path)
 
     with pytest.raises(RuntimeError) as excinfo:
         llm._call_live("sys", "usr", model="claude-sonnet-4-5", temperature=0.0)
     assert not isinstance(excinfo.value, InsufficientCreditsError)
+    # The 402 was genuinely observed on the wire (not a pre-transport refusal).
+    assert sent == ["claude-sonnet-4-5"], sent
 
 
 # ---------------------------------------------------------------------------

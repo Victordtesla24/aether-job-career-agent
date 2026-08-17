@@ -251,10 +251,14 @@ describe("CONDUCTOR — the supervisor's model binding is the LIVE one", () => {
   });
 
   it("resolves an unset provider by the SAME rule the server bills on", () => {
-    // A `/` in the id is an OpenRouter id; a bare `claude-*` is direct Anthropic
-    // (llm_client.resolve_provider). Nothing here may cross those.
-    expect(providerLabel(null, null, "anthropic/claude-opus-4-8")).toBe("OpenRouter");
+    // llm_client.resolve_provider: ANY Claude id — bare or `anthropic/`-
+    // namespaced — is served by the operator's Anthropic subscription
+    // (MODEL-SUB-QUOTA, OWNER DIRECTIVE 2026-08-17); every OTHER `vendor/model`
+    // id is OpenRouter's. Nothing here may cross those.
+    expect(providerLabel(null, null, "anthropic/claude-opus-4-8")).toBe("Anthropic");
     expect(providerLabel(null, null, "claude-opus-4-8")).toBe("Anthropic");
+    expect(providerLabel(null, null, "deepseek/deepseek-v4-pro")).toBe("OpenRouter");
+    expect(providerLabel(null, null, "anthropic/some-non-claude-model")).toBe("OpenRouter");
     expect(providerLabel("abacus", null, "some-model")).toBe("Abacus.ai");
     expect(providerLabel("google", null, "gemini-3.5-flash")).toBe("Google");
   });

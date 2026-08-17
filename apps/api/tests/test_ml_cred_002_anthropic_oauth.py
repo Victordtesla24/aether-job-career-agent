@@ -701,7 +701,12 @@ def test_refresh_failure_marks_needs_reauth_honest_error_no_cross_provider_fallb
         ("claude-3-5-sonnet-20241022", "anthropic"),
         ("claude-opus-4-1", "anthropic"),
         ("anthropic-internal-alias", "anthropic"),
-        ("anthropic/claude-3.5-sonnet", "openrouter"),
+        # MODEL-SUB-QUOTA (OWNER DIRECTIVE 2026-08-17): a namespaced Claude id
+        # is the SAME model as its bare form and is served by the operator's
+        # subscription — it no longer bills OpenRouter. Non-Claude vendor ids
+        # (below) are unchanged, which is what this guard actually protects.
+        ("anthropic/claude-3.5-sonnet", "anthropic"),
+        ("anthropic/some-non-claude-model", "openrouter"),
         ("deepseek/deepseek-chat", "openrouter"),
         ("openai/gpt-4o", "openrouter"),
     ],

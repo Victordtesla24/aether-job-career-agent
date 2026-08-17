@@ -140,20 +140,45 @@ exact id.
 `resolve_provider(model_id)` (`apps/api/app/services/llm_client.py`) is the single source of truth
 every billing/verify/run-time code path calls to decide which credential a model id bills against:
 
-- **Any id containing a `/`** (e.g. `deepseek/deepseek-v4-flash`, or OpenRouter's own
-  `anthropic/claude-3-haiku`) is OpenRouter-namespaced and **always bills through OpenRouter** —
-  including the 15+ `anthropic/*` ids OpenRouter itself serves. Those do **not** route to the
-  direct Anthropic API even though the id starts with `anthropic/`; the presence of the slash wins.
-- **A bare id** starting with `claude-` or `anthropic` (no slash) routes to the **direct Anthropic
-  API**.
-- Any other bare id defaults to OpenRouter.
+- **Any CLAUDE id — `claude-…` OR `anthropic/claude-…`** (case-insensitive) routes to the
+  **direct Anthropic API** and is served by the operator's Anthropic subscription. The
+  `anthropic/` namespace is stripped to the bare id for the call: same model, its own vendor's
+  API, never a substitution.
+- **Any other id containing a `/`** (`deepseek/deepseek-v4-flash`, `openai/…`, and even a
+  hypothetical non-Claude `anthropic/…` model) is OpenRouter-namespaced and **always bills
+  through OpenRouter**.
+- **A bare id** starting with `anthropic` routes to the direct Anthropic API; any other bare id
+  defaults to OpenRouter.
 
-This distinction exists specifically because early code used a `startswith("anthropic/")` heuristic
-that silently crossed the billing boundary for OpenRouter's own `anthropic/*` catalog entries — a
-real defect caught in adversarial review of the original model-choice feature (`ceb8c23`) and now
-covered by the slash-first rule above. The per-agent picker states this routing implication directly
-in the UI next to every agent's model list ("These models come from the OpenRouter catalog —
-choosing one routes this agent's runs through OpenRouter…").
+### Why the Claude rule overrides the slash rule (MODEL-SUB-QUOTA, 2026-08-17)
+
+The slash-first rule came from a real defect: early code used a `startswith("anthropic/")`
+heuristic that silently billed the direct-Anthropic account for models a user had picked from the
+OpenRouter catalog (caught in adversarial review of the original model-choice feature, `ceb8c23`).
+Slash-first fixed that, but produced the mirror-image problem the OWNER DIRECTIVE names:
+
+> "I want all the claude requests to use my Anthropic Pro Subscription quota instead of consuming
+> extra credits via an API_KEY including for openrouter."
+
+`anthropic/claude-opus-5` and `claude-opus-5` are the SAME model. Routing them to different
+accounts meant a Claude pick from the picker was bought a second time out of OpenRouter credit
+while the subscription sat idle. So the Claude rule now wins, and the billing separation that
+motivated slash-first is preserved for everything else — no NON-Claude model changed provider.
+
+Three enforcement points, so no single mistake can undo it:
+
+1. `resolve_provider` (above) — the routing decision.
+2. `_build_openrouter_request` raises `ClaudeOnOpenRouterError` for any Claude model, so even a
+   bypassed router cannot spend OpenRouter credit on Claude.
+3. `_curate_openrouter_models` drops every `anthropic/claude-*` row, so the picker never offers a
+   Claude model under an OpenRouter price. Claude models appear in their own
+   **"Anthropic — your subscription"** group, fed by the Anthropic catalog.
+
+Persisted pins written before this change are normalized on save AND on read, and
+`scripts/repair_claude_model_pins.py` rewrites them in place (dry run by default): a namespaced id
+whose bare form is in the Anthropic catalog is rewritten to that bare form; a Claude id the catalog
+does not carry has its pin CLEARED to the tier default and the change recorded in `AdminAuditLog`
+— never silently swapped for a different model (ADR-ML-3).
 
 ## 7. Anthropic credential (separate from the OpenRouter catalog)
 

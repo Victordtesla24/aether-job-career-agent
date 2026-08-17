@@ -368,7 +368,10 @@ const HOP = {
     kind: "writes",
     mechanism:
       "triage mode: UPDATE EmailThread SET classification, aiScore (NULL when the model gave no real score)",
-    evidence: "apps/api/app/agents/email_agent.py:365-382",
+    // Career-inbox + interview-ingest commits inserted code above the triage
+    // block and shifted these lines — re-resolved against the live tree.
+    evidence: "apps/api/app/agents/email_agent.py:473-477",
+    discoveryEvidence: "apps/api/app/agents/email_agent.py:365-382",
     anchors: ['UPDATE "EmailThread" SET "classification" = %s,'],
     status: "live",
   },
@@ -379,7 +382,7 @@ const HOP = {
     mechanism:
       "one synced thread per run; never mutates the Email Agent's triage labels",
     evidence:
-      "apps/api/app/agents/sentiment_analysis_agent.py:13,113; catalog copy apps/api/app/routers/agents.py:359",
+      "apps/api/app/agents/sentiment_analysis_agent.py:13,113; catalog copy apps/api/app/routers/agents.py:362",
     discoveryEvidence:
       "apps/api/app/agents/sentiment_analysis_agent.py:51; catalog copy agents.py:343",
     anchors: [
@@ -398,9 +401,10 @@ const HOP = {
     // (P1-A + B6 + D.524 + B1b + ML-STOPALL-001..004 + interim guards all
     // shift agents.py); anchors unchanged. The provenance re-anchor pass
     // revalidates every citation before the landing gates. AUD-AGENT-4 round 2
-    // added `honest_map_counts` above these lines and shifted them again —
-    // re-resolved against the live tree, same anchors.
-    evidence: "apps/api/app/routers/agents.py:3976,4008",
+    // added `honest_map_counts` above these lines and shifted them again, and
+    // MODEL-SUB-QUOTA round 3 added imports + a config guard above those —
+    // re-resolved against the live tree after both merges, same anchors.
+    evidence: "apps/api/app/routers/agents.py:4008,4040",
     discoveryEvidence: "apps/api/app/routers/agents.py:3380",
     anchors: [
       "def _pipeline_core(",
@@ -434,7 +438,9 @@ const HOP = {
     kind: "writes",
     mechanism:
       "job_alerts mode: detect_alert_platform -> parse_job_alert -> JobRepository.create(posting.to_job_raw()) through the SAME upsert path as a board adapter; counts jobsCreated vs jobsUpdated from wasInserted",
-    evidence: "apps/api/app/agents/email_agent.py:410,480,495,509,515-519",
+    // Career-inbox + interview-ingest commits inserted code above _job_alerts
+    // and shifted these lines — re-resolved against the live tree.
+    evidence: "apps/api/app/agents/email_agent.py:552,632,647,661,671-675",
     discoveryEvidence: "apps/api/app/agents/email_agent.py:410-420,505-518",
     anchors: [
       "def _job_alerts(",
@@ -482,7 +488,7 @@ const HOP = {
     // honest-refusal check + its helper were inserted earlier in the file) —
     // re-verified against HEAD, same anchors, new line numbers.
     evidence:
-      "apps/api/app/agents/company_research_agent.py:53,183; narrative opt-in at apps/api/app/routers/agents.py:1871,2478",
+      "apps/api/app/agents/company_research_agent.py:53,183; narrative opt-in at apps/api/app/routers/agents.py:1897,2510",
     discoveryEvidence:
       "apps/api/app/agents/company_research_agent.py:53; narrative opt-in at apps/api/app/routers/agents.py:2020-2027",
     anchors: [

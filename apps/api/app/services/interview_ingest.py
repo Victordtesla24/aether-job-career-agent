@@ -17,10 +17,10 @@ from __future__ import annotations
 
 import logging
 import re
-from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
 import threading
 import time
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 from app.db import get_connection, new_id, rows_to_dicts
@@ -329,6 +329,7 @@ def ingest_inbound_for_user(
         if not verdict.is_interview_invite:
             continue
         stamp = t.get("lastMessageAt")
+        scheduled: datetime | None
         if isinstance(stamp, datetime):
             scheduled = stamp
         else:

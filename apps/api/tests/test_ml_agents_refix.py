@@ -225,9 +225,11 @@ def test_catalog_model_field_is_per_agent_not_shared(client, auth_headers):
         headers=auth_headers,
     )
     assert put1.status_code == 200, put1.text
+    # MODEL-SUB-QUOTA: sent namespaced, stored/served bare (same model, routed
+    # to the operator's Anthropic subscription instead of OpenRouter credit).
     put2 = client.put(
         "/agents/config/coverLetter",
-        json={"model": "anthropic/claude-opus"},
+        json={"model": "anthropic/claude-opus-4-8"},
         headers=auth_headers,
     )
     assert put2.status_code == 200, put2.text
@@ -239,9 +241,10 @@ def test_catalog_model_field_is_per_agent_not_shared(client, auth_headers):
         f"resumeTailoring catalog model is {tailor_model!r}, expected the "
         "saved 'deepseek/deepseek-chat'"
     )
-    assert cover_model == "anthropic/claude-opus", (
+    assert cover_model == "claude-opus-4-8", (
         f"coverLetter catalog model is {cover_model!r}, expected the saved "
-        "'anthropic/claude-opus'"
+        "'anthropic/claude-opus-4-8' normalized to its bare, "
+        "subscription-routed spelling"
     )
     assert tailor_model != cover_model, (
         "both agents' catalog model resolved to the SAME value — the "
@@ -259,9 +262,15 @@ def test_test_run_estimate_differs_for_differently_priced_saved_models(
     client, auth_headers,
 ):
     """Two REASONING-tier agents with two saved models of DIFFERENT published
-    price (`MODEL_PRICING`: claude-haiku-4-5-20251001 $0.001/$0.005 per 1K vs
-    claude-fable-5 $0.010/$0.050 per 1K — a 10x spread) must get DIFFERENT
+    price (the app's Anthropic catalog: claude-haiku-4-5 $1/$5 per M vs
+    claude-opus-4-8 $15/$75 per M — a 15x spread) must get DIFFERENT
     `estCost` (and ideally different `model`) from `POST /agents/test-run`.
+
+    (MODEL-SUB-QUOTA: the two ids were previously `claude-haiku-4-5-20251001`
+    and `claude-fable-5`. Those are no longer accepted by the save endpoint —
+    a Claude pin is now validated against the catalog the subscription can
+    actually serve — so the equivalent in-catalog pair with an even wider price
+    spread is used. The assertion is unchanged.)
 
     FAILS NOW: `test_run()` computes
     `llm_model = _model_for_agent(backend) if backend else None` with NO
@@ -274,13 +283,13 @@ def test_test_run_estimate_differs_for_differently_priced_saved_models(
     """
     cheap = client.put(
         "/agents/config/resumeTailoring",
-        json={"model": "claude-haiku-4-5-20251001"},
+        json={"model": "claude-haiku-4-5"},
         headers=auth_headers,
     )
     assert cheap.status_code == 200, cheap.text
     expensive = client.put(
         "/agents/config/coverLetter",
-        json={"model": "claude-fable-5"},
+        json={"model": "claude-opus-4-8"},
         headers=auth_headers,
     )
     assert expensive.status_code == 200, expensive.text
@@ -299,8 +308,8 @@ def test_test_run_estimate_differs_for_differently_priced_saved_models(
     assert body_expensive["estCost"] is not None
     assert body_cheap["estCost"] != body_expensive["estCost"], (
         "the Test Run cost estimate is a CONSTANT: resumeTailoring "
-        f"(saved claude-haiku-4-5-20251001) and coverLetter (saved "
-        f"claude-fable-5, 10x the published price) both estimated "
+        f"(saved claude-haiku-4-5) and coverLetter (saved "
+        f"claude-opus-4-8, 15x the published price) both estimated "
         f"${body_cheap['estCost']} — the estimate ignores each agent's own "
         "saved model"
     )
