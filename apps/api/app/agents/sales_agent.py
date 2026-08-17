@@ -227,6 +227,22 @@ required; Starter A$19/month; Pro A$39/month or A$359/year; Power A$69/month.
 Founder: Vikram Sarkar, a software engineer who built it for his own search.
 """
 
+#: Human-authored product update for consented network contacts. Prices and
+#: features are copied from GROUNDED_FACTS — this is not LLM output.
+NETWORK_NURTURE_TEMPLATE = (
+    "Hi {{name}},\n\n"
+    "A short update on Aether Career Agent, the job-search product I have been "
+    "building.\n\n"
+    "It sources roles from licensed job APIs (listings no older than 30 days), "
+    "scores fit with a reason you can read, and never sends an application "
+    "without your explicit approval.\n\n"
+    "Free plan is A$0 (5 agent runs a month, no card). Starter is A$19/month. "
+    "Pro is A$39/month. Power is A$69/month (AUD, GST inclusive).\n\n"
+    "If this is useful for you or someone in your network, they can try it at "
+    "https://5cb5f0620.abacusai.cloud\n\n"
+    "Vik\nAether Career Agent"
+)
+
 
 # --------------------------------------------------------------------- flags
 def sales_agent_enabled() -> bool:
@@ -1569,6 +1585,112 @@ class SalesAgent:
         set_setting("salesAgent.lastDigestDate", today)
         result["digest"] = True
 
+    def _run_network_nurture(
+        self,
+        admin_id: str,
+        accounts: list[dict[str, Any]],
+        *,
+        dry_run: bool,
+        result: dict[str, Any],
+    ) -> None:
+        """Product-update emails to consented CRM contacts (cap 5 per run).
+
+        Recipients must already be this user's Contact rows AND carry ratified
+        ``existing_relationship`` or ``inbound_signal`` consent. Default is
+        dry_run. Anyone emailed (or dry-run logged) in the last 30 days is
+        skipped. Suppressed addresses are counted, never written.
+        """
+        from app.services.networking_insights import list_nurture_candidates
+
+        result.setdefault("networkNurtured", 0)
+        result.setdefault("dryRunLogged", 0)
+        result.setdefault("sent", 0)
+        result.setdefault("suppressed", 0)
+        result.setdefault("errors", [])
+        if not dry_run and not accounts:
+            result["errors"].append("network nurture skipped: no sending account (live mode)")
+            return
+        gmail = None
+        if not dry_run and accounts:
+            gmail = self.gmail_factory(admin_id, accounts[0]["id"])
+        since = _now() - timedelta(days=30)
+        recent_rows, _total = self.repo.list_outreach(since=since, limit=200)
+        recently_emailed = {
+            (row.get("recipient") or "").lower()
+            for row in recent_rows
+            if row.get("outcome") in ("sent", "dry_run")
+        }
+        campaign = self.repo.active_campaign_by_type("demo_response")
+        campaign_id = campaign["id"] if campaign else None
+        subject = "Aether Career Agent — a short product update"
+        for cand in list_nurture_candidates(admin_id, limit=5):
+            email = (cand.get("email") or "").strip().lower()
+            if not email:
+                continue
+            if self.repo.is_suppressed(email):
+                result["suppressed"] += 1
+                continue
+            if email in recently_emailed:
+                continue
+            body = append_compliance_footer(
+                personalize_template(NETWORK_NURTURE_TEMPLATE, cand.get("name"))
+            )
+            if dry_run:
+                self.repo.record_outreach(
+                    channel="email",
+                    outcome="dry_run",
+                    lead_id=cand.get("leadId"),
+                    campaign_id=campaign_id,
+                    subject=subject,
+                    body=body,
+                    recipient=email,
+                    detail=(
+                        "shadow mode — network nurture would send; consent "
+                        f"{cand.get('consentType')}"
+                    ),
+                )
+                result["dryRunLogged"] += 1
+                result["networkNurtured"] += 1
+                recently_emailed.add(email)
+                continue
+            try:
+                sent = gmail.send(  # type: ignore[union-attr]
+                    to=email,
+                    subject=subject,
+                    body=body,
+                    html_body=render_sales_outreach_html(subject, body),
+                )
+            except (GmailNotConnectedError, GmailError) as exc:
+                self.repo.record_outreach(
+                    channel="email",
+                    outcome="error",
+                    lead_id=cand.get("leadId"),
+                    campaign_id=campaign_id,
+                    recipient=email,
+                    detail=f"gmail send failed: {exc}",
+                )
+                result["errors"].append(f"network nurture to {email} failed: {exc}")
+                continue
+            try:
+                self.repo.record_outreach(
+                    channel="email",
+                    outcome="sent",
+                    lead_id=cand.get("leadId"),
+                    campaign_id=campaign_id,
+                    gmail_message_id=sent.get("id"),
+                    gmail_thread_id=sent.get("threadId"),
+                    subject=subject,
+                    body=body,
+                    recipient=email,
+                    sent_at=_now(),
+                    detail=f"network nurture; consent {cand.get('consentType')}",
+                )
+            except DuplicateSendError:
+                continue
+            result["sent"] += 1
+            result["networkNurtured"] += 1
+            recently_emailed.add(email)
+
     # ----------------------------------------------------- content generation
     def generate_marketing_content(self, trigger: str = "admin") -> dict[str, Any]:
         """On-demand, LLM-authored marketing refresh (admin ``POST /generate``):
@@ -1625,9 +1747,12 @@ class SalesAgent:
             model, model_source = resolve_model()
             result["model"] = model
             result["modelSource"] = model_source
-            self._generate_campaigns(model=model, result=result)
+            from app.services.networking_insights import network_snapshot_for_prompt
+
+            facts = f"{GROUNDED_FACTS}\n\n{network_snapshot_for_prompt(admin_id)}"
+            self._generate_campaigns(model=model, result=result, facts=facts)
             self._generate_promo(result=result)
-            self._generate_linkedin_drafts(model=model, result=result, count=3)
+            self._generate_linkedin_drafts(model=model, result=result, count=3, facts=facts)
         except Exception as exc:  # noqa: BLE001 — the run row must go terminal
             logger.exception("sales agent content generation failed")
             result["errors"].append(str(exc))
@@ -1662,7 +1787,9 @@ class SalesAgent:
             return "invented user/customer count"
         return None
 
-    def _generate_campaigns(self, *, model: str, result: dict[str, Any]) -> None:
+    def _generate_campaigns(
+        self, *, model: str, result: dict[str, Any], facts: str = GROUNDED_FACTS
+    ) -> None:
         specs = (
             (
                 "free_to_paid_nudge",
@@ -1695,7 +1822,7 @@ class SalesAgent:
                     "no unsubscribe line (a compliance footer is appended "
                     "server-side); under 170 words; plain text only."
                 ),
-                user=f"FACTS:\n{GROUNDED_FACTS}\n\nWrite: {intent}.",
+                user=f"FACTS:\n{facts}\n\nWrite: {intent}.",
                 model=model,
                 temperature=0.5,
                 fixture_key=f"sales_generate_{ctype}",
@@ -1771,7 +1898,8 @@ class SalesAgent:
             result["errors"].append(f"promo: {exc}")
 
     def _generate_linkedin_drafts(
-        self, *, model: str, result: dict[str, Any], count: int = 3
+        self, *, model: str, result: dict[str, Any], count: int = 3,
+        facts: str = GROUNDED_FACTS,
     ) -> None:
         campaign = self.repo.active_campaign_by_type("linkedin_draft")
         raw = self._llm_client().complete(
@@ -1787,7 +1915,7 @@ class SalesAgent:
                 "Separate posts with a line containing only '==='."
             ),
             user=(
-                f"FACTS:\n{GROUNDED_FACTS}\n\n"
+                f"FACTS:\n{facts}\n\n"
                 f"Write {count} posts: one on the anti-fabrication guard, one "
                 "on the human approval queue, one founder reflection on why "
                 "honest tooling wins in a job search."
@@ -1852,6 +1980,7 @@ class SalesAgent:
             "digest": False,
             "noSendingAccount": False,
             "watermarksPruned": 0,
+            "networkNurtured": 0,
             # S3: per-account scan facts + one founder-readable sentence. A run
             # that reports zeros must say WHY it reports zeros.
             "accounts": [],
@@ -1891,6 +2020,7 @@ class SalesAgent:
                 logger.info("sales agent: lifecycle skipped; live scope is inbound-only")
             self._run_linkedin_draft(model=model, result=result, admin_id=admin_id)
             self._run_digest(admin_id, accounts, dry_run=dry_run, result=result)
+            self._run_network_nurture(admin_id, accounts, dry_run=dry_run, result=result)
         except Exception as exc:  # noqa: BLE001 — the run row must go terminal
             logger.exception("sales agent run failed")
             result["errors"].append(str(exc))

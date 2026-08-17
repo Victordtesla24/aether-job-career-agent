@@ -1657,6 +1657,14 @@ def _dashboard(current_user: CurrentUser, period: str = "all") -> dict[str, Any]
     }
 
 
+@router.get("/networking")
+def networking_analytics(current_user: CurrentUser) -> dict[str, Any]:
+    """Orchestrator CRM snapshot — counts and employer names, never emails."""
+    from app.services.networking_insights import build_analytics_snapshot
+
+    return build_analytics_snapshot(current_user["id"])
+
+
 @router.get("")
 def dashboard_root(current_user: CurrentUser, period: str = "all") -> dict[str, Any]:
     """Dashboard summary — alias for the root analytics path."""

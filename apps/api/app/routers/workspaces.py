@@ -300,118 +300,14 @@ def interview_prep(current_user: CurrentUser) -> dict[str, Any]:
 
 @router.get("/networking/summary")
 def networking_summary(current_user: CurrentUser) -> dict[str, Any]:
-    """Recruiter & referral CRM — real Contact records from the database."""
-    uid = current_user["id"]
+    """Recruiter & referral CRM — real Contact records from the database.
 
-    with get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT id, name, title, company, stage, email, "linkedinUrl", "createdAt"
-                FROM "Contact"
-                WHERE "userId" = %s
-                ORDER BY "createdAt" DESC
-                """,
-                (uid,),
-            )
-            contacts = rows_to_dicts(cur)
+    Response rate is null when nothing has been sent (never a fabricated 0).
+    Outreach subjects come from the stored message, not an invented label.
+    """
+    from app.services.networking_insights import build_crm_summary
 
-    # Stage ordering: the DB's `ContactStage` enum (identified/contacted/
-    # responded/meeting/referral) mapped to the wireframe's pipeline column
-    # labels (New/Warm/Active/Scheduled/Placed). Contacts are stored with the
-    # enum value, so grouping and the pipeline columns must use the same keys
-    # — previously this mapping was missing and every column showed count 0.
-    stage_order = ["identified", "contacted", "responded", "meeting", "referral"]
-    stage_labels = {
-        "identified": "New",
-        "contacted": "Warm",
-        "responded": "Active",
-        "meeting": "Scheduled",
-        "referral": "Placed",
-    }
-    stage_warmth = {"identified": 1, "contacted": 2, "responded": 3, "meeting": 4, "referral": 5}
-
-    # Group contacts by stage
-    by_stage: dict[str, list[dict]] = {s: [] for s in stage_order}
-    for c in contacts:
-        stage_key = (c.get("stage") or "identified").lower()
-        if stage_key not in by_stage:
-            stage_key = "identified"
-        by_stage[stage_key].append({
-            "id": c["id"],
-            "name": c["name"] or "",
-            "role": c.get("title") or "",
-            "company": c.get("company") or "",
-            "email": c.get("email") or "",
-            "linkedinUrl": c.get("linkedinUrl") or "",
-            "warmth": stage_warmth.get(stage_key, 1),
-        })
-
-    pipeline = [
-        {
-            "stage": stage_labels[s],
-            "count": len(by_stage[s]),
-            "contacts": by_stage[s][:5],  # show up to 5 per column
-        }
-        for s in stage_order
-    ]
-
-    active_count = len(by_stage.get("responded", [])) + len(by_stage.get("meeting", []))
-
-    # Outreach queue + communication log from real OutreachTask rows
-    with get_connection() as conn2:
-        with conn2.cursor() as cur2:
-            try:
-                cur2.execute(
-                    'SELECT ot."id", ot."type", ot."status", ot."scheduledAt",'
-                    ' ot."sentAt", c."company", c."name"'
-                    ' FROM "OutreachTask" ot'
-                    ' LEFT JOIN "Contact" c ON c."id" = ot."contactId"'
-                    ' WHERE ot."userId" = %s ORDER BY ot."createdAt" DESC LIMIT 50',
-                    (uid,),
-                )
-                ot_rows = cur2.fetchall()
-                cols = [d[0] for d in cur2.description or []]
-                ot_rows = [dict(zip(cols, r)) for r in ot_rows]
-            except Exception:
-                ot_rows = []
-
-    queue, log = [], []
-    for t in ot_rows:
-        entry = {
-            "id": t["id"],
-            "kind": t["type"],
-            "status": t["status"],
-            "contactName": t.get("name") or "",
-            "company": (t.get("company") or ""),
-            "subject": (
-                f"{(t.get('type') or '').replace('_', ' ').title()}"
-                f" — {(t.get('company') or '')}"
-            ),
-            "scheduledAt": str(t["scheduledAt"]) if t.get("scheduledAt") else None,
-            "sentAt": str(t["sentAt"]) if t.get("sentAt") else None,
-        }
-        if t["status"] == "sent":
-            log.append(entry)
-        else:
-            queue.append(entry)
-
-    return {
-        "stats": {
-            "contacts": len(contacts),
-            "activeConversations": active_count,
-            "referralsInFlight": len(by_stage.get("referral", [])),
-            "responseRate": 0,
-        },
-        "pipeline": pipeline,
-        "outreachQueue": queue,
-        "communicationLog": log,
-        "crmSummary": {
-            "activeConversations": active_count,
-            "followUpsDueToday": 0,
-            "warmIntrosPending": len(by_stage.get("contacted", [])),
-        },
-    }
+    return build_crm_summary(current_user["id"])
 
 
 # ---------------------------------------------------------------------------

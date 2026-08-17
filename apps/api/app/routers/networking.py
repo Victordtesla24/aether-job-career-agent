@@ -17,6 +17,10 @@ from pydantic import BaseModel, Field
 from app.db import get_connection, new_id, rows_to_dicts
 from app.middleware.auth import CurrentUser
 from app.repositories.sales import ConsentViolationError, SalesRepository
+from app.services.networking_insights import (
+    refresh_contacts_from_inbox,
+    upsert_contact,
+)
 
 router = APIRouter()
 
@@ -83,6 +87,7 @@ def import_gmail_contacts(current_user: CurrentUser) -> dict[str, int]:
     seen: set[str] = set()
     counts = {
         "contactsCreated": 0,
+        "contactsUpdated": 0,
         "leadsCreated": 0,
         "duplicates": 0,
         "suppressed": 0,
@@ -143,22 +148,13 @@ def import_gmail_contacts(current_user: CurrentUser) -> dict[str, int]:
             counts["ignored"] += 1
             continue
 
-        with get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(
-                    'SELECT "id" FROM "Contact" WHERE "userId" = %s '
-                    'AND LOWER("email") = %s LIMIT 1',
-                    (uid, email),
-                )
-                if cur.fetchone() is None:
-                    cur.execute(
-                        '''INSERT INTO "Contact" (
-                            "id", "userId", "name", "stage", "email", "createdAt", "updatedAt"
-                        ) VALUES (%s, %s, %s, %s::"ContactStage", %s, now(), now())''',
-                        (new_id(), uid, name, "identified", email),
-                    )
-                    counts["contactsCreated"] += 1
-            conn.commit()
+        _cid, action = upsert_contact(uid, name=name, email=email)
+        if action == "created":
+            counts["contactsCreated"] += 1
+        elif action == "updated":
+            counts["contactsUpdated"] += 1
+        else:
+            counts["duplicates"] += 1
 
         if sales.get_lead_by_email(email) is None:
             try:
@@ -268,6 +264,7 @@ async def import_linkedin_contacts(
     counts = {
         "rows": 0,
         "contactsCreated": 0,
+        "contactsUpdated": 0,
         "leadsCreated": 0,
         "duplicates": 0,
         "suppressed": 0,
@@ -306,39 +303,20 @@ async def import_linkedin_contacts(
             counts["suppressed"] += 1
             continue
 
-        with get_connection() as conn:
-            with conn.cursor() as cur:
-                if email:
-                    cur.execute(
-                        'SELECT "id" FROM "Contact" WHERE "userId" = %s '
-                        'AND LOWER("email") = %s LIMIT 1',
-                        (uid, email),
-                    )
-                else:
-                    cur.execute(
-                        'SELECT "id" FROM "Contact" WHERE "userId" = %s '
-                        'AND LOWER("name") = %s AND "email" IS NULL LIMIT 1',
-                        (uid, name.lower()),
-                    )
-                if cur.fetchone() is None:
-                    cur.execute(
-                        '''INSERT INTO "Contact" (
-                            "id", "userId", "name", "title", "company", "stage",
-                            "email", "linkedinUrl", "createdAt", "updatedAt"
-                        ) VALUES (%s, %s, %s, %s, %s, %s::"ContactStage",
-                                  %s, %s, now(), now())''',
-                        (
-                            new_id(), uid, name or email.split("@", 1)[0],
-                            title or None, company or None, "identified",
-                            email or None, url or None,
-                        ),
-                    )
-                    counts["contactsCreated"] += 1
-                else:
-                    # Known contact — count as duplicate but still fall through
-                    # to the lead hand-off, which is idempotent on its own.
-                    counts["duplicates"] += 1
-            conn.commit()
+        _cid, action = upsert_contact(
+            uid,
+            name=name or (email.split("@", 1)[0] if email else ""),
+            email=email or None,
+            title=title or None,
+            company=company or None,
+            linkedin_url=url or None,
+        )
+        if action == "created":
+            counts["contactsCreated"] += 1
+        elif action == "updated":
+            counts["contactsUpdated"] += 1
+        else:
+            counts["duplicates"] += 1
 
         # Hand-off to Sales (R4.2): only connections who chose to share their
         # email, with real existing-relationship provenance. Never guessed.
@@ -361,6 +339,16 @@ async def import_linkedin_contacts(
             except ConsentViolationError:
                 counts["ignored"] += 1
     return counts
+
+
+@router.post("/refresh-from-inbox")
+def refresh_from_inbox(current_user: CurrentUser) -> dict[str, int]:
+    """Refresh Contact rows from already-synced career EmailThread senders.
+
+    Does not call Gmail and does not steal Email Center sync. Personal
+    classification is ignored. Nothing is sent.
+    """
+    return refresh_contacts_from_inbox(current_user["id"])
 
 
 # ---------------------------------------------------------------------------

@@ -41,11 +41,16 @@ export interface NetworkingOutreachEntry {
 }
 
 export interface NetworkingSummary {
-  stats: { contacts: number; activeConversations: number; referralsInFlight: number; responseRate: number };
+  stats: { contacts: number; activeConversations: number; referralsInFlight: number; responseRate: number | null };
   pipeline: Array<{ stage: string; count: number; contacts: NetworkingContact[] }>;
   outreachQueue: NetworkingOutreachEntry[];
   communicationLog: NetworkingOutreachEntry[];
-  crmSummary: { activeConversations: number; followUpsDueToday: number; warmIntrosPending: number };
+  crmSummary: {
+    activeConversations: number;
+    followUpsDueToday: number;
+    warmIntrosPending: number;
+    lastContactUpdatedAt?: string | null;
+  };
 }
 
 export const fetchNetworkingSummary = (options: RequestOptions = {}) =>
@@ -98,6 +103,34 @@ export const createNetworkingContact = (
 /** GET /networking/contacts/{id} (MV-networking-005 contact-detail view). */
 export const fetchNetworkingContact = (contactId: string, options: RequestOptions = {}) =>
   apiRequest<NetworkingContactRecord>(`/networking/contacts/${contactId}`, options);
+
+interface NetworkingContactUpdateInput {
+  name?: string;
+  title?: string;
+  company?: string;
+  email?: string;
+  linkedinUrl?: string;
+  stage?: string;
+}
+
+/** PATCH /networking/contacts/{id} — edit fields the add form used to omit. */
+export const updateNetworkingContact = (
+  contactId: string,
+  input: NetworkingContactUpdateInput,
+  options: RequestOptions = {},
+) =>
+  apiRequest<NetworkingContactRecord>(`/networking/contacts/${contactId}`, {
+    ...options,
+    method: "PATCH",
+    body: {
+      name: input.name,
+      title: input.title,
+      company: input.company,
+      email: input.email,
+      linkedin_url: input.linkedinUrl,
+      stage: input.stage,
+    },
+  });
 
 /** DELETE /networking/contacts/{id} (ML-networking-001) — the backend delete
  * endpoint existed but had NO UI affordance; the contact-detail panel now

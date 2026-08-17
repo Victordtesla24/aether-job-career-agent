@@ -29,6 +29,7 @@ import {
   deleteNetworkingContact,
   fetchNetworkingContact,
   fetchNetworkingSummary,
+  updateNetworkingContact,
   type NetworkingContactRecord,
   type NetworkingSummary,
 } from "../../../lib/api/workspaces";
@@ -38,10 +39,13 @@ import {
   importGmailContacts,
   importLinkedInConnections,
   listContacts,
+  refreshContactsFromInbox,
   type ContactListRow,
 } from "../../../lib/api/networking";
+import PageHeader from "../../../components/shell/PageHeader";
 
-const EMPTY_FORM = { name: "", role: "", company: "" };
+const EMPTY_FORM = { name: "", role: "", company: "", email: "", linkedinUrl: "" };
+const CONTACT_STAGES = ["identified", "contacted", "responded", "meeting", "referral"] as const;
 
 export default function NetworkingPage() {
   const [data, setData] = useState<NetworkingSummary | null>(null);
@@ -50,7 +54,7 @@ export default function NetworkingPage() {
   // W-NET-1: owner-initiated contact importers (Gmail correspondence /
   // LinkedIn export). One shared busy flag so the two can't race each other;
   // the notice reports the server's real counts, never a summary guess.
-  const [importing, setImporting] = useState<"gmail" | "linkedin" | null>(null);
+  const [importing, setImporting] = useState<"gmail" | "linkedin" | "inbox" | null>(null);
   const [importNotice, setImportNotice] = useState<string | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   // W-NET-2: the FULL contact browser. The kanban deliberately previews only
@@ -78,6 +82,12 @@ export default function NetworkingPage() {
   // click arms the button, the second actually deletes.
   const [deleteArmed, setDeleteArmed] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [editStage, setEditStage] = useState("identified");
+  const [editEmail, setEditEmail] = useState("");
+  const [editTitle, setEditTitle] = useState("");
+  const [editCompany, setEditCompany] = useState("");
+  const [editLinkedin, setEditLinkedin] = useState("");
+  const [savingEdits, setSavingEdits] = useState(false);
 
   // ?demo=empty → render the real empty-state branch (state variant preview).
   useEffect(() => {
@@ -118,7 +128,14 @@ export default function NetworkingPage() {
     setDeleteArmed(false);
     fetchNetworkingContact(selectedContactId)
       .then((c) => {
-        if (!cancelled) setContactDetail(c);
+        if (!cancelled) {
+          setContactDetail(c);
+          setEditStage(c.stage);
+          setEditEmail(c.email || "");
+          setEditTitle(c.title || "");
+          setEditCompany(c.company || "");
+          setEditLinkedin(c.linkedinUrl || "");
+        }
       })
       .catch((e: unknown) => {
         if (!cancelled) setContactDetailError(e instanceof Error ? e.message : "Failed to load contact");
@@ -142,15 +159,16 @@ export default function NetworkingPage() {
   // the previous per-dialog onKeyDown only fired when focus was already
   // inside the modal's DOM subtree).
   useEffect(() => {
-    if (!showAdd && !selectedContactId) return;
+    if (!showAdd && !selectedContactId && !showAllContacts) return;
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       if (showAdd) closeAddModal();
+      else if (showAllContacts) setShowAllContacts(false);
       else setSelectedContactId(null);
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [showAdd, selectedContactId, closeAddModal]);
+  }, [showAdd, selectedContactId, showAllContacts, closeAddModal]);
 
   const saveContact = async () => {
     if (!form.name.trim()) {
@@ -164,6 +182,8 @@ export default function NetworkingPage() {
         name: form.name.trim(),
         title: form.role.trim() || undefined,
         company: form.company.trim() || undefined,
+        email: form.email.trim() || undefined,
+        linkedinUrl: form.linkedinUrl.trim() || undefined,
       });
       // Re-fetch from the source of truth so the board reflects exactly what
       // the backend persisted — no optimistic local-only echo (MV-networking-001).
@@ -177,6 +197,46 @@ export default function NetworkingPage() {
       setFormError(e instanceof Error ? e.message : "Failed to save contact");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const saveContactEdits = async () => {
+    if (!contactDetail) return;
+    setSavingEdits(true);
+    setContactDetailError(null);
+    try {
+      const updated = await updateNetworkingContact(contactDetail.id, {
+        title: editTitle.trim() || undefined,
+        company: editCompany.trim() || undefined,
+        email: editEmail.trim() || undefined,
+        linkedinUrl: editLinkedin.trim() || undefined,
+        stage: editStage,
+      });
+      setContactDetail(updated);
+      setData(await fetchNetworkingSummary());
+    } catch (e) {
+      setContactDetailError(e instanceof Error ? e.message : "Failed to save contact");
+    } finally {
+      setSavingEdits(false);
+    }
+  };
+
+  const runRefreshFromInbox = async () => {
+    setImporting("inbox");
+    setImportNotice(null);
+    setImportError(null);
+    try {
+      const r = await refreshContactsFromInbox();
+      setImportNotice(
+        `Inbox refresh: ${r.contactsCreated} contact(s) created, ` +
+          `${r.contactsUpdated} updated, ${r.threadsLinked} thread(s) linked, ` +
+          `${r.ignored} ignored.`,
+      );
+      loadSummary();
+    } catch (e) {
+      setImportError(e instanceof Error ? e.message : "Inbox refresh failed.");
+    } finally {
+      setImporting(null);
     }
   };
 
@@ -203,11 +263,20 @@ export default function NetworkingPage() {
 
   return (
     <div className="space-y-6" data-testid="networking-crm">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold">Networking</h1>
-          <p className="text-sm text-aether-muted">Recruiter &amp; Referral CRM — warm intros beat cold applies.</p>
-        </div>
+      <PageHeader
+        title={<span className="text-gradient-brand">Networking</span>}
+        subtitle="Recruiter and referral CRM — contacts stay current from Gmail and LinkedIn export."
+        footnote={
+          data.crmSummary.lastContactUpdatedAt ? (
+            <span data-testid="networking-freshness">
+              Last contact update {formatWhen(data.crmSummary.lastContactUpdatedAt)} ·{" "}
+              {data.crmSummary.followUpsDueToday} follow-up{data.crmSummary.followUpsDueToday === 1 ? "" : "s"} due today
+            </span>
+          ) : (
+            <span data-testid="networking-freshness">Last contact update not measured</span>
+          )
+        }
+        action={
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
@@ -235,6 +304,16 @@ export default function NetworkingPage() {
           >
             <i className="fa-solid fa-envelope mr-2" aria-hidden="true" />
             {importing === "gmail" ? "Importing…" : "Import from Gmail"}
+          </button>
+          <button
+            type="button"
+            data-testid="refresh-from-inbox-btn"
+            disabled={importing !== null}
+            onClick={() => void runRefreshFromInbox()}
+            className="rounded-xl border border-white/15 px-3 py-2 text-sm font-semibold text-aether-muted hover:border-white/30 hover:text-white disabled:opacity-50"
+          >
+            <i className="fa-solid fa-rotate mr-2" aria-hidden="true" />
+            {importing === "inbox" ? "Refreshing…" : "Refresh from inbox"}
           </button>
           <label
             data-testid="import-linkedin-contacts-label"
@@ -296,12 +375,13 @@ export default function NetworkingPage() {
             type="button"
             data-testid="add-contact-btn"
             onClick={() => setShowAdd(true)}
-            className="rounded-xl bg-aether-coral px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
+            className="rounded-xl bg-gold px-4 py-2 text-sm font-semibold text-[#0a0a0a] hover:opacity-90"
           >
-            + Add Contact
+            Add Contact
           </button>
         </div>
-      </header>
+        }
+      />
 
       {showAllContacts ? (
         <div
@@ -402,8 +482,8 @@ export default function NetworkingPage() {
         <div className="bg-surface-1 rounded-[14px] border border-white/10 p-12 text-center" data-testid="networking-empty-state">
           <p className="text-lg font-semibold">No connections yet</p>
           <p className="mx-auto mt-1 max-w-md text-sm text-aether-muted">
-            Start building your recruiter &amp; referral network by adding a contact manually to begin tracking
-            outreach.
+            Import from Gmail or a LinkedIn Connections.csv export to keep this board current, or add a contact
+            manually to begin tracking outreach.
           </p>
           <button
             type="button"
@@ -422,7 +502,11 @@ export default function NetworkingPage() {
             <Stat label="Contacts" value={String(contactCount)} />
             <Stat label="Active conversations" value={String(data.stats.activeConversations)} accent="text-aether-coral" />
             <Stat label="Referrals in flight" value={String(data.stats.referralsInFlight)} accent="text-aether-violet" />
-            <Stat label="Response rate" value={`${data.stats.responseRate}%`} accent="text-aether-green" />
+            <Stat
+              label="Response rate"
+              value={data.stats.responseRate === null ? "not measured" : `${data.stats.responseRate}%`}
+              accent={data.stats.responseRate === null ? "text-aether-muted" : "text-aether-green"}
+            />
           </section>
 
           <div className="grid gap-6 xl:grid-cols-3">
@@ -486,10 +570,6 @@ export default function NetworkingPage() {
                                   {col.stage}
                                 </span>
                               </div>
-                              <p className="mt-1.5 text-[10px] text-aether-amber" aria-label={`Warmth ${c.warmth} of 5`}>
-                                {"★".repeat(c.warmth)}
-                                <span className="text-white/15">{"★".repeat(Math.max(0, 5 - c.warmth))}</span>
-                              </p>
                             </article>
                           ))}
                         </div>
@@ -582,6 +662,8 @@ export default function NetworkingPage() {
               <Field label="Name *" value={form.name} onChange={(v) => setForm((f) => ({ ...f, name: v }))} testId="contact-name-input" />
               <Field label="Role" value={form.role} onChange={(v) => setForm((f) => ({ ...f, role: v }))} testId="contact-role-input" />
               <Field label="Company" value={form.company} onChange={(v) => setForm((f) => ({ ...f, company: v }))} testId="contact-company-input" />
+              <Field label="Email" value={form.email} onChange={(v) => setForm((f) => ({ ...f, email: v }))} testId="contact-email-input" />
+              <Field label="LinkedIn URL" value={form.linkedinUrl} onChange={(v) => setForm((f) => ({ ...f, linkedinUrl: v }))} testId="contact-linkedin-input" />
               {formError ? <p className="text-xs text-red-300" data-testid="add-contact-error">{formError}</p> : null}
               <div className="flex justify-end gap-2 pt-2">
                 <button
@@ -596,7 +678,7 @@ export default function NetworkingPage() {
                   data-testid="save-contact-btn"
                   onClick={saveContact}
                   disabled={saving}
-                  className="rounded-lg bg-aether-coral px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-60"
+                  className="rounded-lg bg-gold px-4 py-2 text-sm font-semibold text-[#0a0a0a] hover:opacity-90 disabled:opacity-60"
                 >
                   {saving ? "Saving…" : "Save Contact"}
                 </button>
@@ -637,20 +719,50 @@ export default function NetworkingPage() {
                 {contactDetailError}
               </p>
             ) : contactDetail ? (
-              <dl className="space-y-2 text-sm" data-testid="contact-detail-body">
-                <DetailRow label="Name" value={contactDetail.name} />
-                <DetailRow label="Role" value={contactDetail.title || "—"} />
-                <DetailRow label="Company" value={contactDetail.company || "—"} />
-                <DetailRow label="Stage" value={contactDetail.stage} />
-                <DetailRow label="Email" value={contactDetail.email || "Not provided"} />
-                <DetailRow label="LinkedIn" value={contactDetail.linkedinUrl || "Not provided"} />
-              </dl>
+              <div className="space-y-3" data-testid="contact-detail-body">
+                <dl className="space-y-2 text-sm">
+                  <DetailRow label="Name" value={contactDetail.name} />
+                  <DetailRow label="Role" value={contactDetail.title || "—"} />
+                  <DetailRow label="Company" value={contactDetail.company || "—"} />
+                  <DetailRow label="Stage" value={contactDetail.stage} />
+                  <DetailRow label="Email" value={contactDetail.email || "Not provided"} />
+                  <DetailRow label="LinkedIn" value={contactDetail.linkedinUrl || "Not provided"} />
+                </dl>
+                <Field label="Role" value={editTitle} onChange={setEditTitle} testId="contact-edit-title" />
+                <Field label="Company" value={editCompany} onChange={setEditCompany} testId="contact-edit-company" />
+                <label className="block">
+                  <span className="mb-1 block text-xs text-aether-muted">Stage</span>
+                  <select
+                    data-testid="contact-stage-select"
+                    value={editStage}
+                    onChange={(e) => setEditStage(e.target.value)}
+                    className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm outline-none focus:border-gold/50"
+                  >
+                    {CONTACT_STAGES.map((stage) => (
+                      <option key={stage} value={stage} className="bg-black">
+                        {stage}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <Field label="Email" value={editEmail} onChange={setEditEmail} testId="contact-edit-email" />
+                <Field label="LinkedIn" value={editLinkedin} onChange={setEditLinkedin} testId="contact-edit-linkedin" />
+              </div>
             ) : null}
             {contactDetail ? (
               /* ML-networking-001: the backend DELETE endpoint existed with no
                  UI path. Two-click confirm, then refetch the summary so the
                  board reflects exactly what the server persisted. */
-              <div className="mt-4 flex justify-end">
+              <div className="mt-4 flex justify-between gap-2">
+                <button
+                  type="button"
+                  data-testid="save-contact-edits-btn"
+                  disabled={savingEdits || deleting}
+                  onClick={() => void saveContactEdits()}
+                  className="rounded-lg bg-gold px-4 py-2 text-sm font-semibold text-[#0a0a0a] hover:opacity-90 disabled:opacity-60"
+                >
+                  {savingEdits ? "Saving…" : "Save changes"}
+                </button>
                 <button
                   type="button"
                   data-testid="delete-contact-btn"
