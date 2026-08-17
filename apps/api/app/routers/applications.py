@@ -118,13 +118,22 @@ def funnel_sankey(current_user: CurrentUser) -> dict[str, Any]:
 
     CUMULATIVE model (MV-application-tracker-006): each node counts
     applications that have reached AT LEAST that stage, mirroring the
-    nested-IN stage definitions analytics.funnel() already uses — "applied"
-    is the canonical non-draft count from get_application_counts()
-    (status <> 'draft', consistent with the funnel's "Applied" and the
-    dashboard summary), "screened" is status IN (screening, interview,
-    offer), "interviewed" is status IN (interview, offer), and "offers" is
-    status = 'offer'. Each stage is therefore always >= the next stage, so
-    every dropoff (stage_N - stage_{N+1}) is always >= 0.
+    nested-IN stage definitions analytics.funnel() already uses — the
+    ``applied`` stage is the canonical non-draft count from
+    get_application_counts() (status <> 'draft', consistent with the funnel's
+    own stage and the dashboard summary), "screened" is status IN (screening,
+    interview, offer), "interviewed" is status IN (interview, offer), and
+    "offers" is status = 'offer'. Each stage is therefore always >= the next
+    stage, so every dropoff (stage_N - stage_{N+1}) is always >= 0.
+
+    AUD-META-1 ("Dashboard/Analytics label apps 'submitted/applied' when not
+    transmitted"): that stage KEY stays ``applied`` — the FE binds stage
+    identity and dropoffs to it — but its user-visible LABEL is "Prepared",
+    because ``status <> 'draft'`` is preparation and carries no evidence that
+    anything was sent. The payload additionally carries ``transmitted``
+    (``transmittedAt IS NOT NULL``, the same DISTINCT-jobId discipline), and
+    the insight prose states both figures separately. Pinned by
+    ``tests/test_meta1_cohort_transmitted.py``.
 
     A prior stage-EXCLUSIVE model (status == 'submitted'/'screening'/etc.
     exactly) was disproven live: an application that skipped straight to
@@ -138,7 +147,15 @@ def funnel_sankey(current_user: CurrentUser) -> dict[str, Any]:
         with conn.cursor() as cur:
             cur.execute('SELECT count(*) FROM "Job" WHERE "userId" = %s', (uid,))
             jobs_found = cur.fetchone()[0]
-            applied = get_application_counts(cur, uid)["submitted"]
+            sankey_counts = get_application_counts(cur, uid)
+            applied = sankey_counts["submitted"]
+            # AUD-META-1: the verified-send subset of that same population —
+            # ``transmittedAt IS NOT NULL``, stamped only by the real send
+            # path. The node below keeps the ``applied`` KEY (stage identity
+            # and dropoff wiring the FE binds to) but no longer CLAIMS the
+            # word: its label is "Prepared", and this is the count that may
+            # honestly be described as sent.
+            transmitted = sankey_counts["transmitted"]
             # RT-004: DISTINCT jobs, not letter-version rows — 9 submitted
             # versions of one job are ONE application in the funnel.
             cur.execute(
@@ -166,7 +183,11 @@ def funnel_sankey(current_user: CurrentUser) -> dict[str, Any]:
             # ground #0F0F12, because the client paints each stage's numeral
             # in its own node colour.
             {"key": "jobs_found", "label": "Jobs Found", "value": jobs_found, "color": "#9C8038"},
-            {"key": "applied", "label": "Applied", "value": applied, "color": "#AE8E32"},
+            # AUD-META-1: "Prepared", not "Applied" — this count is
+            # ``status <> 'draft'`` (preparation), and the FE renders this
+            # label verbatim. The verified-send figure travels beside the
+            # stages as ``transmitted``.
+            {"key": "applied", "label": "Prepared", "value": applied, "color": "#AE8E32"},
             {"key": "screened", "label": "Screened", "value": screened, "color": "#C9A84C"},
             {"key": "interviewed", "label": "Interviewed", "value": interviewed,
              "color": "#D4B65C"},
@@ -180,8 +201,13 @@ def funnel_sankey(current_user: CurrentUser) -> dict[str, Any]:
              "reason": "no response / screened out"},
             {"after": "interviewed", "count": interviewed - offers, "reason": "not selected"},
         ],
+        # AUD-META-1: the verified-send count, exposed distinctly from the
+        # prepared population above so no reader has to infer one from the
+        # other. Additive — every pre-existing key keeps its exact meaning.
+        "transmitted": transmitted,
         "insight": (
-            f"{jobs_found} jobs found, {applied} applied. "
+            f"{jobs_found} jobs found, {applied} applications prepared, "
+            f"{transmitted} verifiably sent by Aether. "
             "Track applications through the pipeline to improve conversion."
         ),
     }

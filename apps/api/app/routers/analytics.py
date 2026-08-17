@@ -542,16 +542,38 @@ def agent_policy_cohorts(current_user: CurrentUser) -> dict[str, Any]:
     measurement: if heightened rigor works, its cohort converts better than the
     standard one, and if it does not, that is visible too.
 
+    AUD-META-1 (cohort residual — "Dashboard/Analytics label apps
+    'submitted/applied' when not transmitted"). This endpoint used to report a
+    single ``submitted`` bucket built from ``status <> 'draft'`` and divide
+    interviews by it. Two things were wrong with that at once: it applied the
+    word "submitted" to applications that never left the building (live audit:
+    391 of them), and its denominator silently disagreed with
+    ``quality_policy.collect_policy_metrics`` — the metric drawn in the SAME
+    panel — which CLI-QP had already narrowed to jobs carrying a real
+    ``transmittedAt``. The payload now carries the two populations as DISTINCT,
+    honestly named counts:
+
+    * ``prepared`` — DISTINCT jobs whose application left ``draft``. That is
+      preparation, not proof of sending, and it is never called "submitted",
+      "applied" or "sent".
+    * ``transmitted`` — DISTINCT jobs with ``transmittedAt IS NOT NULL``,
+      stamped only by the real send path at the moment a message verifiably
+      left the building. This is the ONLY population the conversion rate is
+      computed over.
+
     Honesty rules:
 
-    * Same counting semantics as ``quality_policy.collect_policy_metrics`` and
-      the conversion chart — DISTINCT jobs, submitted == "left draft",
-      interview reached == status ``interview`` or ``offer`` — so no two
-      surfaces can quote different denominators.
-    * A cohort below ``MIN_SAMPLE_SIZE`` reports ``conversionRate: null``. One
-      application that did not convert is not "0%"; it is one application, and
-      printing a rate there would invite exactly the wrong conclusion about the
-      tier that produced it.
+    * Same counting semantics as ``quality_policy.collect_policy_metrics``
+      (verified sends as the denominator, interview reached == status
+      ``interview`` or ``offer``, DISTINCT jobs throughout) — so the two charts
+      in this panel cannot quote different numbers. Pinned by
+      ``tests/test_meta1_cohort_transmitted.py``.
+    * A cohort with fewer than ``MIN_SAMPLE_SIZE`` VERIFIED sends reports
+      ``conversionRate: null``. One application that did not convert is not
+      "0%"; it is one application, and printing a rate there would invite
+      exactly the wrong conclusion about the tier that produced it. A tier with
+      12 prepared applications and 0 verified sends is likewise not "0%" — it
+      still appears, with both counts, and no rate.
     * Applications submitted before the policy existed carry NULL and form
       their own labelled bucket. Folding them into a real tier would credit (or
       blame) a policy that was not running when they were sent.
@@ -559,13 +581,19 @@ def agent_policy_cohorts(current_user: CurrentUser) -> dict[str, Any]:
     from app.services.quality_policy import INTERVIEW_CONVERSION_TARGET, MIN_SAMPLE_SIZE
 
     target = _percent(INTERVIEW_CONVERSION_TARGET)
+    # AUD-META-1: names the lazy additive "transmittedAt" column, so the
+    # ADR-TR-1 contract applies here exactly as it does in
+    # get_application_counts — ensure before the statement that reads it.
+    ensure_application_transmission_columns()
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 '''
                 SELECT "policyTierAtSubmission" AS tier,
                        COUNT(DISTINCT "jobId") FILTER (
-                           WHERE "status" <> 'draft'::"ApplicationStatus") AS submitted,
+                           WHERE "status" <> 'draft'::"ApplicationStatus") AS prepared,
+                       COUNT(DISTINCT "jobId") FILTER (
+                           WHERE "transmittedAt" IS NOT NULL) AS transmitted,
                        COUNT(DISTINCT "jobId") FILTER (
                            WHERE "status" IN ('interview'::"ApplicationStatus",
                                               'offer'::"ApplicationStatus")
@@ -579,25 +607,30 @@ def agent_policy_cohorts(current_user: CurrentUser) -> dict[str, Any]:
             rows = cur.fetchall()
 
     cohorts: list[dict[str, Any]] = []
-    untagged = {"submitted": 0, "interviewed": 0}
-    for tier, submitted, interviewed in rows:
-        submitted = int(submitted or 0)
+    untagged = {"prepared": 0, "transmitted": 0, "interviewed": 0}
+    for tier, prepared, transmitted, interviewed in rows:
+        prepared = int(prepared or 0)
+        transmitted = int(transmitted or 0)
         interviewed = int(interviewed or 0)
         if tier is None:
-            untagged["submitted"] += submitted
+            untagged["prepared"] += prepared
+            untagged["transmitted"] += transmitted
             untagged["interviewed"] += interviewed
             continue
-        if submitted == 0:
-            # Drafts only — nothing was ever sent under this tier, so there is
-            # no outcome to report and a 0-denominator row would read as 0%.
+        if prepared == 0 and transmitted == 0:
+            # Drafts only — nothing was ever prepared or sent under this tier,
+            # so there is no population to report at all.
             continue
-        sufficient = submitted >= MIN_SAMPLE_SIZE
-        rate = round(interviewed / submitted * 100, 2) if sufficient else None
+        sufficient = transmitted >= MIN_SAMPLE_SIZE
+        rate = round(interviewed / transmitted * 100, 2) if sufficient else None
         cohorts.append(
             {
                 "tier": tier,
                 "label": _COHORT_LABELS.get(str(tier), str(tier)),
-                "submitted": submitted,
+                # Preparation and verified sending are different facts and are
+                # reported as different numbers (AUD-META-1).
+                "prepared": prepared,
+                "transmitted": transmitted,
                 "interviewed": interviewed,
                 "conversionRate": rate,
                 "sufficientSample": sufficient,
@@ -614,7 +647,7 @@ def agent_policy_cohorts(current_user: CurrentUser) -> dict[str, Any]:
         "untagged": {
             **untagged,
             "reason": (
-                "submitted before the rigor policy was instrumented — no tier was "
+                "prepared before the rigor policy was instrumented — no tier was "
                 "recorded for these, so their outcome cannot be attributed to one"
             ),
         },
@@ -686,10 +719,22 @@ _PROGRESS_NOTE = (
     "Average of the measured signals below — all from your own applications, "
     "interview outcomes and job-fit scores."
 )
+#: AUD-META-1 (residual — "Dashboard/Analytics label apps 'submitted/applied'
+#: when not transmitted"). This copy used to say the panel measures
+#: "applications you have submitted". Its "Application volume" factor is
+#: computed from ``get_application_counts(...)["total"]`` — EVERY
+#: ``Application`` row for the user, drafts included and transmission
+#: irrelevant — so a tracker holding nothing but drafts was described to the
+#: reader as a count of submissions. The METRIC is deliberately unchanged
+#: (``total`` is the honest basis for a volume-of-work signal, and six
+#: consumers already read it); the SENTENCE now names the population it
+#: really counts. Pinned by ``tests/test_meta1_cohort_transmitted.py``
+#: (``TestProgressMethodologyDescribesWhatItActuallyCounts``).
 _PROGRESS_METHODOLOGY = (
     "Not an offer-likelihood estimate. Aether has no offer-outcome model and "
     "no external market-data provider, so it cannot tell you how likely an "
-    "offer is. What it does measure: applications you have submitted (scaled "
+    "offer is. What it does measure: every application in your tracker, "
+    "drafts included — work you have started, not work that was sent (scaled "
     f"against a {_APPLICATION_VOLUME_REFERENCE}-application reference), the "
     "share of those that reached an interview, and the average fit score of "
     'your fit-scored jobs. A signal with no data yet reads "not measured" and '
@@ -821,8 +866,23 @@ def _pct_delta_avg(series: list[float | None]) -> tuple[str, str, str]:
     return _period_delta(dated[-2], dated[-1])
 
 
-def _status_event(company: str, status_val: str) -> tuple[str, str]:
-    """Map an application status to a human event + signal for the feed."""
+def _status_event(
+    company: str, status_val: str, *, transmitted: bool = False
+) -> tuple[str, str]:
+    """Map an application status to a human event + signal for the feed.
+
+    AUD-META-1: "Received your application" is a claim about what the EMPLOYER
+    did, and the only evidence for it in this system is ``transmittedAt``.
+    A row parked at ``submitted``/``applied`` with nothing transmitted proves
+    a status change, not a receipt — so without that evidence the feed says
+    what it can actually stand behind (the application is prepared, Aether
+    recorded no send) instead of putting words in the employer's mouth.
+
+    Every other status is an outcome the employer really produced — a screen,
+    an interview, an offer, a rejection — and stays exactly as it was: a user
+    who applied by hand and recorded the result is telling the truth about the
+    employer even though Aether transmitted nothing.
+    """
     mapping = {
         "offer": ("Extended an offer", "hot"),
         "interview": ("Moved you to interview stage", "hot"),
@@ -832,6 +892,8 @@ def _status_event(company: str, status_val: str) -> tuple[str, str]:
         "rejected": ("Closed your application", "cold"),
         "draft": ("Application in progress", "new"),
     }
+    if status_val in ("applied", "submitted") and not transmitted:
+        return ("Application prepared — no send recorded by Aether", "new")
     event, signal = mapping.get(status_val, (f"Application status: {status_val}", "new"))
     return event, signal
 
@@ -959,8 +1021,11 @@ def market_pulse(current_user: CurrentUser) -> dict[str, Any]:
             avg_fit = float(fit_row[1] or 0)
 
             # --- Employer activity: recent application status changes ------
+            # AUD-META-1: ``transmittedAt`` rides along because the feed's
+            # "Received your application" line is a claim about the EMPLOYER
+            # that only a verified send can support (see _status_event).
             cur.execute(
-                'SELECT j.company, a.status, a."updatedAt" '
+                'SELECT j.company, a.status, a."updatedAt", a."transmittedAt" '
                 'FROM "Application" a JOIN "Job" j ON a."jobId" = j.id '
                 'WHERE a."userId" = %s ORDER BY a."updatedAt" DESC LIMIT 5',
                 (user_id,),
@@ -1268,7 +1333,11 @@ def market_pulse(current_user: CurrentUser) -> dict[str, Any]:
     # ---- Employer activity feed ------------------------------------------
     employer_activity = []
     for r in employer_rows:
-        event, signal = _status_event(str(r.get("company") or ""), str(r.get("status") or ""))
+        event, signal = _status_event(
+            str(r.get("company") or ""),
+            str(r.get("status") or ""),
+            transmitted=r.get("transmittedAt") is not None,
+        )
         employer_activity.append(
             {
                 "company": r.get("company") or "Unknown",

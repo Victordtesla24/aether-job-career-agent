@@ -48,7 +48,9 @@ import { Rail } from "../Rail";
 
 function subscription(overrides: Partial<SubscriptionState> = {}): SubscriptionState {
   return {
-    plan: { id: "pro", name: "Pro", modelTier: "premium" },
+    // AUD-MON-1: the subscription payload carries plan identity only — the
+    // unenforced `modelTier` label is no longer transmitted or typed.
+    plan: { id: "pro", name: "Pro" },
     status: "active",
     interval: "month",
     currentPeriodEnd: "2026-08-01T00:00:00Z",

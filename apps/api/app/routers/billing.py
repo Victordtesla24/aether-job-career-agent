@@ -34,33 +34,37 @@ from app.services import entitlements, stripe_gateway
 
 router = APIRouter()
 
-#: Presentation copy for /pricing (design §3.1 features[] is presentation only).
-_PLAN_FEATURES: dict[str, list[str]] = {
-    "free": [
-        "5 tailored agent runs / month",
-        "Light model tier",
-        "Resume tailoring + ATS scoring",
-        "Community support",
-    ],
-    "starter": [
-        "30 tailored agent runs / month",
-        "Standard model tier",
-        "Cover letters + story bank",
-        "Email agent (triage + drafts)",
-    ],
-    "pro": [
-        "100 tailored agent runs / month",
-        "Advanced model tier",
-        "Everything in Starter",
-        "Priority email agent",
-    ],
-    "power": [
-        "300 tailored agent runs / month",
-        "Full model access",
-        "Everything in Pro",
-        "Highest monthly run ceiling",
-    ],
-}
+# AUD-MON-1 (ledger round 1) — the plan catalog asserts ONLY what code enforces.
+#
+# This module used to ship a static ``_PLAN_FEATURES`` ladder ("Advanced model
+# tier", "Cover letters + story bank", "Priority email agent", "Everything in
+# Starter", "Community support", …) plus the per-plan ``modelTier`` label, and
+# /pricing filtered them out client-side. Filtering in one client is not the
+# same as not asserting them: the PUBLIC payload still told every consumer that
+# capabilities are gated by tier, and none of it was implemented — no code path
+# routes a subscriber's plan to a different model, and no capability check
+# consults the plan.
+#
+# Architect ruling D4: a plan enforces EXACTLY two things —
+#   * the monthly agent-run quota  (Plan.runsPerMonth -> UsageQuota.runsAllowed)
+#   * the monthly AI spend cap     (Plan.spendCapUsdMonthly ->
+#     UsageQuota.spendCapUsd), both checked atomically in
+#     ``UsageQuotaRepository.reserve``.
+# Real per-plan FEATURE gating (tier-differentiated capabilities or models) is
+# explicitly DEFERRED — not implemented anywhere in this codebase. Until it is
+# built and enforced, this endpoint must not describe one. ``_enforced_facts``
+# therefore DERIVES the bullets from the two enforced columns instead of
+# carrying editorial copy, so the payload cannot drift out of truth.
+
+
+def _enforced_facts(plan: dict[str, Any]) -> list[str]:
+    """The per-plan facts the backend actually enforces (ruling D4)."""
+    runs = int(plan["runsPerMonth"])
+    cap = float(plan["spendCapUsdMonthly"])
+    return [
+        f"{runs} tailored agent runs / month",
+        f"US${cap:.2f} monthly AI spend cap",
+    ]
 
 
 # ---------------------------------------------------------------------------
@@ -80,7 +84,13 @@ class CheckoutRequest(BaseModel):
 
 @router.get("/plans")
 def list_plans() -> dict[str, Any]:
-    """Active plans with the GST breakdown pre-computed server-side."""
+    """Active plans with the GST breakdown pre-computed server-side.
+
+    AUD-MON-1: the payload carries only the two ENFORCED per-plan facts
+    (``runsPerMonth`` + ``spendCapUsdMonthly``, and bullets derived from them)
+    — never an unenforced ``modelTier`` label or feature-ladder copy. See the
+    ruling-D4 note above ``_enforced_facts``.
+    """
     plans = []
     for p in PlanRepository().list_active():
         monthly_total = float(p["priceAudMonthly"])
@@ -91,11 +101,11 @@ def list_plans() -> dict[str, Any]:
             {
                 "id": p["id"],
                 "name": p["name"],
-                "modelTier": p["modelTier"],
                 "runsPerMonth": int(p["runsPerMonth"]),
+                "spendCapUsdMonthly": round(float(p["spendCapUsdMonthly"]), 2),
                 "monthly": gst_breakdown(monthly_total),
                 "annual": annual,
-                "features": _PLAN_FEATURES.get(p["id"], []),
+                "features": _enforced_facts(p),
                 "purchasable": p["id"] != "free",
             }
         )
@@ -789,10 +799,13 @@ def get_subscription(current_user: CurrentUser) -> dict[str, Any]:
         return value.isoformat() if value is not None else None
 
     return {
+        # AUD-MON-1: same rule as /billing/plans — this block carries the plan's
+        # identity only. The unenforced `modelTier` label is NOT transmitted
+        # (ruling D4: plans enforce exactly runs + spend caps); the enforced
+        # numbers ride in `quota` below.
         "plan": {
             "id": plan["id"],
             "name": plan["name"],
-            "modelTier": plan["modelTier"],
         }
         if plan
         else None,

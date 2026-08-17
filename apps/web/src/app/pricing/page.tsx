@@ -11,12 +11,12 @@
  * /api/billing/checkout and redirects to the returned Stripe Checkout URL
  * (logged-out visitors are sent to /login by the shared client first).
  *
- * MV-pricing-002 (HIGH): the API still returns a per-plan `modelTier` field
+ * MV-pricing-002 (HIGH): the API used to return a per-plan `modelTier` field
  * and feature bullets like "Advanced model tier" / "Full model access" — but
  * no backend code path routes a subscriber's plan to a different LLM; every
  * agent call resolves its model from a fixed task-type tier, identical for
- * every plan. This page does not render the `modelTier` label or any
- * feature bullet that claims per-plan model differentiation.
+ * every plan. This page does not render a `modelTier` label or any feature
+ * bullet that claims per-plan model differentiation.
  *
  * CLI-D3 / D4 (audit wf_9a87f76f-eaa) sharpens that rule to ALL feature
  * bullets: the backend gates nothing by plan except the monthly agent-run
@@ -24,6 +24,13 @@
  * capability ("Cover letters + story bank", "Priority email agent",
  * "Everything in Starter", support tiers) are filtered too. Only quota-truth
  * bullets render, and the header states the real differentiators plainly.
+ *
+ * AUD-MON-1 (ledger round 1) closes the other half: those corrections were
+ * client-side only, so GET /billing/plans kept TRANSMITTING the unenforced
+ * tier labels and ladder copy. The payload now carries only what the backend
+ * enforces — `runsPerMonth`, `spendCapUsdMonthly`, and bullets derived from
+ * them server-side — with no `modelTier` at all. The filter below is kept as
+ * defence in depth, not as the fix.
  *
  * PAY-R3-01/PAY-R3-03 fix — plan switching: an authenticated visitor who
  * already holds an active PAID subscription sees a "Current plan" badge on
@@ -89,7 +96,16 @@ const MODEL_TIER_CLAIM_RE = /model tier|model access/i;
 // free-vs-paid, not tier-vs-tier, and the current deployment disables it —
 // which is why the "every plan includes every feature" sentence below renders
 // ONLY on a live requiresSubscription === false signal, never statically.
-const QUOTA_FACT_RE = /agent runs\s*\/\s*month|runs per month|run ceiling/i;
+//
+// AUD-MON-1: the API no longer SENDS the ladder — GET /billing/plans now
+// derives its bullets from the two enforced columns (see `_enforced_facts` in
+// apps/api/app/routers/billing.py), so the honest payload is honest at the
+// source rather than only after this filter. The filter stays as a
+// defence-in-depth guard so a future editorial bullet can never reach a
+// visitor unchallenged, and it now admits the second enforced fact (the
+// monthly AI spend cap) that the payload states alongside the run quota.
+const QUOTA_FACT_RE =
+  /agent runs\s*\/\s*month|runs per month|run ceiling|monthly ai spend cap/i;
 
 // Subscription statuses the backend treats as "entitled paid" (mirrors
 // SubscriptionRepository.has_active_paid_subscription in

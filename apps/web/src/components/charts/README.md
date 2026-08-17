@@ -13,7 +13,9 @@ import { Funnel, Histogram, Radar10 } from "@/components/charts";
   windowLabel="all time — not affected by the period selector"
   steps={[
     { label: "Jobs found", value: 8358 },
-    { label: "Applied", value: 287 },
+    // AUD-META-1: never "Applied"/"Sent" for a count that is only
+    // status <> 'draft' — the analytics page labels that stage "Prepared".
+    { label: "Prepared", value: 287 },
     { label: "Screened", value: 0 },
   ]}
   mode="share-of-previous"

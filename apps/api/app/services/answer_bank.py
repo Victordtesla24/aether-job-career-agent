@@ -71,6 +71,15 @@ application in the card right now: that is the user answering, not the agent
 guessing. The per-application layer in :func:`build_resolver` carries exactly
 that distinction.
 
+ACKNOWLEDGEMENT IS NOT CONSENT (SUB-008). The ``acknowledgement`` class covers
+the tick-boxes that restate what the applicant is already doing by applying —
+"the information I have given is true", "I have read your privacy policy", "I
+agree to your application terms". It is factual, so one banked answer covers
+every form that asks. A box that grants PERMISSION — a background, police or
+credit check, a medical, a diversity disclosure — is NOT in that class: those
+keep their own sensitive concept (which wins by list order) and are vetoed by
+``none_of`` on top, so no standing answer can ever tick one.
+
 NOTE ON THE WORK-RIGHTS / VISA SPLIT (flagged for the orchestrator). The brief
 names "visa specifics" as sensitive; the ADR names "work rights" as a factual
 class in both the seed questionnaire and the ratchet. These are treated as two
@@ -363,6 +372,96 @@ CONCEPTS: tuple[Concept, ...] = (
             ("baseline", "clearance"),
             ("nv1",),
             ("nv2",),
+        ),
+    ),
+    # ---- recurring form furniture (SUB-008) -----------------------------
+    # Two classes every ATS asks and the bank had no word for, so a user who
+    # had answered them ten times still met a manual step on the eleventh.
+    #
+    # WHERE THEY SIT, AND WHY. After the sensitive block, because order breaks
+    # ties: a tick that CONSENTS to a check ("I acknowledge that a police
+    # check will be carried out") must reach its own sensitive class first,
+    # whatever acknowledgement-shaped words it also carries. Before the broad
+    # factual classes, because those recognise themselves by single common
+    # words ("remote", "notice", "reference") that a referral or an
+    # acknowledgement sentence can mention in passing.
+    Concept(
+        key="referral_source",
+        sensitivity=SENSITIVITY_FACTUAL,
+        stale_days=None,
+        any_of=(
+            ("how", "hear"),
+            ("where", "hear"),
+            ("how", "learn"),
+            ("where", "learn"),
+            ("how", "find", "out"),
+            ("how", "come", "across"),
+            ("where", "see", "advertised"),
+            ("where", "advertised"),
+            ("referral", "source"),
+        ),
+        # A compound question that also asks WHY belongs to ``motivation`` —
+        # judgement, user-gated. Answering "LinkedIn" to "why do you want to
+        # work here, and how did you hear about us?" would be both wrong and
+        # ungated, so the veto hands the whole question to the stricter class.
+        none_of=("why", "motivate", "motivation", "salary"),
+    ),
+    Concept(
+        key="acknowledgement",
+        sensitivity=SENSITIVITY_FACTUAL,
+        stale_days=None,
+        # PURE acknowledgements only: a statement the applicant is already
+        # making by applying ("what I have written is true", "I have read your
+        # privacy policy", "I agree to your application terms"). Each group
+        # pairs a commitment verb with what is being committed to, so an
+        # employer's free-text question that merely MENTIONS a privacy policy
+        # does not land here.
+        any_of=(
+            ("acknowledge",),
+            ("acknowledgement",),
+            ("acknowledgment",),
+            ("certify",),
+            ("confirm", "true"),
+            ("confirm", "accurate"),
+            ("confirm", "correct"),
+            ("confirm", "information"),
+            ("information", "true"),
+            ("information", "accurate"),
+            ("declare", "true"),
+            ("declaration", "true"),
+            ("read", "understood"),
+            ("read", "agree"),
+            ("read", "accept"),
+            ("read", "privacy"),
+            ("agree", "term"),
+            ("agree", "condition"),
+            ("agree", "privacy"),
+            ("accept", "term"),
+            ("accept", "condition"),
+            ("accept", "privacy"),
+        ),
+        # The line between "acknowledgement" and "consent". A tick that grants
+        # PERMISSION (a background, police or credit check, a medical, a
+        # diversity disclosure), or that carries another class's subject
+        # matter at all, is not a pure acknowledgement and must never be
+        # ticked from a standing answer. The sensitive concepts above already
+        # win by order; this veto is the second lock, and it fails toward
+        # "ask the user" — the only safe direction.
+        none_of=(
+            "consent", "consents", "consenting", "authorise", "authorize",
+            "authorisation", "authorization", "permission",
+            "background", "criminal", "police", "conviction", "convictions",
+            "convicted", "vetting",
+            "medical", "health", "drug", "drugs", "vaccination", "vaccinated",
+            "visa", "visas", "sponsorship", "sponsor", "immigration",
+            "citizenship", "residency",
+            "gender", "ethnicity", "ethnic", "race", "racial", "disability",
+            "disabilities", "veteran", "eeo", "aboriginal", "indigenous",
+            "clearance",
+            "salary", "salaries", "remuneration", "compensation",
+            "work", "working", "employment", "licence", "license",
+            "reference", "references", "referee", "referees", "credit",
+            "notice period", "relocate", "relocation", "travel",
         ),
     ),
     # ---- judgement: user-gated until the user opts the item in ----------
@@ -1040,6 +1139,27 @@ SEED_QUESTIONS: tuple[SeedQuestion, ...] = (
         "Are you willing to travel for this role?",
         "Answer once; Aether reuses it wherever the question appears.",
         "e.g. Yes, up to 20% domestic travel.",
+    ),
+    _seed(
+        "referral_source",
+        "How did you hear about the roles you apply for?",
+        "Nearly every application form asks this. Aether sends what you write "
+        "here word for word — it never substitutes the job board it happened "
+        "to find a role on. If one application came from somewhere else, edit "
+        "that application's answer before it is sent.",
+        "e.g. LinkedIn Jobs — that is where I find most of the roles I apply for.",
+    ),
+    _seed(
+        "acknowledgement",
+        "Do you confirm that the information in your application is true, and "
+        "agree to an employer's standard application terms and privacy policy?",
+        "This covers plain tick-boxes only — \"I certify the information is "
+        "true\", \"I have read the privacy policy\", \"I agree to the terms\". A "
+        "box that gives CONSENT rather than an acknowledgement — a background "
+        "check, a criminal or police check, a medical, a diversity disclosure "
+        "— is never ticked from this answer: Aether stops and asks you, every "
+        "time.",
+        "e.g. Yes — everything I put in an application is true and complete.",
     ),
 )
 
