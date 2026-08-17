@@ -290,6 +290,13 @@ const MANUAL_STEP_LABELS: Readonly<Record<string, string>> = {
   // words — and neither of them ever reads as "applied".
   submitted_unconfirmed: "Submitted — but the site never confirmed it received it",
   form_rejected: "The site rejected the form — nothing was submitted",
+  // SUB-007 round 2: a submit button that is present but GREYED OUT is not a
+  // missing button. Saying "could not find its submit button" about a control
+  // the user can see on the page reads as a bug in Aether rather than as the
+  // form still holding something back — and sends them looking for the wrong
+  // thing.
+  submit_control_disabled: "The form's submit button was greyed out — nothing was submitted",
+  submit_click_failed: "Aether found the submit button but the click did not land",
   // ORCHESTRATOR RULING U5-F3: an ASSISTED channel is not a failure — the
   // artifacts are done and only the click is the user's.
   assisted_manual_submit: "Ready to submit — this platform needs your click",

@@ -40,11 +40,14 @@ import pytest
 
 from app.services.apply_executor import (
     _CONFIRMATION_TEXT,
+    MANUAL_STEP_SUBMIT_CONTROL_DISABLED,
+    MANUAL_STEP_SUBMIT_CONTROL_NOT_FOUND,
     POST_SUBMIT_CONFIRMED,
     POST_SUBMIT_REJECTED,
     POST_SUBMIT_UNCONFIRMED,
     POST_SUBMIT_UNKNOWN,
     ManualStepRequired,
+    _activate_submit,
     _submit_state_probe,
     classify_post_submit,
 )
@@ -75,6 +78,17 @@ _ATS_CONFIRMATION_FIXTURES: tuple[tuple[str, str], ...] = (
     ("jazzhr", "Your application is complete."),
     ("generic", "Submitted successfully"),
     ("generic", "We have your application."),
+    # Round-2 additions — each one a phrasing the list did NOT recognise, and
+    # each one wording a site only uses once it HAS the application.
+    ("bullhorn", "Thank you for submitting your resume."),
+    ("bullhorn", "We have received your resume."),
+    ("icims", "Thank you for completing our application."),
+    ("zoho", "Your profile has been submitted."),
+    ("freshteam", "Your candidacy has been received."),
+    ("taleo", "Your application is on file."),
+    ("smartrecruiters", "Your application is now with our hiring team."),
+    ("breezy", "We're reviewing your application."),
+    ("teamtailor", "We have received your details."),
 )
 
 #: Text that must NEVER count as proof. Every one of these can sit on a form
@@ -88,6 +102,12 @@ _NOT_CONFIRMATION_FIXTURES: tuple[str, ...] = (
     "Thank you for your interest in careers at Acme.",
     "Submit your application below.",
     "Your application was not received. Please try again.",
+    # Round-2 near-misses for the widened phrases above.
+    "We have not received your application yet.",
+    "Please submit your resume to continue.",
+    "We will review your application once it is submitted.",
+    "Upload your resume and we will review your application.",
+    "Your profile is incomplete — finish it before submitting.",
 )
 
 
@@ -216,6 +236,25 @@ def _before(**overrides: Any) -> dict[str, Any]:
     return state
 
 
+def _clicked_activation() -> Any:
+    """The activation record of a submit control that WAS clicked.
+
+    Round-2 review: ``classify_post_submit`` may only read a post-click page as
+    "the site accepted it" when a click actually happened. Every classification
+    test that describes an outcome AFTER a click therefore states that fact
+    explicitly instead of leaving it implied.
+    """
+    from app.services.apply_executor import SubmitActivation
+
+    return SubmitActivation(
+        clicked=True,
+        present=True,
+        enabled=True,
+        selector='button[type="submit"]',
+        failure=None,
+    )
+
+
 def test_classify_confirmed_when_the_site_says_it_has_the_application(
     open_page: Any,
 ) -> None:
@@ -254,8 +293,18 @@ def test_classify_submitted_unconfirmed_when_the_form_is_gone_without_a_phrase(
 def test_classify_submitted_unconfirmed_when_submit_went_from_armed_to_disabled(
     open_page: Any,
 ) -> None:
+    """An armed button that the CLICK greyed out is the classic "sending…"
+    shape, so it reads as acceptance — but ONLY because the click happened.
+    The activation record is what says so; see
+    ``test_live_armed_to_disabled_submit_is_submitted_unconfirmed_end_to_end``
+    for the same shape driven through the real submitter."""
     page = open_page(_DISABLED_SUBMIT_FORM)
-    outcome = classify_post_submit(page, page.url, before_probe=_before())
+    outcome = classify_post_submit(
+        page,
+        page.url,
+        before_probe=_before(),
+        activation=_clicked_activation(),
+    )
     assert outcome.classification == POST_SUBMIT_UNCONFIRMED
     assert outcome.reason == "submitted_unconfirmed"
 
@@ -433,6 +482,206 @@ def test_live_broadened_confirmation_phrase_now_counts_as_proof(
 
 
 # ---------------------------------------------------------------------------
+# 3b. The DISABLED submit control, end to end (round-2 review).
+#
+# The ledger's "probe disabled-submit state" is not satisfied by a probe whose
+# reading nothing acts on. Before this section:
+#
+#   * ``_activate_submit`` clicked without ever asking ``is_enabled()``, so on
+#     a present-but-DISABLED control Playwright's click timed out, the bare
+#     ``except Exception: continue`` swallowed the timeout and the function
+#     returned ``False`` — indistinguishable from "this form has no submit
+#     button at all";
+#   * classification was gated on that ``False``, so the PostSubmitOutcome
+#     (whose before-probe had correctly read ``submitEnabled=False``) was
+#     computed and then thrown away; and
+#   * the recording site reported the greyed-out button as
+#     ``submit_control_not_found`` — telling the user Aether could not FIND a
+#     button that was sitting right there, disabled.
+#
+# Every test below drives the real code path against a synthetic form.
+# ---------------------------------------------------------------------------
+
+
+class _SpyLocator:
+    """A locator that records ``click()`` calls and otherwise defers."""
+
+    def __init__(self, real: Any, selector: str, clicks: list[str]) -> None:
+        self._real = real
+        self._selector = selector
+        self._clicks = clicks
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._real, name)
+
+    @property
+    def first(self) -> "_SpyLocator":
+        return _SpyLocator(self._real.first, self._selector, self._clicks)
+
+    def click(self, **kwargs: Any) -> Any:
+        self._clicks.append(self._selector)
+        return self._real.click(**kwargs)
+
+
+class _ClickSpyPage:
+    """A real page that records which selectors were actually clicked."""
+
+    def __init__(self, page: Any) -> None:
+        self._page = page
+        self.clicks: list[str] = []
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._page, name)
+
+    def locator(self, selector: str) -> _SpyLocator:
+        return _SpyLocator(self._page.locator(selector), selector, self.clicks)
+
+
+_NO_SUBMIT_CONTROL_FORM = """
+<title>form</title>
+<form id="f"><label for="name">Name</label><input id="name" type="text"></form>
+"""
+
+
+def test_activate_submit_probes_the_disabled_state_instead_of_clicking_it(
+    open_page: Any,
+) -> None:
+    """The ledger's probe, at the one place it changes behaviour: a disabled
+    control is READ as disabled and never clicked, so no click timeout can
+    launder "the button is greyed out" into "there is no button"."""
+    page = _ClickSpyPage(open_page(_DISABLED_SUBMIT_FORM))
+    activation = _activate_submit(page)
+    assert activation.clicked is False
+    assert activation.present is True, "the control is right there in the DOM"
+    assert activation.enabled is False
+    assert activation.failure == MANUAL_STEP_SUBMIT_CONTROL_DISABLED
+    assert page.clicks == [], "a disabled control must never be clicked at all"
+
+
+def test_activate_submit_reports_a_missing_control_as_absent_not_disabled(
+    open_page: Any,
+) -> None:
+    activation = _activate_submit(open_page(_NO_SUBMIT_CONTROL_FORM))
+    assert activation.clicked is False
+    assert activation.present is False
+    assert activation.failure == MANUAL_STEP_SUBMIT_CONTROL_NOT_FOUND
+
+
+def test_activate_submit_clicks_an_armed_control(open_page: Any) -> None:
+    page = _ClickSpyPage(open_page(_ARMED_FORM))
+    activation = _activate_submit(page)
+    assert activation.clicked is True
+    assert (activation.present, activation.enabled) == (True, True)
+    assert activation.failure is None
+    assert page.clicks, "an armed control is still clicked"
+
+
+def test_classify_calls_a_never_clicked_disabled_control_a_rejection(
+    open_page: Any,
+) -> None:
+    """No click happened, so nothing reached the employer — and the outcome
+    must say the form REFUSED to arm, not that Aether knows nothing."""
+    page = open_page(_DISABLED_SUBMIT_FORM)
+    activation = _activate_submit(page)
+    outcome = classify_post_submit(
+        page, page.url, before_probe=_submit_state_probe(page), activation=activation
+    )
+    assert outcome.classification == POST_SUBMIT_REJECTED
+    assert outcome.reason == MANUAL_STEP_SUBMIT_CONTROL_DISABLED
+    assert outcome.confirmation is None
+    lowered = outcome.detail.lower()
+    assert "disabled" in lowered or "greyed" in lowered
+    assert "nothing was submitted" in lowered
+
+
+def test_classify_never_reads_an_unclicked_form_as_submitted_unconfirmed(
+    open_page: Any,
+) -> None:
+    """A form with no submit control at all has an "accepted" SHAPE by every
+    DOM signal (no submit button on the page) — but nothing was clicked, so
+    calling it ``submitted_unconfirmed`` would be a fabricated attempt."""
+    page = open_page(_NO_SUBMIT_CONTROL_FORM)
+    activation = _activate_submit(page)
+    outcome = classify_post_submit(
+        page, page.url, before_probe=_submit_state_probe(page), activation=activation
+    )
+    assert outcome.classification == POST_SUBMIT_UNKNOWN
+    assert outcome.reason == MANUAL_STEP_SUBMIT_CONTROL_NOT_FOUND
+    assert outcome.confirmation is None
+
+
+_E2E_DISABLED_SUBMIT_FORM = """
+<title>blocked</title>
+<form>
+  <label for="name">Name</label><input id="name" type="text">
+  <button type="submit" disabled>Submit Application</button>
+</form>
+"""
+
+_E2E_DISABLED_SUBMIT_WITH_ERROR_FORM = """
+<title>blocked</title>
+<form>
+  <label for="name">Name</label><input id="name" type="text">
+  <p role="alert">Please complete every required field before submitting.</p>
+  <button type="submit" disabled>Submit Application</button>
+</form>
+"""
+
+_E2E_ARMED_THEN_DISABLED_FORM = """
+<title>sending</title>
+<form onsubmit="event.preventDefault();
+    document.querySelector('button').disabled = true;
+    document.querySelector('button').textContent = 'Sending…';">
+  <label for="name">Name</label><input id="name" type="text">
+  <button type="submit">Submit Application</button>
+</form>
+"""
+
+
+def test_live_disabled_submit_is_a_blocked_form_not_a_missing_control(
+    tmp_path: Any,
+) -> None:
+    """The exact live reproduction the round-2 review recorded: a synthetic
+    form whose only control is ``<button type="submit" disabled>`` used to come
+    back ``{'submitted': False, 'classification': 'unknown'}`` and be reported
+    as ``submit_control_not_found``."""
+    with pytest.raises(ManualStepRequired) as exc_info:
+        _submit(_E2E_DISABLED_SUBMIT_FORM, tmp_path, "sub007disabled")
+    err = exc_info.value
+    assert err.reason == MANUAL_STEP_SUBMIT_CONTROL_DISABLED
+    assert err.reason != MANUAL_STEP_SUBMIT_CONTROL_NOT_FOUND
+    lowered = err.message.lower()
+    assert "disabled" in lowered or "greyed" in lowered
+    # It must NOT claim the button was missing, and must NOT read as a send.
+    assert "could not find" not in lowered
+    assert "nothing was submitted" in lowered
+
+
+def test_live_disabled_submit_quotes_the_forms_own_blocking_message(
+    tmp_path: Any,
+) -> None:
+    with pytest.raises(ManualStepRequired) as exc_info:
+        _submit(_E2E_DISABLED_SUBMIT_WITH_ERROR_FORM, tmp_path, "sub007disablederr")
+    err = exc_info.value
+    assert err.reason == MANUAL_STEP_SUBMIT_CONTROL_DISABLED
+    assert "required field" in err.message.lower()
+
+
+def test_live_armed_to_disabled_submit_is_submitted_unconfirmed_end_to_end(
+    tmp_path: Any,
+) -> None:
+    """The armed→disabled acceptance shape, driven through the REAL
+    ``_activate_submit``/``playwright_form_submitter`` path rather than a
+    hand-built before-probe: the click lands, the button greys out, no
+    confirmation wording appears — honest ``submitted_unconfirmed``."""
+    with pytest.raises(ManualStepRequired) as exc_info:
+        _submit(_E2E_ARMED_THEN_DISABLED_FORM, tmp_path, "sub007arming")
+    err = exc_info.value
+    assert err.reason == "submitted_unconfirmed"
+    assert "will not" in err.message.lower() or "not claim" in err.message.lower()
+
+
+# ---------------------------------------------------------------------------
 # 4. The honesty floor at the RECORDING site: `transmittedAt` is stamped in
 #    exactly one place, and an unconfirmed ending may never reach it.
 # ---------------------------------------------------------------------------
@@ -510,3 +759,77 @@ def test_an_unconfirmed_outcome_is_never_recorded_as_a_transmission(
             transmitted_at, manual_reason = cur.fetchone()
     assert transmitted_at is None, "an unconfirmed ending must never read as transmitted"
     assert manual_reason == expected_reason
+
+
+def test_a_disabled_control_is_recorded_as_disabled_not_as_a_missing_button(
+    client: Any,
+    auth_headers: Any,
+    test_user_id: str,
+    tmp_path: Any,
+) -> None:
+    """Defence in depth at the RECORDING site (round-2 review). The submitter
+    already raises ``submit_control_disabled`` for a greyed-out button, but the
+    ``not outcome["submitted"]`` branch here used to hard-code
+    ``submit_control_not_found`` for EVERY unsubmitted outcome — so any
+    submitter reporting a present-but-disabled control still told the user
+    Aether could not find a button that exists."""
+    from test_u5b_apply_executor import (  # same tests dir — one seeded fixture set
+        ASHBY_HTML,
+        FULL_PROFILE_ASHBY,
+        _make_approval,
+        _seed,
+    )
+
+    from app.db import get_connection
+    from app.services.apply_executor import execute_site_application
+
+    user_id = test_user_id
+    job_id, _resume_id, app_id = _seed(user_id)
+    approval_id = _make_approval(user_id, app_id, job_id, status="approved")
+
+    def _disabled_control_submitter(**_kwargs: Any) -> dict[str, Any]:
+        return {
+            "submitted": False,
+            "confirmation": None,
+            "classification": POST_SUBMIT_REJECTED,
+            "submitControl": {
+                "present": True,
+                "enabled": False,
+                "clicked": False,
+                "selector": 'button[type="submit"]',
+                "failure": MANUAL_STEP_SUBMIT_CONTROL_DISABLED,
+            },
+            "evidencePath": str(tmp_path / "shot.png"),
+            "destination": "https://jobs.example.invalid/apply",
+            "filled": [],
+            "unfilled": [],
+            "mode": "live",
+        }
+
+    with pytest.raises(ManualStepRequired) as exc_info:
+        execute_site_application(
+            user_id,
+            app_id,
+            approval_id,
+            page_html=ASHBY_HTML,
+            channel="ashby",
+            profile=FULL_PROFILE_ASHBY,
+            resume_pdf_bytes=b"%PDF-1.4 fake",
+            cover_letter_text="Dear Hiring Manager,",
+            evidence_dir=str(tmp_path),
+            apply_url="https://jobs.example.invalid/apply",
+            submitter=_disabled_control_submitter,
+        )
+    assert exc_info.value.reason == MANUAL_STEP_SUBMIT_CONTROL_DISABLED
+    assert "could not find" not in exc_info.value.message.lower()
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT "transmittedAt", "manualStepReason" FROM "Application" '
+                'WHERE "id" = %s',
+                (app_id,),
+            )
+            transmitted_at, manual_reason = cur.fetchone()
+    assert transmitted_at is None
+    assert manual_reason == MANUAL_STEP_SUBMIT_CONTROL_DISABLED

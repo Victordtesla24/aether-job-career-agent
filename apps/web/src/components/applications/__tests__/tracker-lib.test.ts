@@ -410,6 +410,25 @@ describe("U5 manualStepLabel", () => {
     expect(rejected.toLowerCase()).toContain("nothing was submitted");
   });
 
+  // SUB-007 round 2: a greyed-out submit button is a different fact from a
+  // missing one, and the card must not tell the user Aether could not find a
+  // button that is on their screen.
+  it("distinguishes a greyed-out submit button from a missing one", () => {
+    const disabled = manualStepLabel("submit_control_disabled");
+    const missing = manualStepLabel("submit_control_not_found");
+    const clickFailed = manualStepLabel("submit_click_failed");
+    expect(disabled).toBe(
+      "The form's submit button was greyed out — nothing was submitted",
+    );
+    expect(disabled).not.toBe(missing);
+    expect(clickFailed).not.toBe(missing);
+    expect(disabled.toLowerCase()).not.toContain("could not find");
+    // Neither may read as a completed application.
+    for (const label of [disabled, clickFailed]) {
+      expect(label.toLowerCase()).not.toMatch(/\b(applied|submitted to|sent)\b/);
+    }
+  });
+
   it("de-slugifies an unknown reason instead of hiding it behind a vague label", () => {
     expect(manualStepLabel("two_factor_challenge")).toBe("Two factor challenge");
   });

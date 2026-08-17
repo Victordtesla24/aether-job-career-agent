@@ -1816,10 +1816,16 @@ def playwright_form_submitter(
                 # "the site rejected the form" and "the site took it silently"
                 # can never collapse into the same verdict again.
                 before_probe = _submit_state_probe(page) if apply_url else {}
-                submitted = _activate_submit(page)
+                activation = _activate_submit(page)
+                submitted = activation.clicked
                 page.wait_for_timeout(1500)
                 post_submit = (
-                    classify_post_submit(page, before_url, before_probe=before_probe)
+                    classify_post_submit(
+                        page,
+                        before_url,
+                        before_probe=before_probe,
+                        activation=activation,
+                    )
                     if apply_url
                     else None
                 )
@@ -1830,7 +1836,6 @@ def playwright_form_submitter(
                 page.screenshot(path=str(screenshot), full_page=True)
                 if (
                     apply_url
-                    and submitted
                     and post_submit is not None
                     and post_submit.classification != POST_SUBMIT_CONFIRMED
                 ):
@@ -1842,6 +1847,14 @@ def playwright_form_submitter(
                     # user can act on it, and the reason code now says WHICH
                     # of the honest non-receipt endings this was (rejected /
                     # submitted-unconfirmed / unreadable).
+                    #
+                    # ROUND-2 REVIEW: this is deliberately NOT gated on
+                    # ``submitted`` any more. It used to be, so the one case
+                    # the ledger names — a present-but-disabled submit control,
+                    # which produced ``submitted=False`` — skipped this branch
+                    # entirely and the outcome that had already been classified
+                    # (from a before-probe that correctly read
+                    # ``submitEnabled=False``) was computed and discarded.
                     raise ManualStepRequired(
                         post_submit.reason or MANUAL_STEP_NO_CONFIRMATION,
                         post_submit.detail,
@@ -1879,6 +1892,7 @@ def playwright_form_submitter(
                 "classification": classification,
                 "submitStateBefore": before_probe or None,
                 "submitStateAfter": post_submit.probe_after if post_submit else None,
+                "submitControl": activation.as_evidence(),
                 "commitVerified": verify_commit,
                 "fieldsFilled": filled,
                 "fieldsNotFilled": unfilled,
@@ -1891,6 +1905,10 @@ def playwright_form_submitter(
         "submitted": submitted,
         "confirmation": confirmation,
         "classification": classification,
+        # The activation record travels with the outcome so the RECORDING site
+        # can tell a greyed-out submit control from an absent one without
+        # re-deriving it (or defaulting to "not found", as it used to).
+        "submitControl": activation.as_evidence(),
         "evidencePath": str(screenshot),
         "destination": destination,
         "filled": filled,
@@ -1965,7 +1983,8 @@ _CONFIRMATION_PHRASES: tuple[str, ...] = (
     # "Thank you / Thanks for applying | for your application | for submitting"
     r"thank(?:s| you)(?: very much| so much)? for "
     r"(?:applying|your application|your submission"
-    r"|submitting(?: your)?(?: application| details)?"
+    r"|submitting(?: your)?(?: application| details| resume| résumé| cv)?"
+    r"|completing (?:our|the) application"
     r"|taking the time to apply)",
     # "(Your) application (has been|was|is) (successfully) received/submitted/..."
     r"(?:your |the )?application(?: form)?"
@@ -1974,18 +1993,24 @@ _CONFIRMATION_PHRASES: tuple[str, ...] = (
     r"(?:received|submitted|sent|registered|recorded|complete|completed)",
     # "We have received / we've received / we received your application"
     r"we(?:'|’)?(?:ve)?(?: have| had)? ?(?:received|got) your "
-    r"(?:application|submission)",
-    r"we (?:have|now have) your (?:application|submission)",
+    r"(?:application|submission|resume|résumé|cv|details)",
+    r"we (?:have|now have) your (?:application|submission|resume|résumé|cv)",
     # "successfully submitted/applied/sent" and "submitted successfully"
     r"successfully (?:submitted|applied|sent)",
     r"(?:submitted|sent|applied) successfully",
     r"you(?:'|’)?ve (?:successfully )?(?:applied|submitted)",
     r"you have (?:successfully )?(?:applied|submitted)",
     # "Your application/submission is in / complete / under review / on its way"
-    r"your (?:application|submission) (?:is|has been) "
-    r"(?:in|complete|completed|on its way|under review|being reviewed"
+    r"your (?:application|submission) (?:is|has been) (?:now )?"
+    r"(?:in|complete|completed|on file|on its way|under review|being reviewed"
     r"|with (?:the|our) (?:hiring |recruiting )?team)",
     r"your submission (?:has been |was )?(?:received|recorded)",
+    # "Your profile/candidacy has been submitted" (Zoho Recruit, Freshteam)
+    r"your (?:profile|candidacy) (?:has been |was )?(?:submitted|received)",
+    # "(We are|We're) reviewing your application" — a site only says this once
+    # it HAS the application; the pre-submit form page says "we will review".
+    r"we(?:'|’)?re reviewing your application",
+    r"we are (?:now )?reviewing your application",
 )
 _CONFIRMATION_TEXT = re.compile("|".join(_CONFIRMATION_PHRASES), re.I)
 
@@ -2056,6 +2081,21 @@ MANUAL_STEP_SUBMITTED_UNCONFIRMED = "submitted_unconfirmed"
 MANUAL_STEP_FORM_REJECTED = "form_rejected"
 MANUAL_STEP_NO_CONFIRMATION = "no_confirmation"
 
+#: The two ways the click itself never happens. They are DISTINCT from each
+#: other and from everything above, because they lead the user to different
+#: places: a GREYED-OUT submit means the form is still holding something back
+#: (finish it on the site), an ABSENT one means this page never exposed a form
+#: control Aether can drive at all. Collapsing the first into the second —
+#: which is what the pre-round-2 code did, by returning a bare ``False`` from
+#: :func:`_activate_submit` for both — tells the user Aether could not FIND a
+#: button that is sitting right there in front of them.
+MANUAL_STEP_SUBMIT_CONTROL_DISABLED = "submit_control_disabled"
+MANUAL_STEP_SUBMIT_CONTROL_NOT_FOUND = "submit_control_not_found"
+#: The control was present AND armed, and the click still failed (the element
+#: was covered by an overlay, detached mid-click, …). Nothing was submitted and
+#: the page was never in a post-submit state, so this is its own honest ending.
+MANUAL_STEP_SUBMIT_CLICK_FAILED = "submit_click_failed"
+
 #: Post-submit classification -> the manual-step reason it is recorded under.
 #: ``confirmed`` is deliberately absent: it is the only ending that is NOT a
 #: manual step.
@@ -2064,6 +2104,39 @@ _MANUAL_STEP_FOR_CLASSIFICATION: dict[str, str] = {
     POST_SUBMIT_REJECTED: MANUAL_STEP_FORM_REJECTED,
     POST_SUBMIT_UNKNOWN: MANUAL_STEP_NO_CONFIRMATION,
 }
+
+
+@dataclass(frozen=True)
+class SubmitActivation:
+    """What happened when the executor went to press the form's submit control.
+
+    The pre-round-2 ``_activate_submit`` answered this question with a single
+    ``bool``, and a present-but-DISABLED control produced the same ``False`` as
+    a form with no submit control at all (the click timed out inside a bare
+    ``except Exception: continue``, at ~1.5s per selector). Every downstream
+    decision — whether to classify the page, what reason to record, what the
+    card says — needs the difference, so the difference is carried here.
+
+    ``failure`` is ``None`` exactly when ``clicked`` is true; otherwise it is
+    the manual-step reason code for this ending, so the classification never
+    re-derives one.
+    """
+
+    clicked: bool
+    present: bool
+    enabled: bool
+    selector: str | None
+    failure: str | None
+
+    def as_evidence(self) -> dict[str, Any]:
+        """The record that goes into the evidence sidecar and the outcome dict."""
+        return {
+            "clicked": self.clicked,
+            "present": self.present,
+            "enabled": self.enabled,
+            "selector": self.selector,
+            "failure": self.failure,
+        }
 
 
 @dataclass(frozen=True)
@@ -2219,8 +2292,81 @@ def _confirmation_signal(
     return None
 
 
+def _classify_unactivated(
+    page: Any, before_probe: dict[str, Any], activation: SubmitActivation
+) -> PostSubmitOutcome:
+    """The ending when the submit control was never actually clicked.
+
+    Three shapes, three different things to tell the user, and NONE of them is
+    a submission:
+
+    * present but DISABLED — the form itself is holding the application back
+      (a required answer it will not accept, an upload still running, a
+      consent box). It is recorded as ``rejected``: the form refused, and the
+      user has to finish it on the site. Whatever the page is showing as its
+      reason is quoted verbatim rather than paraphrased.
+    * present, armed, and the click still failed — Aether could not operate
+      the control (an overlay, a re-render). ``unknown``: the page was never
+      put into a post-submit state, so there is nothing to read off it.
+    * ABSENT — no control this executor knows how to drive. ``unknown``, with
+      the long-standing ``submit_control_not_found`` reason.
+    """
+    after = _submit_state_probe(page)
+    quoted = "; ".join(
+        err for err in after["errors"] if _VALIDATION_ERROR_TEXT.search(err)
+    )[:400] or "; ".join(after["errors"])[:400]
+
+    if activation.failure == MANUAL_STEP_SUBMIT_CONTROL_DISABLED:
+        return PostSubmitOutcome(
+            classification=POST_SUBMIT_REJECTED,
+            confirmation=None,
+            reason=MANUAL_STEP_SUBMIT_CONTROL_DISABLED,
+            detail=(
+                "Aether filled this application but the form's own submit "
+                "button was disabled (greyed out), so it never clicked it and "
+                "nothing was submitted"
+                + (f' — the page is showing: "{quoted}". ' if quoted else ". ")
+                + "Open the posting, finish whatever the form is still asking "
+                "for and submit it yourself."
+            ),
+            probe_before=before_probe,
+            probe_after=after,
+        )
+
+    if activation.failure == MANUAL_STEP_SUBMIT_CLICK_FAILED:
+        return PostSubmitOutcome(
+            classification=POST_SUBMIT_UNKNOWN,
+            confirmation=None,
+            reason=MANUAL_STEP_SUBMIT_CLICK_FAILED,
+            detail=(
+                "Aether filled this application and found the form's submit "
+                "button, but the click could not be completed, so nothing was "
+                "submitted. Open the posting and submit it yourself."
+            ),
+            probe_before=before_probe,
+            probe_after=after,
+        )
+
+    return PostSubmitOutcome(
+        classification=POST_SUBMIT_UNKNOWN,
+        confirmation=None,
+        reason=MANUAL_STEP_SUBMIT_CONTROL_NOT_FOUND,
+        detail=(
+            "Aether filled this application but the page exposed no submit "
+            "control it could operate, so nothing was submitted. Open the "
+            "posting and submit it yourself."
+        ),
+        probe_before=before_probe,
+        probe_after=after,
+    )
+
+
 def classify_post_submit(
-    page: Any, before_url: str, *, before_probe: dict[str, Any]
+    page: Any,
+    before_url: str,
+    *,
+    before_probe: dict[str, Any],
+    activation: SubmitActivation | None = None,
 ) -> PostSubmitOutcome:
     """Read the page after the submit click and name what actually happened.
 
@@ -2244,7 +2390,19 @@ def classify_post_submit(
     A NAVIGATION is not a confirmation either — it lands in
     ``submitted_unconfirmed``, because the page a submit redirects to is just
     as often a login wall or an error screen as a thank-you.
+
+    ``activation`` is what :func:`_activate_submit` actually did. When it says
+    NO click happened, the page's post-submit shape is not evidence of
+    anything — a form with no submit control looks "accepted" by every DOM
+    signal there is (no submit button on the page) — so the ending comes from
+    the activation itself: ``rejected``/``submit_control_disabled`` for a
+    greyed-out control the form refused to arm, ``unknown`` with its own
+    reason for an absent control or a click that could not land. None of them
+    can be ``confirmed`` and none of them can be ``submitted_unconfirmed``:
+    nothing was submitted.
     """
+    if activation is not None and not activation.clicked:
+        return _classify_unactivated(page, before_probe, activation)
     confirmation = _confirmation_signal(
         page, before_url, seen_before=before_probe.get("confirmationText")
     )
@@ -2336,18 +2494,85 @@ def classify_post_submit(
     )
 
 
-def _activate_submit(page: Any) -> bool:
-    """Click the form's OWN submit control. ``False`` if there is none."""
+def _activate_submit(page: Any) -> SubmitActivation:
+    """Press the form's OWN submit control — after PROBING that it is armed.
+
+    SUB-007 (round 2). The disabled-submit probe the ledger asks for is only
+    worth having if it changes what the executor does, so it is read HERE,
+    before the click:
+
+    * a control that is present and ``is_enabled()`` is clicked, exactly as
+      before;
+    * a control that is present and DISABLED is never clicked at all. The old
+      code clicked it anyway, Playwright's actionability wait timed out
+      (1.5s per selector, ~6s across the list — measured), the bare
+      ``except`` swallowed the timeout and the function returned the same
+      ``False`` a form with NO submit control returns. That collapse is the
+      defect: it reported an existing, greyed-out button as missing;
+    * the whole selector list is still walked, so a page whose
+      ``button[type="submit"]`` is disabled while a different, armed control
+      would submit it is still submitted — the disabled reading is only the
+      verdict when NOTHING on the list turned out to be clickable.
+
+    An unreadable enabled-state counts as NOT armed, never as armed: guessing
+    "probably clickable" is how a timeout gets mistaken for an absent form.
+    """
+    present = False
+    enabled_seen = False
+    disabled_selector: str | None = None
+    failed_selector: str | None = None
     for selector in _SUBMIT_SELECTORS:
         try:
             control = page.locator(selector).first
             if control.count() == 0:
                 continue
-            control.click(timeout=_ACTION_TIMEOUT_MS)
-            return True
         except Exception:  # noqa: BLE001 — try the next control shape
             continue
-    return False
+        present = True
+        try:
+            armed = bool(control.is_enabled(timeout=_PROBE_TIMEOUT_MS))
+        except Exception:  # noqa: BLE001 — unreadable is not "armed"
+            armed = False
+        if not armed:
+            # THE LEDGER'S PROBE, ACTED ON: no click, no timeout, no laundering
+            # of "disabled" into "not found".
+            if disabled_selector is None:
+                disabled_selector = selector
+            continue
+        enabled_seen = True
+        try:
+            control.click(timeout=_ACTION_TIMEOUT_MS)
+        except Exception:  # noqa: BLE001 — try the next control shape
+            if failed_selector is None:
+                failed_selector = selector
+            continue
+        return SubmitActivation(
+            clicked=True, present=True, enabled=True, selector=selector, failure=None
+        )
+
+    if not present:
+        return SubmitActivation(
+            clicked=False,
+            present=False,
+            enabled=False,
+            selector=None,
+            failure=MANUAL_STEP_SUBMIT_CONTROL_NOT_FOUND,
+        )
+    if enabled_seen:
+        return SubmitActivation(
+            clicked=False,
+            present=True,
+            enabled=True,
+            selector=failed_selector,
+            failure=MANUAL_STEP_SUBMIT_CLICK_FAILED,
+        )
+    return SubmitActivation(
+        clicked=False,
+        present=True,
+        enabled=False,
+        selector=disabled_selector,
+        failure=MANUAL_STEP_SUBMIT_CONTROL_DISABLED,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -2473,21 +2698,39 @@ def execute_site_application(
         repo.release_execution(approval_id, user_id)
         raise
     if not outcome.get("submitted"):
-        repo.release_execution(approval_id, user_id)
-        record_manual_step(
-            user_id,
-            application_id,
-            "submit_control_not_found",
-            (
+        # ROUND-2 REVIEW: this used to hard-code ``submit_control_not_found``
+        # for EVERY unsubmitted outcome, so a present-but-DISABLED submit
+        # control — the case the ledger names — was reported to the user as a
+        # button Aether could not find, when the button was on screen, greyed
+        # out. The submitter now reports which of the two it was; the reason
+        # and the words follow that, and only a genuinely absent control is
+        # called absent.
+        control = outcome.get("submitControl") or {}
+        if control.get("present") and not control.get("enabled"):
+            reason = MANUAL_STEP_SUBMIT_CONTROL_DISABLED
+            detail = (
+                "Aether filled this application but the form's own submit "
+                "button was disabled (greyed out), so it never clicked it and "
+                "nothing was submitted. Open the posting, finish whatever the "
+                "form is still asking for and submit it yourself."
+            )
+        elif control.get("present"):
+            reason = MANUAL_STEP_SUBMIT_CLICK_FAILED
+            detail = (
+                "Aether filled this application and found the form's submit "
+                "button, but the click could not be completed, so nothing was "
+                "submitted. Open the posting and submit it yourself."
+            )
+        else:
+            reason = MANUAL_STEP_SUBMIT_CONTROL_NOT_FOUND
+            detail = (
                 "Aether filled this application but could not find the page's "
                 "own submit button, so it did NOT submit anything. Open the "
                 "posting and submit it yourself."
-            ),
-        )
-        raise ManualStepRequired(
-            "submit_control_not_found",
-            "The application form exposed no submit control — nothing was submitted.",
-        )
+            )
+        repo.release_execution(approval_id, user_id)
+        record_manual_step(user_id, application_id, reason, detail)
+        raise ManualStepRequired(reason, detail)
     classification = outcome.get("classification")
     if classification is not None and classification not in (
         POST_SUBMIT_CONFIRMED,
