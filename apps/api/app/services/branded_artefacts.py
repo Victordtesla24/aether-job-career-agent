@@ -7,7 +7,8 @@ obsidian-and-gilt chrome as transactional email — without depending on a
 markdown library or external CSS.
 
 Not for employer-facing application mail (that stays the candidate's voice)
-and not for sales outreach (``sales_branding`` owns that path).
+and not for sales outreach (``sales_branding.render_sales_outreach_html``
+owns that path; Brand-tab kind ``sales_outreach``).
 """
 from __future__ import annotations
 

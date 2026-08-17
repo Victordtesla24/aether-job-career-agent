@@ -68,10 +68,16 @@ class TestForgotPasswordHonestAntiEnumeration:
     def test_provider_configured_reports_true_flag_and_attempts_send(self, client, monkeypatch):
         monkeypatch.setenv("AETHER_EMAIL_API_KEY", "test-key")
         monkeypatch.setenv("AETHER_EMAIL_FROM", "noreply@aether.local")
-        sent_to = []
+        captured: list[dict[str, str]] = []
 
         def _fake_send(to_email, subject, text_body, html_body=None):
-            sent_to.append(to_email)
+            captured.append(
+                {
+                    "to": to_email,
+                    "subject": subject,
+                    "html": html_body or "",
+                }
+            )
             return True
 
         from app.services import email_sender
@@ -83,7 +89,19 @@ class TestForgotPasswordHonestAntiEnumeration:
         body = resp.json()
         assert body["emailSendingEnabled"] is True
         assert body["deliveryDegraded"] is False
-        assert sent_to == [email]
+        assert all(row["to"] == email for row in captured)
+        reset = [
+            row
+            for row in captured
+            if row["subject"] == "Reset your Aether password"
+        ]
+        assert len(reset) == 1
+        assert reset[0]["to"] == email
+        html = reset[0]["html"].lower()
+        assert html.lstrip().startswith("<!doctype html>")
+        assert "#c9a84c" in html
+        assert "#08080a" in html
+        assert "<img" not in html
 
 
 class TestPasswordResetTokenLifecycle:

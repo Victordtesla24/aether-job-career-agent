@@ -1,10 +1,13 @@
 """Brand-templated artefacts for the Aether Career Job Agent web-app.
 
 The admin Brand tab (``/admin/sales-agent`` → Brand) is the single catalogue.
-Every kind listed in ``DOCUMENT_KINDS`` is previewable there. Aether-owned
-email kinds render through ``email_branding`` so the operator preview is the
-same HTML the live send path delivers. Print artefacts (invoice, business
-card, generated documents) use the same obsidian-and-gilt tokens.
+Every kind listed in ``DOCUMENT_KINDS`` is previewable there. Transactional
+Aether-owned email kinds render through ``email_branding`` (bulletproof, no
+images). Sales outreach renders through
+``sales_branding.render_sales_outreach_html`` (Gmail HTML, raster mark).
+Print artefacts (invoice, business card, generated documents) use the same
+obsidian-and-gilt tokens. ``allowsImg`` on a kind is an explicit, tested
+allow-list — never a silent exemption.
 
 Grounding rules (STRICT — mirrors the sales agent's honesty contract):
 
@@ -48,9 +51,11 @@ DOCUMENT_KINDS: dict[str, dict[str, Any]] = {
         "description": (
             "GST-inclusive AUD tax invoice for a subscription charge. Prices "
             "and GST split come live from the Plan catalog + gst_breakdown; "
-            "customer fields are merge fields."
+            "customer fields are merge fields. Print chrome includes the "
+            "brand mark."
         ),
         "needsPlan": True,
+        "allowsImg": True,
     },
     "auto_reply": {
         "title": "Inbound auto-reply email",
@@ -125,6 +130,27 @@ DOCUMENT_KINDS: dict[str, dict[str, Any]] = {
             "Amount comes live from the Plan catalog."
         ),
         "needsPlan": True,
+    },
+    "sales_outreach": {
+        "title": "Sales outreach email",
+        "description": (
+            "Gmail HTML chrome for Aether-owned prospect mail: inbound "
+            "replies, welcome, free-to-paid nudge, re-engagement and demo "
+            "response. Preview is the live wrapper with merge fields; the "
+            "compliance footer is the server-side Spam Act text. Campaign "
+            "copy itself is edited under Campaigns."
+        ),
+        "needsPlan": False,
+        "allowsImg": True,
+    },
+    "ops_alert": {
+        "title": "Operator systemd alert",
+        "description": (
+            "Obsidian-and-gilt alert sent when a production systemd unit "
+            "fails. Preview uses merge fields; scripts/ops_alert.sh calls "
+            "the same builder with the live unit name and log excerpt."
+        ),
+        "needsPlan": False,
     },
     "business_card": {
         "title": "Business card",
@@ -348,7 +374,7 @@ def render_auto_reply() -> str:
         "If your question is about your account or subscription, "
         "including your reference or the email you signed up with "
         "helps us respond faster.\n\n"
-        "— The Aether Career Job Agent team"
+        "— The Aether CareerAI Agent team"
     )
     return html
 
@@ -459,6 +485,32 @@ def render_document_artefact() -> str:
     return render_branded_markdown_html("{{title}}", "{{body}}")
 
 
+def render_sales_outreach() -> str:
+    """Same HTML the sales agent hands to Gmail as ``html_body``.
+
+    Merge fields stay visible. The compliance footer is the live server-side
+    footer, not a placeholder — that text is not editable.
+    """
+    from app.agents.sales_agent import append_compliance_footer
+    from app.services.sales_branding import render_sales_outreach_html
+
+    body = append_compliance_footer("Hi {{name}},\n\n{{body}}")
+    return render_sales_outreach_html("{{subject}}", body)
+
+
+def render_ops_alert() -> str:
+    """Same HTML ``scripts/ops_alert.sh`` posts to Resend."""
+    from app.services.email_branding import build_ops_alert_bodies
+
+    html, _text = build_ops_alert_bodies(
+        unit="{{unit}}",
+        timestamp="{{timestamp}}",
+        log_excerpt="{{log_excerpt}}",
+        log_path="{{log_path}}",
+    )
+    return html
+
+
 # --------------------------------------------------------------- dispatcher
 def render_document(
     kind: str,
@@ -501,5 +553,7 @@ def render_document(
         "trial_ending": lambda: render_trial_ending(plan, interval),  # type: ignore[arg-type]
         "business_card": render_business_card,
         "document": render_document_artefact,
+        "sales_outreach": render_sales_outreach,
+        "ops_alert": render_ops_alert,
     }
     return dispatch[kind]()

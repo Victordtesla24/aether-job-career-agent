@@ -20,16 +20,19 @@ Design-system tokens used (from ``tokens/colors.css`` + ``typography.css``):
   clients — the serif/sans system fallbacks ARE the design here)
 
 COMPLIANCE INVARIANT (§6 hard gate): the plain-text body handed to
-:func:`render_branded_email` already carries the server-side compliance
+:func:`render_sales_outreach_html` already carries the server-side compliance
 footer (``append_compliance_footer`` runs FIRST). This wrapper only splits
 that footer out visually into the branded footer zone — the footer TEXT is
 preserved verbatim inside the rendered HTML, so no template or brand styling
 can strip the Spam Act 2003 sender-identification + unsubscribe lines.
+
+Brand-tab kind ``sales_outreach`` previews this same function.
 """
 from __future__ import annotations
 
 import html as _html
 import os
+import re
 
 #: Aether Career Design System tokens (tokens/colors.css) — visual only.
 BRAND = {
@@ -60,6 +63,11 @@ BRAND = {
 
 #: The compliance footer separator written by ``append_compliance_footer``.
 _FOOTER_SEPARATOR = "\n\n--\n"
+
+
+def strip_exclamation_marks(text: str) -> str:
+    """Design-system copy law: sentences end. No exclamation marks."""
+    return re.sub(r"!+", ".", text or "")
 
 
 def brand_logo_url() -> str:
@@ -100,15 +108,19 @@ def split_compliance_footer(body_text: str) -> tuple[str, str]:
     return body_text[:idx], body_text[idx + len(_FOOTER_SEPARATOR):]
 
 
-def render_branded_email(subject: str, body_text: str) -> str:
+def render_sales_outreach_html(subject: str, body_text: str) -> str:
     """Render a plain-text sales email (footer already appended) into the
-    AB-branded, email-client-safe HTML document. Pure function — no I/O."""
+    AB-branded, email-client-safe HTML document. Pure function — no I/O.
+
+    This is the live Gmail wrapper for inbound replies and lifecycle
+    campaigns. The Brand-tab ``sales_outreach`` kind calls it with merge
+    fields so the operator preview is byte-for-byte the send path.
+    """
     main, footer = split_compliance_footer(body_text)
     subject_html = _html.escape((subject or "").strip())
     body_html = _paragraphs_html(main, BRAND["fg2"])
     footer_html = _paragraphs_html(footer, BRAND["fg3"], size="12px") or (
-        # Defensive only: render_branded_email is always called AFTER
-        # append_compliance_footer, so this branch shouldn't trigger.
+        # Defensive only: always called AFTER append_compliance_footer.
         ""
     )
     g = BRAND
@@ -172,3 +184,7 @@ def render_branded_email(subject: str, body_text: str) -> str:
 </table>
 </body>
 </html>"""
+
+
+#: Historical name used by older call sites and tests. Same function.
+render_branded_email = render_sales_outreach_html
