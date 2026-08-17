@@ -581,7 +581,7 @@ def build_auto_reply_bodies(
     footer: str | None = None,
 ) -> tuple[str, str]:
     """Inbound acknowledgement — default copy or an admin-saved override."""
-    note_parts = [part for part in (footnote, footer) if str(part or "").strip()]
+    note_parts = [part for part in (footnote, footer) if part and part.strip()]
     html, text = render_branded_email(
         "We've received your message",
         [paragraph(body)],

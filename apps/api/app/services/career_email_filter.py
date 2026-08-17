@@ -286,7 +286,9 @@ def thread_is_local_draft(thread: dict[str, Any]) -> bool:
     return not thread.get("gmailThreadId") and not thread.get("gmailMessageId")
 
 
-def classify_thread(thread: dict[str, Any], latest: dict[str, Any] | None = None) -> CareerMailVerdict:
+def classify_thread(
+    thread: dict[str, Any], latest: dict[str, Any] | None = None
+) -> CareerMailVerdict:
     """Classify a stored EmailThread row (+ optional latest message dict)."""
     latest = latest or {}
     msgs = thread.get("messages") or []
