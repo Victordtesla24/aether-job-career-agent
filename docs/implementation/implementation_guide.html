@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Implementation Specification v1.0 — Autonomous AI Job Application Platform</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.0/dist/katex.min.css">
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.0/dist/katex.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.0/dist/contrib/auto-render.min.js"
@@ -15,53 +15,53 @@
 @page {
   size: A4;
   margin: 2cm 1.8cm 2cm 1.8cm;
-  background: #0a0a0f;
+  background: #08080A;
   @top-left {
     content: string(doctitle);
-    font-family: 'Inter', sans-serif;
+    font-family: 'AB Sans', 'DM Sans', sans-serif;
     font-size: 7.5pt;
-    color: #666680;
+    color: #8C8A82;
     padding-top: 0.3cm;
   }
   @top-right {
     content: "Implementation Specification v1.0";
-    font-family: 'Inter', sans-serif;
+    font-family: 'AB Sans', 'DM Sans', sans-serif;
     font-size: 7.5pt;
-    color: #666680;
+    color: #8C8A82;
     padding-top: 0.3cm;
   }
   @bottom-center {
     content: counter(page);
     font-family: 'JetBrains Mono', monospace;
     font-size: 8pt;
-    color: #FF6B35;
+    color: #C9A84C;
   }
   @bottom-left {
     content: "Autonomous AI Job Application Platform";
-    font-family: 'Inter', sans-serif;
+    font-family: 'AB Sans', 'DM Sans', sans-serif;
     font-size: 7pt;
-    color: #444460;
+    color: #8C8A82;
   }
 }
 @page :first {
   margin: 0;
-  background: #0a0a0f;
+  background: #08080A;
   @top-left { content: none; }
   @top-right { content: none; }
   @bottom-center { content: none; }
   @bottom-left { content: none; }
 }
 html {
-  background: #0a0a0f;
+  background: #08080A;
 }
 body {
   margin: 0;
   padding: 0;
-  font-family: 'Inter', sans-serif;
+  font-family: 'AB Sans', 'DM Sans', sans-serif;
   font-size: 9.5pt;
   line-height: 1.6;
   color: #d0d0e0;
-  background: #0a0a0f;
+  background: #08080A;
   string-set: doctitle "";
 }
 h1 { string-set: doctitle content(); }
@@ -76,7 +76,7 @@ h1 { string-set: doctitle content(); }
   position: relative;
   overflow: hidden;
   page-break-after: always;
-  background: #0a0a0f;
+  background: #08080A;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -116,7 +116,7 @@ h1 { string-set: doctitle content(); }
   display: inline-block;
   background: rgba(255,107,53,0.15);
   border: 1px solid rgba(255,107,53,0.4);
-  color: #FF6B35;
+  color: #C9A84C;
   font-family: 'JetBrains Mono', monospace;
   font-size: 8pt;
   font-weight: 500;
@@ -127,7 +127,7 @@ h1 { string-set: doctitle content(); }
   margin-bottom: 28px;
 }
 .cover h1 {
-  font-family: 'Inter', sans-serif;
+  font-family: 'AB Sans', 'DM Sans', sans-serif;
   font-size: 26pt;
   font-weight: 800;
   color: #ffffff;
@@ -141,7 +141,7 @@ h1 { string-set: doctitle content(); }
   string-set: doctitle "";
 }
 .cover-subtitle {
-  font-family: 'Inter', sans-serif;
+  font-family: 'AB Sans', 'DM Sans', sans-serif;
   font-size: 13pt;
   font-weight: 300;
   color: rgba(255,107,53,0.85);
@@ -151,7 +151,7 @@ h1 { string-set: doctitle content(); }
 .cover-divider {
   width: 100px;
   height: 2px;
-  background: linear-gradient(90deg, transparent, #FF6B35, transparent);
+  background: linear-gradient(90deg, transparent, #C9A84C, transparent);
   margin: 0 auto 36px auto;
 }
 .cover-meta {
@@ -182,7 +182,7 @@ h1 { string-set: doctitle content(); }
   display: inline-block;
   background: rgba(255,107,53,0.08);
   border: 1px solid rgba(255,107,53,0.25);
-  color: #FF6B35;
+  color: #C9A84C;
   font-family: 'JetBrains Mono', monospace;
   font-size: 7.5pt;
   letter-spacing: 2px;
@@ -212,14 +212,14 @@ h1 { string-set: doctitle content(); }
 }
 .cover-dot {
   width: 4px; height: 4px;
-  background: #FF6B35;
+  background: #C9A84C;
   border-radius: 50%;
   opacity: 0.6;
 }
 .cover-version-text {
   font-family: 'JetBrains Mono', monospace;
   font-size: 7.5pt;
-  color: #444460;
+  color: #8C8A82;
 }
 
 /* ===== TOC PAGE ===== */
@@ -229,7 +229,7 @@ h1 { string-set: doctitle content(); }
 .toc-title {
   font-size: 18pt;
   font-weight: 700;
-  color: #FF6B35;
+  color: #C9A84C;
   margin-bottom: 24px;
   padding-bottom: 10px;
   border-bottom: 1px solid #1e1e2e;
@@ -272,7 +272,7 @@ h1 { string-set: doctitle content(); }
 .toc-list .toc-phase .toc-text {
   font-weight: 700;
   font-size: 10pt;
-  color: #FF6B35;
+  color: #C9A84C;
 }
 .toc-text {
   white-space: nowrap;
@@ -292,7 +292,7 @@ h1 { string-set: doctitle content(); }
   min-width: 20px;
   font-family: 'JetBrains Mono', monospace;
   font-size: 8.5pt;
-  color: #FF6B35;
+  color: #C9A84C;
 }
 
 /* ===== SECTION HEADERS ===== */
@@ -301,7 +301,7 @@ h1 { string-set: doctitle content(); }
 }
 .phase-header {
   background: linear-gradient(135deg, #0f0f1a 0%, #13131f 100%);
-  border-left: 4px solid #FF6B35;
+  border-left: 4px solid #C9A84C;
   padding: 18px 22px;
   margin-bottom: 28px;
   border-radius: 0 4px 4px 0;
@@ -309,7 +309,7 @@ h1 { string-set: doctitle content(); }
 .phase-label {
   font-family: 'JetBrains Mono', monospace;
   font-size: 7.5pt;
-  color: #FF6B35;
+  color: #C9A84C;
   text-transform: uppercase;
   letter-spacing: 2px;
   margin-bottom: 4px;
@@ -323,7 +323,7 @@ h1 { string-set: doctitle content(); }
 }
 .phase-subtitle {
   font-size: 9pt;
-  color: #666680;
+  color: #8C8A82;
   margin-top: 4px;
 }
 
@@ -337,7 +337,7 @@ h2.section-heading {
   page-break-after: avoid;
 }
 h2.section-heading .section-num {
-  color: #FF6B35;
+  color: #C9A84C;
   margin-right: 8px;
 }
 h3.subsection-heading {
@@ -348,7 +348,7 @@ h3.subsection-heading {
   page-break-after: avoid;
 }
 h3.subsection-heading .section-num {
-  color: #FF6B35;
+  color: #C9A84C;
   margin-right: 6px;
   font-family: 'JetBrains Mono', monospace;
   font-size: 9pt;
@@ -381,7 +381,7 @@ li strong, p strong {
   color: #e8e8f8;
   font-weight: 600;
 }
-a { color: #FF6B35; word-break: break-all; }
+a { color: #C9A84C; word-break: break-all; }
 
 /* ===== CODE BLOCKS ===== */
 pre, code {
@@ -393,7 +393,7 @@ pre, code {
 pre {
   background: #080810;
   border: 1px solid #1e1e30;
-  border-left: 3px solid #FF6B35;
+  border-left: 3px solid #C9A84C;
   padding: 12px 14px;
   font-size: 7.5pt;
   line-height: 1.5;
@@ -424,7 +424,7 @@ pre code {
 .code-string { color: #7bc97e; }
 .code-type { color: #5ba3f5; }
 .code-num { color: #f0a060; }
-.code-decorator { color: #FF6B35; }
+.code-decorator { color: #C9A84C; }
 .code-func { color: #7bd4f0; }
 
 /* ===== TABLES ===== */
@@ -437,7 +437,7 @@ table {
 }
 thead tr {
   background: #13131f;
-  border-bottom: 2px solid #FF6B35;
+  border-bottom: 2px solid #C9A84C;
 }
 thead th {
   padding: 7px 10px;
@@ -463,17 +463,17 @@ tbody td code {
 }
 caption {
   font-size: 8pt;
-  color: #666680;
+  color: #8C8A82;
   text-align: left;
   padding: 0 0 4px 0;
   caption-side: top;
 }
-caption::before { content: attr(data-label) "  "; font-weight: bold; color: #FF6B35; }
+caption::before { content: attr(data-label) "  "; font-weight: bold; color: #C9A84C; }
 
 /* ===== CALLOUT BOXES ===== */
 .callout {
   background: #0d0d18;
-  border-left: 3px solid #FF6B35;
+  border-left: 3px solid #C9A84C;
   padding: 12px 16px;
   margin: 12px 0;
   border-radius: 0 4px 4px 0;
@@ -484,7 +484,7 @@ caption::before { content: attr(data-label) "  "; font-weight: bold; color: #FF6
 .callout-title {
   font-family: 'JetBrains Mono', monospace;
   font-size: 7.5pt;
-  color: #FF6B35;
+  color: #C9A84C;
   text-transform: uppercase;
   letter-spacing: 1.5px;
   margin-bottom: 4px;
@@ -499,7 +499,7 @@ caption::before { content: attr(data-label) "  "; font-weight: bold; color: #FF6
 .agent-card {
   background: #0d0d18;
   border: 1px solid #1e1e30;
-  border-top: 2px solid #FF6B35;
+  border-top: 2px solid #C9A84C;
   padding: 14px 16px;
   margin: 12px 0;
   page-break-inside: avoid;
@@ -520,7 +520,7 @@ caption::before { content: attr(data-label) "  "; font-weight: bold; color: #FF6
   font-family: 'JetBrains Mono', monospace;
   font-size: 7pt;
   background: rgba(255,107,53,0.15);
-  color: #FF6B35;
+  color: #C9A84C;
   padding: 2px 8px;
   border-radius: 2px;
   white-space: nowrap;
@@ -565,14 +565,14 @@ caption::before { content: attr(data-label) "  "; font-weight: bold; color: #FF6
   right: -10px;
   top: 50%;
   transform: translateY(-50%);
-  color: #FF6B35;
+  color: #C9A84C;
   font-size: 10pt;
   z-index: 2;
 }
 .phase-box-num {
   font-family: 'JetBrains Mono', monospace;
   font-size: 7pt;
-  color: #FF6B35;
+  color: #C9A84C;
   display: block;
   margin-bottom: 2px;
 }
@@ -604,7 +604,7 @@ caption::before { content: attr(data-label) "  "; font-weight: bold; color: #FF6
 .metric-chip-value {
   font-size: 11pt;
   font-weight: 700;
-  color: #FF6B35;
+  color: #C9A84C;
   display: block;
 }
 .metric-chip-label {
@@ -623,7 +623,7 @@ pre, table, figure, img, svg, blockquote, .equation {
 }
 figure img, figure svg { max-width: 80%; max-height: 40vh; height: auto; }
 figcaption { font-size: 8pt; color: #555570; margin-top: 4px; }
-figcaption::before { content: attr(data-label) "  "; font-weight: bold; color: #FF6B35; }
+figcaption::before { content: attr(data-label) "  "; font-weight: bold; color: #C9A84C; }
 .katex-display { overflow-x: auto; }
 
 /* ===== PAGE BREAK RULES ===== */
@@ -669,7 +669,7 @@ h2.section-heading, h3.subsection-heading, h4.sub4-heading { page-break-after: a
 .endpoint-group-title {
   font-size: 8.5pt;
   font-weight: 700;
-  color: #FF6B35;
+  color: #C9A84C;
   font-family: 'JetBrains Mono', monospace;
   text-transform: uppercase;
   letter-spacing: 1px;
@@ -706,13 +706,13 @@ h2.section-heading, h3.subsection-heading, h4.sub4-heading { page-break-after: a
   flex: 1;
 }
 .endpoint-desc {
-  color: #666680;
+  color: #8C8A82;
   font-size: 7.5pt;
   flex: 1.5;
 }
 .endpoint-auth {
   font-size: 7pt;
-  color: #FF6B35;
+  color: #C9A84C;
   font-family: 'JetBrains Mono', monospace;
   white-space: nowrap;
 }
@@ -747,6 +747,7 @@ h2.section-heading, h3.subsection-heading, h4.sub4-heading { page-break-after: a
 </style>
 </head>
 <body>
+<p style="margin:0;padding:12px 24px;background:#0F0F12;color:#C9A84C;font-family:'AB Sans','DM Sans',sans-serif;font-size:12px;letter-spacing:0.08em;text-transform:uppercase;">Historical implementation spec — chrome restyled to the current obsidian &amp; gilt system. Body copy that mentions the 2026-07 coral resume wash is a carve-out for employer-facing documents, not current product UI.</p>
 
 <!-- ==================== COVER PAGE ==================== -->
 <div class="cover">
@@ -1949,7 +1950,7 @@ Format as structured JSON for use by the Cover Letter Agent."""</code></pre>
 
 CRITICAL FORMATTING RULES — NEVER VIOLATE:
 1. PRESERVE the two-column asymmetric layout (left sidebar 30%, main 70%)
-2. PRESERVE the coral/orange (#FF6B35) title box and section icons
+2. PRESERVE the employer-facing résumé preview wash (coral, documented carve-out — not product gilt) on changed-line title boxes and section icons
 3. PRESERVE the Inter/Montserrat font hierarchy
 4. NEVER add new sections — only reorder, rephrase, and emphasize existing content
 5. MAX 15 content changes per tailoring pass (bullets reordered/reworded)

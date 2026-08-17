@@ -33,6 +33,7 @@ import {
   type JobAlertIntakeSummary,
 } from "../../../lib/api/jobAlerts";
 import { useRealtimeResources } from "../../../hooks/useRealtime";
+import { usePolling } from "../../../hooks/usePolling";
 import { connectGmail, gmailConnectResultFromParams } from "../../../lib/api/google";
 import { connectAnotherGmail, disconnectAccount, setPrimaryAccount } from "../../../lib/api/emails";
 
@@ -43,6 +44,25 @@ const CATEGORIES = [
   { key: "auto", label: "Auto-Replied" },
   { key: "trashed", label: "Trashed" },
 ] as const;
+
+const EMAIL_POLL_MS = 30_000;
+
+function receivedAtMs(value: string): number {
+  const parsed = Date.parse(value);
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+/** Keep date-only `YYYY-MM-DD` strings (tests + legacy rows) unchanged. */
+function formatReceivedAt(value: string): string {
+  if (!value) return "";
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return new Intl.DateTimeFormat("en-AU", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(parsed);
+}
 
 // Score badge colour. `null` (never-triaged thread) is a neutral, muted
 // placeholder — NOT the red "low score" style — so a not-yet-analyzed thread
@@ -83,6 +103,8 @@ export default function EmailCenterPage() {
   const [draftError, setDraftError] = useState<string | null>(null);
   const [triageBusy, setTriageBusy] = useState(false);
   const [triageNotice, setTriageNotice] = useState<{ kind: "success" | "error"; message: string } | null>(null);
+  const [syncBusy, setSyncBusy] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   // Job-alert intake (email agent `mode: "job_alerts"`). Before this control
   // existed the mode was reachable from no user action anywhere — the backend
@@ -145,18 +167,45 @@ export default function EmailCenterPage() {
   const [composeSaving, setComposeSaving] = useState(false);
   const [composeError, setComposeError] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchEmailInbox()
+  const applyInbox = useCallback((data: EmailInbox) => {
+    setInbox(data);
+    setDrafts((prev) => {
+      const next = { ...prev };
+      for (const m of data.messages) {
+        if (m.draftReply && !next[m.id]) next[m.id] = m.draftReply;
+      }
+      return next;
+    });
+    setComputedIntel((prev) => {
+      const next = { ...prev };
+      for (const m of data.messages) {
+        if (m.intelligence && !next[m.id]) next[m.id] = m.intelligence;
+      }
+      return next;
+    });
+    setSelectedId((current) => {
+      const next =
+        current && data.messages.some((m) => m.id === current)
+          ? current
+          : data.messages[0]?.id ?? null;
+      const msg = data.messages.find((m) => m.id === next);
+      if (msg?.draftReply) {
+        setDraft((existing) => existing || msg.draftReply);
+      }
+      return next;
+    });
+  }, []);
+
+  const loadInbox = useCallback(() => {
+    return fetchEmailInbox()
       .then((data) => {
-        setInbox(data);
-        const first = data.messages[0];
-        if (first) {
-          setSelectedId(first.id);
-          setDraft("");
-        }
+        applyInbox(data);
+        setError(null);
       })
       .catch((e: unknown) => setError(e instanceof Error ? e.message : "Failed to load inbox"));
-  }, []);
+  }, [applyInbox]);
+
+  usePolling(loadInbox, EMAIL_POLL_MS);
 
   // Handle the Google OAuth callback landing (…/email?gmail_connected=1|0).
   // Read the query string directly (no useSearchParams → no Suspense boundary
@@ -169,13 +218,13 @@ export default function EmailCenterPage() {
     if (result.kind === "success") {
       setConnectNotice({ kind: "success", message: "Gmail connected ✓ — syncing your inbox…" });
       fetchEmailInbox()
-        .then((data) => setInbox(data))
-        .catch(() => {});
+        .then((data) => applyInbox(data))
+        .catch(() => { });
     } else {
       setConnectNotice({ kind: "error", message: result.message });
     }
     window.history.replaceState(null, "", "/dashboard/email");
-  }, []);
+  }, [applyInbox]);
 
   // Load the real, full body for whichever thread is currently selected
   // (W-13 / QA #2 / MF-1) — the list response only carries a truncated
@@ -226,9 +275,24 @@ export default function EmailCenterPage() {
 
   const refreshInbox = useCallback(() => {
     fetchEmailInbox()
-      .then((data) => setInbox(data))
-      .catch(() => {});
-  }, []);
+      .then((data) => applyInbox(data))
+      .catch(() => { });
+  }, [applyInbox]);
+
+  const syncNow = useCallback(async () => {
+    setSyncBusy(true);
+    try {
+      const data = await fetchEmailInbox({ force: true });
+      applyInbox(data);
+    } catch (e) {
+      setTriageNotice({
+        kind: "error",
+        message: e instanceof Error ? e.message : "Could not sync Gmail.",
+      });
+    } finally {
+      setSyncBusy(false);
+    }
+  }, [applyInbox]);
 
   // W-RT — the shared realtime channel. The Email Center used to fetch ONCE on
   // mount, so a thread synced or triaged by the email agent stayed invisible
@@ -258,13 +322,17 @@ export default function EmailCenterPage() {
     try {
       const res = await runAgent("email", { mode: "triage" });
       const triaged = typeof res.triaged === "number" ? res.triaged : 0;
+      const drafted = typeof res.drafted === "number" ? res.drafted : 0;
       const data = await fetchEmailInbox();
-      setInbox(data);
+      applyInbox(data);
       setTriageNotice({
         kind: "success",
         message:
           triaged > 0
             ? `Triaged ${triaged} thread${triaged === 1 ? "" : "s"} — scores and tabs updated.`
+              + (drafted > 0
+                ? ` ${drafted} recruiter ${drafted === 1 ? "reply" : "replies"} drafted for review (nothing sent).`
+                : "")
             : "No threads to triage yet.",
       });
     } catch (e) {
@@ -275,7 +343,7 @@ export default function EmailCenterPage() {
     } finally {
       setTriageBusy(false);
     }
-  }, []);
+  }, [applyInbox]);
 
   // Compute the REAL AI-intelligence view for ONE thread on demand.
   const analyzeThread = useCallback(async (threadId: string) => {
@@ -363,6 +431,19 @@ export default function EmailCenterPage() {
     [inbox, selectedId],
   );
 
+  // Hydrate the textarea when the selected thread changes. Deliberately
+  // omit drafts/inbox from deps so a 30s poll cannot clobber an in-progress edit.
+  useEffect(() => {
+    if (!selectedId) {
+      setDraft("");
+      return;
+    }
+    const fromCache = drafts[selectedId];
+    const fromInbox = inbox?.messages.find((m) => m.id === selectedId)?.draftReply ?? "";
+    setDraft(fromCache || fromInbox || "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedId]);
+
   // The real, full body for the selected thread once fetched (W-13 / QA #2).
   const selectedBody = useMemo(
     () => (selected ? (fullBodies[selected.id] ?? selected.body) : ""),
@@ -389,8 +470,8 @@ export default function EmailCenterPage() {
     () =>
       selected
         ? emailIntelligenceView({
-            intelligence: computedIntel[selected.id] ?? selected.intelligence,
-          })
+          intelligence: computedIntel[selected.id] ?? selected.intelligence,
+        })
         : ({ available: false } as const),
     [selected, computedIntel],
   );
@@ -484,12 +565,20 @@ export default function EmailCenterPage() {
 
   const visibleMessages = useMemo(() => {
     if (!inbox) return [];
-    return inbox.messages.filter((m) => {
-      const inCategory = category === "all" ? m.category !== "trashed" : m.category === category;
-      const inAccount = accountFilter === "all" || m.account === accountFilter;
-      return inCategory && inAccount;
-    });
-  }, [inbox, category, accountFilter]);
+    const q = searchQuery.trim().toLowerCase();
+    return inbox.messages
+      .filter((m) => m.category !== "personal")
+      .filter((m) => {
+        const inCategory = category === "all" ? m.category !== "trashed" : m.category === category;
+        const inAccount = accountFilter === "all" || m.account === accountFilter;
+        if (!inCategory || !inAccount) return false;
+        if (!q) return true;
+        const hay = `${m.from} ${m.fromEmail} ${m.subject} ${m.preview} ${m.company}`.toLowerCase();
+        return hay.includes(q);
+      })
+      .slice()
+      .sort((a, b) => receivedAtMs(b.receivedAt) - receivedAtMs(a.receivedAt));
+  }, [inbox, category, accountFilter, searchQuery]);
 
   const selectMessage = (m: EmailMessage) => {
     setSelectedId(m.id);
@@ -591,14 +680,34 @@ export default function EmailCenterPage() {
         <div>
           <h1 className="text-2xl font-bold">Email Command Center</h1>
           <p className="text-sm text-aether-muted">
-            Every outbound reply passes the send confirmation gate — nothing leaves without you.
+            Gmail-powered recruiter intelligence — classified, scored, and answered by your agent.
+            Outbound replies stay behind the send confirmation gate.
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <span className="flex items-center gap-2 rounded-lg border border-aether-green/30 bg-aether-green/10 px-3 py-1.5 text-xs text-aether-green">
-            <span className="h-1.5 w-1.5 rounded-full bg-aether-green live-dot" />
-            Monitoring Active
+          <span
+            className={`flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs ${connected
+                ? "border-aether-green/30 bg-aether-green/10 text-aether-green"
+                : "border-white/15 bg-white/5 text-aether-muted"
+              }`}
+          >
+            <span
+              className={`h-1.5 w-1.5 rounded-full ${connected ? "bg-aether-green live-dot" : "bg-aether-muted-dim"
+                }`}
+            />
+            {connected ? "Monitoring Active" : "Gmail not connected"}
           </span>
+          <button
+            type="button"
+            data-testid="sync-now-btn"
+            onClick={() => void syncNow()}
+            disabled={syncBusy || !connected}
+            title="Pull the latest career mail from every connected inbox now"
+            className="rounded-xl border border-white/15 bg-white/5 px-4 py-2 text-sm font-semibold text-aether-muted hover:border-white/30 hover:text-white disabled:opacity-50"
+          >
+            <i className={`fa-solid fa-rotate mr-2 ${syncBusy ? "animate-spin" : ""}`} aria-hidden="true" />
+            {syncBusy ? "Syncing…" : "Sync Now"}
+          </button>
           <button
             type="button"
             data-testid="run-triage-btn"
@@ -666,9 +775,8 @@ export default function EmailCenterPage() {
             type="button"
             data-testid="inbox-all"
             onClick={() => setAccountFilter("all")}
-            className={`rounded-lg border px-3 py-1.5 text-xs transition ${
-              accountFilter === "all" ? "border-aether-coral/50 text-white" : "border-white/10 text-aether-muted"
-            }`}
+            className={`rounded-lg border px-3 py-1.5 text-xs transition ${accountFilter === "all" ? "border-aether-coral/50 text-white" : "border-white/10 text-aether-muted"
+              }`}
           >
             All Inboxes
           </button>
@@ -683,13 +791,12 @@ export default function EmailCenterPage() {
                 key={a.id ?? a.email}
                 data-testid="inbox-account"
                 data-account-status={a.status}
-                className={`flex min-w-0 max-w-full items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs transition ${
-                  !isConnected
+                className={`flex min-w-0 max-w-full items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs transition ${!isConnected
                     ? "border-amber-400/40 bg-amber-400/5 text-amber-100"
                     : accountFilter === a.email
                       ? "border-aether-coral/50 text-white"
                       : "border-white/10 text-aether-muted"
-                }`}
+                  }`}
               >
                 <button
                   type="button"
@@ -697,9 +804,8 @@ export default function EmailCenterPage() {
                   className="flex min-w-0 items-center gap-2"
                 >
                   <span
-                    className={`h-1.5 w-1.5 shrink-0 rounded-full ${
-                      isConnected ? "bg-aether-green" : "bg-amber-400"
-                    }`}
+                    className={`h-1.5 w-1.5 shrink-0 rounded-full ${isConnected ? "bg-aether-green" : "bg-amber-400"
+                      }`}
                   />
                   <span className="min-w-0 truncate">{a.email}</span>
                   {a.isPrimary ? (
@@ -709,7 +815,16 @@ export default function EmailCenterPage() {
                   ) : null}
                   {/* Never claim an unread count for an inbox we can no longer read. */}
                   {isConnected ? (
-                    <span className="mono text-[10px] text-aether-muted-dim">{a.unread} unread</span>
+                    <span
+                      className="mono text-[10px] text-aether-muted-dim"
+                      title={
+                        a.lastSyncedAt
+                          ? `Last synced ${formatReceivedAt(a.lastSyncedAt)}`
+                          : "Unread career-inbox threads"
+                      }
+                    >
+                      {a.unread} unread
+                    </span>
                   ) : null}
                 </button>
                 {/* Deliberately a label, not a per-account button: Google's consent
@@ -781,11 +896,10 @@ export default function EmailCenterPage() {
         <p
           data-testid="gmail-connect-notice"
           role={connectNotice.kind === "error" ? "alert" : "status"}
-          className={`rounded-xl border p-3 text-sm ${
-            connectNotice.kind === "error"
+          className={`rounded-xl border p-3 text-sm ${connectNotice.kind === "error"
               ? "border-red-500/30 bg-red-500/10 text-red-300"
               : "border-aether-green/30 bg-aether-green/10 text-aether-green"
-          }`}
+            }`}
         >
           {connectNotice.message}
         </p>
@@ -795,11 +909,10 @@ export default function EmailCenterPage() {
         <p
           data-testid="triage-notice"
           role={triageNotice.kind === "error" ? "alert" : "status"}
-          className={`rounded-xl border p-3 text-sm ${
-            triageNotice.kind === "error"
+          className={`rounded-xl border p-3 text-sm ${triageNotice.kind === "error"
               ? "border-red-500/30 bg-red-500/10 text-red-300"
               : "border-aether-violet/30 bg-aether-violet/10 text-aether-violet"
-          }`}
+            }`}
         >
           {triageNotice.message}
         </p>
@@ -848,13 +961,12 @@ export default function EmailCenterPage() {
           data-testid="job-alerts-result"
           data-tone={jobAlertTone(alertsResult)}
           role="status"
-          className={`rounded-[14px] border p-4 ${
-            jobAlertTone(alertsResult) === "success"
+          className={`rounded-[14px] border p-4 ${jobAlertTone(alertsResult) === "success"
               ? "border-aether-green/30 bg-aether-green/5"
               : jobAlertTone(alertsResult) === "warning"
                 ? "border-amber-400/40 bg-amber-400/5"
                 : "border-white/10 bg-white/5"
-          }`}
+            }`}
         >
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div>
@@ -926,9 +1038,8 @@ export default function EmailCenterPage() {
                 <li
                   key={m.accountId ?? `mailbox-${i}`}
                   data-testid="job-alerts-mailbox"
-                  className={`flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border px-2.5 py-1.5 text-[11px] ${
-                    m.error ? "border-amber-400/40 bg-amber-400/5 text-amber-100" : "border-white/10 text-aether-muted"
-                  }`}
+                  className={`flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border px-2.5 py-1.5 text-[11px] ${m.error ? "border-amber-400/40 bg-amber-400/5 text-amber-100" : "border-white/10 text-aether-muted"
+                    }`}
                 >
                   <span className="mono">{m.email ?? m.accountId ?? "Mailbox"}</span>
                   {m.error ? (
@@ -993,6 +1104,18 @@ export default function EmailCenterPage() {
         {/* Smart Inbox */}
         <section className="bg-surface-1 min-w-0 rounded-[14px] border border-white/10 p-4 xl:col-span-1" data-testid="smart-inbox">
           <h2 className="mb-3 text-[15px] font-semibold">Smart Inbox</h2>
+          <label className="sr-only" htmlFor="email-inbox-search">
+            Search inbox
+          </label>
+          <input
+            id="email-inbox-search"
+            data-testid="inbox-search"
+            type="search"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search sender, subject, company…"
+            className="mb-3 w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs text-white outline-none placeholder:text-aether-muted-dim focus:border-aether-coral/40"
+          />
           <div className="mb-3 flex flex-wrap gap-1.5">
             {CATEGORIES.map((c) => (
               <button
@@ -1001,9 +1124,8 @@ export default function EmailCenterPage() {
                 data-testid={`inbox-tab-${c.key}`}
                 onClick={() => setCategory(c.key)}
                 aria-pressed={category === c.key}
-                className={`rounded-md px-2 py-1 text-[11px] font-medium transition ${
-                  category === c.key ? "bg-aether-coral text-white" : "bg-white/5 text-aether-muted hover:text-white"
-                }`}
+                className={`rounded-md px-2 py-1 text-[11px] font-medium transition ${category === c.key ? "bg-aether-coral text-white" : "bg-white/5 text-aether-muted hover:text-white"
+                  }`}
               >
                 {c.label}
               </button>
@@ -1014,7 +1136,9 @@ export default function EmailCenterPage() {
               <p className="py-6 text-center text-xs text-aether-muted-dim" data-testid="inbox-empty">
                 {category === "trashed"
                   ? "Trash is empty."
-                  : !anyTriaged && category !== "all"
+                  : searchQuery.trim()
+                    ? "No emails match this search."
+                    : !anyTriaged && category !== "all"
                     ? "Run AI Triage to sort your inbox into this tab."
                     : "No emails in this view."}
               </p>
@@ -1022,42 +1146,58 @@ export default function EmailCenterPage() {
               visibleMessages.map((m) => {
                 const badge = emailScoreBadge(m.score);
                 return (
-                <button
-                  key={m.id}
-                  type="button"
-                  data-testid="email-card"
-                  onClick={() => selectMessage(m)}
-                  className={`w-full rounded-xl border p-3 text-left transition ${
-                    selectedId === m.id
-                      ? "border-aether-coral/50 bg-aether-coral/5"
-                      : "border-white/10 bg-white/5 hover:border-white/20"
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <p className="truncate text-xs font-semibold">{m.from}</p>
-                    <span
-                      className={`mono flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-[10px] font-bold ${scoreColor(m.score)}`}
-                      title={badge.scored ? `Intelligence score ${badge.text}` : "Not analyzed yet — run AI Triage"}
-                    >
-                      {badge.text}
-                    </span>
-                  </div>
-                  <p className="mt-0.5 truncate text-xs text-aether-coral">{m.subject}</p>
-                  <p className="mt-0.5 truncate text-[11px] text-aether-muted-dim">{m.preview}</p>
-                  <div className="mt-1 flex items-center justify-between gap-2">
-                    <p className="mono text-[10px] text-aether-muted-dim">{m.receivedAt}</p>
-                    {m.account ? (
+                  <button
+                    key={m.id}
+                    type="button"
+                    data-testid="email-card"
+                    onClick={() => selectMessage(m)}
+                    className={`w-full rounded-xl border p-3 text-left transition ${selectedId === m.id
+                        ? "border-aether-coral/50 bg-aether-coral/5"
+                        : "border-white/10 bg-white/5 hover:border-white/20"
+                      }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="flex min-w-0 items-center gap-1.5 truncate text-xs font-semibold">
+                        {m.unread ? (
+                          <span
+                            data-testid="email-unread-dot"
+                            title="Unread"
+                            className="h-1.5 w-1.5 shrink-0 rounded-full bg-aether-coral"
+                          />
+                        ) : null}
+                        <span className="truncate">{m.from}</span>
+                      </p>
                       <span
-                        data-testid="thread-source-account"
-                        title={`Received in ${m.account}`}
-                        className="truncate rounded border border-white/10 bg-white/5 px-1.5 py-0.5 text-[9px] text-aether-muted-dim"
+                        className={`mono flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-[10px] font-bold ${scoreColor(m.score)}`}
+                        title={badge.scored ? `Intelligence score ${badge.text}` : "Not analyzed yet — run AI Triage"}
                       >
-                        <i className="fa-brands fa-google mr-1" aria-hidden="true" />
-                        {m.account}
+                        {badge.text}
+                      </span>
+                    </div>
+                    <p className="mt-0.5 truncate text-xs text-aether-coral">{m.subject}</p>
+                    {(drafts[m.id] || m.draftReply) ? (
+                      <span
+                        data-testid="draft-ready-badge"
+                        className="mt-0.5 inline-flex rounded border border-aether-violet/30 bg-aether-violet/10 px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-aether-violet"
+                      >
+                        Draft ready
                       </span>
                     ) : null}
-                  </div>
-                </button>
+                    <p className="mt-0.5 truncate text-[11px] text-aether-muted-dim">{m.preview}</p>
+                    <div className="mt-1 flex items-center justify-between gap-2">
+                      <p className="mono text-[10px] text-aether-muted-dim">{formatReceivedAt(m.receivedAt)}</p>
+                      {m.account ? (
+                        <span
+                          data-testid="thread-source-account"
+                          title={`Received in ${m.account}`}
+                          className="truncate rounded border border-white/10 bg-white/5 px-1.5 py-0.5 text-[9px] text-aether-muted-dim"
+                        >
+                          <i className="fa-brands fa-google mr-1" aria-hidden="true" />
+                          {m.account}
+                        </span>
+                      ) : null}
+                    </div>
+                  </button>
                 );
               })
             )}
@@ -1073,7 +1213,7 @@ export default function EmailCenterPage() {
                   <div>
                     <h2 className="text-[15px] font-semibold">{selected.subject}</h2>
                     <p className="mt-0.5 text-xs text-aether-muted">
-                      {selected.from} &lt;{selected.fromEmail}&gt; · {selected.receivedAt}
+                      {selected.from} &lt;{selected.fromEmail}&gt; · {formatReceivedAt(selected.receivedAt)}
                       {senderLinkedIn ? (
                         <>
                           {" · "}
@@ -1325,8 +1465,8 @@ export default function EmailCenterPage() {
               </p>
             ) : null}
             <div className="space-y-2.5">
-              {inbox.followUps.map((f) => (
-                <div key={`${f.company}-${f.role}`} className="rounded-xl border border-white/10 bg-white/5 p-3">
+              {inbox.followUps.map((f, idx) => (
+                <div key={`${f.company}-${f.role}-${idx}`} className="rounded-xl border border-white/10 bg-white/5 p-3">
                   <p className="text-xs font-semibold">
                     {f.role} · {f.company}
                   </p>
@@ -1346,7 +1486,14 @@ export default function EmailCenterPage() {
               <MiniStat label="Auto-drafted" value={String(inbox.stats.autoDrafted)} />
               <MiniStat label="Sent (approved)" value={String(inbox.stats.sentApproved)} />
               <MiniStat label="Follow-ups" value={String(inbox.stats.followUpsSent)} />
-              <MiniStat label="Avg response" value={`${inbox.stats.avgResponseHrs}h`} />
+              <MiniStat
+                label="Avg response"
+                value={
+                  inbox.stats.avgResponseHrs == null
+                    ? "—"
+                    : `${inbox.stats.avgResponseHrs}h`
+                }
+              />
             </div>
           </section>
 

@@ -315,6 +315,41 @@ class GoogleCalendarService:
             "status": created.get("status"),
         }
 
+    def list_events(
+        self,
+        *,
+        time_min: datetime,
+        time_max: datetime,
+        calendar_id: str = "primary",
+        max_results: int = 100,
+    ) -> list[dict[str, Any]]:
+        """The user's REAL calendar events in ``[time_min, time_max]``.
+
+        Used to ingest inbound interview invites that Gmail's 25-thread
+        window previously dropped. Returns Google's own event dicts — never
+        synthesised. An ungranted/expired scope raises the same honest
+        refusals as :meth:`create_event`.
+        """
+        self.require_calendar_account()
+        if time_min.tzinfo is None:
+            time_min = time_min.replace(tzinfo=timezone.utc)
+        if time_max.tzinfo is None:
+            time_max = time_max.replace(tzinfo=timezone.utc)
+        payload = self._execute(
+            lambda: self._client()
+            .events()
+            .list(
+                calendarId=calendar_id,
+                timeMin=time_min.isoformat(),
+                timeMax=time_max.isoformat(),
+                singleEvents=True,
+                orderBy="startTime",
+                maxResults=max(1, min(int(max_results), 250)),
+            )
+            .execute()
+        )
+        return list((payload or {}).get("items") or [])
+
     # ------------------------------------------------------------------ read
     def primary_timezone(self) -> str:
         """The calendar's OWN timezone (real data, not a guess). Falls back to

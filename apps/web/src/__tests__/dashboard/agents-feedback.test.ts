@@ -382,19 +382,21 @@ describe("stopAllAgentsNotice", () => {
   it("says runs are BLOCKED (not merely 'on hold') with zero in-flight runs", () => {
     const n = stopAllAgentsNotice(3, 0);
     expect(n.kind).toBe("success");
-    expect(n.text).toBe("Paused 3 agents. New runs are blocked.");
+    // AUD-AGENT-4: the number counts CARDS (three of which are one engine),
+    // so the copy names cards. The enforcement claim is unchanged.
+    expect(n.text).toBe("Paused 3 agent cards. New runs are blocked.");
     expect(n.text).not.toContain("on hold");
   });
 
   it("singularizes the agent count", () => {
     const n = stopAllAgentsNotice(1, 0);
-    expect(n.text).toBe("Paused 1 agent. New runs are blocked.");
+    expect(n.text).toBe("Paused 1 agent card. New runs are blocked.");
   });
 
   it("discloses in-flight runs and the no-force-kill caveat when some are running", () => {
     const n = stopAllAgentsNotice(4, 2);
     expect(n.kind).toBe("success");
-    expect(n.text).toContain("Paused 4 agents. New runs are blocked.");
+    expect(n.text).toContain("Paused 4 agent cards. New runs are blocked.");
     expect(n.text).toContain("2 runs already in progress will finish");
     expect(n.text).toContain("there is no force-kill");
   });

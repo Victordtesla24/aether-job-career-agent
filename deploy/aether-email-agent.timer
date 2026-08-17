@@ -1,13 +1,13 @@
-# Fires aether-email-agent.service every 2 hours, jittered so it never
+# Fires aether-email-agent.service every 10 minutes, jittered so it never
 # ticks in perfect lockstep with aether-discovery.timer (every 30 minutes)
 # or aether-backup.timer (every 6 hours) against the same API process.
 # Install/disable instructions: see aether-email-agent.service header.
 [Unit]
-Description=Run Aether scheduled email agent every 2 hours
+Description=Run Aether scheduled email agent every 10 minutes
 
 [Timer]
-OnCalendar=*-*-* 00/2:00:00
-RandomizedDelaySec=300
+OnCalendar=*-*-* *:0/10:00
+RandomizedDelaySec=60
 Persistent=true
 
 [Install]

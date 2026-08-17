@@ -97,6 +97,9 @@ import { runErrorNotice, type Notice } from "../../lib/agents-feedback";
 import type { AgentRun } from "../../lib/api/agents";
 import type { OrchestrationMapData } from "../../lib/api/agentPolicy";
 import StatusBadge from "../ui/StatusBadge";
+// AUD-AGENT-4 — the map header's scale is worded by the SAME helper the
+// catalog surfaces use, so one screen cannot state its size two ways.
+import { catalogScaleLabel } from "./catalog-counts";
 // ADR-AGI-3 Decision 2 — the header control's name in ONE place, so the map's
 // "X is in progress" copy can never drift from the button it names.
 import { RUN_PIPELINE_SHORT } from "./conductor";
@@ -640,7 +643,7 @@ function NodeCard({
         </span>
 
         {/* U-AX-V4 (binding): the card itself states WHEN this agent last ran,
-            relatively — the defect it transfers from was 18/22 agents reading
+            relatively — the defect it transfers from was 18/22 agent cards reading
             "No runs recorded yet." while the payload knew otherwise. A planned
             agent gets no line at all: it has nothing to be late for. */}
         {isPlanned ? null : (
@@ -1858,9 +1861,19 @@ export default function OrchestrationMap({
               ) : null}
             </div>
             <div className="flex shrink-0 items-center gap-3">
-              <p className="font-mono text-[11px] tabular-nums text-aether-muted-dim">
-                {model.stages.length} stage{model.stages.length === 1 ? "" : "s"} ·{" "}
-                {model.stages.reduce((n, s) => n + s.nodes.length, 0)} agents
+              {/* AUD-AGENT-4 — this used to read `{sum of stage nodes} agents`,
+                  which counted the ONE fitScorer engine three times because
+                  "Fit Scoring" renders three of its faces as separate cards.
+                  The scale is now the server's own (`honest_map_counts`) and
+                  is stated as the same dual disclosure the catalog surfaces
+                  use, so neither number can be mistaken for the other. A
+                  payload without it states no scale — never a node sum. */}
+              <p
+                data-testid={`orchestration-map-scale-${model.key}`}
+                className="font-mono text-[11px] tabular-nums text-aether-muted-dim"
+              >
+                {model.stages.length} stage{model.stages.length === 1 ? "" : "s"}
+                {model.scale ? ` · ${catalogScaleLabel(model.scale)}` : null}
                 {model.liveCount > 0 ? (
                   // The map header's live count is the one place a running total
                   // gets the brand hue — it points at the node that is blooming.
@@ -1885,7 +1898,7 @@ export default function OrchestrationMap({
                   disabled={workflowBlocked !== null}
                   title={
                     workflowBlocked ??
-                    `Run all ${plan.length} runnable agent${plan.length === 1 ? "" : "s"} in ${model.name}, in stage order`
+                    `Run all ${plan.length} runnable engine${plan.length === 1 ? "" : "s"} in ${model.name}, in stage order — cards sharing an engine share one run`
                   }
                   className="flex shrink-0 items-center gap-2 rounded-md border border-hairline bg-surface-1 px-2.5 py-1.5 text-[11.5px] font-medium outline-none transition-colors duration-[var(--dur-fast)] hover:border-hairline-strong hover:bg-surface-3 focus-visible:ring-2 focus-visible:ring-aether-coral/70 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-45"
                 >

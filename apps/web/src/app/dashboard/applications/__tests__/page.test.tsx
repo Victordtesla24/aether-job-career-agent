@@ -47,7 +47,7 @@ const APP_FIXTURE = {
 const SANKEY_FIXTURE = {
   stages: [
     { key: "discovered", label: "Discovered", value: 847, color: "#4F46E5" },
-    { key: "applied", label: "Applied", value: 412, color: "#818CF8" },
+    { key: "applied", label: "Prepared", value: 412, color: "#818CF8" },
   ],
   dropoffs: [{ after: "discovered", count: 435, reason: "not pursued" }],
   insight: "Most drop-off happens before application.",

@@ -866,32 +866,140 @@ def _stop_on_spend_cap(
     _record_spend_cap_stop(user_id, quota)
 
 
-def _record_paused_skip_run(
-    user_id: str, agent_key: str, job_id: str, message: str,
-) -> None:
-    """Persist an honest, zero-cost AgentRun row for a job the interim
-    ``_dispatch`` pause guard refused before any side effect.
+#: STORM-1: hours a recorded pause EPISODE suppresses recording another one
+#: for the same user. Bounds the paused-state audit trail at <= 4 rows/day/user
+#: no matter how many jobs sit on the board or how often the sweep runs.
+_PAUSE_EPISODE_DEDUP_HOURS = 6
 
-    That guard (the plain-string ``"agent_paused: ..."`` shape — see its
-    docstring in ``app/routers/agents.py``) is deliberately a NO-ROW
-    refusal: no ``AgentRun``, no quota reserve, nothing to refund, so a
-    direct API caller who clicks a paused agent's button is never charged
-    for the click. The board sweep's own per-job audit trail is a different
-    contract — every attempted job leaves a trace in "Recent runs" — so it
-    compensates by writing this row itself, exactly the idiom
-    ``_record_spend_cap_stop`` above already uses for the analogous
-    pre-row refusal on the spend-cap path. Costs $0 (no LLM call was made).
+
+def _paused_episode_recorded_recently(user_id: str) -> bool:
+    """Whether this user already has a pause-EPISODE summary row inside the
+    ``_PAUSE_EPISODE_DEDUP_HOURS`` window.
+
+    Matches on the episode shape (``output.reason == 'agent_paused'`` AND a
+    ``skippedJobs`` count), not merely on the reason: the pre-STORM-1 per-job
+    rows carry the same reason with NO ``skippedJobs``, so a user whose history
+    still holds those (5,862 for one owner on 2026-08-17) is not left without
+    an honest episode row for six hours after this ships.
+
+    A read fault is NOT treated as "already recorded" — the caller then writes
+    the row. One extra row is the honest failure mode here; silently losing the
+    only trace of a pause episode is not.
     """
+    from app.db import get_connection
+
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    '''
+                    SELECT 1 FROM "AgentRun"
+                    WHERE "userId" = %s
+                      AND "output"->>'reason' = 'agent_paused'
+                      AND "output"->'skippedJobs' IS NOT NULL
+                      AND "createdAt" > NOW() - make_interval(hours => %s)
+                    LIMIT 1
+                    ''',
+                    (user_id, _PAUSE_EPISODE_DEDUP_HOURS),
+                )
+                return cur.fetchone() is not None
+    except Exception:  # noqa: BLE001 — see docstring: fail toward recording
+        logger.exception(
+            "board-sweep %s: pause-episode dedup read failed; recording the "
+            "episode row rather than dropping the only trace of it", user_id,
+        )
+        return False
+
+
+def _record_paused_skip_episode(
+    user_id: str, agent_keys: tuple[str, ...], skipped_jobs: int,
+) -> bool:
+    """Persist AT MOST ONE zero-cost AgentRun row per pause EPISODE. Returns
+    whether a row was written.
+
+    STORM-1 (live incident 2026-08-17). This replaces a PER-JOB, PER-PASS row:
+    the sweep used to write one ``status='failed'`` row for every job the pause
+    guard refused, every pass — 5,862 rows in 40 minutes for one owner
+    (~146/min), ``AgentRun`` at 104,791 rows, ~200K/day projected while the
+    agents stayed paused. The audit intent was honest; the volume was
+    catastrophic and it poisoned every metric derived from run history.
+
+    Two deliberate departures from the old row, both required for the ledger to
+    mean anything:
+
+    * **Granularity** — ONE row per pause episode (deduped over
+      ``_PAUSE_EPISODE_DEDUP_HOURS``) carrying ``skippedJobs``, instead of N
+      rows asserting nothing the count does not already say.
+    * **Status** — ``completed``, not ``failed``. Nothing failed: the user
+      asked for this refusal. Recording it as a failure is the same dishonesty
+      GAP-P4-002 removed for cover-letter guard rejections (recorded
+      ``completed`` with an honest ``coverLetterUnavailable`` flag precisely
+      because "an owner-visible red 'failed' row for a correct refusal would be
+      dishonest the other way"). ``output.skipped is True`` is the flag that
+      keeps it out of the success numerator (``agent_stats``), exactly as
+      ``coverLetterUnavailable`` does for the degrade.
+
+    ``_record_spend_cap_stop``'s row is deliberately left as it is: it fires
+    once per stretch at a hard stop, not once per job, so it never storms.
+
+    Costs $0 — no LLM call was made.
+    """
+    if _paused_episode_recorded_recently(user_id):
+        return False
     from app.repositories.agent_run import AgentRunRepository
 
+    # Attribute the row to a REAL paused backend so "Recent runs" can label it;
+    # ``pausedAgents`` carries the full set. ``tailor`` first when it is one of
+    # them (the board's entry step), else the remaining paused agent.
+    agent_key = "tailor" if "tailor" in agent_keys else (
+        agent_keys[0] if agent_keys else "tailor"
+    )
+    names = ", ".join(agent_keys) or agent_key
     runs = AgentRunRepository()
-    run = runs.start(user_id, agent_key, {"job_id": job_id, "systemRun": True})
+    run = runs.start(user_id, agent_key, {"systemRun": True, "pausedEpisode": True})
     runs.finish(
         run["id"],
-        "failed",
-        output={"skipped": True, "reason": "agent_paused"},
-        error=message,
+        "completed",
+        output={
+            "skipped": True,
+            "reason": "agent_paused",
+            "skippedJobs": skipped_jobs,
+            "pausedAgents": list(agent_keys),
+            "message": (
+                f"Autopilot skipped {skipped_jobs} job(s): {names} "
+                "stopped by the user's agent controls. One summary row is "
+                "recorded per pause episode (no per-job rows)."
+            ),
+        },
+        error=None,
         cost_usd=0.0,
+    )
+    return True
+
+
+def _paused_backends(user_id: str) -> tuple[bool, bool]:
+    """``(tailor_paused, coverLetter_paused)`` — read ONCE per stretch.
+
+    STORM-1 clause 5: knowing the pause state UP FRONT is what lets a stretch
+    whose relevant agents are all paused cost nothing at all, instead of
+    dispatching every eligible job just to collect a 409 per job (the 291s
+    all-refusal passes observed live).
+
+    Deliberately delegates to ``_agent_paused_by_user`` — the SAME helper both
+    enforcement layers use (``_dispatch``'s pre-check and
+    ``_execute_reserved_run`` via ``_agent_enabled_for_dispatch``) — so this
+    pre-check can never disagree with the guard that would actually refuse the
+    dispatch: same every-card rule, same absent-row default (enabled), same
+    fail-open on a read fault. Fail-open here simply means the sweep behaves
+    exactly as it did before this pre-check existed and the real guard still
+    refuses whatever must be refused.
+    """
+    from app.routers.agents import _agent_paused_by_user, _ensure_agent_config_schema
+
+    _ensure_agent_config_schema()
+    return (
+        _agent_paused_by_user(user_id, "tailor"),
+        _agent_paused_by_user(user_id, "coverLetter"),
     )
 
 
@@ -958,6 +1066,51 @@ def sweep_user_stretch(
         "skipped_paused": 0,
     }
     llm_outages = 0
+    # STORM-1: the pause state is read ONCE, up front, and drives both the
+    # cheap short-circuit below and the per-step decisions inside the loop, so
+    # a paused agent is never dispatched-then-refused (which is what minted a
+    # failed AgentRun row per job per pass, 5,862 of them in 40 minutes live).
+    tailor_paused, cover_paused = _paused_backends(user_id)
+    # Which paused agents actually caused a skip this stretch — carried into
+    # the episode summary row so it names the real cause.
+    paused_agents: set[str] = set()
+
+    def _skip_paused(agent_key: str, job_id: str) -> None:
+        """Count + log ONE honest paused skip. Writes no row (see
+        ``_record_paused_skip_episode`` — one episode row, not one per job)."""
+        summary["skipped_paused"] += 1
+        paused_agents.add(agent_key)
+        logger.info(
+            "board-sweep %s job %s: skipped — %s paused by user",
+            user_id, job_id, agent_key,
+        )
+
+    def _finish_paused_episode() -> None:
+        """Record the bounded episode row iff this stretch skipped anything."""
+        if summary["skipped_paused"]:
+            summary["paused_episode_recorded"] = _record_paused_skip_episode(
+                user_id, tuple(sorted(paused_agents)), summary["skipped_paused"],
+            )
+
+    if tailor_paused and cover_paused:
+        # STORM-1 clauses 3 + 5: EVERY agent this sweep dispatches is paused,
+        # so there is no real work to do and no cheap way for a dispatch to
+        # discover anything new. Short-circuit before a single job is
+        # attempted (the 291s all-refusal passes), and do NOT ask for a
+        # continuation: paused work is not remaining work, so the 10-minute
+        # cron stays the only cadence until the user resumes.
+        summary["reason"] = "agents-paused"
+        summary["skipped_paused"] = _remaining_eligible_count(user_id, attempted)
+        summary["needs_continuation"] = False
+        paused_agents.update({"tailor", "coverLetter"})
+        _finish_paused_episode()
+        logger.info(
+            "board-sweep %s: agents-paused — tailor and coverLetter are both "
+            "stopped by the user; %d eligible job(s) left untouched, no "
+            "dispatch attempted, no continuation requested",
+            user_id, summary["skipped_paused"],
+        )
+        return summary
 
     def _abort_on_llm(llm_exc: Any, job_id: str) -> None:
         """Record + log an abort caused by an upstream LLM refusal.
@@ -1021,20 +1174,35 @@ def sweep_user_stretch(
         job_id = target["job_id"]
         attempted.add(job_id)
         # Which agent this job's attempt is currently on — read only by the
-        # ``except HTTPException`` block below (string-shape paused-refusal
-        # branch) to know which agent name to attribute an honest audit row
-        # to when the guard that refused it left none.
+        # ``except HTTPException`` block below (paused-refusal branch) to name
+        # the right agent in the skip log/episode summary when the refusal
+        # itself carries no ``agentKey`` (the plain-string shape).
         attempting_agent = "tailor" if target["mode"] == "full" else "coverLetter"
         try:
             if target["mode"] == "full":
-                try:
-                    _run_agent(user_id, "tailor", {"job_id": job_id})
-                    summary["tailored"] += 1
-                except NoChangesApplied:
-                    # The guards rejected every rewrite — honest no-op, run
-                    # refunded. The cover letter still proceeds from the base
-                    # résumé (same degrade the manual pipeline uses).
-                    pass
+                if tailor_paused:
+                    # STORM-1 clause 4: the user stopped the TAILOR only. Skip
+                    # that step without dispatching it (no 409, no row) and
+                    # still write the letter below — the same degrade the
+                    # ``NoChangesApplied`` branch already takes, from the base
+                    # résumé. Refusing the cover letter too would skip real
+                    # work the user deliberately left running.
+                    _skip_paused("tailor", job_id)
+                else:
+                    try:
+                        _run_agent(user_id, "tailor", {"job_id": job_id})
+                        summary["tailored"] += 1
+                    except NoChangesApplied:
+                        # The guards rejected every rewrite — honest no-op, run
+                        # refunded. The cover letter still proceeds from the base
+                        # résumé (same degrade the manual pipeline uses).
+                        pass
+            if cover_paused:
+                # The cover agent is stopped: skip this job's letter without a
+                # dispatch attempt. Any tailoring above was real work and is
+                # already counted; the letter is simply not owed while paused.
+                _skip_paused("coverLetter", job_id)
+                continue
             attempting_agent = "coverLetter"
             cover_out = _run_agent(user_id, "coverLetter", {"job_id": job_id})
             if _cover_result_degraded(cover_out):
@@ -1117,31 +1285,22 @@ def sweep_user_stretch(
                 if is_paused_refusal:
                     # ML-STOPALL-001: the user paused this agent (its own
                     # AgentConfig.enabled=false) — an HONEST SKIP of this one
-                    # job, not a sweep failure and not an abort. Mirrors the
-                    # per-job skip/blocked log idiom used throughout this loop
-                    # (e.g. the cover-degrade / guard-rejection branches
-                    # below) and continues to the next eligible job so a
-                    # paused tailor/coverLetter never stalls the rest of the
-                    # board.
-                    summary["skipped_paused"] += 1
-                    logger.info(
-                        "board-sweep %s job %s: skipped — %s paused by user",
-                        user_id, job_id, detail_409.get("agentKey", "agent"),
+                    # job, not a sweep failure and not an abort. Reaching HERE
+                    # means the up-front ``_paused_backends`` read did not see
+                    # the pause: the user hit Stop mid-stretch, or the config
+                    # read failed open. So this stays as defense in depth, and
+                    # it COUNTS + LOGS only.
+                    #
+                    # STORM-1: it deliberately writes NO AgentRun row. The row
+                    # it used to write here was per job, per pass — 5,862 of
+                    # them in 40 minutes live. The paused state is recorded
+                    # ONCE per episode by ``_record_paused_skip_episode`` at
+                    # the end of the stretch, from ``summary["skipped_paused"]``
+                    # (which this branch feeds), so nothing about the pause is
+                    # lost — only the per-job duplication is.
+                    _skip_paused(
+                        detail_409.get("agentKey") or attempting_agent, job_id,
                     )
-                    if isinstance(exc.detail, str):
-                        # The string-shape guard (``_dispatch``'s own
-                        # pre-side-effect check) is deliberately a NO-ROW
-                        # refusal — see its docstring — so unlike the
-                        # dict-shape ``_execute_reserved_run`` refusal (which
-                        # already finishes its own AgentRun row before
-                        # raising), nothing has recorded this attempt yet.
-                        # The sweep's per-job audit trail still needs one —
-                        # same idiom as ``_record_spend_cap_stop`` uses for
-                        # the spend-cap stop, which compensates for the same
-                        # kind of pre-row refusal.
-                        _record_paused_skip_run(
-                            user_id, attempting_agent, job_id, exc.detail,
-                        )
                     continue
             if exc.status_code == 429:
                 detail: dict[str, Any] = exc.detail if isinstance(exc.detail, dict) else {}
@@ -1232,6 +1391,9 @@ def sweep_user_stretch(
                 _abort_on_llm(llm_exc, job_id)
                 break
             logger.exception("board-sweep %s job %s: unexpected: %s", user_id, job_id, exc)
+    # STORM-1: ONE bounded, deduped episode row for everything this stretch
+    # skipped because an agent is paused — never one row per job.
+    _finish_paused_episode()
     if summary["reason"] == "skipped-failures" and summary["processed"] == 0:
         # ML-W-12: a tick that skips EVERY eligible job due to cover-failure
         # suppression must say so explicitly, with the earliest time the
@@ -1269,6 +1431,13 @@ def sweep_user_stretch(
     # is the only honest justification for continuing; zero completions means
     # the cap was consumed by failures and the next cron tick (10 minutes of
     # cooling) is the right cadence, not an immediate re-enqueue.
+    #
+    # STORM-1: ``covers`` (the only thing that increments ``processed``) is
+    # what "real work" means here, and a pause-skipped job increments neither —
+    # so a stretch whose work was ALL pause-skipped can never satisfy this,
+    # exactly as clause 3 requires ("paused work is not remaining work"). The
+    # both-paused stretch returns earlier still, with this key set False before
+    # a single job is looked at.
     summary["needs_continuation"] = (
         summary["reason"] in ("job-cap", "deadline") and summary["processed"] > 0
     )

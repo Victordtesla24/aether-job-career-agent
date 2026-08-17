@@ -1,7 +1,10 @@
-"""Brand-templated admin documents for the Aether Career Job Agent web-app —
-invoice template, auto-reply and Stripe-lifecycle email templates — all built
-from the SAME design-system tokens as the sales emails (``sales_branding.BRAND``)
-so every artefact an admin exports carries one consistent brand.
+"""Brand-templated artefacts for the Aether Career Job Agent web-app.
+
+The admin Brand tab (``/admin/sales-agent`` → Brand) is the single catalogue.
+Every kind listed in ``DOCUMENT_KINDS`` is previewable there. Aether-owned
+email kinds render through ``email_branding`` so the operator preview is the
+same HTML the live send path delivers. Print artefacts (invoice, business
+card, generated documents) use the same obsidian-and-gilt tokens.
 
 Grounding rules (STRICT — mirrors the sales agent's honesty contract):
 
@@ -13,13 +16,10 @@ Grounding rules (STRICT — mirrors the sales agent's honesty contract):
   (``{{customer_name}}``, ``{{invoice_number}}``, …) — these are templates for
   admin use, so merge fields are the correct, honest mechanism. NO fabricated
   sample customers, amounts or dates appear anywhere.
-* The product name rendered is ALWAYS "Aether Career Job Agent"; the business
-  identity block matches the ratified compliance footer (operated by
-  Vikram Sarkar, https://5cb5f0620.abacusai.cloud).
-* These are admin-facing documents. They are deliberately NOT wired into the
-  Stripe webhook (``routers/billing.py`` documents that no outbound-email
-  infrastructure is used by webhooks — a ratified design decision this module
-  must not regress).
+* The product name rendered on print/admin chrome is ALWAYS "Aether Career
+  Job Agent"; transactional email chrome uses ``email_branding.PRODUCT_NAME``.
+* Stripe lifecycle kinds ARE wired into ``routers/billing.py`` after the
+  webhook transaction commits. A send failure must not roll back billing.
 """
 from __future__ import annotations
 
@@ -83,6 +83,64 @@ DOCUMENT_KINDS: dict[str, dict[str, Any]] = {
             "the Free-plan fallback (5 runs/month) — no retention tricks."
         ),
         "needsPlan": True,
+    },
+    "subscriber_welcome": {
+        "title": "Subscriber welcome email",
+        "description": (
+            "Onboarding email sent when a subscriber creates an account. "
+            "Plan name and monthly run quota come live from the Plan catalog; "
+            "the recipient name is a merge field. This is the same renderer "
+            "the signup path uses."
+        ),
+        "needsPlan": True,
+    },
+    "password_reset": {
+        "title": "Password reset email",
+        "description": (
+            "Self-service password-reset email. The live forgot-password "
+            "path uses this same renderer; the reset link is a merge field."
+        ),
+        "needsPlan": False,
+    },
+    "founder_digest": {
+        "title": "Founder daily digest",
+        "description": (
+            "Internal sales-pipeline digest sent to the operator. Preview "
+            "shows merge fields; live numbers come from the sales-agent run."
+        ),
+        "needsPlan": False,
+    },
+    "notification_digest": {
+        "title": "Notification digest email",
+        "description": (
+            "Gilt chrome wrapped around the user-approved digest body "
+            "(status updates and new matches) at execute time."
+        ),
+        "needsPlan": False,
+    },
+    "trial_ending": {
+        "title": "Trial ending (Stripe customer.subscription.trial_will_end)",
+        "description": (
+            "Reminder that a trial is about to convert to a paid charge. "
+            "Amount comes live from the Plan catalog."
+        ),
+        "needsPlan": True,
+    },
+    "business_card": {
+        "title": "Business card",
+        "description": (
+            "Obsidian-and-gilt calling card. Name, role, email and phone "
+            "are merge fields; the mark and URL are the live brand."
+        ),
+        "needsPlan": False,
+    },
+    "document": {
+        "title": "Branded document",
+        "description": (
+            "Generated markdown/HTML report chrome — the same wrapper "
+            "agents use for Aether-owned documentation."
+        ),
+        "needsPlan": False,
     },
 }
 
@@ -279,117 +337,126 @@ def render_invoice(plan: dict[str, Any], interval: str = "monthly") -> str:
 
 
 def render_auto_reply() -> str:
-    """Inbound auto-reply acknowledgement — no marketing claims, honest
-    expectations only."""
-    inner = (
-        _para(f"Hi {_merge_field('name')},")
-        + _para(
-            "Thanks for reaching out — your message has been received. "
-            "A real person reviews every email; you can expect a reply "
-            "within 1–2 business days (Melbourne time)."
-        )
-        + _para(
-            "If your question is about your account or subscription, "
-            "including your reference or the email you signed up with "
-            "helps us respond faster."
-        )
-        + _para("— The Aether Career Job Agent team")
+    """Inbound auto-reply acknowledgement — gilt email chrome, no images."""
+    from app.services.email_branding import build_auto_reply_bodies
+
+    html, _text = build_auto_reply_bodies(
+        "Hi {{name}},\n\n"
+        "Thanks for reaching out — your message has been received. "
+        "A real person reviews every email; you can expect a reply "
+        "within 1–2 business days (Melbourne time).\n\n"
+        "If your question is about your account or subscription, "
+        "including your reference or the email you signed up with "
+        "helps us respond faster.\n\n"
+        "— The Aether Career Job Agent team"
     )
-    return _chrome(
-        "We've received your message",
-        inner,
-        "You are receiving this one-time acknowledgement because you emailed "
-        "us. It is not a marketing email.",
-    )
+    return html
 
 
 def render_subscription_confirmed(
     plan: dict[str, Any], interval: str = "monthly"
 ) -> str:
-    """Post-checkout confirmation (checkout.session.completed) with the live
-    plan price and GST breakdown."""
-    amount, per = _plan_price(plan, interval)
-    tax = gst_breakdown(amount)
-    runs = plan.get("runsPerMonth")
-    inner = (
-        _para(f"Hi {_merge_field('name')},")
-        + _para(
-            f"Your <strong>{_esc(plan['name'])}</strong> subscription is "
-            f"active. You'll be charged {_money(tax['total'])} {per} "
-            f"(AUD, GST-inclusive — GST component {_money(tax['gst'])}), "
-            f"which includes {_esc(runs)} agent runs per month."
-        )
-        + _para(
-            "You can manage or cancel your subscription anytime from the "
-            f'billing page at <a href="{BUSINESS_URL}" style="color:'
-            f'{BRAND["goldAccessible"]};">{BUSINESS_URL}</a>. '
-            "A tax invoice is available for every charge."
-        )
-        + _para("— The Aether Career Job Agent team")
+    """Post-checkout confirmation — same HTML the Stripe webhook sends."""
+    from app.services.email_branding import build_subscription_confirmed_bodies
+    from app.services.stripe_gateway import app_base_url
+
+    html, _text = build_subscription_confirmed_bodies(
+        "{{name}}", plan, interval, f"{app_base_url()}/dashboard"
     )
-    return _chrome(
-        f"Your {plan['name']} subscription is active",
-        inner,
-        "Transactional notice about a purchase you made — "
-        "not a marketing email.",
-    )
+    return html
 
 
 def render_payment_failed(plan: dict[str, Any], interval: str = "monthly") -> str:
-    """Dunning template (invoice.payment_failed) — states the live amount due
-    and the fix, nothing else."""
-    amount, per = _plan_price(plan, interval)
-    inner = (
-        _para(f"Hi {_merge_field('name')},")
-        + _para(
-            f"The renewal charge of {_money(amount)} {per} (AUD, "
-            f"GST-inclusive) for your <strong>{_esc(plan['name'])}</strong> "
-            "plan didn't go through. This is usually an expired or "
-            "declined card."
-        )
-        + _para(
-            "To keep your subscription active, please update your payment "
-            f'method from the billing page at <a href="{BUSINESS_URL}" '
-            f'style="color:{BRAND["goldAccessible"]};">{BUSINESS_URL}</a>. '
-            "Stripe will retry the charge automatically."
-        )
-        + _para("— The Aether Career Job Agent team")
+    """Dunning template — same HTML the Stripe webhook sends."""
+    from app.services.email_branding import build_payment_failed_bodies
+    from app.services.stripe_gateway import app_base_url
+
+    html, _text = build_payment_failed_bodies(
+        "{{name}}", plan, interval, f"{app_base_url()}/dashboard/settings"
     )
-    return _chrome(
-        "Action needed: payment didn't go through",
-        inner,
-        "Transactional billing notice for your active subscription — "
-        "not a marketing email.",
-    )
+    return html
 
 
 def render_cancellation_confirmed(
     plan: dict[str, Any], interval: str = "monthly"
 ) -> str:
-    """Cancellation confirmation (customer.subscription.deleted) — honest
-    paid-until behaviour and the Free-plan fallback, no retention tricks."""
-    inner = (
-        _para(f"Hi {_merge_field('name')},")
-        + _para(
-            f"Your <strong>{_esc(plan['name'])}</strong> subscription has "
-            "been cancelled — you won't be charged again. Access continues "
-            f"until the end of the period you've paid for "
-            f"({_merge_field('paid_until')})."
-        )
-        + _para(
-            "After that, your account moves to the Free plan (5 agent runs "
-            "per month) and your data stays intact. You can resubscribe "
-            f'anytime at <a href="{BUSINESS_URL}" style="color:'
-            f'{BRAND["goldAccessible"]};">{BUSINESS_URL}</a>.'
-        )
-        + _para("— The Aether Career Job Agent team")
+    """Cancellation confirmation — same HTML the Stripe webhook sends."""
+    from app.services.email_branding import build_cancellation_confirmed_bodies
+    from app.services.stripe_gateway import app_base_url
+
+    _ = interval
+    html, _text = build_cancellation_confirmed_bodies(
+        "{{name}}", plan, "{{paid_until}}", f"{app_base_url()}/pricing"
     )
-    return _chrome(
-        "Your subscription is cancelled",
-        inner,
-        "Transactional confirmation of a cancellation you requested — "
-        "not a marketing email.",
+    return html
+
+
+def render_trial_ending(plan: dict[str, Any], interval: str = "monthly") -> str:
+    """Trial-ending reminder — same HTML the Stripe webhook sends."""
+    from app.services.email_branding import build_trial_ending_bodies
+    from app.services.stripe_gateway import app_base_url
+
+    html, _text = build_trial_ending_bodies(
+        "{{name}}", plan, interval, f"{app_base_url()}/dashboard/settings"
     )
+    return html
+
+
+def render_subscriber_welcome(
+    plan: dict[str, Any], interval: str = "monthly"
+) -> str:
+    """New-account welcome — the same HTML the signup path sends.
+
+    Uses ``email_branding`` (bulletproof, no images) rather than the admin
+    document chrome, so the operator preview matches the subscriber inbox.
+    """
+    from app.services.email_branding import build_subscriber_welcome_bodies
+    from app.services.stripe_gateway import app_base_url
+
+    _ = interval
+    html, _text = build_subscriber_welcome_bodies(
+        name="{{name}}",
+        plan_name=str(plan["name"]),
+        runs_per_month=int(plan["runsPerMonth"]),
+        dashboard_url=f"{app_base_url()}/dashboard",
+    )
+    return html
+
+
+def render_password_reset() -> str:
+    """Same HTML ``POST /auth/forgot-password`` sends."""
+    from app.services.password_reset import build_reset_email_bodies
+
+    _text, html = build_reset_email_bodies("{{reset_url}}")
+    return html
+
+
+def render_founder_digest() -> str:
+    from app.services.email_branding import build_founder_digest_preview_bodies
+
+    html, _text = build_founder_digest_preview_bodies()
+    return html
+
+
+def render_notification_digest() -> str:
+    from app.services.email_branding import build_notification_digest_bodies
+
+    html, _text = build_notification_digest_bodies(
+        "Your Aether digest", "{{digest_body}}"
+    )
+    return html
+
+
+def render_business_card() -> str:
+    from app.services.brand_artifacts import render_business_card_preview_html
+
+    return render_business_card_preview_html()
+
+
+def render_document_artefact() -> str:
+    from app.services.branded_artefacts import render_branded_markdown_html
+
+    return render_branded_markdown_html("{{title}}", "{{body}}")
 
 
 # --------------------------------------------------------------- dispatcher
@@ -409,24 +476,30 @@ def render_document(
     if editable_template is not None:
         if kind != "auto_reply":
             raise ValueError("Only auto_reply supports persistent template overrides.")
-        body = _esc(editable_template["body"]).replace("\n", "<br>")
-        inner = _para(body)
-        return _chrome(
-            DOCUMENT_KINDS[kind]["title"],
-            inner,
-            editable_template["footnote"],
-            footer_override=editable_template["footer"],
+        from app.services.email_branding import build_auto_reply_bodies
+
+        html, _text = build_auto_reply_bodies(
+            editable_template["body"],
+            footnote=editable_template["footnote"],
+            footer=editable_template["footer"],
         )
-    if kind == "invoice":
-        assert plan is not None
-        return render_invoice(plan, interval)
-    if kind == "auto_reply":
-        return render_auto_reply()
-    if kind == "subscription_confirmed":
-        assert plan is not None
-        return render_subscription_confirmed(plan, interval)
-    if kind == "payment_failed":
-        assert plan is not None
-        return render_payment_failed(plan, interval)
-    assert plan is not None
-    return render_cancellation_confirmed(plan, interval)
+        return html
+    dispatch = {
+        "invoice": lambda: render_invoice(plan, interval),  # type: ignore[arg-type]
+        "auto_reply": render_auto_reply,
+        "subscription_confirmed": lambda: render_subscription_confirmed(
+            plan, interval  # type: ignore[arg-type]
+        ),
+        "payment_failed": lambda: render_payment_failed(plan, interval),  # type: ignore[arg-type]
+        "cancellation_confirmed": lambda: render_cancellation_confirmed(
+            plan, interval  # type: ignore[arg-type]
+        ),
+        "subscriber_welcome": lambda: render_subscriber_welcome(plan, interval),  # type: ignore[arg-type]
+        "password_reset": render_password_reset,
+        "founder_digest": render_founder_digest,
+        "notification_digest": render_notification_digest,
+        "trial_ending": lambda: render_trial_ending(plan, interval),  # type: ignore[arg-type]
+        "business_card": render_business_card,
+        "document": render_document_artefact,
+    }
+    return dispatch[kind]()

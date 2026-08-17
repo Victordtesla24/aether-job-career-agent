@@ -33,7 +33,18 @@ export type CatalogAgent = z.infer<typeof CatalogAgentSchema>;
 export const CatalogSchema = z.object({
   agents: z.array(CatalogAgentSchema),
   counts: z.object({
+    // AUD-AGENT-4 — `total` is the CARD total and has never been an agent
+    // count: one engine (fitScorer) is presented as three cards. It stays on
+    // the contract because the server still sends it, but NO surface may
+    // render it as "N agents". The two honest numbers are below.
     total: z.number(),
+    // `engines` = distinct implemented backends (the agents that exist),
+    // `cards` = catalog entries (what the grid renders). Optional because a
+    // server predating AUD-AGENT-4 sends neither; when they are missing the
+    // UI states NO count at all rather than falling back to the padded
+    // `total` (see `catalogScaleLabel` in ./catalog-counts).
+    engines: z.number().optional(),
+    cards: z.number().optional(),
     active: z.number(),
     paused: z.number(),
     error: z.number(),
@@ -167,7 +178,7 @@ export const TestRunSchema = z.object({
   // the cost/token ESTIMATE (no per-token pricing to estimate for a
   // deterministic agent) and the "actual" figures (null until the agent has
   // completed at least one real run) are honestly nullable — requiring them
-  // non-null is what produced the raw Zod parse error for 18/22 agents.
+  // non-null is what produced the raw Zod parse error for 18/22 agent cards.
   model: z.string(),
   estTokens: z.number().nullable(),
   estCost: z.number().nullable(),

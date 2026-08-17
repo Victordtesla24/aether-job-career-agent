@@ -1,0 +1,23 @@
+<!-- @dsCard group="Spacing" viewport="700x190" subtitle="248px rail · 64px collapsed · 64px command bar · 1400px content" name="Shell geometry" -->
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>Shell geometry</title>
+<link rel="stylesheet" href="../styles.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap">
+<style>body{margin:0;background:var(--ink-0);color:var(--fg-1);font-family:var(--font-body);padding:18px}
+.sw{display:flex;flex-wrap:wrap;gap:10px}
+.sw>div{flex:1 1 0;min-width:96px}
+.chipbox{height:52px;border-radius:var(--radius-sm);border:1px solid var(--hairline)}
+.nm{font-size:10px;letter-spacing:.1em;text-transform:uppercase;margin:8px 0 2px;color:var(--fg-2)}
+.hx{font-family:var(--font-mono);font-size:10px;color:var(--fg-4)}
+.note{font-size:10.5px;color:var(--fg-3);margin:14px 0 0;line-height:1.5}
+</style>
+</head><body>
+<div style="display:flex;height:104px;border:1px solid var(--hairline);border-radius:var(--radius-lg);overflow:hidden">
+  <div style="width:130px;border-right:1px solid var(--hairline);padding:8px"><p class="hx" style="margin:0">rail 248</p></div>
+  <div style="flex:1;display:flex;flex-direction:column">
+    <div style="height:30px;border-bottom:1px solid var(--hairline);padding:8px" class="chrome-blur"><p class="hx" style="margin:0">command bar 64</p></div>
+    <div style="flex:1;padding:8px"><p class="hx" style="margin:0">content · 24–32px page padding · max 1400</p></div>
+  </div>
+</div>
+  <p class="note">The rail and command bar are viewport-pinned and never scroll away; the rail is colour-flat against the page with a hairline right edge — never its own panel.</p>
+</body></html>

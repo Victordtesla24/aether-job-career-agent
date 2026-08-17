@@ -1,0 +1,73 @@
+:root{
+  /* ── GROUNDS ── obsidian ladder. One ground, four elevations. */
+  --ink-0:#08080A;   /* page ground */
+  --ink-1:#0F0F12;   /* card */
+  --ink-2:#16161A;   /* raised card / popover / sticky chrome */
+  --ink-3:#1E1E23;   /* hover / selected row */
+  --ink-4:#26262C;   /* inset well, track, disabled fill */
+
+  /* ── GILT ── the single brand colour, inherited from the AB baseline. */
+  --gold:#C9A84C;
+  --gold-light:#D4B65C;
+  --gold-pale:#E8D5A3;
+  --gold-dark:#B0923F;
+  --gold-muted:rgba(201,168,76,0.08);
+  --gold-border:rgba(201,168,76,0.20);
+  --gold-border-strong:rgba(201,168,76,0.45);
+  --gold-glow:rgba(201,168,76,0.30);
+
+  /* ── ROYAL SECONDARIES ── rare. Never two on one surface. */
+  --sapphire:#3E5A8C;         /* agent-intelligence cue (replaces Aether indigo) */
+  --sapphire-light:#8FA8CE;   /* the readable text/icon value on obsidian */
+  --burgundy:#722F37;         /* offers, negotiation, ceremonial emphasis */
+  --burgundy-light:#B9707A;
+
+  /* ── TEXT ── warm parchment, never pure #FFF at body sizes. */
+  --fg-1:#F5F1E8;
+  --fg-2:rgba(245,241,232,0.62);
+  --fg-3:rgba(245,241,232,0.46);
+  --fg-4:rgba(245,241,232,0.34);
+
+  /* ── HAIRLINES ── */
+  --hairline:rgba(255,255,255,0.07);
+  --hairline-strong:rgba(255,255,255,0.13);
+  --hairline-gold:rgba(201,168,76,0.20);
+
+  /* ── STATE ── six tones, jewel-toned. Load-bearing semantics:
+     ok = completed/connected/running · warn = stalled/quota pressure
+     danger = failed · neutral = no data / not measured (NEVER ok)
+     degraded = produced-nothing-but-not-a-failure · info = advisory
+     Gold is a BRAND colour and is never a state. Warn is copper, never gold. */
+  --state-ok:#6FAF8D;
+  --state-warn:#C8873A;
+  --state-danger:#B9544B;
+  --state-info:#7C93BE;
+  --state-neutral:#8C8A82;
+  --state-degraded:#A08CB4;
+
+  /* ── SEMANTIC ALIASES ── what product code should reference. */
+  --surface-page:var(--ink-0);
+  --surface-card:var(--ink-1);
+  --surface-raised:var(--ink-2);
+  --surface-hover:var(--ink-3);
+  --surface-well:var(--ink-4);
+  --text-primary:var(--fg-1);
+  --text-secondary:var(--fg-2);
+  --text-muted:var(--fg-3);
+  --text-faint:var(--fg-4);
+  --border-default:var(--hairline);
+  --border-strong:var(--hairline-strong);
+  --border-gold:var(--hairline-gold);
+  --accent:var(--gold);
+  --accent-hover:var(--gold-light);
+  --accent-pressed:var(--gold-dark);
+  --accent-on:#0A0A0A;            /* text/icon colour on a gold fill */
+  --link:var(--gold);
+  --link-hover:var(--gold-pale);
+  --focus-ring:var(--gold);
+  --scrim:rgba(0,0,0,0.75);
+}
+::selection{background:rgba(201,168,76,0.30);color:#FDF8F1}
+a{color:var(--link);text-decoration:none}
+a:hover{color:var(--link-hover)}
+:focus-visible{outline:2px solid var(--focus-ring);outline-offset:2px;box-shadow:0 0 0 5px rgba(201,168,76,0.15)}

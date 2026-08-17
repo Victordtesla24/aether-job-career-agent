@@ -1,10 +1,13 @@
 """THE canonical home for Aether-OWNED transactional email templates.
 
-Owner directive (2026-08-16): every email Aether sends **in its own voice**
-— founder digests, password resets, and anything added after this — is
-rendered here, so the obsidian-and-gilt brand is consistent by construction
-instead of by copy-paste. **Add new Aether email templates to THIS module**;
-do not hand-roll HTML at a call site.
+Owner directive (2026-08-16, extended 2026-08-17): every email Aether sends
+**in its own voice** — founder digests, password resets, subscriber welcome,
+Stripe lifecycle notices, the notification digest chrome, inbound auto-reply,
+and anything added after this — is rendered here, so the obsidian-and-gilt
+brand is consistent by construction instead of by copy-paste. **Add new
+Aether email templates to THIS module**; do not hand-roll HTML at a call
+site. Admin Brand-tab previews call the same builders the live send path
+uses.
 
 Two things are deliberately NOT rendered here (design ruling, pinned by
 ``tests/test_brand_email_adoption.py::TestBrandingCarveOuts``):
@@ -325,3 +328,318 @@ background-color:{PALETTE['goldDark']};border-radius:0 0 6px 6px;">&nbsp;</td></
     plain_text = "\n\n".join(part for part in text_parts if part) + "\n"
 
     return html, plain_text
+
+
+def _welcome_greeting(name: str | None) -> str:
+    trimmed = str(name or "").strip()
+    if not trimmed:
+        return "Hi,"
+    return f"Hi {trimmed},"
+
+
+def build_subscriber_welcome_bodies(
+    name: str | None,
+    plan_name: str,
+    runs_per_month: int,
+    dashboard_url: str,
+) -> tuple[str, str]:
+    """``(html, plain_text)`` for the new-account welcome email.
+
+    Plan name and monthly run quota MUST come from the live Plan catalog
+    (the caller is responsible). This function is pure: no I/O, no defaults
+    that invent a quota. Admin preview passes ``name="{{name}}"`` so the
+    merge field stays visible; signup passes the account's real name.
+    """
+    greeting = _welcome_greeting(name)
+    plan = str(plan_name).strip() or "Free"
+    runs = int(runs_per_month)
+    url = str(dashboard_url).strip()
+    intro = (
+        f"{greeting}\n\n"
+        f"Your {PRODUCT_NAME} account is ready. You are on the {plan} plan, "
+        f"which includes {runs} agent runs this month."
+    )
+    path = (
+        "The shortest path to a first real result:\n"
+        "1. Upload your résumé in Resume Studio.\n"
+        "2. Set your target role and location in Settings.\n"
+        "3. Run Job Discovery. Agents score live openings against your "
+        "résumé; every tailored line has to be entailed by evidence you "
+        "have already given the system."
+    )
+    gate = "Nothing leaves Aether without your approval."
+    html, _branded_text = render_branded_email(
+        "Your Aether account is ready",
+        [
+            paragraph(intro),
+            paragraph(path),
+            divider(),
+            paragraph(gate),
+        ],
+        cta={"label": "Open your workspace", "url": url},
+        footer_note=(
+            "You are receiving this because you created an Aether account. "
+            "It is a transactional notice, not a marketing email."
+        ),
+        preheader=f"{plan} plan · {runs} agent runs this month.",
+    )
+    # render_branded_email already returns a complete plain-text alternative;
+    # keep that as the sendable text so HTML and text cannot drift.
+    return html, _branded_text
+
+
+def _aud(amount: float) -> str:
+    return f"A${float(amount):,.2f}"
+
+
+def _amount_and_per(plan: Mapping[str, Any], interval: str) -> tuple[float, str]:
+    annual = str(interval or "").lower() in {"annual", "year", "yearly"}
+    if annual and plan.get("priceAudAnnual") is not None:
+        return float(plan["priceAudAnnual"]), "per year"
+    return float(plan.get("priceAudMonthly") or 0), "per month"
+
+
+def _gst_split(total: float) -> tuple[float, float]:
+    from app.repositories.billing import gst_breakdown
+
+    tax = gst_breakdown(float(total))
+    return float(tax["total"]), float(tax["gst"])
+
+
+def build_subscription_confirmed_bodies(
+    name: str | None,
+    plan: Mapping[str, Any],
+    interval: str,
+    billing_url: str,
+) -> tuple[str, str]:
+    """Post-checkout confirmation — live plan price, GST, run quota."""
+    greeting = _welcome_greeting(name)
+    plan_name = str(plan.get("name") or "").strip() or "paid"
+    amount, per = _amount_and_per(plan, interval)
+    total, gst = _gst_split(amount)
+    runs = int(plan.get("runsPerMonth") or 0)
+    url = str(billing_url).strip()
+    html, text = render_branded_email(
+        f"Your {plan_name} subscription is active",
+        [
+            paragraph(
+                f"{greeting}\n\n"
+                f"Your {plan_name} subscription is active. You will be charged "
+                f"{_aud(total)} {per} (AUD, GST-inclusive — GST component "
+                f"{_aud(gst)}), which includes {runs} agent runs per month."
+            ),
+            paragraph(
+                "You can manage or cancel your subscription anytime from your "
+                "workspace. A tax invoice is available for every charge."
+            ),
+        ],
+        cta={"label": "Open your workspace", "url": url},
+        footer_note=(
+            "Transactional notice about a purchase you made — "
+            "not a marketing email."
+        ),
+        preheader=f"{plan_name} plan · {_aud(total)} {per}.",
+    )
+    return html, text
+
+
+def build_payment_failed_bodies(
+    name: str | None,
+    plan: Mapping[str, Any],
+    interval: str,
+    billing_url: str,
+) -> tuple[str, str]:
+    """Dunning notice for a failed renewal charge."""
+    greeting = _welcome_greeting(name)
+    plan_name = str(plan.get("name") or "").strip() or "paid"
+    amount, per = _amount_and_per(plan, interval)
+    url = str(billing_url).strip()
+    html, text = render_branded_email(
+        "Action needed: payment did not go through",
+        [
+            paragraph(
+                f"{greeting}\n\n"
+                f"The renewal charge of {_aud(amount)} {per} (AUD, "
+                f"GST-inclusive) for your {plan_name} plan did not go through. "
+                "This is usually an expired or declined card."
+            ),
+            paragraph(
+                "To keep your subscription active, update your payment method "
+                "from your workspace. Stripe will retry the charge automatically."
+            ),
+        ],
+        cta={"label": "Update payment method", "url": url},
+        footer_note=(
+            "Transactional billing notice for your active subscription — "
+            "not a marketing email."
+        ),
+        preheader=f"{plan_name} renewal of {_aud(amount)} {per} did not go through.",
+    )
+    return html, text
+
+
+def build_cancellation_confirmed_bodies(
+    name: str | None,
+    plan: Mapping[str, Any],
+    paid_until: str | None,
+    pricing_url: str,
+) -> tuple[str, str]:
+    """Cancellation confirmation — paid-until date and Free-plan fallback."""
+    greeting = _welcome_greeting(name)
+    plan_name = str(plan.get("name") or "").strip() or "paid"
+    until = str(paid_until or "").strip() or (
+        "the end of the period you have already paid for"
+    )
+    url = str(pricing_url).strip()
+    html, text = render_branded_email(
+        "Your subscription is cancelled",
+        [
+            paragraph(
+                f"{greeting}\n\n"
+                f"Your {plan_name} subscription has been cancelled — you will "
+                f"not be charged again. Access continues until {until}."
+            ),
+            paragraph(
+                "After that, your account moves to the Free plan (5 agent runs "
+                "per month) and your data stays intact. You can resubscribe "
+                "anytime from the pricing page."
+            ),
+        ],
+        cta={"label": "View plans", "url": url},
+        footer_note=(
+            "Transactional confirmation of a cancellation you requested — "
+            "not a marketing email."
+        ),
+        preheader=f"{plan_name} cancelled · access until {until}.",
+    )
+    return html, text
+
+
+def build_trial_ending_bodies(
+    name: str | None,
+    plan: Mapping[str, Any],
+    interval: str,
+    billing_url: str,
+) -> tuple[str, str]:
+    """Reminder that a trial is about to convert to a paid charge."""
+    greeting = _welcome_greeting(name)
+    plan_name = str(plan.get("name") or "").strip() or "paid"
+    amount, per = _amount_and_per(plan, interval)
+    url = str(billing_url).strip()
+    html, text = render_branded_email(
+        f"Your {plan_name} trial is ending",
+        [
+            paragraph(
+                f"{greeting}\n\n"
+                f"Your {plan_name} trial is ending. Unless you cancel, the "
+                f"card on file will be charged {_aud(amount)} {per} "
+                "(AUD, GST-inclusive)."
+            ),
+            paragraph(
+                "You can manage or cancel from your workspace before the "
+                "trial ends. Nothing else changes until then."
+            ),
+        ],
+        cta={"label": "Review billing", "url": url},
+        footer_note=(
+            "Transactional reminder about a trial you started — "
+            "not a marketing email."
+        ),
+        preheader=f"{plan_name} trial ending · {_aud(amount)} {per}.",
+    )
+    return html, text
+
+
+def build_notification_digest_bodies(
+    subject: str, body: str
+) -> tuple[str, str]:
+    """Wrap an already-composed digest in gilt chrome.
+
+    The digest body is the user-approved plain text (status updates and
+    matches). This function does not invent items — it only presents the
+    supplied body in the Aether-owned email template.
+    """
+    title = str(subject or "").strip() or "Your Aether digest"
+    digest = str(body or "").strip() or "{{digest_body}}"
+    html, text = render_branded_email(
+        title,
+        [paragraph(digest)],
+        footer_note=(
+            "You are receiving this because you approved a digest from your "
+            "Aether workspace. It is a transactional notice, not a marketing "
+            "email."
+        ),
+        preheader=title,
+    )
+    return html, text
+
+
+def build_auto_reply_bodies(
+    body: str,
+    *,
+    footnote: str | None = None,
+    footer: str | None = None,
+) -> tuple[str, str]:
+    """Inbound acknowledgement — default copy or an admin-saved override."""
+    note_parts = [part for part in (footnote, footer) if str(part or "").strip()]
+    html, text = render_branded_email(
+        "We've received your message",
+        [paragraph(body)],
+        footer_note="\n\n".join(note_parts) or (
+            "You are receiving this one-time acknowledgement because you "
+            "emailed us. It is not a marketing email."
+        ),
+        preheader="We've received your message",
+    )
+    return html, text
+
+
+def build_founder_digest_preview_bodies() -> tuple[str, str]:
+    """Brand-tab preview — merge fields, never invented metrics."""
+    from app.services.stripe_gateway import app_base_url
+
+    html, text = render_branded_email(
+        "Aether Sales Agent — daily digest ({{date}} UTC)",
+        [
+            paragraph(
+                "Where the sales pipeline stands as of this morning (UTC). "
+                "Sent every day, including zero-activity days."
+            ),
+            stats(
+                [
+                    ("Mode", "{{mode}}"),
+                    ("Signups (total users)", "{{signups}}"),
+                    (
+                        "Paid conversions (active/trialing/past_due, non-free)",
+                        "{{paid_conversions}}",
+                    ),
+                    ("MRR (AUD, billingInterval-aware)", "{{mrr_aud}}"),
+                    ("Leads", "{{leads}}"),
+                    ("Emails really sent (all time)", "{{emails_sent}}"),
+                    (
+                        "Dry-run emails logged (all time)",
+                        "{{dry_run_logged}}",
+                    ),
+                    ("Reply rate", "{{reply_rate}}"),
+                    ("LinkedIn drafts queued", "{{linkedin_drafts}}"),
+                    ("Suppression list size", "{{suppression_count}}"),
+                    ("Outreach log rows today", "{{outreach_today}}"),
+                ]
+            ),
+            divider(),
+            paragraph(
+                "All numbers above are live database queries — nothing "
+                "is estimated."
+            ),
+        ],
+        cta={"label": "Open the admin console", "url": f"{app_base_url()}/admin"},
+        footer_note=(
+            "Aether Career Job Agent — internal founder digest, sent to "
+            "the account owner only."
+        ),
+        preheader=(
+            "{{signups}} signups · {{leads}} leads · "
+            "{{outreach_today}} outreach rows today"
+        ),
+    )
+    return html, text

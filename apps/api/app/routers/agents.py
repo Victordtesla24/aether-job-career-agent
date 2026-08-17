@@ -15,6 +15,7 @@ import os
 import re
 import secrets
 import time
+from collections.abc import Iterable
 from dataclasses import asdict, is_dataclass
 from typing import Any, Callable
 
@@ -424,6 +425,57 @@ _BACKEND_TO_KEY = {a["backend"]: a["key"] for a in AGENT_CATALOG if a["backend"]
 #: Scoring plus its ATS-optimization / skill-gap facets); pin the canonical card
 #: so stat displays name the primary agent, not whichever facet sorted last.
 _BACKEND_TO_KEY["fitScorer"] = "matchScoring"
+
+
+def honest_catalog_counts() -> dict[str, int]:
+    """The honest basis behind every agent count this product shows.
+
+    AUD-AGENT-4. :data:`AGENT_CATALOG` is a list of CARDS, not of agents: one
+    deterministic engine (``fitScorer``) is presented as THREE cards — Match
+    Scoring, ATS Optimization and Skill Gap — so ``len(AGENT_CATALOG)`` has
+    never been a count of agents. ``GET /agents/catalog`` transmitted only that
+    length (as ``counts.total``) and every surface rendered it as "22 agents",
+    which counted one engine three times and padded the product's headline
+    number.
+
+    BOTH facts are computed here and BOTH are transmitted, so no screen has to
+    guess which number it is holding:
+
+    ``engines``  distinct implemented backends — the agents that actually exist.
+    ``cards``    catalog entries — what the configuration grid renders.
+
+    Cards with no backend are roadmap entries: they are counted as cards (they
+    are on screen) and never as engines (nothing runs behind them).
+    """
+    return {
+        "engines": len({a["backend"] for a in AGENT_CATALOG if a.get("backend")}),
+        "cards": len(AGENT_CATALOG),
+    }
+
+
+def honest_map_counts(agent_keys: Iterable[str]) -> dict[str, int]:
+    """The same honest basis as :func:`honest_catalog_counts`, per WORKFLOW MAP.
+
+    AUD-AGENT-4, round 2. The orchestration screen draws one panel per map and
+    its header stated a scale. That header summed the map's NODES, and a node
+    is a CARD: the "Fit Scoring" stage lists ``matchScoring``,
+    ``atsOptimization`` and ``skillGap``, which are three faces of the single
+    ``fitScorer`` engine, so the header claimed 12 agents for a pipeline of 10.
+    Exactly the padding this finding names, on the same screen as the catalog
+    surfaces its first half fixed.
+
+    So the server computes the map's scale too, and transmits BOTH numbers:
+    the header states them as a pair ("N engines powering M cards") rather than
+    picking one and calling it agents. Duplicate keys within a map collapse —
+    a card placed twice is still one card.
+
+    Keys with no catalog entry are ignored (the map builder drops them from the
+    payload as well, so counting them would describe nodes nobody can see).
+    """
+    keys = [k for k in dict.fromkeys(agent_keys) if k in _CATALOG_BY_KEY]
+    backends = {b for b in (_CATALOG_BY_KEY[k].get("backend") for k in keys) if b}
+    return {"engines": len(backends), "cards": len(keys)}
+
 
 #: Canonical agent registry — every DISTINCT implemented agent, DERIVED from the
 #: catalog rather than hardcoded (F-3, PROD-VERIFY-5A).
@@ -4570,9 +4622,11 @@ def orchestration_map(current_user: CurrentUser) -> dict[str, Any]:
     maps: list[dict[str, Any]] = []
     for map_key, map_name, subtitle, stages in _ORCHESTRATION_MAPS:
         stage_payload = []
+        mapped_keys: list[str] = []
         for stage_name, agent_keys in stages:
             known = [k for k in agent_keys if k in _CATALOG_BY_KEY]
             placed.update(known)
+            mapped_keys.extend(known)
             stage_payload.append(
                 {"stage": stage_name, "agents": [entry_for(k) for k in known]}
             )
@@ -4582,6 +4636,10 @@ def orchestration_map(current_user: CurrentUser) -> dict[str, Any]:
                 "name": map_name,
                 "subtitle": subtitle,
                 "stages": stage_payload,
+                # AUD-AGENT-4: the map's own honest scale, so its header states
+                # the server's arithmetic instead of summing nodes (which
+                # counts one engine once per facet card).
+                "counts": honest_map_counts(mapped_keys),
             }
         )
 
@@ -4604,6 +4662,7 @@ def orchestration_map(current_user: CurrentUser) -> dict[str, Any]:
                         "agents": [entry_for(k) for k in unmapped],
                     }
                 ],
+                "counts": honest_map_counts(unmapped),
             }
         )
     return {"maps": maps}
@@ -5071,10 +5130,17 @@ def agent_catalog(current_user: CurrentUser) -> dict[str, Any]:
                 "last_run": run["createdAt"].isoformat() if run else None,
             }
         )
+    # AUD-AGENT-4: ``engines`` and ``cards`` are the two honest numbers (see
+    # ``honest_catalog_counts``). ``total`` is retained on the wire because it
+    # is what older clients read, and it has always been the CARD total — never
+    # an agent count. Clients must render the pair, not ``total`` alone.
+    scale = honest_catalog_counts()
     return {
         "agents": agents,
         "counts": {
             "total": len(agents),
+            "engines": scale["engines"],
+            "cards": scale["cards"],
             "active": active,
             "paused": paused,
             "error": error,
@@ -6294,6 +6360,23 @@ def anthropic_oauth_refresh(current_user: AdminUser) -> dict[str, Any]:
 def agent_stats(current_user: CurrentUser) -> dict[str, Any]:
     """Real aggregate stats derived from AgentRun history (no hardcoded values)."""
     runs = AgentRunRepository().list_recent(current_user["id"], limit=200)
+    all_runs = runs
+    # STORM-1: a paused-episode row (board_sweep._record_paused_skip_episode)
+    # records that autopilot SKIPPED work while the user had an agent stopped.
+    # No model was asked anything, so it is not a task, not a success and not a
+    # failure — it belongs in NEITHER side of the ratio. That is the one way it
+    # differs from the letterless cover degrade below, which WAS a real attempt
+    # and so stays in the denominator.
+    def _is_skip_row(run: dict[str, Any]) -> bool:
+        out = run.get("output") or {}
+        if isinstance(out, str):
+            try:
+                out = json.loads(out)
+            except (ValueError, TypeError):
+                return False
+        return isinstance(out, dict) and out.get("skipped") is True
+    skipped = sum(1 for r in all_runs if _is_skip_row(r))
+    runs = [r for r in all_runs if not _is_skip_row(r)]
     total = len(runs)
     completed = 0
     degraded = 0
@@ -6344,6 +6427,10 @@ def agent_stats(current_user: CurrentUser) -> dict[str, Any]:
         ),
         "successRate": success_rate,
         "degradedCount": degraded,
+        # STORM-1: runs autopilot deliberately did NOT perform because the user
+        # had the agent stopped. Reported so the number is visible rather than
+        # silently dropped — it is excluded from every ratio above.
+        "skippedCount": skipped,
         "taskCount": total,
     }
 

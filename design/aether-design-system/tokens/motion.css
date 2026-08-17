@@ -1,0 +1,24 @@
+:root{
+  --ease:cubic-bezier(0.25,1,0.5,1);      /* the house curve — everything uses it */
+  --ease-spring:cubic-bezier(0.2,0.9,0.2,1);
+  --dur-fast:120ms;
+  --dur:180ms;
+  --dur-slow:260ms;
+  --dur-shine:700ms;
+}
+@keyframes ae-fade-in{from{opacity:0}to{opacity:1}}
+@keyframes ae-slide-up{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+@keyframes ae-scale-in{from{opacity:0;transform:scale(0.97)}to{opacity:1;transform:scale(1)}}
+@keyframes ae-shimmer{0%{background-position:-200% center}100%{background-position:200% center}}
+@keyframes ae-pulse-ok{0%{box-shadow:0 0 0 0 rgba(111,175,141,0.42)}70%{box-shadow:0 0 0 6px rgba(111,175,141,0)}100%{box-shadow:0 0 0 0 rgba(111,175,141,0)}}
+@keyframes ae-breathe{0%,100%{opacity:1}50%{opacity:0.45}}
+.anim-fade-in{animation:ae-fade-in var(--dur-slow) var(--ease) both}
+.anim-slide-up{animation:ae-slide-up 420ms var(--ease) both}
+.anim-scale-in{animation:ae-scale-in var(--dur-slow) var(--ease) both}
+.shimmer-gilt{background-image:linear-gradient(96deg,var(--gold-dark),var(--gold),var(--gold-pale),var(--gold),var(--gold-dark));background-size:200% auto;-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent;animation:ae-shimmer 3s linear infinite}
+/* Motion means "something is working". A non-live state never animates. */
+.pulse-ok{animation:ae-pulse-ok 2s infinite}
+.breathe-warn{animation:ae-breathe 2.6s ease-in-out infinite}
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:0.01ms !important;animation-iteration-count:1 !important;transition-duration:0.01ms !important}
+}

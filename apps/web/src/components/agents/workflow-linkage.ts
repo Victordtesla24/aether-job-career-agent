@@ -379,7 +379,7 @@ const HOP = {
     mechanism:
       "one synced thread per run; never mutates the Email Agent's triage labels",
     evidence:
-      "apps/api/app/agents/sentiment_analysis_agent.py:13,113; catalog copy apps/api/app/routers/agents.py:361",
+      "apps/api/app/agents/sentiment_analysis_agent.py:13,113; catalog copy apps/api/app/routers/agents.py:362",
     discoveryEvidence:
       "apps/api/app/agents/sentiment_analysis_agent.py:51; catalog copy agents.py:343",
     anchors: [
@@ -397,11 +397,11 @@ const HOP = {
     // Line numbers recomputed at the ORCH-EXEC final integration merge
     // (P1-A + B6 + D.524 + B1b + ML-STOPALL-001..004 + interim guards all
     // shift agents.py); anchors unchanged. The provenance re-anchor pass
-    // revalidates every citation before the landing gates.
-    // MODEL-SUB-QUOTA round 3: re-measured against agents.py again (the
-    // subscription-routing work adds imports + a config guard above these
-    // lines). Anchors unchanged — same code, new offsets.
-    evidence: "apps/api/app/routers/agents.py:3956,3988",
+    // revalidates every citation before the landing gates. AUD-AGENT-4 round 2
+    // added `honest_map_counts` above these lines and shifted them again, and
+    // MODEL-SUB-QUOTA round 3 added imports + a config guard above those —
+    // re-resolved against the live tree after both merges, same anchors.
+    evidence: "apps/api/app/routers/agents.py:4008,4040",
     discoveryEvidence: "apps/api/app/routers/agents.py:3380",
     anchors: [
       "def _pipeline_core(",
@@ -483,7 +483,7 @@ const HOP = {
     // honest-refusal check + its helper were inserted earlier in the file) —
     // re-verified against HEAD, same anchors, new line numbers.
     evidence:
-      "apps/api/app/agents/company_research_agent.py:53,183; narrative opt-in at apps/api/app/routers/agents.py:1845,2458",
+      "apps/api/app/agents/company_research_agent.py:53,183; narrative opt-in at apps/api/app/routers/agents.py:1897,2510",
     discoveryEvidence:
       "apps/api/app/agents/company_research_agent.py:53; narrative opt-in at apps/api/app/routers/agents.py:2020-2027",
     anchors: [

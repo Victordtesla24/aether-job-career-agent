@@ -344,13 +344,12 @@ export default function SalesAgentPage() {
       <div className="sa-card mb-5 p-4">
         <div className="flex flex-wrap items-center gap-3">
           <span
-            className={`sa-badge ${
-              health?.status === "ok"
+            className={`sa-badge ${health?.status === "ok"
                 ? "sa-badge-ok"
                 : healthAlarm
                   ? "sa-badge-danger"
                   : "sa-badge-neutral"
-            }`}
+              }`}
           >
             {health ? `scheduler: ${health.status}` : "scheduler: …"}
           </span>
@@ -392,9 +391,8 @@ export default function SalesAgentPage() {
                   <button
                     type="button"
                     onClick={() => void onToggleAccount(a)}
-                    className={`sa-badge ${
-                      a.usedForSalesAgent ? "sa-badge-ok" : "sa-badge-neutral"
-                    }`}
+                    className={`sa-badge ${a.usedForSalesAgent ? "sa-badge-ok" : "sa-badge-neutral"
+                      }`}
                   >
                     {a.usedForSalesAgent ? "sales sending: ON" : "sales sending: off"}
                   </button>
@@ -739,10 +737,13 @@ export default function SalesAgentPage() {
       {tab === "brand" && !loading ? (
         <div className="space-y-4">
           <p className="sa-meta">
-            Brand-templated admin documents — invoice, auto-reply and Stripe-lifecycle email
-            templates — rendered from the same design system as the campaign emails. Prices and
-            GST come live from the Plan catalog; customer fields render as explicit{" "}
+            Brand-templated artefacts — the single catalogue for every
+            Aether-owned email, invoice, document and business card. Preview
+            HTML for email kinds is the same renderer the live send path
+            uses (obsidian and gilt, no images). Prices and GST come live
+            from the Plan catalog; customer fields render as explicit{" "}
             {"{{merge_field}}"} tokens, never fabricated sample data.
+            Candidate mail to an employer stays unbranded on purpose.
           </p>
 
           <div className="flex flex-wrap items-center gap-3">

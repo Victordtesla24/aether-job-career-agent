@@ -135,7 +135,10 @@ const COHORTS_FIXTURE = {
     {
       tier: "standard",
       label: "Standard rigor",
-      submitted: 24,
+      // AUD-META-1: prepared (left draft) and transmitted (verified send) are
+      // separate counts; the rate is computed over the transmitted one.
+      prepared: 24,
+      transmitted: 24,
       interviewed: 2,
       conversionRate: 8.33,
       sufficientSample: true,
@@ -145,7 +148,8 @@ const COHORTS_FIXTURE = {
     {
       tier: "heightened",
       label: "Heightened rigor",
-      submitted: 3,
+      prepared: 3,
+      transmitted: 3,
       interviewed: 0,
       conversionRate: null,
       sufficientSample: false,
@@ -154,9 +158,10 @@ const COHORTS_FIXTURE = {
     },
   ],
   untagged: {
-    submitted: 178,
+    prepared: 178,
+    transmitted: 178,
     interviewed: 0,
-    reason: "submitted before the rigor policy was instrumented",
+    reason: "prepared before the rigor policy was instrumented",
   },
 };
 

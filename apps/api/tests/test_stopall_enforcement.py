@@ -292,6 +292,30 @@ class TestBoardSweepHonestSkip:
     WARNING log instead of ``skipped_paused`` + an INFO log. Fixed by having
     board_sweep.py also recognize the string shape; xfail marker removed now
     that the test is green again.
+
+    STORM-1 (2026-08-17) UPDATE — two assertions of this test pinned what
+    turned out to be the DEFECT, and are corrected here in the same commit as
+    the fix, deliberately and with the reasons on the record:
+
+    * It required a PER-JOB ``AgentRun`` row for the refusal
+      (``tailor_runs[0]["status"] == "failed"``). Live, that contract minted
+      5,862 failed rows in 40 minutes for one owner (~146/min, ``AgentRun`` at
+      104,791 rows, ~200K/day projected) because it is written once per job per
+      sweep pass and the sweep runs continuously. It also asserted "failed" for
+      a refusal the USER asked for, which is precisely what makes failure
+      counts meaningless. The replacement contract — pinned in
+      ``tests/test_storm1_paused_row_storm.py`` — is AT MOST ONE
+      ``status='completed'`` episode row per user per 6h carrying
+      ``{skipped, reason: 'agent_paused', skippedJobs}``. This test now asserts
+      that shape and asserts NO per-job row exists.
+    * It required ``reason == "board-complete"`` with ``covers == 0`` — i.e. it
+      pinned that pausing the TAILOR also silently skipped this job's COVER
+      LETTER, an agent the user deliberately left running. The sweep now runs
+      the enabled agent's work (from the base résumé, the same degrade the
+      ``NoChangesApplied`` branch already takes). With no résumé seeded in this
+      fixture, that attempt honestly stops the stretch at ``no-resume`` —
+      which is itself the proof that the cover agent DID get its turn instead
+      of being skipped with the tailor.
     """
 
     def test_sweep_skips_paused_agent_job_honestly_and_completes(
@@ -317,18 +341,35 @@ class TestBoardSweepHonestSkip:
             "a paused-agent refusal is an honest skip, never a sweep failure: "
             f"{summary}"
         )
-        assert summary["reason"] == "board-complete", summary
+        # The ENABLED cover agent still got its turn (STORM-1 clause 4); it
+        # stopped on this fixture's missing résumé, an input error, not on the
+        # pause.
+        assert summary["reason"] == "no-resume", summary
         assert any(
             "skipped" in r.getMessage() and "paused by user" in r.getMessage()
             for r in caplog.records
         ), "the sweep must log an honest per-job skip note (sweep-trail idiom)"
 
         runs = AgentRunRepository().list_recent(test_user_id, limit=10)
-        tailor_runs = [r for r in runs if r["agentName"] == "tailor"]
-        assert tailor_runs, "the refused attempt must still leave an honest audit row"
-        assert tailor_runs[0]["status"] == "failed"
-        assert "paused" in (tailor_runs[0]["error"] or "").lower()
-        # The job itself was never actually processed.
+        paused_rows = [
+            r for r in runs
+            if isinstance(r.get("output"), dict)
+            and r["output"].get("reason") == "agent_paused"
+        ]
+        assert len(paused_rows) == 1, (
+            "exactly ONE bounded episode row keeps the pause traceable: "
+            f"{[(r['agentName'], r['status'], r['output']) for r in runs]}"
+        )
+        episode = paused_rows[0]
+        assert episode["status"] == "completed", (
+            "a refusal the user asked for is not a failure: " f"{episode}"
+        )
+        assert episode["output"]["skipped"] is True, episode
+        assert episode["output"]["skippedJobs"] == 1, episode
+        assert not (episode.get("input") or {}).get("job_id"), (
+            "the episode row is per-EPISODE, never per-job: " f"{episode}"
+        )
+        # The job itself was never actually tailored or lettered.
         assert summary["processed"] == 0
         assert summary["tailored"] == 0
         assert summary["covers"] == 0

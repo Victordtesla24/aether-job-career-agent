@@ -38,6 +38,7 @@ import StatusBadge, { type StatusTone } from "../ui/StatusBadge";
 import AgentModelPicker from "./AgentModelPicker";
 import AgentSettingsPanel from "./AgentSettingsPanel";
 import type { CatalogAgent, ProviderModel } from "./api";
+import { type CatalogCounts, catalogScaleLabel } from "./catalog-counts";
 import { agentRunDisabledReason } from "./logic";
 
 /** Human "catalog last refreshed …" text (ML-catalog-002). Honest when the
@@ -382,13 +383,7 @@ export default function AgentConfigGrid({
   onSelectModel,
 }: {
   agents: CatalogAgent[];
-  counts: {
-    total: number;
-    active: number;
-    paused: number;
-    error: number;
-    planned?: number;
-  } | null;
+  counts: CatalogCounts | null;
   loading: boolean;
   busyKey: string | null;
   onToggle: (key: string, enabled: boolean) => void;
@@ -439,8 +434,15 @@ export default function AgentConfigGrid({
         <div className="flex items-center gap-2">
           <i className="fa-solid fa-robot text-sm text-aether-coral" aria-hidden="true" />
           <h2 className="text-[15px] font-semibold tracking-[-0.01em]">Agent Configuration</h2>
-          <span className="font-mono text-[11px] tabular-nums text-aether-muted-dim">
-            {counts ? `${counts.total} agents` : "…"}
+          {/* AUD-AGENT-4: this said "N agents" over the CARD total, counting
+              the one fitScorer engine three times. Both server-computed
+              numbers are stated instead, and nothing is stated when the
+              server sent no honest basis. */}
+          <span
+            data-testid="catalog-scale"
+            className="font-mono text-[11px] tabular-nums text-aether-muted-dim"
+          >
+            {catalogScaleLabel(counts) ?? "…"}
           </span>
         </div>
         <div className="flex items-center gap-3 text-[11px] text-aether-muted-dim">

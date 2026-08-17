@@ -1042,16 +1042,47 @@ def _first_present(page: Any, selectors: list[str]) -> Any | None:
     return None
 
 
+#: An answer that unambiguously means "tick it", anchored at the START of the
+#: answer so the affirmation is the answer's subject and not a clause buried
+#: inside it. Read together with :data:`_ANSWER_REFUSAL`, which vetoes it.
+_AFFIRMATIVE_ANSWER = re.compile(
+    r"^(yes|y|true|agreed?|confirmed?|accepted?|acknowledged?|certify|certified|"
+    r"i (agree|confirm|accept|acknowledge|certify|understand|declare|have read))\b"
+)
+
+#: Any word that turns an answer into a refusal. Deliberately broad — the cost
+#: of a false positive is a required box left unticked, which
+#: :func:`run_apply_execution` already turns into an honest ``form_fill_failed``
+#: manual step; the cost of a false negative is the agent agreeing to something
+#: on the user's behalf.
+_ANSWER_REFUSAL = re.compile(
+    r"\b(no|not|never|cannot|decline|declined|refuse|refused|unwilling)\b"
+)
+
+
 def _match_choice_option(answer: str, options: list[str]) -> str | None:
     """The option label a radio/checkbox answer selects, or ``None``.
 
     Gives choice widgets the same tolerance the combobox path already has for
     widgets whose option text differs from the user's wording — a banked
     ``"Yes"`` onto ``"Yes, I'm based in Australia"``, ``"Australian Citizen"``
-    onto ``"I am an Australian/New Zealand Citizen"``. Order: exact, then a
-    yes/no head match, then a one-way prefix, then a >=1-shared-token STRICT
-    DOMINANCE rule. A tie or no overlap returns ``None`` (recorded as unfilled)
-    rather than guessing between an employer's options.
+    onto ``"I am an Australian/New Zealand Citizen"``. Order: exact, then the
+    LONE-OPTION rule, then a yes/no head match, then a one-way prefix, then a
+    >=1-shared-token STRICT DOMINANCE rule. A tie or no overlap returns
+    ``None`` (recorded as unfilled) rather than guessing between an employer's
+    options.
+
+    THE LONE-OPTION RULE (SUB-008). An acknowledgement tick is ONE checkbox
+    whose label is the statement itself ("I certify that the information
+    provided is true"). There is nothing to choose between, so the answer's
+    POLARITY is the only thing that decides it, and the token-overlap rule
+    below is the wrong instrument twice over: a bare ``"Yes"`` shares no word
+    with the employer's sentence and would leave a required box unticked,
+    while a REFUSAL ("no, I do not want a blanket declaration that the
+    information provided is true") shares most of them and would tick the box
+    the user just declined. So a lone option is ticked only for an
+    unambiguously affirmative answer, and a refusal stops here — never falling
+    through to a rule that reads it as agreement.
     """
     if not options:
         return None
@@ -1066,6 +1097,12 @@ def _match_choice_option(answer: str, options: list[str]) -> str | None:
     for opt, no in norm:  # exact
         if no == ans:
             return opt
+    if len(norm) == 1:
+        only_option, only_norm = norm[0]
+        if _ANSWER_REFUSAL.search(ans):
+            return None
+        if _AFFIRMATIVE_ANSWER.match(ans) and not _ANSWER_REFUSAL.match(only_norm):
+            return only_option
     ans_head = ans.split(" ", 1)[0]
     if ans_head in ("yes", "no"):  # yes/no question — head word decides
         heads = [opt for opt, no in norm if no.split(" ", 1)[0] == ans_head]

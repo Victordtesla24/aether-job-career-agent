@@ -38,6 +38,7 @@
  * takes, matched against other rows in that same array. Still never inferred
  * from `stages`, agent name or timing — only from two real ids matching.
  */
+import { catalogScale } from "./catalog-counts";
 import {
   ageMs,
   humanizeDuration,
@@ -100,6 +101,18 @@ export interface MapModel {
   subtitle: string | null;
   stages: Array<{ stage: string; nodes: MapNode[] }>;
   edges: MapEdge[];
+  /**
+   * The map's SERVER-computed scale — `engines` (distinct backends placed in
+   * it) and `cards` (nodes it renders) — or `null` when the payload carries
+   * none (AUD-AGENT-4).
+   *
+   * IT IS TRANSMITTED, NEVER RECOMPUTED HERE. Summing `stages[].nodes` counts
+   * one engine once per facet card: the three `fitScorer` faces in "Fit
+   * Scoring" made the Application Pipeline header claim 12 agents for 10. A
+   * renderer that has no scale must state no scale — falling back to the node
+   * sum is the padded number this fix removes.
+   */
+  scale: { engines: number; cards: number } | null;
   /** Count of nodes whose run is genuinely in flight right now. */
   liveCount: number;
   /** Count of nodes whose in-flight run has gone stale (no worker attached). */
@@ -124,7 +137,7 @@ export function relativeRunLabel(iso: string | null, now: number): string | null
  * TWO SOURCES, AND WHY BOTH ARE NEEDED (U-AX-V4 / S-UI-1 review finding 1).
  *
  * 1. `runs` — `GET /agents/runs`, a GLOBAL window (default `limit=50`) shared
- *    by all 22 agents, newest-first. Richer per row: it carries `heartbeatAt`,
+ *    by all 22 agent cards, newest-first. Richer per row: it carries `heartbeatAt`,
  *    which is the only positive evidence that a long run is genuinely alive.
  *    But one busy agent can push every other agent out of a 50-row window, and
  *    an agent missing from the window is NOT an agent that has not run.
@@ -287,6 +300,7 @@ export function buildMapModel(
     subtitle: entry.subtitle ?? null,
     stages,
     edges,
+    scale: catalogScale(entry.counts),
     liveCount: flat.filter((n) => n.state === "live").length,
     stalledCount: flat.filter((n) => n.state === "stalled").length,
   };

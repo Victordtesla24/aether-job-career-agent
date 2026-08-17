@@ -4,7 +4,7 @@
  * GET /analytics/agent-policy — the SAME deterministic rigor tier every real
  * agent obeys (`app.services.quality_policy.resolve_policy_for_user`), why it
  * is what it is, and per-agent last-run visibility.
- * GET /agents/orchestration-map — all 22 catalog agents placed into one or
+ * GET /agents/orchestration-map — all 22 catalog agent cards placed into one or
  * more end-to-end workflow maps, honest real-vs-planned status.
  *
  * Both schemas are deliberately permissive on the server's optional/extra
@@ -123,10 +123,23 @@ export const OrchestrationMapStageSchema = z.object({
 
 export type OrchestrationMapStage = z.infer<typeof OrchestrationMapStageSchema>;
 
+/**
+ * AUD-AGENT-4 — the map's own honest scale, computed server-side
+ * (`honest_map_counts`): `engines` = distinct implemented backends placed in
+ * this map, `cards` = nodes it renders. Optional because a server predating
+ * the fix sends neither; when they are missing the header states NO scale
+ * rather than summing its nodes, which is the padded number itself.
+ */
+export const OrchestrationMapCountsSchema = z.object({
+  engines: z.number(),
+  cards: z.number(),
+});
+
 export const OrchestrationMapEntrySchema = z.object({
   key: z.string(),
   name: z.string(),
   subtitle: z.string().nullish(),
+  counts: OrchestrationMapCountsSchema.nullish(),
   stages: z.array(OrchestrationMapStageSchema).default([]),
 });
 
@@ -202,11 +215,19 @@ export async function fetchPolicyHistory(
 export const PolicyCohortSchema = z.object({
   tier: z.string(),
   label: z.string(),
-  submitted: z.number().default(0),
+  /** AUD-META-1: applications that left `draft` under this tier — PREPARED.
+   *  Preparation is not proof of sending, so this is never called "submitted",
+   *  "applied" or "sent" on any surface that renders it. Required (no
+   *  `.default()`): a payload that stopped sending it must fail loudly here
+   *  rather than render a silent 0. */
+  prepared: z.number(),
+  /** Applications under this tier carrying a real `transmittedAt` — a VERIFIED
+   *  send, and the only denominator `conversionRate` is computed over. */
+  transmitted: z.number(),
   interviewed: z.number().default(0),
-  /** `null` when the cohort is below the minimum sample: one application that
-   *  did not convert is not "0%", and printing a rate there would invite the
-   *  wrong conclusion about the tier that produced it. */
+  /** `null` when the cohort has fewer than `minSampleSize` VERIFIED sends: one
+   *  application that did not convert is not "0%", and printing a rate there
+   *  would invite the wrong conclusion about the tier that produced it. */
   conversionRate: z.number().nullish(),
   sufficientSample: z.boolean().default(false),
   meetsTarget: z.boolean().nullish(),
@@ -221,11 +242,13 @@ export const PolicyCohortsSchema = z.object({
   cohorts: z.array(PolicyCohortSchema).default([]),
   untagged: z
     .object({
-      submitted: z.number().default(0),
+      // AUD-META-1: same prepared-vs-transmitted split as a cohort row.
+      prepared: z.number(),
+      transmitted: z.number(),
       interviewed: z.number().default(0),
       reason: z.string().nullish(),
     })
-    .default({ submitted: 0, interviewed: 0 }),
+    .default({ prepared: 0, transmitted: 0, interviewed: 0 }),
 });
 
 export type PolicyCohorts = z.infer<typeof PolicyCohortsSchema>;

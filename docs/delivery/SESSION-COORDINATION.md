@@ -930,3 +930,18 @@ Rules of engagement unchanged: locks (git/deploy/test), runbook deploys, append-
 - **Evidence for you (on disk, gitignored):** `uat/reports/evidence/market-perf/final-closeout/AUTHORITATIVE-FULL-BATTERY-ANALYSIS.md`, `isolation-recheck-status.log`, `battery-failing-files.txt`; raw logs `/home/ubuntu/fable5-review/logs/battery-mem-*.log`.
 - **Ledger:** G1–G4 remain `[ ]` in `/home/ubuntu/aether-market-performance.md` with these reasons recorded; flip them only after the conftest redesign makes the authoritative battery clean. G5 stays BLOCKED-ON-OWNER (INV-C-001 secret rotation; sending-mailbox auth — revoke prior consent at myaccount.google.com/permissions then reconnect for a refresh token; F5 Stripe cleanup).
 - Invariants unchanged by DA this resume: sent-count 20/20; no LinkedIn automation; no destructive DB; owner/protected accounts untouched; no force-push.
+
+---
+
+## SESSION DS — 2026-08-17T10:00Z — Design-system default (obsidian & gilt)
+
+**By:** Cursor Grok session. **Does not touch** the in-flight email-center / interview-ingest WIP already dirty in this tree.
+**Scope claimed:**
+- `design/aether-design-system/**` (vendored Claude DS zip), `design/DESIGN.md`, `design/screens/*.html`, `design/templates/**`, `design/review_report.md`
+- `AGENTS.md`, `CLAUDE.md`, `.cursor/rules/aether-design-system.mdc`, `.claude/skills/aether-career-agent-design/**`, `.claude/DESIGN-SYSTEM.md`, selected `.claude/agents/*` brand pointers
+- `README.md`, `docs/delivery/DECISIONS.md` (append D-0043 only)
+- `apps/api/app/services/email_branding.py`, `brand_documents.py`, `branded_artefacts.py` (new), `routers/auth.py` (non-fatal welcome send), `routers/billing.py` (lifecycle mail after commit), `routers/approvals.py` (notification-digest chrome)
+- `apps/api/tests/test_design_system_canonical.py`, `test_subscriber_welcome.py`, `test_aether_owned_brand_registry.py`, plus targeted updates to `test_sales_agent.py` / `test_brand_email_adoption.py`
+- `apps/web/src/app/admin/sales-agent/page.tsx` (brand-tab copy), `apps/web/src/components/charts/tokens.ts` (DS path)
+**Brand catalogue:** password_reset, founder_digest, notification_digest, trial_ending, business_card, document added to the Brand tab; Stripe lifecycle + auto-reply previews are the live `email_branding` send. Carve-out unchanged: candidate → employer Gmail.
+**Deploy:** will stash foreign WIP before any production build/restart so uncommitted email/interview work cannot ship.

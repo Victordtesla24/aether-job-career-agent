@@ -230,6 +230,51 @@ describe("MF-1: email detail panel honest full-body loading", () => {
 });
 
 describe("REV-U-UI-02: EMAIL-BODY-HORIZONTAL-OVERFLOW-01", () => {
+  it("Sync Now re-fetches the inbox with force=true", async () => {
+    fetchEmailInboxMock.mockResolvedValue(inboxWith([MSG_A]));
+    render(<EmailCenterPage />);
+    await screen.findByTestId("email-center");
+    fetchEmailInboxMock.mockClear();
+    fireEvent.click(screen.getByTestId("sync-now-btn"));
+    await waitFor(() =>
+      expect(fetchEmailInboxMock).toHaveBeenCalledWith({ force: true }),
+    );
+  });
+
+  it("search filters the list by subject without dropping the selected thread's body", async () => {
+    fetchEmailInboxMock.mockResolvedValue(inboxWith([MSG_A, MSG_B]));
+    render(<EmailCenterPage />);
+    await screen.findByTestId("email-center");
+    expect(inboxList().getAllByTestId("email-card")).toHaveLength(2);
+    fireEvent.change(screen.getByTestId("inbox-search"), {
+      target: { value: "Alice" },
+    });
+    expect(inboxList().getAllByTestId("email-card")).toHaveLength(1);
+    expect(inboxList().getByText("Recruiter Alice Thread")).toBeTruthy();
+  });
+
+  it("hydrates a persisted AI draft into the review pane and never claims it was sent", async () => {
+    const drafted = baseMessage({
+      id: "thread-drafted",
+      subject: "Screening call",
+      draftReply: "Thank you for reaching out about the role.",
+      bodyTruncated: false,
+      body: "Are you free Thursday?",
+      preview: "Are you free Thursday?",
+    });
+    fetchEmailInboxMock.mockResolvedValue(inboxWith([drafted]));
+    render(<EmailCenterPage />);
+    await screen.findByTestId("email-center");
+    expect(screen.getByTestId("draft-ready-badge")).toBeTruthy();
+    const textarea = await screen.findByTestId("draft-textarea");
+    await waitFor(() =>
+      expect((textarea as HTMLTextAreaElement).value).toContain(
+        "Thank you for reaching out",
+      ),
+    );
+    expect(screen.queryByTestId("email-sent-notice")).toBeNull();
+  });
+
   it("wraps long unbroken tokens (e.g. a tracking URL) instead of overflowing the page", async () => {
     // Live audit: an unbroken long token in the body pushed scrollWidth to
     // 8x clientWidth with no wrap CSS at all, cascading to a page-wide

@@ -1,0 +1,25 @@
+/* ── THE LADDER ── one ground, three elevations. Blur is chrome-only. */
+.elev-1{background:linear-gradient(180deg,rgba(255,255,255,0.035),rgba(255,255,255,0.012));border:1px solid var(--hairline);box-shadow:inset 0 1px 0 0 rgba(255,255,255,0.04)}
+.elev-2{background:linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.022));border:1px solid var(--hairline-strong);box-shadow:0 1px 2px rgba(0,0,0,0.45),inset 0 1px 0 0 rgba(255,255,255,0.05)}
+.elev-3{background:var(--ink-2);border:1px solid var(--hairline-strong);box-shadow:0 16px 40px -12px rgba(0,0,0,0.8);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px)}
+/* Gilded surface — the ceremonial card. Gold hairline, glass, shine on hover. */
+.gilt-card{position:relative;overflow:hidden;background:rgba(255,255,255,0.02);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid var(--gold-muted);border-radius:var(--radius-2xl);transition:border-color var(--dur) var(--ease),transform var(--dur) var(--ease),box-shadow var(--dur) var(--ease)}
+.gilt-card:hover{background:rgba(255,255,255,0.04);border-color:var(--gold-border-strong);transform:translateY(-2px);box-shadow:0 8px 32px rgba(0,0,0,0.45)}
+.gilt-card::after{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(115deg,transparent 40%,rgba(232,213,163,0.10) 50%,transparent 60%);transform:translateX(-120%);transition:transform 700ms var(--ease)}
+.gilt-card:hover::after{transform:translateX(120%)}
+/* Chrome. Only the command bar, rail sheet, tab bar and elev-3 overlays blur. */
+.chrome-blur{background:rgba(8,8,10,0.74);backdrop-filter:blur(24px) saturate(140%);-webkit-backdrop-filter:blur(24px) saturate(140%)}
+/* Page atmosphere: one gold light source, bounded, static. */
+.atmos-page{background-color:var(--ink-0);background-image:radial-gradient(120% 90% at 50% 40%,transparent 40%,rgba(0,0,0,0.55) 100%),radial-gradient(900px 420px at 12% -8%,rgba(201,168,76,0.07),transparent 62%),radial-gradient(700px 380px at 92% 4%,rgba(62,90,140,0.08),transparent 66%);background-attachment:fixed}
+.atmos-hero{position:relative;isolation:isolate}
+.atmos-hero::before{content:"";position:absolute;left:0;right:0;top:-200px;height:560px;z-index:0;pointer-events:none;background:radial-gradient(28% 38% at 18% 56%,rgba(201,168,76,0.22),transparent 64%),radial-gradient(78% 84% at 14% 58%,rgba(201,168,76,0.06),transparent 74%),radial-gradient(44% 56% at 86% 36%,rgba(62,90,140,0.14),transparent 70%);filter:blur(26px)}
+.atmos-hero::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:1px;z-index:0;pointer-events:none;background:linear-gradient(90deg,rgba(201,168,76,0.40) 0%,rgba(232,213,163,0.16) 36%,rgba(255,255,255,0.04) 64%,transparent 100%)}
+.atmos-hero>*{position:relative;z-index:1}
+/* Band separation by luminance, never a border. */
+.band-recessed{background:linear-gradient(180deg,rgba(255,255,255,0.014),rgba(255,255,255,0.03));border-top:1px solid var(--hairline);border-bottom:1px solid var(--hairline)}
+/* Shadows */
+.shadow-gilt{box-shadow:0 0 20px rgba(201,168,76,0.28)}
+.shadow-deep{box-shadow:0 10px 40px rgba(0,0,0,0.55)}
+.rule-gold{height:1px;border:0;background:linear-gradient(90deg,transparent,var(--gold-border),transparent)}
+.film-grain{position:relative}
+.film-grain::before{content:"";position:absolute;inset:0;pointer-events:none;opacity:0.015;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}

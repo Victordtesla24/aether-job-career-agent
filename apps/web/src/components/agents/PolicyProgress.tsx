@@ -166,15 +166,26 @@ export function PolicyCohortProgress({ cohorts }: { cohorts: PolicyCohorts }) {
       cohort.conversionRate === null || cohort.conversionRate === undefined
         ? undefined
         : pct(cohort.conversionRate),
+    // AUD-META-1: the denominator is stated as what it actually is — VERIFIED
+    // sends (`transmittedAt`), not the wider "left draft" population this row
+    // used to call "submitted". When the two differ, the row says so on its
+    // face rather than letting the reader assume every prepared application
+    // went out.
     basis: `${cohort.interviewed} interview${
       cohort.interviewed === 1 ? "" : "s"
-    } from ${cohort.submitted} submitted`,
+    } from ${cohort.transmitted} sent (verified)${
+      cohort.prepared > cohort.transmitted
+        ? ` · ${cohort.prepared} prepared, ${
+            cohort.prepared - cohort.transmitted
+          } not verified as sent`
+        : ""
+    }`,
     // A withheld rate keeps its reason ON the row — the same words the list
     // used, so "we will not print a rate from 3 submissions" survives the
     // move from prose to chart intact.
     note:
       cohort.conversionRate === null || cohort.conversionRate === undefined
-        ? `not enough data yet — at least ${cohorts.minSampleSize} submissions are needed before a rate means anything`
+        ? `not enough data yet — at least ${cohorts.minSampleSize} verified sends are needed before a rate means anything`
         : undefined,
     testId: `policy-cohort-${cohort.tier}`,
     trailing:
@@ -194,22 +205,33 @@ export function PolicyCohortProgress({ cohorts }: { cohorts: PolicyCohorts }) {
   }));
 
   /**
-   * The denominator ribbon. Every tier's submissions, plus the ones that
-   * predate the instrumentation drawn as their own hatched segment — which is
-   * how "these rates describe 27 of 317 applications" becomes a proportion you
-   * can see rather than a sentence you might skip.
+   * The coverage ribbon. Every tier's PREPARED applications, plus the ones
+   * that predate the instrumentation drawn as their own hatched segment —
+   * which is how "these rates describe 27 of 317 applications" becomes a
+   * proportion you can see rather than a sentence you might skip.
+   *
+   * AUD-META-1: the ribbon spans the prepared population (that is the whole
+   * body of work the tiers produced), while the rates above are computed over
+   * verified sends only. Those are different numbers whenever an application
+   * was prepared but never transmitted, so `coverageNote` states the sent
+   * subtotal underneath rather than leaving the ribbon to imply that every
+   * segment left the building.
    */
+  const preparedTotal =
+    cohorts.cohorts.reduce((sum, c) => sum + c.prepared, 0) + cohorts.untagged.prepared;
+  const transmittedTotal =
+    cohorts.cohorts.reduce((sum, c) => sum + c.transmitted, 0) + cohorts.untagged.transmitted;
   const coverage = [
     ...cohorts.cohorts.map((cohort) => ({
       label: TIER_LABEL[cohort.tier] ?? cohort.tier,
-      count: cohort.submitted,
+      count: cohort.prepared,
       kind: "attributed" as const,
     })),
-    ...(cohorts.untagged.submitted > 0
+    ...(cohorts.untagged.prepared > 0
       ? [
           {
             label: "No tier recorded",
-            count: cohorts.untagged.submitted,
+            count: cohorts.untagged.prepared,
             kind: "unattributed" as const,
           },
         ]
@@ -228,29 +250,36 @@ export function PolicyCohortProgress({ cohorts }: { cohorts: PolicyCohorts }) {
       <div className="mt-3">
         <BulletChart
           title="Each tier's cohort against the target"
-          windowLabel="all-time — applications grouped by the tier they were submitted under"
+          windowLabel="all-time — rates over applications verified as sent under each tier"
           rows={rows}
           target={{ value: cohorts.target, label: `${pct(cohorts.target)} target` }}
           coverage={coverage}
-          emptyMessage="No application has been submitted under a recorded policy tier yet."
-          emptyHint="Cohorts appear here as soon as one submission carries a recorded tier."
+          coverageNote={
+            preparedTotal > 0
+              ? `Ribbon spans ${preparedTotal} application${
+                  preparedTotal === 1 ? "" : "s"
+                } PREPARED under a tier; ${transmittedTotal} of them carry a verified send, and the rates above are computed over those only. Preparation is not proof of sending.`
+              : undefined
+          }
+          emptyMessage="No application has been prepared under a recorded policy tier yet."
+          emptyHint="Cohorts appear here as soon as one application carries a recorded tier."
         />
       </div>
 
-      {cohorts.untagged.submitted > 0 ? (
+      {cohorts.untagged.prepared > 0 ? (
         <p
           data-prose="caption"
           className="mt-2 text-[11px] leading-[1.45] text-aether-muted-dim"
           data-testid="policy-cohort-untagged"
         >
-          {`${cohorts.untagged.submitted} not creditable to any tier${
+          {`${cohorts.untagged.prepared} not creditable to any tier${
             cohorts.untagged.interviewed > 0
               ? `, including ${cohorts.untagged.interviewed} interview${
                   cohorts.untagged.interviewed === 1 ? "" : "s"
                 }`
               : ""
           } — ${
-            cohorts.untagged.reason ?? "submitted before the rigor policy was instrumented"
+            cohorts.untagged.reason ?? "prepared before the rigor policy was instrumented"
           }.`}
         </p>
       ) : null}

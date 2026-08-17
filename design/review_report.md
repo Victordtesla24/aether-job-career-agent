@@ -1,5 +1,7 @@
 # Aether AI Job Application Platform — Design Review & Adversarial Audit
 
+> **Historical.** This audit (1 July 2026) reviewed the original coral/indigo wireframes. Those comps are retired. Current brand law is obsidian & gilt — see [`DESIGN.md`](DESIGN.md) and [`aether-design-system/readme.md`](aether-design-system/readme.md). Hex values in the findings below (`#FF6B35`, `#4F46E5`) describe the 2026-07 artefacts, not the shipping product.
+
 **Reviewer:** Senior QA / Design Auditor  
 **Date:** 1 July 2026  
 **Scope:** All 16 high-fidelity HTML wireframe screens  

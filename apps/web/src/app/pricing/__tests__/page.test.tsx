@@ -259,6 +259,43 @@ describe("PricingPage", () => {
     expect(bodyText).toMatch(/same ai models/i);
   });
 
+  it("AUD-MON-1: renders the honest payload the API now sends — both enforced facts (run quota + spend cap), no tier ladder", async () => {
+    // The live GET /billing/plans payload after AUD-MON-1: no `modelTier`, and
+    // `features` derived server-side from the two enforced columns
+    // (apps/api/app/routers/billing.py `_enforced_facts`). The page must render
+    // BOTH facts — the spend cap is a real, enforced plan difference
+    // (UsageQuota.spendCapUsd), not editorial copy to be filtered away.
+    fetchPlansMock.mockResolvedValue({
+      currency: "AUD",
+      gstIncluded: true,
+      plans: [
+        {
+          id: "free", name: "Free", runsPerMonth: 5, spendCapUsdMonthly: 1,
+          monthly: { total: 0, gst: 0, net: 0 }, annual: null,
+          features: ["5 tailored agent runs / month", "US$1.00 monthly AI spend cap"],
+          purchasable: false,
+        },
+        {
+          id: "power", name: "Power", runsPerMonth: 300, spendCapUsdMonthly: 40,
+          monthly: { total: 69, gst: 6.27, net: 62.73 },
+          annual: { total: 649, gst: 59.0, net: 590.0 },
+          features: ["300 tailored agent runs / month", "US$40.00 monthly AI spend cap"],
+          purchasable: true,
+        },
+      ],
+    });
+    render(<PricingPage />);
+    await waitFor(() => screen.getByTestId("pricing-tier-power"));
+
+    const bodyText = document.body.textContent ?? "";
+    expect(bodyText).toMatch(/5 tailored agent runs \/ month/i);
+    expect(bodyText).toMatch(/US\$1\.00 monthly AI spend cap/i);
+    expect(bodyText).toMatch(/300 tailored agent runs \/ month/i);
+    expect(bodyText).toMatch(/US\$40\.00 monthly AI spend cap/i);
+    expect(bodyText).not.toMatch(/model tier/i);
+    expect(bodyText).not.toMatch(/model access/i);
+  });
+
   it("CLI-D3 refix: with a live requiresSubscription=false signal, the includes-every-feature clause renders (true under this operator configuration)", async () => {
     window.localStorage.setItem("aether_token", "fake.jwt.token");
     fetchPlansMock.mockResolvedValue(PLANS);
