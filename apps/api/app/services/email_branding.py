@@ -16,9 +16,11 @@ Two things are deliberately NOT rendered here (design ruling, pinned by
   candidate's own voice, sent from the candidate's own mailbox. Aether
   branding there would misrepresent the applicant to an employer and leak
   the fact that a tool was used.
-* **Sales outreach to prospects** stays text-first for deliverability and
-  keeps only its server-side compliance footer (``sales_branding`` owns that
-  separate, marketing-specific template).
+* **Sales outreach to prospects** is still Aether-owned mail, but Gmail
+  HTML is allowed the raster brand mark. Chrome lives in
+  ``sales_branding.render_sales_outreach_html`` and is registered as Brand-tab
+  kind ``sales_outreach`` so the operator preview is the live wrapper. This
+  module stays bulletproof (no ``<img>``) for transactional SMTP.
 
 Design tokens are copied verbatim from ``apps/web/src/app/globals.css`` /
 ``tailwind.config.ts`` — gold ``#c9a84c`` (light ``#d4b65c``, pale
@@ -44,6 +46,7 @@ branded email from a broken one):
 from __future__ import annotations
 
 import html as _html
+import re
 from typing import Any, Iterable, Mapping, Sequence
 
 #: Brand identity — MUST stay in lockstep with the web's canonical
@@ -114,6 +117,27 @@ def divider() -> dict[str, Any]:
 # ------------------------------------------------------------- html pieces
 def _esc(value: Any) -> str:
     return _html.escape(str(value if value is not None else ""))
+
+
+#: Absolute HTTPS unsubscribe URL — same gate as BrandTemplateRepository.
+_UNSUBSCRIBE_URL = re.compile(
+    r"https://[^\s<>\"']+/[^\s<>\"']*unsubscribe[^\s<>\"']*",
+    re.IGNORECASE,
+)
+
+
+def _footer_note_html(note: str) -> str:
+    """Escape a footer note, keep line breaks, and make a real opt-out URL."""
+    escaped = _esc(note).replace("\n", "<br>")
+
+    def link(match: re.Match[str]) -> str:
+        url = match.group(0)
+        return (
+            f'<a href="{url}" style="color:{PALETTE["gold"]};'
+            f'text-decoration:none;">{url}</a>'
+        )
+
+    return _UNSUBSCRIBE_URL.sub(link, escaped)
 
 
 def _paragraph_html(text: str) -> str:
@@ -249,7 +273,7 @@ def render_branded_email(
         note_row = (
             f'<tr><td align="center" style="padding:18px 40px 0 40px;'
             f"font-family:{BODY_FONT};font-size:12px;line-height:1.6;"
-            f'color:{PALETTE["textFaint"]};">{_esc(footer_note)}</td></tr>'
+            f'color:{PALETTE["textFaint"]};">{_footer_note_html(footer_note)}</td></tr>'
         )
     # The legal footer renders on EVERY branded email (owner directive
     # 2026-08-16): the canonical line plus a real support mailto.
@@ -594,52 +618,80 @@ def build_auto_reply_bodies(
     return html, text
 
 
+#: One ordered list of (label, merge-key). Preview fills ``{{key}}``; the
+#: live sales-agent digest fills live overview numbers. Labels must stay
+#: identical on both paths — do not copy this table into ``sales_agent``.
+FOUNDER_DIGEST_STATS: tuple[tuple[str, str], ...] = (
+    ("Mode", "mode"),
+    ("Signups (total users)", "signups"),
+    (
+        "Paid conversions (active/trialing/past_due, non-free)",
+        "paid_conversions",
+    ),
+    ("MRR (AUD, billingInterval-aware)", "mrr_aud"),
+    ("Leads", "leads"),
+    ("Emails really sent (all time)", "emails_sent"),
+    ("Dry-run emails logged (all time)", "dry_run_logged"),
+    ("Reply rate", "reply_rate"),
+    ("LinkedIn drafts queued", "linkedin_drafts"),
+    ("Suppression list size", "suppression_count"),
+    ("Outreach log rows today", "outreach_today"),
+)
+
+_FOUNDER_DIGEST_INTRO = (
+    "Where the sales pipeline stands as of this morning (UTC). "
+    "Sent every day, including zero-activity days."
+)
+_FOUNDER_DIGEST_CLOSING = (
+    "All numbers above are live database queries — nothing is estimated."
+)
+_FOUNDER_DIGEST_FOOTER = (
+    "Aether Career Job Agent — internal founder digest, sent to "
+    "the account owner only."
+)
+
+
+def build_founder_digest_bodies(
+    *,
+    date: str,
+    values: Mapping[str, str],
+    admin_url: str,
+) -> tuple[str, str]:
+    """Live founder digest and Brand-tab preview share this builder.
+
+    ``values`` must contain every key in :data:`FOUNDER_DIGEST_STATS`.
+    Missing keys fail loudly rather than dropping a row.
+    """
+    rows: list[tuple[str, str]] = []
+    for label, key in FOUNDER_DIGEST_STATS:
+        if key not in values:
+            raise KeyError(f"founder digest missing stat {key!r}")
+        rows.append((label, str(values[key])))
+    html, text = render_branded_email(
+        f"Aether Sales Agent — daily digest ({date} UTC)",
+        [
+            paragraph(_FOUNDER_DIGEST_INTRO),
+            stats(rows),
+            divider(),
+            paragraph(_FOUNDER_DIGEST_CLOSING),
+        ],
+        cta={"label": "Open the admin console", "url": admin_url},
+        footer_note=_FOUNDER_DIGEST_FOOTER,
+        preheader=(
+            f"{values['signups']} signups · {values['leads']} leads · "
+            f"{values['outreach_today']} outreach rows today"
+        ),
+    )
+    return html, text
+
+
 def build_founder_digest_preview_bodies() -> tuple[str, str]:
     """Brand-tab preview — merge fields, never invented metrics."""
     from app.services.stripe_gateway import app_base_url
 
-    html, text = render_branded_email(
-        "Aether Sales Agent — daily digest ({{date}} UTC)",
-        [
-            paragraph(
-                "Where the sales pipeline stands as of this morning (UTC). "
-                "Sent every day, including zero-activity days."
-            ),
-            stats(
-                [
-                    ("Mode", "{{mode}}"),
-                    ("Signups (total users)", "{{signups}}"),
-                    (
-                        "Paid conversions (active/trialing/past_due, non-free)",
-                        "{{paid_conversions}}",
-                    ),
-                    ("MRR (AUD, billingInterval-aware)", "{{mrr_aud}}"),
-                    ("Leads", "{{leads}}"),
-                    ("Emails really sent (all time)", "{{emails_sent}}"),
-                    (
-                        "Dry-run emails logged (all time)",
-                        "{{dry_run_logged}}",
-                    ),
-                    ("Reply rate", "{{reply_rate}}"),
-                    ("LinkedIn drafts queued", "{{linkedin_drafts}}"),
-                    ("Suppression list size", "{{suppression_count}}"),
-                    ("Outreach log rows today", "{{outreach_today}}"),
-                ]
-            ),
-            divider(),
-            paragraph(
-                "All numbers above are live database queries — nothing "
-                "is estimated."
-            ),
-        ],
-        cta={"label": "Open the admin console", "url": f"{app_base_url()}/admin"},
-        footer_note=(
-            "Aether Career Job Agent — internal founder digest, sent to "
-            "the account owner only."
-        ),
-        preheader=(
-            "{{signups}} signups · {{leads}} leads · "
-            "{{outreach_today}} outreach rows today"
-        ),
+    values = {key: "{{" + key + "}}" for _label, key in FOUNDER_DIGEST_STATS}
+    return build_founder_digest_bodies(
+        date="{{date}}",
+        values=values,
+        admin_url=f"{app_base_url()}/admin",
     )
-    return html, text

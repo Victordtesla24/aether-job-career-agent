@@ -128,7 +128,7 @@ def campaign_preview(campaign_id: str, _admin: AdminUser) -> dict[str, Any]:
         append_compliance_footer,
         personalize_template,
     )
-    from app.services.sales_branding import render_branded_email
+    from app.services.sales_branding import render_sales_outreach_html
 
     campaign = _repo().get_campaign(campaign_id)
     if campaign is None:
@@ -140,7 +140,7 @@ def campaign_preview(campaign_id: str, _admin: AdminUser) -> dict[str, Any]:
         "campaignId": campaign["id"],
         "name": campaign["name"],
         "sampleName": "Alex",
-        "html": render_branded_email(campaign["name"], body),
+        "html": render_sales_outreach_html(campaign["name"], body),
     }
 
 
@@ -393,6 +393,7 @@ def brand_documents(_admin: AdminUser) -> dict[str, Any]:
                 "title": meta["title"],
                 "description": meta["description"],
                 "needsPlan": meta["needsPlan"],
+                "allowsImg": bool(meta.get("allowsImg")),
             }
             for kind, meta in DOCUMENT_KINDS.items()
         ],

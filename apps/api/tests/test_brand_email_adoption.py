@@ -349,12 +349,14 @@ class TestBrandingCarveOuts:
         source = (APP_DIR / "services" / "submission_control.py").read_text()
         assert "email_branding" not in source
 
-    def test_sales_outreach_does_not_use_the_branded_template(self):
-        """Outreach keeps its own text-first path + compliance footer."""
+    def test_sales_outreach_uses_sales_branding_not_transactional_chrome(self):
+        """Prospect mail uses the Gmail wrapper (Brand-tab sales_outreach),
+        not the bulletproof transactional template. email_branding may only
+        appear on the founder-digest path."""
         source = (APP_DIR / "agents" / "sales_agent.py").read_text()
         assert "def _handle_interest" in source  # the prospect-outreach path
-        assert "sales_branding" in source, "outreach keeps its own text-first renderer"
-        # email_branding may only be referenced by the founder digest.
+        assert "sales_branding" in source
+        assert "render_sales_outreach_html" in source
         for line_no, line in enumerate(source.splitlines(), start=1):
             if "email_branding" in line:
                 assert "digest" in line or line.strip().startswith("from app.services"), (

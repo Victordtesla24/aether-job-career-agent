@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AETHER — email artefact</title>
+  <link rel="stylesheet" href="../aether-design-system/styles.css">
+  <style>
+    /*
+      Designer fill-in for Aether-owned mail. Live send does NOT load this file:
+      transactional SMTP → apps/api/app/services/email_branding.py
+      sales Gmail HTML  → apps/api/app/services/sales_branding.py
+      Both are previewable under /admin/sales-agent → Brand.
+      Tokens: design/aether-design-system/tokens/colors.css
+    */
+    body {
+      margin: 0;
+      background: #08080A;
+      color: #F5F1E8;
+      font-family: "AB Sans", "DM Sans", Helvetica, sans-serif;
+    }
+
+    .page {
+      max-width: 1280px;
+      margin: 48px auto 80px;
+      padding: 0 24px;
+    }
+
+    .page > h1 {
+      font-family: "AB Marquee", "Playfair Display", Georgia, serif;
+      font-size: 13px;
+      letter-spacing: 0.28em;
+      text-transform: uppercase;
+      color: #C9A84C;
+      margin: 0 0 28px;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 600px));
+      gap: 40px;
+      justify-content: center;
+    }
+
+    .rule {
+      height: 3px;
+      background: linear-gradient(96deg, #B0923F 0%, #C9A84C 38%, #E8D5A3 62%, #C9A84C 100%);
+    }
+
+    .mail {
+      background: #0F0F12;
+      border-left: 1px solid rgba(201, 168, 76, 0.20);
+      border-right: 1px solid rgba(201, 168, 76, 0.20);
+    }
+
+    .eyebrow {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.25em;
+      text-transform: uppercase;
+      color: #C9A84C;
+      text-align: center;
+      padding: 28px 40px 8px;
+    }
+
+    .mail h2 {
+      font-family: "AB Marquee", "Playfair Display", Georgia, serif;
+      font-size: 24px;
+      font-weight: 700;
+      color: #F5F1E8;
+      text-align: center;
+      margin: 0 40px 8px;
+    }
+
+    .hairline {
+      width: 48px;
+      height: 1px;
+      background: rgba(201, 168, 76, 0.20);
+      margin: 12px auto 0;
+    }
+
+    .body {
+      padding: 24px 40px 32px;
+      font-size: 15px;
+      line-height: 1.7;
+      color: rgba(245, 241, 232, 0.62);
+    }
+
+    .body p {
+      margin: 0 0 16px;
+    }
+
+    .mark {
+      display: block;
+      width: 72px;
+      height: auto;
+      margin: 28px auto 12px;
+    }
+
+    .foot {
+      background: #08080A;
+      border-top: 1px solid rgba(201, 168, 76, 0.20);
+      padding: 20px 40px 24px;
+      font-size: 12px;
+      line-height: 1.6;
+      color: rgba(245, 241, 232, 0.46);
+      text-align: center;
+    }
+
+    .caption {
+      font-size: 12px;
+      color: rgba(245, 241, 232, 0.34);
+      margin: 12px 0 0;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="page">
+    <h1>Email artefacts</h1>
+    <div class="grid">
+      <section>
+        <div class="rule"></div>
+        <article class="mail">
+          <div class="eyebrow">Aether CareerAI Agent</div>
+          <h2>{{subject}}</h2>
+          <div class="hairline"></div>
+          <div class="body">
+            <p>Hi {{name}},</p>
+            <p>{{body}}</p>
+            <p>Transactional kinds (welcome, password reset, Stripe lifecycle,
+              founder digest, notification digest, inbound auto-reply) use this
+              bulletproof chrome: tables, inline colour, no images.</p>
+          </div>
+          <div class="foot">© 2026 Aether CareerAI Agent · A product of V² Group Pty. Ltd. · All rights reserved.</div>
+        </article>
+        <div class="rule"></div>
+        <p class="caption">Transactional — Brand kinds subscriber_welcome, password_reset, subscription_confirmed, payment_failed, cancellation_confirmed, trial_ending, founder_digest, notification_digest, auto_reply.</p>
+      </section>
+
+      <section>
+        <div class="rule"></div>
+        <article class="mail">
+          <img class="mark" src="../../apps/web/public/brand/aether-mark.png" alt="Aether Career Job Agent" width="72">
+          <div class="eyebrow">Aether Career Job Agent</div>
+          <h2>{{subject}}</h2>
+          <div class="hairline"></div>
+          <div class="body">
+            <p>Hi {{name}},</p>
+            <p>{{body}}</p>
+            <p>Sales outreach (inbound reply, welcome nudge, re-engagement, demo
+              response) uses this Gmail wrapper. Campaign copy is edited under
+              Campaigns; this chrome is Brand kind sales_outreach.</p>
+          </div>
+          <div class="foot">Aether Career Agent — operated by Vikram Sarkar<br>
+            You received this email because you contacted us or hold an Aether account. Reply unsubscribe to stop receiving these emails.</div>
+        </article>
+        <div class="rule"></div>
+        <p class="caption">Sales outreach — Brand kind sales_outreach. Raster mark is an explicit allow-list exception for Gmail HTML.</p>
+      </section>
+    </div>
+  </div>
+</body>
+
+</html>

@@ -175,6 +175,7 @@ export const BrandDocumentKindSchema = z.object({
   title: z.string(),
   description: z.string(),
   needsPlan: z.boolean(),
+  allowsImg: z.boolean().optional(),
 });
 export type BrandDocumentKind = z.infer<typeof BrandDocumentKindSchema>;
 
