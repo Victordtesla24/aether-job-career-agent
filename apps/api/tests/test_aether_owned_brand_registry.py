@@ -30,6 +30,7 @@ EXPECTED_KINDS = {
     "notification_digest",
     "trial_ending",
     "sales_outreach",
+    "ops_alert",
     "business_card",
     "document",
 }
@@ -109,6 +110,38 @@ def test_sales_outreach_preview_is_the_live_gmail_wrapper() -> None:
     assert "{{body}}" in html
     assert "unsubscribe" in html.lower()
     assert "<img" in html.lower()
+
+
+def test_ops_alert_preview_is_the_live_gilt_builder() -> None:
+    from app.services.brand_documents import render_document
+    from app.services.email_branding import PALETTE, PRODUCT_NAME, build_ops_alert_bodies
+
+    html = render_document("ops_alert")
+    live, text = build_ops_alert_bodies(
+        unit="{{unit}}",
+        timestamp="{{timestamp}}",
+        log_excerpt="{{log_excerpt}}",
+        log_path="{{log_path}}",
+    )
+    assert html == live
+    assert PALETTE["gold"] in html.lower()
+    assert PALETTE["ink0"] in html.lower()
+    assert "<img" not in html.lower()
+    assert "{{unit}}" in html
+    assert "{{log_excerpt}}" in html
+    assert PRODUCT_NAME in html
+    assert PRODUCT_NAME in text
+    assert "!" not in text
+
+
+def test_ops_alert_script_posts_the_gilt_html_field() -> None:
+    from pathlib import Path
+
+    script = (
+        Path(__file__).resolve().parents[3] / "scripts" / "ops_alert.sh"
+    ).read_text()
+    assert "build_ops_alert_bodies" in script
+    assert 'payload["html"] = html' in script
 
 
 def test_founder_digest_preview_and_live_share_one_builder() -> None:

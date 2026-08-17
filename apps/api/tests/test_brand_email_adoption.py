@@ -2,10 +2,10 @@
 
 Adoption (owner directive 2026-08-16, extended 2026-08-17): Aether-OWNED email —
 the founder daily digest, the password-reset link, the subscriber welcome,
-Stripe lifecycle notices, inbound auto-reply, and the notification-digest
-chrome — renders through ``app.services.email_branding``, with the plain-text
-alternative carrying the identical information. Every kind is previewable on
-the admin Brand tab; preview HTML is the live renderer.
+Stripe lifecycle notices, inbound auto-reply, the notification-digest chrome,
+and operator systemd alerts — renders through ``app.services.email_branding``,
+with the plain-text alternative carrying the identical information. Every kind
+is previewable on the admin Brand tab; preview HTML is the live renderer.
 
 Carve-outs (design ruling, pinned here so a future "brand everything" sweep
 has to argue with a red test):
@@ -15,9 +15,9 @@ has to argue with a red test):
   CANDIDATE's own mailbox. Aether branding there would misrepresent the
   applicant to an employer and leak the fact that a tool was used — it
   sabotages the user. Those messages stay plain text.
-* **Sales OUTREACH** to prospects stays text-first for deliverability and
-  keeps only its existing compliance footer; it must not pick up this
-  template.
+* **Sales OUTREACH** to prospects is still Aether-owned mail, but uses the
+  Gmail wrapper in ``sales_branding.render_sales_outreach_html`` (Brand-tab
+  kind ``sales_outreach``) rather than the bulletproof transactional template.
 """
 from __future__ import annotations
 

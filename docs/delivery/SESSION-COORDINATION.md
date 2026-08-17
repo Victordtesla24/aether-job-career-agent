@@ -947,6 +947,8 @@ Rules of engagement unchanged: locks (git/deploy/test), runbook deploys, append-
 **Deploy:** will stash foreign WIP before any production build/restart so uncommitted email/interview work cannot ship.
 **Continuation 2026-08-17T12:00Z — automated email catalogue.** Brand-tab kind `sales_outreach` is the live `render_sales_outreach_html` Gmail wrapper. Founder digest preview and live send share `build_founder_digest_bodies`. Designer fill-in: `design/templates/email.html`. Does not touch SESSION EC / SESSION NW files.
 
+**Continuation 2026-08-17T14:10Z — live inbox review (both Gmail accounts).** Opened `sarkar.vikram@gmail.com` and `melbvicduque@gmail.com`. Aether Resend mail (ops alerts, Aug-14 password reset, delivery test) arrived as plain text. Sales Gmail replies already carry gilt chrome. Scope added: `scripts/ops_alert.sh` + Brand-tab kind `ops_alert` through `email_branding.build_ops_alert_bodies`; transactional footers use `PRODUCT_NAME`; sales outbound strips exclamation marks. Does not take SESSION EC / SESSION NW files.
+
 ---
 
 ## SESSION EC — 2026-08-17T11:50Z — Email Center + Email Agent (score sort, product mail, agent graph)

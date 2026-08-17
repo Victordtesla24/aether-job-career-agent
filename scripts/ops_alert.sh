@@ -60,11 +60,6 @@ else
 fi
 
 subject="[Aether ALERT] unit $UNIT failed on prod VM"
-body="Unit: $UNIT
-Failed/alerted at: $timestamp UTC
-
---- last 40 lines of $LOG_FILE ---
-$log_excerpt"
 
 if [[ -z "$api_key" || -z "$email_from" ]]; then
   echo "ops_alert.sh: AETHER_EMAIL_API_KEY / AETHER_EMAIL_FROM not configured in $ENV_FILE — cannot send alert for unit '$UNIT'. See docs/delivery/OPS-ALERTING.md." >&2
@@ -73,14 +68,41 @@ fi
 
 # Build the JSON payload with python3 (stdlib json — correct escaping of the
 # log excerpt's newlines/quotes, avoids hand-rolled JSON string building).
+# HTML chrome comes from email_branding (same renderer as Brand-tab
+# ops_alert). If that import fails, the alert still goes out as plain text.
 # The API key never enters this payload or argv here; it goes into the curl
 # request only via the header config file below.
-json_payload="$(python3 - "$email_from" "$ALERT_TO" "$subject" "$body" <<'PY'
+json_payload="$(PYTHONPATH="$REPO_ROOT/apps/api${PYTHONPATH:+:$PYTHONPATH}" python3 - \
+  "$email_from" "$ALERT_TO" "$subject" "$UNIT" "$timestamp" "$LOG_FILE" "$log_excerpt" <<'PY'
 import json
 import sys
 
-from_addr, to_addr, subject, body = sys.argv[1:5]
-print(json.dumps({"from": from_addr, "to": [to_addr], "subject": subject, "text": body}))
+from_addr, to_addr, subject, unit, timestamp, log_path, log_excerpt = sys.argv[1:8]
+text = (
+    f"Unit: {unit}\n"
+    f"Failed/alerted at: {timestamp} UTC\n\n"
+    f"--- last 40 lines of {log_path} ---\n"
+    f"{log_excerpt}"
+)
+payload = {"from": from_addr, "to": [to_addr], "subject": subject, "text": text}
+try:
+    from app.services.email_branding import build_ops_alert_bodies
+
+    html, text = build_ops_alert_bodies(
+        unit=unit,
+        timestamp=timestamp,
+        log_excerpt=log_excerpt,
+        log_path=log_path,
+    )
+    payload["text"] = text
+    payload["html"] = html
+except Exception as exc:  # noqa: BLE001 — an alert must still send
+    print(
+        f"ops_alert.sh: gilt template unavailable ({type(exc).__name__}); "
+        "sending plain text. API key not printed.",
+        file=sys.stderr,
+    )
+print(json.dumps(payload))
 PY
 )" || {
   echo "ops_alert.sh: failed to build JSON payload for unit '$UNIT' alert." >&2

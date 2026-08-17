@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import html as _html
 import os
+import re
 
 #: Aether Career Design System tokens (tokens/colors.css) — visual only.
 BRAND = {
@@ -62,6 +63,11 @@ BRAND = {
 
 #: The compliance footer separator written by ``append_compliance_footer``.
 _FOOTER_SEPARATOR = "\n\n--\n"
+
+
+def strip_exclamation_marks(text: str) -> str:
+    """Design-system copy law: sentences end. No exclamation marks."""
+    return re.sub(r"!+", ".", text or "")
 
 
 def brand_logo_url() -> str:

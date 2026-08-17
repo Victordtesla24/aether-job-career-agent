@@ -180,6 +180,7 @@ def build_reset_email_bodies(reset_url: str) -> tuple[str, str]:
     that the text part does not also say.
     """
     from app.services.email_branding import (
+        PRODUCT_NAME,
         divider,
         paragraph,
         render_branded_email,
@@ -199,7 +200,7 @@ def build_reset_email_bodies(reset_url: str) -> tuple[str, str]:
         ],
         cta={"label": _RESET_CTA_LABEL, "url": reset_url},
         footer_note=(
-            "Aether Career Job Agent — this is an automated security email; "
+            f"{PRODUCT_NAME} — this is an automated security email; "
             "nobody at Aether can see or set your password."
         ),
         preheader="Your Aether password-reset link (valid for 1 hour).",

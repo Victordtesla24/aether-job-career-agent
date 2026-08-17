@@ -3,11 +3,11 @@
 Owner directive (2026-08-16, extended 2026-08-17): every email Aether sends
 **in its own voice** — founder digests, password resets, subscriber welcome,
 Stripe lifecycle notices, the notification digest chrome, inbound auto-reply,
-and anything added after this — is rendered here, so the obsidian-and-gilt
-brand is consistent by construction instead of by copy-paste. **Add new
-Aether email templates to THIS module**; do not hand-roll HTML at a call
-site. Admin Brand-tab previews call the same builders the live send path
-uses.
+operator systemd alerts, and anything added after this — is rendered here, so
+the obsidian-and-gilt brand is consistent by construction instead of by
+copy-paste. **Add new Aether email templates to THIS module**; do not
+hand-roll HTML at a call site. Admin Brand-tab previews call the same
+builders the live send path uses.
 
 Two things are deliberately NOT rendered here (design ruling, pinned by
 ``tests/test_brand_email_adoption.py::TestBrandingCarveOuts``):
@@ -646,7 +646,7 @@ _FOUNDER_DIGEST_CLOSING = (
     "All numbers above are live database queries — nothing is estimated."
 )
 _FOUNDER_DIGEST_FOOTER = (
-    "Aether Career Job Agent — internal founder digest, sent to "
+    f"{PRODUCT_NAME} — internal founder digest, sent to "
     "the account owner only."
 )
 
@@ -681,6 +681,50 @@ def build_founder_digest_bodies(
             f"{values['signups']} signups · {values['leads']} leads · "
             f"{values['outreach_today']} outreach rows today"
         ),
+    )
+    return html, text
+
+
+def build_ops_alert_bodies(
+    *,
+    unit: str,
+    timestamp: str,
+    log_excerpt: str,
+    log_path: str,
+) -> tuple[str, str]:
+    """Operator alert when a production systemd unit fails.
+
+    ``scripts/ops_alert.sh`` and Brand-tab kind ``ops_alert`` share this
+    builder so a plaintext Resend alert cannot drift from the gilt chrome.
+    The log excerpt is the last lines the shell already captured — this
+    function does not read files or invent a unit name.
+    """
+    unit_name = str(unit or "").strip() or "{{unit}}"
+    when = str(timestamp or "").strip() or "{{timestamp}}"
+    path = str(log_path or "").strip() or "{{log_path}}"
+    excerpt = str(log_excerpt or "").strip() or "{{log_excerpt}}"
+    html, text = render_branded_email(
+        f"Unit {unit_name} failed",
+        [
+            paragraph(
+                f"A production systemd unit failed at {when} UTC. "
+                f"This is an operator alert from the {PRODUCT_NAME} host."
+            ),
+            stats(
+                [
+                    ("Unit", unit_name),
+                    ("Failed at (UTC)", when),
+                    ("Log file", path),
+                ]
+            ),
+            divider(),
+            paragraph(f"Last 40 log lines:\n{excerpt}"),
+        ],
+        footer_note=(
+            f"{PRODUCT_NAME} — internal operator alert. "
+            "This is not a marketing email."
+        ),
+        preheader=f"{unit_name} failed at {when} UTC",
     )
     return html, text
 

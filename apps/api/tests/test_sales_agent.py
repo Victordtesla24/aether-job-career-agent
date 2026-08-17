@@ -620,6 +620,15 @@ def test_branded_email_preserves_compliance_footer_verbatim():
     assert "unsubscribe" not in main.lower()
 
 
+def test_sales_outbound_copy_has_no_exclamation_marks():
+    from app.services.sales_branding import strip_exclamation_marks
+
+    assert strip_exclamation_marks("Great! Here's the path.") == "Great. Here's the path."
+    footed = append_compliance_footer("Thanks for signing up to Aether!")
+    assert "!" not in footed
+    assert "Thanks for signing up to Aether." in footed
+
+
 def test_gmail_html_body_is_multipart_alternative_with_plain_first():
     """html_body must never REPLACE the compliance-footed plain body."""
     import base64
@@ -868,7 +877,7 @@ def test_brand_documents_registry_lists_kinds_plans_and_assets(
         "payment_failed", "cancellation_confirmed",
         "subscriber_welcome",
         "password_reset", "founder_digest", "notification_digest",
-        "trial_ending", "sales_outreach", "business_card", "document",
+        "trial_ending", "sales_outreach", "ops_alert", "business_card", "document",
     }
     plan_ids = {p["id"] for p in data["plans"]}
     assert {"free", "starter", "pro", "power"} <= plan_ids

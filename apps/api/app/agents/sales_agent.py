@@ -77,7 +77,10 @@ from app.services.llm_client import (
     LLMUnavailableError,
     get_model,
 )
-from app.services.sales_branding import render_sales_outreach_html
+from app.services.sales_branding import (
+    render_sales_outreach_html,
+    strip_exclamation_marks,
+)
 from app.services.stripe_gateway import StripeNotConfiguredError
 
 logger = logging.getLogger("aether.sales_agent")
@@ -299,7 +302,7 @@ def sales_agent_live_scope() -> str:
 # ------------------------------------------------------------------- helpers
 def append_compliance_footer(body: str) -> str:
     """Server-side footer appender — the compliance gate for EVERY send."""
-    body = (body or "").rstrip()
+    body = strip_exclamation_marks(body or "").rstrip()
     if COMPLIANCE_FOOTER.strip() in body:
         return body
     return body + COMPLIANCE_FOOTER
@@ -1071,7 +1074,9 @@ class SalesAgent:
             campaign["templateBody"], sender_name, inbound_text, model
         )
         body = append_compliance_footer(body)
-        reply_subject = subject if subject.lower().startswith("re:") else f"Re: {subject}".strip()
+        reply_subject = strip_exclamation_marks(
+            subject if subject.lower().startswith("re:") else f"Re: {subject}".strip()
+        )
         if dry_run:
             self.repo.record_outreach(
                 channel="email",
@@ -1240,7 +1245,7 @@ class SalesAgent:
             body = append_compliance_footer(
                 personalize_template(campaign["templateBody"], cand.get("name"))
             )
-            subject = campaign["name"]
+            subject = strip_exclamation_marks(campaign["name"])
             if dry_run:
                 self.repo.record_outreach(
                     channel="email",

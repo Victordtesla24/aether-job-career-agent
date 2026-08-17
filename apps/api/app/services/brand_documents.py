@@ -143,6 +143,15 @@ DOCUMENT_KINDS: dict[str, dict[str, Any]] = {
         "needsPlan": False,
         "allowsImg": True,
     },
+    "ops_alert": {
+        "title": "Operator systemd alert",
+        "description": (
+            "Obsidian-and-gilt alert sent when a production systemd unit "
+            "fails. Preview uses merge fields; scripts/ops_alert.sh calls "
+            "the same builder with the live unit name and log excerpt."
+        ),
+        "needsPlan": False,
+    },
     "business_card": {
         "title": "Business card",
         "description": (
@@ -365,7 +374,7 @@ def render_auto_reply() -> str:
         "If your question is about your account or subscription, "
         "including your reference or the email you signed up with "
         "helps us respond faster.\n\n"
-        "— The Aether Career Job Agent team"
+        "— The Aether CareerAI Agent team"
     )
     return html
 
@@ -489,6 +498,19 @@ def render_sales_outreach() -> str:
     return render_sales_outreach_html("{{subject}}", body)
 
 
+def render_ops_alert() -> str:
+    """Same HTML ``scripts/ops_alert.sh`` posts to Resend."""
+    from app.services.email_branding import build_ops_alert_bodies
+
+    html, _text = build_ops_alert_bodies(
+        unit="{{unit}}",
+        timestamp="{{timestamp}}",
+        log_excerpt="{{log_excerpt}}",
+        log_path="{{log_path}}",
+    )
+    return html
+
+
 # --------------------------------------------------------------- dispatcher
 def render_document(
     kind: str,
@@ -532,5 +554,6 @@ def render_document(
         "business_card": render_business_card,
         "document": render_document_artefact,
         "sales_outreach": render_sales_outreach,
+        "ops_alert": render_ops_alert,
     }
     return dispatch[kind]()

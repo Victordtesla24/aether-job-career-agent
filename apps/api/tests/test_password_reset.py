@@ -71,7 +71,13 @@ class TestForgotPasswordHonestAntiEnumeration:
         captured: list[dict[str, str]] = []
 
         def _fake_send(to_email, subject, text_body, html_body=None):
-            captured.append({"to": to_email, "subject": subject})
+            captured.append(
+                {
+                    "to": to_email,
+                    "subject": subject,
+                    "html": html_body or "",
+                }
+            )
             return True
 
         from app.services import email_sender
@@ -89,7 +95,13 @@ class TestForgotPasswordHonestAntiEnumeration:
             for row in captured
             if row["subject"] == "Reset your Aether password"
         ]
-        assert reset == [{"to": email, "subject": "Reset your Aether password"}]
+        assert len(reset) == 1
+        assert reset[0]["to"] == email
+        html = reset[0]["html"].lower()
+        assert html.lstrip().startswith("<!doctype html>")
+        assert "#c9a84c" in html
+        assert "#08080a" in html
+        assert "<img" not in html
 
 
 class TestPasswordResetTokenLifecycle:

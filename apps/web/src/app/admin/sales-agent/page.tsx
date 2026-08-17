@@ -740,11 +740,13 @@ export default function SalesAgentPage() {
             Brand-templated artefacts — the single catalogue for every
             Aether-owned email, invoice, document and business card. Preview
             HTML is the same renderer the live send path uses (obsidian and
-            gilt). Transactional mail is bulletproof (no images). Sales
-            outreach and the print invoice include the brand mark. Prices
-            and GST come live from the Plan catalog; customer fields render
-            as explicit {"{{merge_field}}"} tokens, never fabricated sample
-            data. Candidate mail to an employer stays unbranded on purpose.
+            gilt). Transactional mail (welcome, reset, Stripe lifecycle,
+            founder digest, notification digest, inbound auto-reply, operator
+            systemd alert) is bulletproof (no images). Sales outreach and the
+            print invoice include the brand mark. Prices and GST come live
+            from the Plan catalog; customer fields render as explicit
+            {"{{merge_field}}"} tokens, never fabricated sample data.
+            Candidate mail to an employer stays unbranded on purpose.
           </p>
 
           <div className="flex flex-wrap items-center gap-3">
