@@ -379,9 +379,9 @@ def create_brand_artifact(
 # ----------------------------------------------------------- brand documents
 @router.get("/brand/documents")
 def brand_documents(_admin: AdminUser) -> dict[str, Any]:
-    """Registry of brand-templated admin documents (invoice, auto-reply and
-    Stripe-lifecycle email templates) plus the live plan catalog they render
-    against, and the static brand assets served by the web app."""
+    """Registry of Brand-tab artefacts (emails, invoice, business card,
+    documents) plus the live plan catalog they render against, and the
+    static brand assets served by the web app."""
     from app.repositories.billing import PlanRepository
     from app.services.brand_documents import DOCUMENT_KINDS
 

@@ -1,9 +1,11 @@
 """Where the branded template is adopted — and where it is DELIBERATELY not.
 
-Adoption (owner directive 2026-08-16): Aether-OWNED email — the founder daily
-digest and the password-reset link — renders through
-``app.services.email_branding``, with the plain-text alternative carrying the
-identical information.
+Adoption (owner directive 2026-08-16, extended 2026-08-17): Aether-OWNED email —
+the founder daily digest, the password-reset link, the subscriber welcome,
+Stripe lifecycle notices, inbound auto-reply, and the notification-digest
+chrome — renders through ``app.services.email_branding``, with the plain-text
+alternative carrying the identical information. Every kind is previewable on
+the admin Brand tab; preview HTML is the live renderer.
 
 Carve-outs (design ruling, pinned here so a future "brand everything" sweep
 has to argue with a red test):

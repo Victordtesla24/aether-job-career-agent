@@ -11,8 +11,9 @@ an honest 503 — never a fabricated success.
 from __future__ import annotations
 
 import json
+import logging
 import os
-from typing import Any, Literal, Optional
+from typing import Any, Literal, NamedTuple, Optional
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
@@ -33,6 +34,7 @@ from app.repositories.user import UserRepository
 from app.services import entitlements, stripe_gateway
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 # AUD-MON-1 (ledger round 1) — the plan catalog asserts ONLY what code enforces.
 #
@@ -248,6 +250,7 @@ async def stripe_webhook(request: Request) -> Response:
     obj = event["data"]["object"]
 
     _ensure_billing_tables()
+    intent: BillingEmailIntent | None = None
     with get_connection() as conn:
         try:
             with conn.cursor() as cur:
@@ -264,7 +267,7 @@ async def stripe_webhook(request: Request) -> Response:
                     conn.commit()
                     return _json_response({"received": True, "status": "already_processed"})
 
-                _dispatch_stripe_event(cur, event_type, obj)
+                intent = _dispatch_stripe_event(cur, event_type, obj)
 
                 cur.execute(
                     'UPDATE "StripeEvent" SET "status"=\'processed\',"processedAt"=now() '
@@ -282,7 +285,125 @@ async def stripe_webhook(request: Request) -> Response:
             raise HTTPException(
                 status.HTTP_500_INTERNAL_SERVER_ERROR, "Webhook handler failed"
             )
+    _maybe_send_billing_lifecycle_email(intent)
     return _json_response({"received": True, "status": "processed"})
+
+
+class BillingEmailIntent(NamedTuple):
+    """Captured inside the webhook txn, sent only after a successful commit."""
+
+    kind: str
+    user_id: str
+    plan_id: str
+    interval: str
+    paid_until: str | None = None
+
+
+def _format_paid_until(value: Any) -> str | None:
+    if value is None:
+        return None
+    if hasattr(value, "strftime"):
+        return value.strftime("%d %B %Y")
+    text = str(value).strip()
+    return text or None
+
+
+def _intent_from_checkout(obj: dict[str, Any]) -> BillingEmailIntent | None:
+    metadata = _obj_get(obj, "metadata") or {}
+    user_id = metadata.get("user_id") or _obj_get(obj, "client_reference_id")
+    plan_id = metadata.get("plan_id")
+    interval = metadata.get("interval") or "month"
+    if not user_id or not plan_id:
+        return None
+    return BillingEmailIntent(
+        "subscription_confirmed", str(user_id), str(plan_id), str(interval)
+    )
+
+
+def _intent_from_subscription_row(
+    cur: Any, user_id: str | None, kind: str
+) -> BillingEmailIntent | None:
+    if not user_id:
+        return None
+    cur.execute(
+        'SELECT "planId","billingInterval" FROM "Subscription" WHERE "userId"=%s',
+        (user_id,),
+    )
+    row = cur.fetchone()
+    if not row or not row[0]:
+        return None
+    return BillingEmailIntent(kind, user_id, row[0], row[1] or "month")
+
+
+def _maybe_send_billing_lifecycle_email(intent: BillingEmailIntent | None) -> None:
+    """Best-effort Aether-owned mail AFTER billing has committed.
+
+    A send exception must never 500 the webhook or roll back entitlement.
+    Unconfigured mail is a silent no-op (same contract as welcome/reset).
+    """
+    if intent is None:
+        return
+    from app.services import email_sender
+
+    if not email_sender.is_configured():
+        return
+    try:
+        from app.repositories.billing import PlanRepository
+        from app.services.email_branding import (
+            build_cancellation_confirmed_bodies,
+            build_payment_failed_bodies,
+            build_subscription_confirmed_bodies,
+            build_trial_ending_bodies,
+        )
+
+        user = UserRepository().get_by_id(intent.user_id)
+        plan = PlanRepository().get(intent.plan_id)
+        to_email = (user or {}).get("email")
+        if not user or not to_email or not plan:
+            logger.warning(
+                "billing lifecycle email skipped: missing user/plan "
+                "(kind=%s userId=%s planId=%s)",
+                intent.kind,
+                intent.user_id,
+                intent.plan_id,
+            )
+            return
+        name = user.get("name")
+        base = stripe_gateway.app_base_url()
+        builders = {
+            "subscription_confirmed": lambda: build_subscription_confirmed_bodies(
+                name, plan, intent.interval, f"{base}/dashboard"
+            ),
+            "payment_failed": lambda: build_payment_failed_bodies(
+                name, plan, intent.interval, f"{base}/dashboard/settings"
+            ),
+            "cancellation_confirmed": lambda: build_cancellation_confirmed_bodies(
+                name, plan, intent.paid_until, f"{base}/pricing"
+            ),
+            "trial_ending": lambda: build_trial_ending_bodies(
+                name, plan, intent.interval, f"{base}/dashboard/settings"
+            ),
+        }
+        builder = builders.get(intent.kind)
+        if builder is None:
+            return
+        html, text = builder()
+        titles = {
+            "subscription_confirmed": f"Your {plan['name']} subscription is active",
+            "payment_failed": "Action needed: payment did not go through",
+            "cancellation_confirmed": "Your subscription is cancelled",
+            "trial_ending": f"Your {plan['name']} trial is ending",
+        }
+        email_sender.send_email(
+            to_email, titles[intent.kind], text, html_body=html
+        )
+    except Exception:  # noqa: BLE001 — mail must never fail the webhook
+        logger.warning(
+            "billing lifecycle email failed (kind=%s userId=%s)",
+            intent.kind,
+            intent.user_id,
+            exc_info=True,
+        )
 
 
 def _json_response(payload: dict[str, Any]) -> Response:
@@ -294,24 +415,43 @@ def _json_response(payload: dict[str, Any]) -> Response:
 # ---------------------------------------------------------------------------
 
 
-def _dispatch_stripe_event(cur: Any, event_type: str, obj: dict[str, Any]) -> None:
+def _dispatch_stripe_event(
+    cur: Any, event_type: str, obj: dict[str, Any]
+) -> BillingEmailIntent | None:
     if event_type == "checkout.session.completed":
         _handle_checkout_completed(cur, obj)
-    elif event_type == "customer.subscription.updated":
+        return _intent_from_checkout(obj)
+    if event_type == "customer.subscription.updated":
         _handle_subscription_updated(cur, obj)
-    elif event_type == "customer.subscription.deleted":
-        _handle_subscription_deleted(cur, obj)
-    elif event_type == "invoice.payment_failed":
+        return None
+    if event_type == "customer.subscription.deleted":
+        return _handle_subscription_deleted(cur, obj)
+    if event_type == "invoice.payment_failed":
         _handle_payment_failed(cur, obj)
-    elif event_type == "invoice.paid":
+        metadata = _obj_get(obj, "metadata") or {}
+        user_id = (
+            metadata.get("user_id")
+            or _user_by_subscription(cur, _obj_get(obj, "subscription"))
+            or _user_by_customer(cur, _obj_get(obj, "customer"))
+        )
+        return _intent_from_subscription_row(cur, user_id, "payment_failed")
+    if event_type == "invoice.paid":
         _handle_invoice_paid(cur, obj)
-    elif event_type == "charge.refunded":
+        return None
+    if event_type == "charge.refunded":
         _handle_charge_refunded(cur, obj)
-    elif event_type == "charge.dispute.created":
+        return None
+    if event_type == "charge.dispute.created":
         _handle_dispute_created(cur, obj)
-    elif event_type == "customer.subscription.trial_will_end":
+        return None
+    if event_type == "customer.subscription.trial_will_end":
         _handle_trial_will_end(cur, obj)
-    # Unknown types: no-op but still marked 'processed' (idempotent ack).
+        metadata = _obj_get(obj, "metadata") or {}
+        user_id = metadata.get("user_id") or _user_by_subscription(
+            cur, _obj_get(obj, "id")
+        )
+        return _intent_from_subscription_row(cur, user_id, "trial_ending")
+    return None
 
 
 def _plan_limits(cur: Any, plan_id: str) -> tuple[int, float]:
@@ -516,17 +656,11 @@ def _handle_trial_will_end(cur: Any, obj: dict[str, Any]) -> None:
     "was it handled", and trial users approaching their first charge got no
     durable record that a reminder was due.
 
-    No outbound-email infrastructure exists anywhere in this codebase to
-    "notify" with (grepped: no smtplib/EmailMessage/sendgrid/postmark/resend
-    outside ``app/services/gmail_service.py``, which is the USER's own
-    OAuth-connected inbox, not something Aether can send FROM) — so the
-    smallest additive, defensible fix is the same shared Subscription-row-
-    mutation pattern every other stateful handler in this file already uses
-    (mirrors :func:`_handle_subscription_updated`'s user resolution exactly):
-    stamp ``Subscription."trialEndNotifiedAt"`` to ``now()`` for the resolved
-    user, so the fact "this trial-ending event was processed for this user"
-    is durable and queryable. A future change is free to layer a real
-    outbound reminder on top of this without touching the record contract.
+    The durable record remains ``Subscription."trialEndNotifiedAt"`` stamped
+    to ``now()`` for the resolved user. After the webhook transaction
+    commits, :func:`_maybe_send_billing_lifecycle_email` sends the gilt
+    trial-ending template when outbound mail is configured. A send failure
+    is logged and never rolls back this stamp.
     """
     metadata = _obj_get(obj, "metadata") or {}
     subscription_id = _obj_get(obj, "id")
@@ -572,14 +706,30 @@ def _revoke_to_free(cur: Any, user_id: str, *, cancel_stripe: bool) -> None:
     _reset_quota(cur, user_id, "free", runs_allowed, spend_cap)
 
 
-def _handle_subscription_deleted(cur: Any, obj: dict[str, Any]) -> None:
+def _handle_subscription_deleted(
+    cur: Any, obj: dict[str, Any]
+) -> BillingEmailIntent | None:
     metadata = _obj_get(obj, "metadata") or {}
     subscription_id = _obj_get(obj, "id")
     user_id = metadata.get("user_id") or _user_by_subscription(cur, subscription_id)
     if not user_id:
-        return
+        return None
+    cur.execute(
+        'SELECT "planId","billingInterval","currentPeriodEnd" '
+        'FROM "Subscription" WHERE "userId"=%s',
+        (user_id,),
+    )
+    row = cur.fetchone()
+    plan_id = row[0] if row else None
+    interval = (row[1] if row and row[1] else "month")
+    paid_until = _format_paid_until(row[2] if row else None)
     # The subscription is already gone at Stripe — no cancel call needed.
     _revoke_to_free(cur, user_id, cancel_stripe=False)
+    if not plan_id or plan_id == "free":
+        return None
+    return BillingEmailIntent(
+        "cancellation_confirmed", user_id, plan_id, interval, paid_until
+    )
 
 
 def _handle_payment_failed(cur: Any, obj: dict[str, Any]) -> None:

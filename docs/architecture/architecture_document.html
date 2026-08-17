@@ -3,6 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <title>Autonomous AI Job Application Platform — Enterprise Architecture Package v1.0</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.0/dist/katex.min.css">
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.0/dist/katex.min.js"></script>
@@ -14,17 +16,17 @@
     startOnLoad: true,
     theme: 'base',
     themeVariables: {
-      background: '#1a1f2e',
-      primaryColor: '#FF6B35',
+      background: '#08080A',
+      primaryColor: '#C9A84C',
       primaryTextColor: '#e2e8f0',
-      primaryBorderColor: '#FF6B35',
+      primaryBorderColor: '#C9A84C',
       lineColor: '#94a3b8',
-      secondaryColor: '#1e2a3a',
-      tertiaryColor: '#252d3d',
-      noteBkgColor: '#1e2a3a',
+      secondaryColor: '#0F0F12',
+      tertiaryColor: '#16161A',
+      noteBkgColor: '#0F0F12',
       noteTextColor: '#e2e8f0',
-      activationBkgColor: '#FF6B35',
-      sequenceNumberColor: '#FF6B35'
+      activationBkgColor: '#C9A84C',
+      sequenceNumberColor: '#C9A84C'
     }
   });
 </script>
@@ -37,22 +39,22 @@
   margin: 1.5cm 2cm;
   @top-center {
     content: string(doctitle);
-    font-family: 'Inter', -apple-system, sans-serif;
+    font-family: 'AB Sans', 'DM Sans', sans-serif;
     font-size: 8pt;
     color: #64748b;
     letter-spacing: 0.5px;
   }
   @bottom-left {
     content: "Autonomous AI Job Application Platform — Enterprise Architecture v1.0";
-    font-family: 'Inter', -apple-system, sans-serif;
+    font-family: 'AB Sans', 'DM Sans', sans-serif;
     font-size: 7.5pt;
     color: #64748b;
   }
   @bottom-right {
     content: counter(page);
-    font-family: 'Inter', -apple-system, sans-serif;
+    font-family: 'AB Sans', 'DM Sans', sans-serif;
     font-size: 8pt;
-    color: #FF6B35;
+    color: #C9A84C;
   }
 }
 @page :first { margin: 0; @top-center { content: none; } @bottom-left { content: none; } @bottom-right { content: none; } }
@@ -66,7 +68,7 @@ body {
   margin: 0; padding: 0;
   background: #0a0e1a;
   color: #e2e8f0;
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: 'AB Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   font-size: 10pt;
   line-height: 1.65;
   string-set: doctitle "";
@@ -83,7 +85,7 @@ pre, table, figure, img, svg, .mermaid, blockquote, .equation, code {
 }
 pre { overflow-x: auto; white-space: pre-wrap; word-wrap: break-word; }
 figure img, figure svg { max-width: 80%; max-height: 40vh; height: auto; }
-a { word-break: break-all; color: #FF6B35; text-decoration: none; }
+a { word-break: break-all; color: #C9A84C; text-decoration: none; }
 .katex-display { overflow-x: auto; }
 
 /* ============================================================
@@ -170,7 +172,7 @@ a { word-break: break-all; color: #FF6B35; text-decoration: none; }
   display: inline-block;
   background: rgba(255,107,53,0.15);
   border: 1px solid rgba(255,107,53,0.45);
-  color: #FF6B35;
+  color: #C9A84C;
   font-size: 8pt;
   font-weight: 600;
   letter-spacing: 2.5px;
@@ -199,7 +201,7 @@ a { word-break: break-all; color: #FF6B35; text-decoration: none; }
 
 .cover-subtitle {
   font-size: 13pt;
-  color: #FF6B35;
+  color: #C9A84C;
   font-weight: 600;
   margin: 0 0 30px 0;
   letter-spacing: 1px;
@@ -207,7 +209,7 @@ a { word-break: break-all; color: #FF6B35; text-decoration: none; }
 
 .cover-accent-line {
   width: 120px; height: 3px;
-  background: linear-gradient(90deg, transparent, #FF6B35, transparent);
+  background: linear-gradient(90deg, transparent, #C9A84C, transparent);
   margin: 0 auto 30px;
 }
 
@@ -239,7 +241,7 @@ a { word-break: break-all; color: #FF6B35; text-decoration: none; }
   position: absolute;
   bottom: 0; left: 0; right: 0;
   height: 4px;
-  background: linear-gradient(90deg, transparent, #FF6B35, #4ECDC4, #FF6B35, transparent);
+  background: linear-gradient(90deg, transparent, #C9A84C, #4ECDC4, #C9A84C, transparent);
 }
 
 /* ============================================================
@@ -252,7 +254,7 @@ a { word-break: break-all; color: #FF6B35; text-decoration: none; }
 .toc-title {
   font-size: 20pt;
   font-weight: 700;
-  color: #FF6B35;
+  color: #C9A84C;
   margin-bottom: 6px;
   border-bottom: none;
 }
@@ -298,7 +300,7 @@ a { word-break: break-all; color: #FF6B35; text-decoration: none; }
   border: 1px solid rgba(255,107,53,0.3);
   border-radius: 4px;
   font-size: 8pt;
-  color: #FF6B35;
+  color: #C9A84C;
   font-weight: 700;
   margin-right: 8px;
   flex-shrink: 0;
@@ -313,7 +315,7 @@ a { word-break: break-all; color: #FF6B35; text-decoration: none; }
 .toc-page-num {
   flex-shrink: 0; text-align: right;
   min-width: 24px; font-size: 9.5pt;
-  color: #FF6B35; font-weight: 600;
+  color: #C9A84C; font-weight: 600;
 }
 
 /* ============================================================
@@ -333,7 +335,7 @@ a { word-break: break-all; color: #FF6B35; text-decoration: none; }
   display: inline-block;
   background: rgba(255,107,53,0.15);
   border: 1px solid rgba(255,107,53,0.35);
-  color: #FF6B35;
+  color: #C9A84C;
   font-size: 7.5pt;
   font-weight: 700;
   letter-spacing: 2px;
@@ -356,7 +358,7 @@ a { word-break: break-all; color: #FF6B35; text-decoration: none; }
 
 .section-rule {
   height: 3px;
-  background: linear-gradient(90deg, #FF6B35, rgba(255,107,53,0.2), transparent);
+  background: linear-gradient(90deg, #C9A84C, rgba(255,107,53,0.2), transparent);
   border: none;
   margin: 12px 0 24px 0;
   border-radius: 2px;
@@ -394,7 +396,7 @@ a { word-break: break-all; color: #FF6B35; text-decoration: none; }
   position: absolute;
   top: 0; left: 0; right: 0;
   height: 2px;
-  background: linear-gradient(90deg, #FF6B35, rgba(255,107,53,0.2), transparent);
+  background: linear-gradient(90deg, #C9A84C, rgba(255,107,53,0.2), transparent);
 }
 
 .card-accent {
@@ -421,7 +423,7 @@ a { word-break: break-all; color: #FF6B35; text-decoration: none; }
 .card h4 {
   font-size: 10pt;
   font-weight: 700;
-  color: #FF6B35;
+  color: #C9A84C;
   margin: 12px 0 6px 0;
 }
 .card p {
@@ -464,7 +466,7 @@ a { word-break: break-all; color: #FF6B35; text-decoration: none; }
   position: absolute;
   top: 0; left: 0; right: 0;
   height: 2px;
-  background: var(--agent-color, #FF6B35);
+  background: var(--agent-color, #C9A84C);
 }
 
 .agent-header {
@@ -482,7 +484,7 @@ a { word-break: break-all; color: #FF6B35; text-decoration: none; }
   display: flex; align-items: center; justify-content: center;
   font-size: 8.5pt;
   font-weight: 800;
-  color: #FF6B35;
+  color: #C9A84C;
   flex-shrink: 0;
 }
 
@@ -515,7 +517,7 @@ a { word-break: break-all; color: #FF6B35; text-decoration: none; }
 }
 .agent-field .field-label {
   font-size: 7pt;
-  color: #FF6B35;
+  color: #C9A84C;
   font-weight: 700;
   letter-spacing: 0.5px;
   text-transform: uppercase;
@@ -548,7 +550,7 @@ a { word-break: break-all; color: #FF6B35; text-decoration: none; }
   padding: 10px 14px;
   text-align: left;
   font-weight: 700;
-  color: #FF6B35;
+  color: #C9A84C;
   font-size: 9pt;
   letter-spacing: 0.5px;
   text-transform: uppercase;
@@ -588,7 +590,7 @@ a { word-break: break-all; color: #FF6B35; text-decoration: none; }
 .kpi-tile .kpi-value {
   font-size: 20pt;
   font-weight: 800;
-  color: #FF6B35;
+  color: #C9A84C;
   display: block;
   line-height: 1.1;
   margin-bottom: 4px;
@@ -605,7 +607,7 @@ a { word-break: break-all; color: #FF6B35; text-decoration: none; }
    INFO BOXES
    ============================================================ */
 .info-box {
-  border-left: 3px solid #FF6B35;
+  border-left: 3px solid #C9A84C;
   background: rgba(255,107,53,0.07);
   padding: 12px 16px;
   margin: 14px 0;
@@ -616,7 +618,7 @@ a { word-break: break-all; color: #FF6B35; text-decoration: none; }
 .info-box.blue { border-color: #60A5FA; background: rgba(96,165,250,0.07); }
 
 .info-box p { margin: 0; font-size: 9.5pt; color: #cbd5e1; }
-.info-box strong { color: #FF6B35; }
+.info-box strong { color: #C9A84C; }
 
 /* ============================================================
    TAGS / BADGES
@@ -625,7 +627,7 @@ a { word-break: break-all; color: #FF6B35; text-decoration: none; }
   display: inline-block;
   background: rgba(255,107,53,0.12);
   border: 1px solid rgba(255,107,53,0.3);
-  color: #FF6B35;
+  color: #C9A84C;
   font-size: 7.5pt;
   font-weight: 600;
   padding: 2px 8px;
@@ -652,7 +654,7 @@ a { word-break: break-all; color: #FF6B35; text-decoration: none; }
 .section h3 {
   font-size: 11pt;
   font-weight: 700;
-  color: #FF6B35;
+  color: #C9A84C;
   margin: 18px 0 8px 0;
 }
 .section h4 {
@@ -687,7 +689,7 @@ code {
   background: rgba(255,255,255,0.07);
   padding: 1px 5px;
   border-radius: 4px;
-  color: #FF6B35;
+  color: #C9A84C;
 }
 pre {
   background: rgba(17,24,39,0.95);
@@ -713,6 +715,7 @@ tr, li { page-break-inside: avoid; }
 </style>
 </head>
 <body>
+<p style="margin:0;padding:12px 24px;background:#0F0F12;color:#C9A84C;font-family:'AB Sans','DM Sans',sans-serif;font-size:12px;letter-spacing:0.08em;text-transform:uppercase;">Historical architecture package — chrome and diagrams restyled to the current obsidian &amp; gilt system.</p>
 
 <!-- ============================================================
      COVER PAGE
@@ -1164,8 +1167,8 @@ flowchart LR
     P -->|Submits applications| ATS
     P -->|Auto-fills forms| REC
 
-    classDef person fill:#FF6B35,color:#fff,stroke:#FF6B35
-    classDef system fill:#1a2a6c,color:#fff,stroke:#FF6B35,stroke-width:2px
+    classDef person fill:#C9A84C,color:#08080A,stroke:#C9A84C
+    classDef system fill:#1a2a6c,color:#fff,stroke:#C9A84C,stroke-width:2px
     classDef ext fill:#1e2a3a,color:#e2e8f0,stroke:#4ECDC4
     </div>
     <div class="diagram-label">Figure 1 — C4 Level 1: System Context. The platform acts as autonomous intermediary between the user and all external career systems.</div>
@@ -1194,9 +1197,9 @@ flowchart TB
     AOE --> CLS
     AOE --> ASS
 
-    classDef fe fill:#1a1f2e,color:#FF6B35,stroke:#FF6B35
+    classDef fe fill:#1a1f2e,color:#C9A84C,stroke:#C9A84C
     classDef api fill:#1a2a6c,color:#e2e8f0,stroke:#4ECDC4
-    classDef agent fill:#FF6B35,color:#fff,stroke:#FF6B35,stroke-width:2px
+    classDef agent fill:#C9A84C,color:#08080A,stroke:#C9A84C,stroke-width:2px
     classDef svc fill:#1e2a3a,color:#e2e8f0,stroke:#4ECDC4
         </div>
         <div class="diagram-label">Figure 2a — Application & Service Layer</div>
@@ -1219,7 +1222,7 @@ flowchart TB
     AOE -->|Stores documents| OS
     AOE -->|Traces/Metrics| MON
 
-    classDef agent fill:#FF6B35,color:#fff,stroke:#FF6B35,stroke-width:2px
+    classDef agent fill:#C9A84C,color:#08080A,stroke:#C9A84C,stroke-width:2px
     classDef infra fill:#1a2a6c,color:#e2e8f0,stroke:#A78BFA
     classDef data fill:#0d1b3e,color:#e2e8f0,stroke:#4ECDC4,stroke-width:2px
     classDef mon fill:#1e2a3a,color:#e2e8f0,stroke:#FBBF24
@@ -1252,13 +1255,13 @@ flowchart LR
     EXEC --> AL
     SUP --> AL
 
-    classDef sup fill:#FF6B35,color:#fff,stroke:#FF6B35
+    classDef sup fill:#C9A84C,color:#08080A,stroke:#C9A84C
     classDef plan fill:#1a2a6c,color:#e2e8f0,stroke:#4ECDC4
     classDef exec fill:#1e2a3a,color:#e2e8f0,stroke:#4ECDC4
     classDef mem fill:#0d1b3e,color:#e2e8f0,stroke:#A78BFA
     classDef tool fill:#1e2a3a,color:#e2e8f0,stroke:#FBBF24
-    classDef wf fill:#252d3d,color:#e2e8f0,stroke:#FF6B35
-    classDef human fill:#FF6B35,color:#fff,stroke:#fff,stroke-width:2px
+    classDef wf fill:#252d3d,color:#e2e8f0,stroke:#C9A84C
+    classDef human fill:#C9A84C,color:#08080A,stroke:#fff,stroke-width:2px
     classDef audit fill:#1a1f2e,color:#94a3b8,stroke:#64748b
     </div>
     <div class="diagram-label">Figure 3 — C4 Level 3: Component Diagram of the Agent Orchestration Engine.</div>
@@ -1290,10 +1293,10 @@ flowchart LR
     CICD -->|Deploy| K8S
 
     classDef infra fill:#1a2a6c,color:#e2e8f0,stroke:#4ECDC4
-    classDef cluster fill:#0d1b3e,color:#e2e8f0,stroke:#FF6B35,stroke-width:2px
+    classDef cluster fill:#0d1b3e,color:#e2e8f0,stroke:#C9A84C,stroke-width:2px
     classDef ns fill:#1e2a3a,color:#e2e8f0,stroke:#94a3b8
     classDef data fill:#252d3d,color:#e2e8f0,stroke:#A78BFA
-    classDef cicd fill:#FF6B35,color:#fff,stroke:#FF6B35
+    classDef cicd fill:#C9A84C,color:#08080A,stroke:#C9A84C
     </div>
     <div class="diagram-label">Figure 4 — C4 Level 4: Deployment Diagram on AWS EKS with namespaced Kubernetes workloads.</div>
   </div>
@@ -1334,7 +1337,7 @@ flowchart LR
   <h2>Core Execution Agents (1-7)</h2>
   <div class="agents-grid">
 
-    <div class="agent-card" style="--agent-color: #FF6B35">
+    <div class="agent-card" style="--agent-color: #C9A84C">
       <div class="agent-header">
         <div class="agent-number">01</div>
         <div class="agent-title-block">
@@ -1687,7 +1690,7 @@ flowchart LR
       </div>
     </div>
 
-    <div class="agent-card" style="--agent-color: #FF6B35">
+    <div class="agent-card" style="--agent-color: #C9A84C">
       <div class="agent-header">
         <div class="agent-number">11</div>
         <div class="agent-title-block">
@@ -1948,7 +1951,7 @@ flowchart LR
       </div>
     </div>
 
-    <div class="agent-card" style="--agent-color: #FF6B35">
+    <div class="agent-card" style="--agent-color: #C9A84C">
       <div class="agent-header">
         <div class="agent-number">19</div>
         <div class="agent-title-block">
@@ -2056,13 +2059,13 @@ flowchart TB
     HAG -->|Revision| PLAN
     APP --> LEARN
 
-    classDef start fill:#FF6B35,color:#fff,stroke:#FF6B35
-    classDef sup fill:#1a2a6c,color:#fff,stroke:#FF6B35,stroke-width:2px
+    classDef start fill:#C9A84C,color:#08080A,stroke:#C9A84C
+    classDef sup fill:#1a2a6c,color:#fff,stroke:#C9A84C,stroke-width:2px
     classDef plan fill:#0d1b3e,color:#e2e8f0,stroke:#4ECDC4
     classDef exec fill:#1e2a3a,color:#e2e8f0,stroke:#94a3b8
     classDef rev fill:#252d3d,color:#e2e8f0,stroke:#A78BFA
     classDef comp fill:#1a1f2e,color:#F87171,stroke:#F87171
-    classDef human fill:#FF6B35,color:#fff,stroke:#fff,stroke-width:2px
+    classDef human fill:#C9A84C,color:#08080A,stroke:#fff,stroke-width:2px
     classDef app fill:#34D399,color:#0a0e1a,stroke:#34D399
     classDef learn fill:#FBBF24,color:#0a0e1a,stroke:#FBBF24
         </div>
@@ -2312,10 +2315,10 @@ flowchart LR
     ATS -->|Fail| MAP
     FMT -->|Violation| PARSE
 
-    classDef start fill:#FF6B35,color:#fff,stroke:#FF6B35
+    classDef start fill:#C9A84C,color:#08080A,stroke:#C9A84C
     classDef end fill:#34D399,color:#0a0e1a,stroke:#34D399
     classDef step fill:#1e2a3a,color:#e2e8f0,stroke:#4ECDC4
-    classDef gate fill:#1a2a6c,color:#fff,stroke:#FF6B35,stroke-width:2px
+    classDef gate fill:#1a2a6c,color:#fff,stroke:#C9A84C,stroke-width:2px
     </div>
     <div class="diagram-label">Figure 11 — Resume Tailoring Pipeline: 12-stage processing from input to verified tailored output.</div>
   </div>
@@ -2396,7 +2399,7 @@ flowchart TB
 
     IN --> KE --> SM --> ES --> SKG --> AO --> CS --> OUT
 
-    classDef start fill:#FF6B35,color:#fff,stroke:#FF6B35
+    classDef start fill:#C9A84C,color:#08080A,stroke:#C9A84C
     classDef end fill:#34D399,color:#0a0e1a,stroke:#34D399
     classDef step fill:#1e2a3a,color:#e2e8f0,stroke:#4ECDC4
         </div>
@@ -2589,7 +2592,7 @@ flowchart TB
     EM -->|Pattern extraction| PROC
     PROC -->|Strategy retrieval| WM
 
-    classDef wm fill:#FF6B35,color:#fff,stroke:#FF6B35
+    classDef wm fill:#C9A84C,color:#08080A,stroke:#C9A84C
     classDef stm fill:#1a2a6c,color:#e2e8f0,stroke:#4ECDC4
     classDef ltm fill:#0d1b3e,color:#e2e8f0,stroke:#A78BFA,stroke-width:2px
     classDef em fill:#1e2a3a,color:#e2e8f0,stroke:#FBBF24
@@ -2658,7 +2661,7 @@ flowchart LR
     SK --> JOB
     ACH --> JOB
 
-    classDef person fill:#FF6B35,color:#fff,stroke:#FF6B35,stroke-width:2px
+    classDef person fill:#C9A84C,color:#08080A,stroke:#C9A84C,stroke-width:2px
     classDef node fill:#1e2a3a,color:#e2e8f0,stroke:#4ECDC4
         </div>
         <div class="diagram-label">Figure 16 — Knowledge Graph: Entity interconnections from user identity to target roles.</div>
@@ -2681,7 +2684,7 @@ flowchart LR
     GH --> JARVIS
     JARVIS --> SKILL --> APP
 
-    classDef source fill:#FF6B35,color:#fff,stroke:#FF6B35
+    classDef source fill:#C9A84C,color:#08080A,stroke:#C9A84C
     classDef proj fill:#1a2a6c,color:#e2e8f0,stroke:#4ECDC4
     classDef ach fill:#FBBF24,color:#0a0e1a,stroke:#FBBF24
     classDef skill fill:#A78BFA,color:#fff,stroke:#A78BFA
@@ -2821,7 +2824,7 @@ flowchart LR
 
     classDef start fill:#F87171,color:#fff,stroke:#F87171
     classDef end fill:#34D399,color:#0a0e1a,stroke:#34D399
-    classDef decision fill:#FF6B35,color:#fff,stroke:#FF6B35
+    classDef decision fill:#C9A84C,color:#08080A,stroke:#C9A84C
     classDef action fill:#1e2a3a,color:#e2e8f0,stroke:#4ECDC4
     classDef block fill:#1a1f2e,color:#F87171,stroke:#F87171
     classDef warn fill:#1e2a3a,color:#FBBF24,stroke:#FBBF24
@@ -3175,11 +3178,11 @@ flowchart TB
     HUMAN -->|Approved| APPLY
     HUMAN -->|Rejected| SKIP
 
-    classDef start fill:#FF6B35,color:#fff,stroke:#FF6B35
+    classDef start fill:#C9A84C,color:#08080A,stroke:#C9A84C
     classDef apply fill:#34D399,color:#0a0e1a,stroke:#34D399
     classDef skip fill:#1a1f2e,color:#94a3b8,stroke:#64748b
     classDef warn fill:#FBBF24,color:#0a0e1a,stroke:#FBBF24
-    classDef decision fill:#1a2a6c,color:#fff,stroke:#FF6B35
+    classDef decision fill:#1a2a6c,color:#fff,stroke:#C9A84C
         </div>
         <div class="diagram-label">Figure 20 — Apply/Don't Apply Decision Tree.</div>
       </div>
@@ -3211,11 +3214,11 @@ flowchart TB
     SAFE -->|Not critical| AUTO
     SAFE -->|Safety critical| REVIEW
 
-    classDef start fill:#FF6B35,color:#fff,stroke:#FF6B35
+    classDef start fill:#C9A84C,color:#08080A,stroke:#C9A84C
     classDef apply fill:#34D399,color:#0a0e1a,stroke:#34D399
     classDef warn fill:#FBBF24,color:#0a0e1a,stroke:#FBBF24
     classDef block fill:#F87171,color:#fff,stroke:#F87171
-    classDef decision fill:#1a2a6c,color:#fff,stroke:#FF6B35
+    classDef decision fill:#1a2a6c,color:#fff,stroke:#C9A84C
         </div>
         <div class="diagram-label">Figure 21 — Escalation Decision Tree: Confidence, Compliance, and Verification gates.</div>
       </div>
@@ -3241,11 +3244,11 @@ flowchart TB
     SCORE -->|75+| PASS
     SCORE -->|Below 75| ITER
 
-    classDef start fill:#FF6B35,color:#fff,stroke:#FF6B35
+    classDef start fill:#C9A84C,color:#08080A,stroke:#C9A84C
     classDef apply fill:#34D399,color:#0a0e1a,stroke:#34D399
     classDef warn fill:#FBBF24,color:#0a0e1a,stroke:#FBBF24
     classDef action fill:#1e2a3a,color:#e2e8f0,stroke:#4ECDC4
-    classDef decision fill:#1a2a6c,color:#fff,stroke:#FF6B35
+    classDef decision fill:#1a2a6c,color:#fff,stroke:#C9A84C
         </div>
         <div class="diagram-label">Figure 22 — Tailoring Depth Decision: matched to skill overlap rate.</div>
       </div>

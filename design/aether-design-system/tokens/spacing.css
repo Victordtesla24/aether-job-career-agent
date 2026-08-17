@@ -1,0 +1,23 @@
+:root{
+  --space-2xs:2px; --space-xs:4px; --space-sm:8px; --space-md:16px;
+  --space-lg:24px; --space-xl:40px; --space-2xl:64px; --space-3xl:112px;
+
+  --radius-xs:2px;  /* buttons, chips, badges — the sharp-edge brand nod */
+  --radius-sm:4px;
+  --radius-md:6px;
+  --radius-lg:8px;
+  --radius-xl:10px;  /* list rows, tiles */
+  --radius-2xl:14px; /* sections, stat blocks, modals */
+  --radius-full:9999px;
+
+  --container:85%;
+  --container-max:1400px;
+  --rail-w:248px;
+  --rail-w-collapsed:64px;
+  --chrome-h:64px;
+  --tap-min:44px;
+  --section-py:112px;
+}
+.container-ae{width:var(--container);max-width:var(--container-max);margin-inline:auto}
+@media(max-width:1024px){.container-ae{width:90%}}
+@media(max-width:768px){.container-ae{width:92%}}

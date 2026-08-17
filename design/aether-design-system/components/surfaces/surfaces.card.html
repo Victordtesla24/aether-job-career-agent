@@ -1,0 +1,57 @@
+<!-- @dsCard group="Components" viewport="700x430" name="Surfaces — Section, ListCard, StatBlock" subtitle="Elevation ladder, gold selection rail, typeset figures" -->
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><title>Surfaces</title>
+<link rel="stylesheet" href="../../styles.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<style>body{margin:0;background:var(--ink-0);color:var(--fg-1);font-family:var(--font-body);padding:20px}.lbl{font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--fg-4);margin:0 0 8px}.row{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin-bottom:14px}</style>
+</head><body><div id="root"></div>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../../preview/ds-preview-loader.js"></script>
+<script type="text/babel" data-presets="react">
+DSPreview.ensure("../../").then((DS) => {
+  const { Section, ListCard, StatBlock, Chip, Button, StatusBadge } = DS;
+  function Card() {
+    const [sel, setSel] = React.useState("a");
+    return (
+      <div style={{ display: "grid", gap: 16 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12 }}>
+          <StatBlock label="Active applications" value="42" delta={2} note="+3 this week" />
+          <StatBlock label="Interview rate" value="18" unit="%" note="7 of 39 applied" />
+          <StatBlock label="AI confidence" value={null} note="no scored roles yet" />
+        </div>
+        <Section
+          eyebrow="Pipeline"
+          title="Today's opportunities"
+          action={<Button tone="quiet" size="xs" iconAfter="fa-solid fa-arrow-right">Browse all</Button>}
+          footnote="Scored against your resume at discovery time — rescored when the resume changes."
+          accent
+          bodyStyle={{ display: "grid", gap: 8 }}
+        >
+          {[
+            { id: "a", role: "Senior Data Analyst", org: "Telstra · Melbourne", fit: "94% fit", tone: "accent" },
+            { id: "b", role: "Analytics Lead", org: "Coles Group · Hybrid", fit: "88% fit", tone: "neutral" }
+          ].map((j) => (
+            <ListCard key={j.id} selected={sel === j.id} onClick={() => setSel(j.id)}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+                <div style={{ minWidth: 0 }}>
+                  <p className="type-label" style={{ margin: 0 }}>{j.role}</p>
+                  <p className="type-meta" style={{ margin: "4px 0 0" }}>{j.org}</p>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <Chip mono tone={j.tone}>{j.fit}</Chip>
+                  <StatusBadge tone="ok" dot live>Tailoring</StatusBadge>
+                </div>
+              </div>
+            </ListCard>
+          ))}
+        </Section>
+      </div>
+    );
+  }
+  ReactDOM.createRoot(document.getElementById("root")).render(<Card />);
+});
+</script>
+</body></html>

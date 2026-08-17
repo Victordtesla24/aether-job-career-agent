@@ -1,0 +1,84 @@
+<!-- @dsCard group="Command Center" viewport="1440x900" -->
+<!-- @startingPoint section="App" subtitle="Aether command center — rail, command bar, dashboard hub" viewport="1440x900" -->
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Aether — Command Center</title>
+<link rel="icon" href="../../assets/favicon.ico">
+<link rel="stylesheet" href="../../styles.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<style>
+*{box-sizing:border-box}
+body{margin:0;color:var(--fg-1);font-family:var(--font-body);font-size:13px;min-height:100vh}
+body.atmos-page{background-color:var(--ink-0)}
+::-webkit-scrollbar{width:9px;height:9px}
+::-webkit-scrollbar-thumb{background:linear-gradient(180deg,rgba(201,168,76,.4),rgba(201,168,76,.15));border-radius:9px}
+::-webkit-scrollbar-track{background:transparent}
+button{font-family:var(--font-body)}
+.grid-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:16px}
+.grid-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:16px}
+.grid-mini{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px}
+.grid-7-5{display:grid;grid-template-columns:7fr 5fr;gap:22px;align-items:start}
+.grid-2pane{display:grid;grid-template-columns:minmax(0,400px) minmax(0,1fr);gap:20px;align-items:start}
+.grid-3pane{display:grid;grid-template-columns:minmax(0,250px) minmax(0,1fr) minmax(0,290px);gap:20px;align-items:start}
+@media(max-width:1240px){.grid-7-5,.grid-2pane{grid-template-columns:1fr}.grid-3pane{grid-template-columns:minmax(0,240px) minmax(0,1fr)}}
+@media(max-width:900px){.grid-3pane{grid-template-columns:1fr}}
+</style>
+</head><body class="atmos-page"><div id="root"></div>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+<script src="../../preview/ds-preview-loader.js"></script>
+<script src="data.js"></script>
+<script type="text/babel" data-presets="react" src="Shell.jsx"></script>
+<script type="text/babel" data-presets="react" src="DashboardScreen.jsx"></script>
+<script type="text/babel" data-presets="react" src="JobsScreen.jsx"></script>
+<script type="text/babel" data-presets="react" src="ResumeScreen.jsx"></script>
+<script type="text/babel" data-presets="react" src="AgentsScreen.jsx"></script>
+<script type="text/babel" data-presets="react">
+const SCREENS = { dashboard: "DashboardScreen", jobs: "JobsScreen", resume: "ResumeScreen", agents: "AgentsScreen" };
+const LABELS = {
+  "cover-letters": "Cover Letter Studio", stories: "Story Bank", applications: "Applications",
+  interviews: "Interview Center", networking: "Networking", email: "Email Center",
+  analytics: "Analytics", offers: "Offers", settings: "Settings"
+};
+
+function Placeholder({ name, onNavigate }) {
+  const { PageHeader, Section, Button, OrnamentDivider } = window.__DS;
+  return (
+    <div className="atmos-hero">
+      <PageHeader title={name} subtitle="This surface is part of the product but is not recreated in this kit." ornament />
+      <Section style={{ padding: 40, textAlign: "center" }}>
+        <p className="type-card-title" style={{ margin: 0, color: "var(--text-secondary)" }}>Not in this kit</p>
+        <div style={{ margin: "16px 0" }}><OrnamentDivider width={200} /></div>
+        <p className="type-body" style={{ margin: "0 auto 20px", maxWidth: "52ch" }}>
+          The four recreated screens are Dashboard, Job Discovery, Resume Studio and Agent Orchestration.
+        </p>
+        <Button tone="outline" size="sm" onClick={() => onNavigate("dashboard")}>Back to dashboard</Button>
+      </Section>
+    </div>
+  );
+}
+
+function App() {
+  const [screen, setScreen] = React.useState("dashboard");
+  const [collapsed, setCollapsed] = React.useState(false);
+  const navigate = (href) => { setScreen(href); window.scrollTo({ top: 0 }); };
+  const Screen = window[SCREENS[screen]];
+  return (
+    <div style={{ display: "flex", minHeight: "100vh" }}>
+      <Rail current={screen} onNavigate={navigate} collapsed={collapsed} onToggle={() => setCollapsed(!collapsed)} />
+      <div style={{ display: "flex", flexDirection: "column", flex: 1, minWidth: 0 }}>
+        <CommandBar onNavigate={navigate} collapsed={collapsed} onToggle={() => setCollapsed(!collapsed)} />
+        <main style={{ flex: 1, padding: "28px 32px 56px" }}>
+          {Screen ? <Screen onNavigate={navigate} /> : <Placeholder name={LABELS[screen] || screen} onNavigate={navigate} />}
+        </main>
+      </div>
+    </div>
+  );
+}
+
+DSPreview.ensure("../../").then(() => {
+  ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+});
+</script>
+</body></html>
