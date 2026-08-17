@@ -29,6 +29,14 @@ Carve-outs: candidate→employer application email and the printed résumé/cove
 - Runbook: `docs/delivery/DEPLOYMENT-RUNBOOK.md`
 - Session claims: `docs/delivery/SESSION-COORDINATION.md`
 - Pytest: `scripts/run-tests.sh` only. Never `source .env` then pytest.
+- Parallel test gate (TEST-PAR-1): do NOT queue behind `/tmp/aether-pytest.lock`. Give your wave its own schema and lock —
+  `scripts/test-schema.sh provision <wave>`, then
+  `AETHER_TEST_SCHEMA=aether_test_<wave> flock /tmp/aether-pytest-<wave>.lock scripts/run-tests.sh -q`,
+  then `scripts/test-schema.sh drop <wave>` when the wave closes. The shared `aether_test` schema + `/tmp/aether-pytest.lock`
+  remain valid for anyone who wants the legacy default. Host budget (measured, do not extrapolate): this VM has ~8 GB
+  and no swap; a full suite reaches ~1.5 GB RSS and was OOM-killed at 2.18 GB when THREE ran at once (2026-08-17).
+  Two concurrent TARGETED batteries alongside another agent's full suite ran green; safe concurrency for FULL suites
+  is unproven — check `free -m` before starting one, and prefer targeted per-wave batteries.
 - Do not restart systemd units without a claimed deploy window. Foreign WIP in this tree must not ship.
 
 ## Non-negotiable constraints

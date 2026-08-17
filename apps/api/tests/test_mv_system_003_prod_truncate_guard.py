@@ -40,7 +40,8 @@ def test_guard_rejects_none_resolution():
 
 
 def test_guard_rejects_any_other_schema_name():
-    """Anything that isn't literally 'aether_test' is refused — not just the
+    """Anything outside the isolated-test-schema shape (``aether_test`` or a
+    per-wave ``aether_test_<wave>``, TEST-PAR-1) is refused — not just the
     known production name. An unrecognized schema is unsafe by default.
     """
     with pytest.raises(ct.ProdTruncationGuardError):
@@ -53,7 +54,9 @@ def test_guard_rejects_any_other_schema_name():
 
 
 def test_guard_allows_test_schema_resolution():
-    """The one and only schema the guard allows through."""
+    """The legacy shared test schema — always allowed. (Per-wave
+    ``aether_test_<wave>`` schemas are covered by TEST-PAR-1's own suite,
+    ``test_test_par_001_parallel_test_schemas.py``.)"""
     ct._assert_schema_is_safe_test_schema("aether_test")  # must not raise
 
 
@@ -200,7 +203,13 @@ def test_resolve_truncation_dsn_fails_closed_when_schema_param_missing(monkeypat
 
 
 def test_real_environment_database_url_test_schema_is_test_not_prod():
+    """The schema this checkout would actually truncate must be an isolated
+    test schema — the legacy shared ``aether_test`` OR this wave's own
+    ``aether_test_<wave>`` (TEST-PAR-1). Production is named explicitly here
+    so the assertion cannot pass by accident if the pattern ever widens.
+    """
     dsn, options, schema = ct._resolve_truncation_dsn()
-    assert schema == "aether_test"
-    assert options == "-csearch_path=aether_test"
+    assert schema not in {"aether", "public"}
+    assert ct._TEST_SCHEMA_PATTERN.fullmatch(schema), schema
+    assert options == f"-csearch_path={schema}"
     assert dsn  # non-empty, sanity check
