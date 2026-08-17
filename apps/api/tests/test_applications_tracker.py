@@ -274,9 +274,14 @@ class TestFunnelSankey:
 
     def test_canonical_labels_and_structure(self, client, auth_headers):
         data = client.get("/applications/funnel/sankey", headers=auth_headers).json()
+        # AUD-META-1: the second stage KEY stays "applied" (stage identity /
+        # dropoff wiring), but its user-visible label is "Prepared" — the count
+        # is status <> 'draft', which is preparation and carries no evidence of
+        # a send. The verified-send figure rides beside the stages.
         assert [s["label"] for s in data["stages"]] == [
-            "Jobs Found", "Applied", "Screened", "Interviewed", "Offers",
+            "Jobs Found", "Prepared", "Screened", "Interviewed", "Offers",
         ]
+        assert isinstance(data["transmitted"], int) and data["transmitted"] >= 0
         assert [s["key"] for s in data["stages"]] == [
             "jobs_found", "applied", "screened", "interviewed", "offers",
         ]

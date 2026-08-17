@@ -117,7 +117,7 @@ const COHORTS_FIXTURE = {
   target: 20,
   minSampleSize: 5,
   cohorts: [],
-  untagged: { submitted: 0, interviewed: 0, reason: null },
+  untagged: { prepared: 0, transmitted: 0, interviewed: 0, reason: null },
 };
 const MARKET_PULSE_FIXTURE = {
   sources: [],

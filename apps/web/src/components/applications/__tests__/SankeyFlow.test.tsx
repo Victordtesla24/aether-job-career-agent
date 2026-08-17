@@ -24,7 +24,9 @@ afterEach(() => {
 const BASE_DATA: SankeyData = {
   stages: [
     { key: "jobs_found", label: "Jobs Found", value: 10, color: "#4F46E5" },
-    { key: "applied", label: "Applied", value: 4, color: "#818CF8" },
+    // AUD-META-1: the server labels this stage "Prepared" (the count is
+    // status <> 'draft'); the component renders the label verbatim.
+    { key: "applied", label: "Prepared", value: 4, color: "#818CF8" },
     { key: "screened", label: "Screened", value: 0, color: "#FF6B35" },
     { key: "interviewed", label: "Interviewed", value: 3, color: "#F59E0B" },
     { key: "offers", label: "Offers", value: 1, color: "#34D399" },
@@ -38,7 +40,7 @@ const BASE_DATA: SankeyData = {
     { after: "screened", count: -3, reason: "no response / screened out" },
     { after: "interviewed", count: 2, reason: "not selected" },
   ],
-  insight: "10 jobs found, 4 applied.",
+  insight: "10 jobs found, 4 applications prepared, 1 verifiably sent by Aether.",
 };
 
 describe("SankeyFlow dropoff rendering (MV-application-tracker-006)", () => {

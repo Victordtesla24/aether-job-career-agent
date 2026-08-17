@@ -128,11 +128,28 @@ def _seed_resume(user_id: str) -> str:
 
 
 def _seed_submitted_application(
-    user_id: str, *, tier: str | None, status: str = "submitted"
+    user_id: str,
+    *,
+    tier: str | None,
+    status: str = "submitted",
+    transmitted: bool = True,
 ) -> str:
-    from app.db import ensure_application_submission_snapshot_columns
+    """One Job + one Application recorded under ``tier``.
+
+    ``transmitted`` (AUD-META-1) stamps ``transmittedAt`` — the only evidence
+    that something verifiably left the building, and now the denominator the
+    cohort endpoint computes conversion over. Defaults to True here so the
+    pre-existing cases below keep measuring exactly the population they were
+    written to measure; the phantom (prepared-but-never-sent) case has its own
+    test, and ``tests/test_meta1_cohort_transmitted.py`` pins the split.
+    """
+    from app.db import (
+        ensure_application_submission_snapshot_columns,
+        ensure_application_transmission_columns,
+    )
 
     ensure_application_submission_snapshot_columns()
+    ensure_application_transmission_columns()
     job_id = _seed_job(user_id)
     resume_id = _seed_resume(user_id)
     app_id = new_id()
@@ -141,9 +158,10 @@ def _seed_submitted_application(
             cur.execute(
                 f'''INSERT INTO "Application"
                     ("id","userId","jobId","resumeId","status","createdAt","updatedAt",
-                     "policyTierAtSubmission")
-                    VALUES (%s,%s,%s,%s,'{status}'::"ApplicationStatus",NOW(),NOW(),%s)''',
-                (app_id, user_id, job_id, resume_id, tier),
+                     "policyTierAtSubmission","transmittedAt")
+                    VALUES (%s,%s,%s,%s,'{status}'::"ApplicationStatus",NOW(),NOW(),%s,
+                            CASE WHEN %s THEN NOW() END)''',
+                (app_id, user_id, job_id, resume_id, tier, transmitted),
             )
         conn.commit()
     return app_id
@@ -265,11 +283,14 @@ class TestPolicyCohortEndpoint:
         assert resp.status_code == 200, resp.text
         body = resp.json()
         by_tier = {c["tier"]: c for c in body["cohorts"]}
-        assert by_tier["standard"]["submitted"] == 6
+        # AUD-META-1: the population is named for what it is — 'transmitted'
+        # (verified sends, the rate's denominator) and 'prepared' (left draft).
+        assert by_tier["standard"]["transmitted"] == 6
+        assert by_tier["standard"]["prepared"] == 6
         assert by_tier["standard"]["interviewed"] == 1
         assert by_tier["standard"]["conversionRate"] == pytest.approx(16.67, abs=0.01)
         assert by_tier["standard"]["meetsTarget"] is False
-        assert by_tier["heightened"]["submitted"] == 6
+        assert by_tier["heightened"]["transmitted"] == 6
         assert by_tier["heightened"]["interviewed"] == 0
         assert by_tier["heightened"]["conversionRate"] == 0.0
 
@@ -283,7 +304,7 @@ class TestPolicyCohortEndpoint:
             "/analytics/agent-policy/cohorts", headers=auth_headers
         ).json()
         cohort = next(c for c in body["cohorts"] if c["tier"] == "heightened")
-        assert cohort["submitted"] == 1
+        assert cohort["transmitted"] == 1
         assert cohort["sufficientSample"] is False
         assert cohort["conversionRate"] is None
         assert cohort["meetsTarget"] is None
@@ -302,18 +323,22 @@ class TestPolicyCohortEndpoint:
             "/analytics/agent-policy/cohorts", headers=auth_headers
         ).json()
         assert {c["tier"] for c in body["cohorts"]} == {"heightened"}
-        assert body["untagged"]["submitted"] == 3
+        assert body["untagged"]["transmitted"] == 3
+        assert body["untagged"]["prepared"] == 3
         assert body["untagged"]["reason"]
 
-    def test_drafts_are_not_counted_as_submitted(
+    def test_drafts_are_counted_as_neither_prepared_nor_transmitted(
         self, client, auth_headers, test_user_id
     ):
-        _seed_submitted_application(test_user_id, tier="heightened", status="draft")
+        _seed_submitted_application(
+            test_user_id, tier="heightened", status="draft", transmitted=False
+        )
         body = client.get(
             "/analytics/agent-policy/cohorts", headers=auth_headers
         ).json()
         assert body["cohorts"] == []
-        assert body["untagged"]["submitted"] == 0
+        assert body["untagged"]["prepared"] == 0
+        assert body["untagged"]["transmitted"] == 0
 
     def test_target_and_gap_are_stated_so_the_number_is_actionable(
         self, client, auth_headers, test_user_id
