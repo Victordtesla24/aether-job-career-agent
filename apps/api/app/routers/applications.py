@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 
 from app.db import (
     ensure_application_apply_channel_column,
+    ensure_application_apply_resolution_columns,
     ensure_application_manual_step_columns,
     ensure_application_manual_step_question_column,
     ensure_application_submission_truth_columns,
@@ -62,6 +63,10 @@ _COLUMNS = (
     'a."applyChannel", a."manualStepReason", a."manualStepDetail", '
     'a."manualStepAt", a."manualStepQuestions", '
     'a."submissionTruthState", a."submissionTruthAt", '
+    # SUB-006: when Aether applied at a canonical ATS form URL rather than the
+    # posting URL the user sees, BOTH are on the row — the substitution is
+    # disclosed to the client, not only to the server log.
+    'a."applyResolvedFrom", a."applyResolvedUrl", a."applyResolvedAt", '
     # U5d-2: does a JOB-TAILORED résumé exist for this application's job? The
     # per-card submit control must promise exactly what the write path will
     # accept (``jobs._resume_for_apply``), so it reads the same fact rather
@@ -87,6 +92,7 @@ def _ensure_read_columns() -> None:
     ensure_application_submission_truth_columns()
     ensure_application_manual_step_columns()
     ensure_application_manual_step_question_column()
+    ensure_application_apply_resolution_columns()
 
 
 def _with_submission(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:

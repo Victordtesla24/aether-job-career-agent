@@ -6,6 +6,7 @@
  * DOM (see __tests__/tracker-lib.test.ts).
  */
 import type { Job } from "../../lib/api/jobs";
+import { hasTransmissionProof } from "./submission-control-lib";
 import type { TrackerApplication } from "./tracker-api";
 
 /** Tracker metadata persisted in Application.answers (jsonb). */
@@ -540,6 +541,67 @@ export function automaticSubmissionDisclaimer(sweepEnabled: boolean): string {
       : "is not enabled on this deployment yet — apply on the employer's " +
         "site yourself for those.")
   );
+}
+
+// ---- SUB-006 — prepared is not submitted -----------------------------------
+
+/**
+ * The honest word for "the artifacts are ready, nothing was transmitted, the
+ * click is still yours".
+ *
+ * GROUND TRUTH (production, 2026-08-16): all 5 `Application` rows carry
+ * `status = 'submitted'` and ZERO carry a `transmittedAt`. Every one of those
+ * cards sat under the word "Submitted" — five claims that a real job
+ * application had been sent, with nothing in the database able to support a
+ * single one of them.
+ */
+export const PREPARED_NOT_SENT_LABEL = "Prepared — needs your click";
+
+/** The facts the prepared-vs-submitted derivation reads — a structural subset
+ *  of `TrackerApplication`, so a bare row shape works without the full type. */
+export type PreparedFacts = {
+  status?: string | null;
+  transmittedAt?: string | null;
+};
+
+/**
+ * `true` when the row SAYS submitted but nothing proves a transmission.
+ *
+ * Two deliberate boundaries:
+ *
+ *  - Proof is `hasTransmissionProof`, IMPORTED rather than re-derived, so this
+ *    label and the per-card submit control can never disagree about what
+ *    counts as a send (the test pins the two against each other).
+ *  - Only `submitted` is reinterpreted. `screening`/`interview`/`offer` are the
+ *    USER telling us an application is already live somewhere — an employer
+ *    replied — so calling those "prepared" would be its own false claim, in
+ *    the opposite direction.
+ *
+ * The stored status is the user's own tracker history and is never rewritten;
+ * what this changes is only the CLAIM the UI makes about it.
+ */
+export function isPreparedNotTransmitted(app: PreparedFacts | null | undefined): boolean {
+  if (!app || app.status !== "submitted") return false;
+  return !hasTransmissionProof({ transmittedAt: app.transmittedAt ?? null });
+}
+
+/**
+ * The stage word a CARD is allowed to use, which is not always its column's.
+ *
+ * A column is a lane shared by many rows, so its header keeps the stage name;
+ * an individual card in the Submitted lane with no transmission proof says the
+ * true thing instead. Every other stage's word is returned untouched — this is
+ * a correction of one specific over-claim, not a relabelling pass.
+ */
+export function stageLabelForCard(
+  stage: StageKey,
+  app?: PreparedFacts | null,
+): string {
+  const label = STAGE_DEFS.find((d) => d.key === stage)?.label ?? stage;
+  if (stage === "submitted" && isPreparedNotTransmitted(app)) {
+    return PREPARED_NOT_SENT_LABEL;
+  }
+  return label;
 }
 
 function metaOf(app: TrackerApplication): TrackerMeta {

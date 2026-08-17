@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<!--
+  SYNTHETIC — a minimised stand-in for the employer-domain `?gh_jid=` microsite
+  shape. Provenance and the live measurements it reproduces are in README.md
+  (SUB-006-GH-CANONICAL). The structural facts it exists to carry, all
+  confirmed against the live page on 2026-08-17 by a read-only GET:
+
+    * HTTP 200, a full marketing page,
+    * ZERO <form> elements — the application UI is a `div#grnhse_app` mount
+      point that Greenhouse's JS fills in later,
+    * the Greenhouse BOARD SLUG is nowhere in the served HTML.
+
+  It is minimised (the real page is 700,675 bytes of marketing markup and
+  inline CSS) because only those three facts are under test. Nothing here is
+  asserted to be byte-identical to any employer's page.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Senior Software Engineer — Careers</title>
+  </head>
+  <body class="general-page-careers">
+    <header>
+      <nav aria-label="Main">
+        <a href="/">Home</a>
+        <a href="/company/careers">Careers</a>
+      </nav>
+    </header>
+    <main>
+      <section class="specific-wrapper-top">
+        <h1>Senior Software Engineer</h1>
+        <p>Sydney, Australia &middot; Engineering</p>
+        <div class="job-description">
+          <h2>About the role</h2>
+          <p>
+            You will build and operate large-scale data infrastructure with a
+            team that cares deeply about correctness.
+          </p>
+          <h2>What we look for</h2>
+          <ul>
+            <li>Experience with distributed systems.</li>
+            <li>Strong written communication.</li>
+          </ul>
+          <p>
+            <a href="/legal/applicant-privacy-notice" target="_blank"
+              ><strong>Applicant Privacy Notice</strong></a
+            >
+          </p>
+        </div>
+      </section>
+      <section id="apply" class="w-full">
+        <!-- The whole application experience. Empty until Greenhouse's script
+             mounts into it client-side; a server-side fetch sees exactly this. -->
+        <div id="grnhse_app" class="bg-gray-cool"></div>
+      </section>
+    </main>
+    <footer>
+      <p>&copy; 2026 Example Corp</p>
+    </footer>
+  </body>
+</html>

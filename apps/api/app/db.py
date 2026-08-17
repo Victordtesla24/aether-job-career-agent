@@ -1867,6 +1867,74 @@ def ensure_application_manual_step_question_column() -> None:
     _application_manual_step_question_column_ready = True
 
 
+#: Guard so the additive SUB-006 apply-resolution columns are only ensured once
+#: per worker process (see ``ensure_application_apply_resolution_columns``).
+_application_apply_resolution_columns_ready = False
+
+
+def ensure_application_apply_resolution_columns() -> None:
+    """Idempotently add the additive ``Application`` apply-resolution columns
+    (SUB-006-GH-CANONICAL).
+
+    WHY THEY EXIST. 99/512 production applications store the EMPLOYER's own
+    ``?gh_jid=`` page as their apply URL, and that page hosts no application
+    form at all (live probe 2026-08-17: 200, 700,675 bytes, zero ``<form>``
+    elements — ``uat/reports/evidence/models-live/sub-006-gh-canonical/
+    live-probe-2026-08-17.json``). The apply engine now resolves such a posting
+    to the canonical Greenhouse ``embed/job_app`` form before it opens a
+    browser. That means the URL a submission was actually driven against is no
+    longer the URL the user sees on the posting — a substitution, and every
+    substitution this product makes on a user's behalf is DISCLOSED rather than
+    silently performed.
+
+    * ``applyResolvedFrom`` (text) — the posting URL as stored on the Job row.
+    * ``applyResolvedUrl`` (text) — the VERIFIED form URL Aether opened
+      instead (verified means: fetched, and a real form was found on it).
+    * ``applyResolvedAt`` (timestamptz) — when the resolution was made.
+
+    NULL is the correct, honest value for every row whose apply URL was never
+    substituted — which is every pre-existing row — so NO backfill is
+    performed.
+
+    Additive only — no DROP, no ALTER TYPE, no DEFAULT rewrite. A
+    transaction-scoped advisory lock serialises concurrent first-hit callers so
+    the DDL cannot race; ``TRUNCATE`` never drops columns, so the process-wide
+    latch survives test teardown. Lazy DDL per ADR-TR-1.
+
+    MUST be called by EVERY path that reads or writes these columns, before the
+    statement that names them.
+    """
+    global _application_apply_resolution_columns_ready
+    if _application_apply_resolution_columns_ready:
+        return
+    columns = (
+        ("applyResolvedFrom", "text"),
+        ("applyResolvedUrl", "text"),
+        ("applyResolvedAt", "timestamptz"),
+    )
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT count(*) FROM information_schema.columns"
+                " WHERE table_name = 'Application'"
+                " AND table_schema = ANY(current_schemas(false))"
+                " AND column_name = ANY(%s)",
+                ([name for name, _type in columns],),
+            )
+            row = cur.fetchone()
+            if row and row[0] == len(columns):
+                _application_apply_resolution_columns_ready = True
+                return
+            cur.execute("SELECT pg_advisory_xact_lock(%s)", (7420260811,))
+            for column, coltype in columns:
+                cur.execute(
+                    f'ALTER TABLE "Application" '
+                    f'ADD COLUMN IF NOT EXISTS "{column}" {coltype}'
+                )
+        conn.commit()
+    _application_apply_resolution_columns_ready = True
+
+
 #: Guard so the additive ADMIN-2.0 user-lifecycle columns are only ensured once
 #: per worker process (see ``ensure_user_lifecycle_columns``).
 _user_lifecycle_columns_ready = False

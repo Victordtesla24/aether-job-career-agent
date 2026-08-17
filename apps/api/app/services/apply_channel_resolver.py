@@ -31,10 +31,11 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import threading
 import time
 from typing import Any, Callable
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 from app.db import ensure_application_apply_channel_column, get_connection
 
@@ -291,6 +292,355 @@ def classify_url(url: str) -> str:
     if "/ashby_jid=" in query or "ashby_jid=" in query:
         return "ashby"
     return "generic"
+
+
+# ---------------------------------------------------------------------------
+# SUB-006 — Greenhouse canonicalisation.
+# ---------------------------------------------------------------------------
+
+#: The ONE Greenhouse surface that serves a real, server-rendered application
+#: form. ``boards.greenhouse.io`` 301s to ``job-boards.greenhouse.io`` (live
+#: 2026-08-17); both are in :data:`_ATS_HOSTS`, and the redirect is followed by
+#: the fetcher, so the stored/disclosed URL stays the canonical one.
+GREENHOUSE_EMBED_TEMPLATE = (
+    "https://boards.greenhouse.io/embed/job_app?for={board}&token={token}"
+)
+
+#: The honest refusal when no candidate board slug produced a real form.
+#: Deliberately its OWN reason code rather than being folded into
+#: ``submit_control_not_found``: that code says "we filled a form and could not
+#: submit it", which is a different (and, for this shape, false) story.
+GREENHOUSE_UNRESOLVABLE_REASON = "greenhouse_form_unresolvable"
+
+#: How many DISTINCT board slugs may be verified for one posting. Each costs an
+#: outbound GET, and a slug we cannot derive in the first few tries is one we
+#: should refuse honestly rather than brute-force against Greenhouse.
+_GREENHOUSE_MAX_CANDIDATES = 3
+
+#: Minimum number of VISIBLE (non-hidden) controls a ``<form>`` must contain
+#: before this module will call it an application form.
+#:
+#: Calibrated on measurements, not taste (live probe 2026-08-17,
+#: ``uat/reports/evidence/models-live/sub-006-gh-canonical/
+#: live-probe-2026-08-17.json``): the real Databricks embed form carries 35
+#: visible controls (36 in the 2026-08-13 capture), a wrong board slug answers
+#: 404 with 0 forms, and the employer microsite serves 0 forms. The floor sits
+#: above the marketing-widget shape (a one-input search or newsletter box) so
+#: a stray form on an error page can never be mistaken for an application.
+_GREENHOUSE_MIN_FORM_CONTROLS = 3
+
+#: Subdomain labels that name the careers SITE, not the employer, and so must
+#: be stripped before the host is used as a board-slug candidate.
+_CAREERS_SUBDOMAIN_LABELS = frozenset(
+    {"www", "www2", "careers", "career", "jobs", "job", "apply", "boards", "hire", "hiring"}
+)
+
+#: Hosts that ARE Greenhouse. A URL already on one of these needs no
+#: canonicalisation (and must not be fetched to discover that).
+_GREENHOUSE_HOSTS = tuple(host for host, channel in _ATS_HOSTS if channel == "greenhouse")
+
+#: Prefix for the resolution cache so a canonicalisation can never collide with
+#: a redirector resolution stored under the same posting URL.
+_GREENHOUSE_CACHE_PREFIX = "gh-canonical:"
+
+#: Cap on how much of a candidate page is read. The real embed form is ~91KB;
+#: 2MB is generous for it and still bounded against a pathological response.
+_GREENHOUSE_MAX_BYTES = 2_000_000
+
+
+def _is_greenhouse_host(host: str) -> bool:
+    return any(_domain_matches(host, domain) for domain in _GREENHOUSE_HOSTS)
+
+
+def greenhouse_token(url: str) -> str | None:
+    """The Greenhouse job token in ``url``, or ``None``.
+
+    Three real shapes: ``?gh_jid=<token>`` (the employer-embedded posting —
+    99/512 production rows), ``?token=<token>`` on an embed URL, and
+    ``/<board>/jobs/<token>`` on a Greenhouse board. Never invented: a URL that
+    carries no token gets ``None``, which the caller turns into an honest
+    refusal rather than a guess.
+    """
+    if not url:
+        return None
+    parsed = urlparse(url)
+    params = parse_qs(parsed.query or "")
+    for key in ("gh_jid", "token"):
+        for raw in params.get(key, []):
+            candidate = (raw or "").strip()
+            if candidate:
+                return candidate
+    match = re.search(r"/jobs/(\d+)", parsed.path or "")
+    if match:
+        return match.group(1)
+    return None
+
+
+def _board_from_embed_config(page_html: str | None) -> str | None:
+    """The board slug an employer page's own Greenhouse embed declares.
+
+    Authoritative when present — it is the employer telling us which board the
+    posting lives on. Absent for a page whose embed is injected client-side
+    (the live Databricks probe carried only the ``div#grnhse_app`` mount point
+    and no slug at all), which is exactly why a fallback candidate exists.
+    """
+    if not page_html:
+        return None
+    match = re.search(
+        r"job_board/js\?[^\"'<>]*\bfor=([A-Za-z0-9_-]+)", page_html
+    )
+    if match:
+        return match.group(1)
+    match = re.search(
+        r"grnhse_settings\s*=\s*\{[^}]*?['\"]for['\"]\s*:\s*['\"]([A-Za-z0-9_-]+)",
+        page_html,
+    )
+    if match:
+        return match.group(1)
+    return None
+
+
+def _board_candidates(url: str, page_html: str | None) -> tuple[str, ...]:
+    """Board slugs worth VERIFYING for ``url``, best-evidence first.
+
+    Order is evidence quality, not convenience: an explicit ``for=`` on the
+    posting URL, then the employer page's own embed config, then a guess
+    derived from the employer's host. The guess is only ever a CANDIDATE — it
+    reaches the plan only if fetching its embed URL shows a real form.
+    """
+    candidates: list[str] = []
+
+    def add(value: str | None) -> None:
+        slug = (value or "").strip().lower()
+        if slug and slug not in candidates:
+            candidates.append(slug)
+
+    parsed = urlparse(url)
+    for raw in parse_qs(parsed.query or "").get("for", []):
+        add(raw)
+    add(_board_from_embed_config(page_html))
+
+    host = _host_of(url)
+    labels = [label for label in host.split(".") if label]
+    while labels and labels[0] in _CAREERS_SUBDOMAIN_LABELS:
+        labels.pop(0)
+    if len(labels) >= 2:
+        # The registrable label: `databricks.com` -> `databricks`. Greenhouse
+        # board slugs are overwhelmingly the company's own name, which is why
+        # this is worth ONE verified attempt — and why it is never trusted.
+        add(labels[0])
+        if "-" in labels[0]:
+            add(labels[0].replace("-", ""))
+    return tuple(candidates[:_GREENHOUSE_MAX_CANDIDATES])
+
+
+def greenhouse_form_present(html: str) -> bool:
+    """Whether ``html`` really contains a Greenhouse application form.
+
+    THE VERIFICATION GATE. Structural, not textual: at least one ``<form>``
+    holding at least :data:`_GREENHOUSE_MIN_FORM_CONTROLS` visible controls.
+    A 404 board page, an error page and the employer's own formless microsite
+    all fail it, which is the entire point — this function is what stands
+    between "we derived a URL" and "we will type a real person's application
+    into it".
+    """
+    if not html or "<form" not in html.lower():
+        return False
+    from bs4 import BeautifulSoup
+
+    soup = BeautifulSoup(html, "html.parser")
+    for form in soup.find_all("form"):
+        controls = [
+            control
+            for control in form.find_all(["input", "select", "textarea"])
+            if str(control.get("type") or "").lower() != "hidden"
+        ]
+        if len(controls) >= _GREENHOUSE_MIN_FORM_CONTROLS:
+            return True
+    return False
+
+
+def _default_greenhouse_fetch_html(url: str) -> dict[str, Any]:
+    """One bounded, READ-ONLY GET of a Greenhouse embed URL.
+
+    Returns ``{"status": int, "html": str}``. Never raises and never submits:
+    it opens a public job-application page, reads at most
+    :data:`_GREENHOUSE_MAX_BYTES` of it and closes. Redirects ARE followed
+    (``boards.greenhouse.io`` 301s to ``job-boards.greenhouse.io``) but only
+    within Greenhouse's own hosts — a redirect that leaves Greenhouse is
+    reported as status 0, i.e. unverified, rather than read.
+    """
+    global _last_fetch_at
+    interval = resolver_min_interval_seconds()
+    if interval:
+        with _cache_lock:
+            wait = _last_fetch_at + interval - time.monotonic()
+        if wait > 0:
+            time.sleep(min(wait, interval))
+    try:
+        import httpx
+
+        with httpx.Client(follow_redirects=True, timeout=15.0) as client:
+            response = client.get(
+                url,
+                headers={
+                    "User-Agent": (
+                        "AetherJobAgent/1.0 (+https://aether.jobs; applying on "
+                        "behalf of the account owner)"
+                    )
+                },
+            )
+        final_host = (response.url.host or "").lower() if response.url else ""
+        if not _is_greenhouse_host(final_host):
+            logger.info(
+                "greenhouse canonicalisation left greenhouse (%s) — not read", final_host
+            )
+            return {"status": 0, "html": ""}
+        return {
+            "status": int(response.status_code),
+            "html": response.text[:_GREENHOUSE_MAX_BYTES],
+        }
+    except Exception as exc:  # noqa: BLE001 — a transport failure is data, not a crash
+        logger.info(
+            "greenhouse canonicalisation fetch failed for %s: %s", url, type(exc).__name__
+        )
+        return {"status": 0, "html": ""}
+    finally:
+        with _cache_lock:
+            _last_fetch_at = time.monotonic()
+
+
+def resolve_greenhouse_apply_url(
+    url: str,
+    *,
+    page_html: str | None = None,
+    fetch_html: Callable[[str], dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Resolve a Greenhouse posting URL to the form that actually exists.
+
+    SUB-006. The stored ``sourceUrl`` for 99/512 production applications is the
+    EMPLOYER's own page carrying ``?gh_jid=<token>``. Live probe 2026-08-17
+    (read-only GET, evidence
+    ``uat/reports/evidence/models-live/sub-006-gh-canonical/
+    live-probe-2026-08-17.json``): that page answers 200 with 700,675 bytes and
+    **zero ``<form>`` elements** — the application UI is a ``div#grnhse_app``
+    that Greenhouse's JS mounts client-side. Navigating a browser there can end
+    exactly one way: ``submit_control_not_found``. Meanwhile
+    ``boards.greenhouse.io/embed/job_app?for=<board>&token=<token>`` serves the
+    real server-rendered form (1 form / 35 visible controls).
+
+    So this function derives ``<board>``, and then — because a wrong slug
+    answers 404 (also measured) — it VERIFIES the candidate by fetching it and
+    requiring a real form before returning it. Nothing is navigated on faith.
+
+    Returns::
+
+        {"originalUrl", "resolvedUrl" | None, "board" | None, "token" | None,
+         "verified": bool, "reason": None | GREENHOUSE_UNRESOLVABLE_REASON,
+         "detail": str, "candidates": tuple[str, ...]}
+
+    ``reason`` set means REFUSE: the caller must record the manual step and
+    must not open a browser. ``resolvedUrl`` equal to ``originalUrl`` with
+    ``verified`` false means "already a Greenhouse-hosted URL, nothing to
+    canonicalise" — no fetch is performed for that case.
+    """
+    original = (url or "").strip()
+    base: dict[str, Any] = {
+        "originalUrl": original,
+        "resolvedUrl": None,
+        "board": None,
+        "token": None,
+        "verified": False,
+        "reason": None,
+        "detail": "",
+        "candidates": (),
+    }
+    if not original:
+        return {
+            **base,
+            "reason": GREENHOUSE_UNRESOLVABLE_REASON,
+            "detail": (
+                "This application has no posting URL, so Aether could not find "
+                "a Greenhouse application form for it. Nothing was submitted."
+            ),
+        }
+    if _is_greenhouse_host(_host_of(original)):
+        return {
+            **base,
+            "resolvedUrl": original,
+            "token": greenhouse_token(original),
+            "detail": "Already a Greenhouse-hosted URL — no canonicalisation needed.",
+        }
+
+    cache_key = _GREENHOUSE_CACHE_PREFIX + original
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+
+    token = greenhouse_token(original)
+    if not token:
+        result = {
+            **base,
+            "reason": GREENHOUSE_UNRESOLVABLE_REASON,
+            "detail": (
+                f"This posting ({original}) carries no Greenhouse job token, so "
+                "Aether could not find the real application form for it and did "
+                "not submit anything. Open the posting and apply there."
+            ),
+        }
+        _cache_put(cache_key, result, resolver_cache_ttl_seconds())
+        return result
+
+    candidates = _board_candidates(original, page_html)
+    fetch = fetch_html or _default_greenhouse_fetch_html
+    for board in candidates:
+        candidate_url = GREENHOUSE_EMBED_TEMPLATE.format(board=board, token=token)
+        try:
+            response = fetch(candidate_url) or {}
+        except Exception as exc:  # noqa: BLE001 — an injected fetcher must not crash a sweep
+            logger.info(
+                "greenhouse canonicalisation fetch raised for %s: %s",
+                candidate_url,
+                type(exc).__name__,
+            )
+            continue
+        status = int(response.get("status") or 0)
+        html = str(response.get("html") or "")
+        if status == 200 and greenhouse_form_present(html):
+            result = {
+                **base,
+                "resolvedUrl": candidate_url,
+                "board": board,
+                "token": token,
+                "verified": True,
+                "candidates": candidates,
+                "detail": (
+                    f"Resolved {original} to the Greenhouse application form at "
+                    f"{candidate_url} (verified: the page really serves a form)."
+                ),
+            }
+            _cache_put(cache_key, result, resolver_cache_ttl_seconds())
+            return result
+        logger.info(
+            "greenhouse candidate %s rejected by the form gate (status=%s)",
+            candidate_url,
+            status,
+        )
+
+    result = {
+        **base,
+        "token": token,
+        "candidates": candidates,
+        "reason": GREENHOUSE_UNRESOLVABLE_REASON,
+        "detail": (
+            f"This Greenhouse posting ({original}) hosts no application form of "
+            "its own, and Aether could not verify which Greenhouse board it "
+            "belongs to, so it did not submit anything. Open the posting and "
+            "apply there."
+        ),
+    }
+    _cache_put(cache_key, result, resolver_cache_ttl_seconds())
+    return result
 
 
 def resolve_apply_channel(

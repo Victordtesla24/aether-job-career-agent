@@ -49,6 +49,7 @@ from pathlib import Path
 from typing import Any, Callable, Iterable
 
 from app.db import (
+    ensure_application_apply_resolution_columns,
     ensure_application_manual_step_columns,
     ensure_application_transmission_columns,
     get_connection,
@@ -856,6 +857,53 @@ def record_manual_step(
                 (reason, detail, payload, application_id, user_id),
             )
         conn.commit()
+
+
+def record_apply_url_resolution(
+    user_id: str,
+    application_id: str,
+    *,
+    original_url: str,
+    resolved_url: str,
+) -> None:
+    """DISCLOSE that Aether will apply at a different URL than the posting's.
+
+    SUB-006. A Greenhouse posting stored as the employer's own ``?gh_jid=``
+    page hosts no form (live probe 2026-08-17: 0 ``<form>`` elements on a
+    700KB page); the real form lives at the canonical
+    ``boards.greenhouse.io/embed/job_app`` URL, and the apply engine resolves
+    to it — but only after fetching the candidate and confirming a real form is
+    there (``apply_channel_resolver.resolve_greenhouse_apply_url``).
+
+    Substituting a URL silently would mean the run record said "submitted to
+    the posting" while a different page was driven. This writes BOTH sides onto
+    the row, so the substitution is auditable from the application itself
+    rather than only from a log line.
+
+    Never touches ``transmittedAt``: recording where we are about to apply is
+    not a claim that we applied.
+    """
+    ensure_application_apply_resolution_columns()
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                '''
+                UPDATE "Application"
+                SET "applyResolvedFrom" = %s,
+                    "applyResolvedUrl" = %s,
+                    "applyResolvedAt" = NOW(),
+                    "updatedAt" = NOW()
+                WHERE "id" = %s AND "userId" = %s
+                ''',
+                (original_url, resolved_url, application_id, user_id),
+            )
+        conn.commit()
+    logger.info(
+        "apply-url resolved for application %s: %s -> %s",
+        application_id,
+        original_url,
+        resolved_url,
+    )
 
 
 def _record_site_transmission(

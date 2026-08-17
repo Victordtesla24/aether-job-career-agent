@@ -43,7 +43,10 @@ Confirmed real field shapes present (useful for U5b test design):
 |---|---|---|
 | `captcha_challenge_synthetic.html` | A triggered reCAPTCHA v2 challenge overlay (`#rc-imageselect` iframe, visible challenge frame) | Deliberately forcing a live reCAPTCHA challenge against a real employer's ATS to capture it was judged out of scope for a read-only test-authoring pass and not reliably reproducible on demand. The DOM shape here (a `g-recaptcha` container plus a visible `<iframe title="recaptcha challenge …">`) matches Google's documented reCAPTCHA v2 challenge markup, which is a matter of public record, not a guess about any specific employer's page. |
 | `login_wall_synthetic.html` | A "sign in to apply" gate (Workday/Greenhouse-account-gated posting shape) | Same reasoning — this is a commonly-documented ATS pattern (a login form blocking the application form), constructed as a minimal repro rather than captured live. |
+| `greenhouse_employer_microsite_synthetic.html` | The employer-domain `?gh_jid=` page: HTTP 200, **0 `<form>` elements**, application UI is a `div#grnhse_app` mount point, board slug absent from the served HTML | MINIMISED, not invented. The three structural facts above were measured on the live page by a read-only GET on 2026-08-17 (`https://www.databricks.com/company/careers/open-positions/job?gh_jid=8569564002` → 200, 700,675 bytes, 0 forms — see `uat/reports/evidence/models-live/sub-006-gh-canonical/live-probe-2026-08-17.json`). Checking in 700KB of an employer's marketing markup to assert "there is no form here" would be 700KB of noise, so the fixture carries the shape and the evidence file carries the measurement. |
 
-Both synthetic files are for pinning the apply-executor's *detection*
-contract only (`ManualStepRequired` on CAPTCHA/login-wall) — they are never
-asserted to be byte-identical to any specific real site.
+Both CAPTCHA/login-wall synthetic files are for pinning the apply-executor's
+*detection* contract only (`ManualStepRequired` on CAPTCHA/login-wall), and
+the microsite file pins the apply-channel resolver's Greenhouse verification
+GATE (`greenhouse_form_unresolvable`) — none of them is asserted to be
+byte-identical to any specific real site.
