@@ -130,7 +130,15 @@ class TestDirectDomainClassification:
 
         result = resolve_apply_channel(_job(REAL_URLS[url_key], source=url_key))
         assert result["channel"] == expected_channel
-        assert result["applyUrl"] == REAL_URLS[url_key]
+        if expected_channel == "lever":
+            # SUB-011: REAL_URLS["lever"] is the bare posting page (the
+            # common sourceUrl shape) -- confirmed to carry NO <form> at all
+            # (scout evidence). The resolver must hand the executor the URL
+            # it can actually parse a schema off, not the marketing page.
+            # See TestLeverApplyUrlDerivation below for the full contract.
+            assert result["applyUrl"] == REAL_URLS[url_key] + "/apply"
+        else:
+            assert result["applyUrl"] == REAL_URLS[url_key]
 
     def test_seek_is_never_automated_even_though_url_is_known(self):
         """ADR-SEEK-V3 (RULING: REFUSED, re-verified live 2026-08-13) --
@@ -168,6 +176,71 @@ class TestDirectDomainClassification:
         result = resolve_apply_channel(_job(None, source="remotive"))
         assert result["channel"] == "unknown"
         assert result["applyUrl"] is None
+
+
+# ---------------------------------------------------------------------------
+# 1b. SUB-011 — Lever apply-URL derivation.
+#
+# A ``jobs.lever.co`` posting's own "Apply for this job" button (scout
+# evidence, confirmed against two live captures) points at exactly
+# ``<posting>/apply`` -- the bare posting page itself carries NO <form> at
+# all. The common ``Job.sourceUrl`` shape (a job board or employer link) is
+# the bare posting, so the resolver must append ``/apply`` -- idempotently,
+# and ONLY for lever -- rather than hand the executor a page it cannot parse
+# a schema off.
+# ---------------------------------------------------------------------------
+
+
+class TestLeverApplyUrlDerivation:
+    def test_bare_posting_url_gets_the_apply_suffix_appended(self):
+        from app.services.apply_channel_resolver import resolve_apply_channel
+
+        result = resolve_apply_channel(
+            _job("https://jobs.lever.co/brighte/3bd048bf-74a9-4a32-9692-34c94bf24bc2")
+        )
+        assert result["channel"] == "lever"
+        assert (
+            result["applyUrl"]
+            == "https://jobs.lever.co/brighte/3bd048bf-74a9-4a32-9692-34c94bf24bc2/apply"
+        )
+
+    def test_bare_posting_url_with_a_trailing_slash_is_not_double_slashed(self):
+        from app.services.apply_channel_resolver import resolve_apply_channel
+
+        result = resolve_apply_channel(
+            _job("https://jobs.lever.co/brighte/3bd048bf-74a9-4a32-9692-34c94bf24bc2/")
+        )
+        assert result["applyUrl"] == (
+            "https://jobs.lever.co/brighte/3bd048bf-74a9-4a32-9692-34c94bf24bc2/apply"
+        )
+
+    def test_a_url_that_already_ends_in_apply_is_returned_unchanged(self):
+        """Idempotent: a sourceUrl that is ALREADY the apply page must never
+        become ``.../apply/apply``."""
+        from app.services.apply_channel_resolver import resolve_apply_channel
+
+        already = "https://jobs.lever.co/brighte/3bd048bf-74a9-4a32-9692-34c94bf24bc2/apply"
+        result = resolve_apply_channel(_job(already))
+        assert result["applyUrl"] == already
+
+    def test_a_url_already_ending_in_apply_with_a_trailing_slash_is_unchanged(self):
+        from app.services.apply_channel_resolver import resolve_apply_channel
+
+        already = "https://jobs.lever.co/brighte/3bd048bf-74a9-4a32-9692-34c94bf24bc2/apply/"
+        result = resolve_apply_channel(_job(already))
+        assert result["applyUrl"] == already
+
+    def test_derivation_is_lever_only_a_non_lever_url_is_never_touched(self):
+        """The same bare-URL shape on a DIFFERENT channel must not gain a
+        Lever-specific suffix it never asked for."""
+        from app.services.apply_channel_resolver import resolve_apply_channel
+
+        result = resolve_apply_channel(
+            _job(REAL_URLS["ashby"], source="ashby")
+        )
+        assert result["channel"] == "ashby"
+        assert result["applyUrl"] == REAL_URLS["ashby"]
+        assert not result["applyUrl"].endswith("/apply/apply")
 
 
 # ---------------------------------------------------------------------------
@@ -212,6 +285,23 @@ class TestAdzunaRedirectorResolution:
         assert result["channel"] == "ashby"
         assert result["applyUrl"] == REAL_URLS["ashby"]
         assert calls == [REAL_URLS["adzuna_land"]]
+
+    def test_redirector_resolving_to_a_bare_lever_posting_gets_the_apply_suffix_too(self):
+        """SUB-011: the derivation applies uniformly, regardless of whether
+        the Lever URL arrived directly on the Job row or through a followed
+        Adzuna redirect -- the SAME bare-marketing-page defect exists either
+        way, so both call sites (:func:`resolve_apply_channel`'s direct path
+        and :func:`_resolve_redirector`) must derive it."""
+        from app.services.apply_channel_resolver import resolve_apply_channel
+
+        def fake_http_get(url: str) -> dict:
+            return {"status": 302, "location": REAL_URLS["lever"]}
+
+        result = resolve_apply_channel(
+            _job(REAL_URLS["adzuna_land"], source="adzuna"), http_get=fake_http_get
+        )
+        assert result["channel"] == "lever"
+        assert result["applyUrl"] == REAL_URLS["lever"] + "/apply"
 
     def test_429_resolves_honestly_to_unknown_not_a_guess(self):
         """LIVE EVIDENCE (2026-08-13T09:06Z): both attempted Adzuna first-hop

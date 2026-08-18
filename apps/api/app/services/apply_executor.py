@@ -44,8 +44,11 @@ import os
 import re
 import shutil
 import tempfile
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
+from html import unescape
 from pathlib import Path
 from typing import Any, Callable, Iterable
 
@@ -172,7 +175,10 @@ class ManualStepRequired(Exception):
     """A human has to finish this one — and here is exactly why.
 
     ``reason`` is a machine code (``unknown_required_question``, ``captcha``,
-    ``login_wall``, ``no_automatable_channel``, …). ``question`` carries the
+    ``captcha_challenge`` — a MOUNTED hCaptcha widget the submitter refuses
+    to click past, distinct from ``captcha``'s TRIGGERED-challenge detection
+    in :func:`detect_blocking_state` — ``login_wall``,
+    ``no_automatable_channel``, …). ``question`` carries the
     employer's VERBATIM question text when the obstacle is an unanswerable
     required field, so the UI shows the user the real words rather than a
     paraphrase. This is an honest ACTIONABLE outcome, not a failure: it
@@ -282,8 +288,14 @@ def _text(node: Any) -> str:
 
 
 def _label_text(raw: str) -> str:
-    """A label without its required-marker asterisk."""
-    return re.sub(r"\s*\*\s*$", "", (raw or "").strip()).strip()
+    """A label without its required-marker asterisk.
+
+    Strips the ASCII ``*`` every other dialect here uses AND Lever's own
+    U+2731 HEAVY ASTERISK ``✱`` (confirmed on real captured Lever pages,
+    SUB-011 scout evidence) -- a plain ``\\s*\\*\\s*$`` regex leaves that
+    character on every required label a Lever manual step shows the user.
+    """
+    return re.sub(r"\s*[*✱]\s*$", "", (raw or "").strip()).strip()
 
 
 def _classes(node: Any) -> list[str]:
@@ -455,6 +467,103 @@ def _parse_greenhouse(soup: Any) -> list[dict[str, Any]]:
     return list(fields.values())
 
 
+def _lever_options(node: Any, primary: Any) -> list[str]:
+    """Option labels of a Lever radio/checkbox question (survey or consent).
+
+    Every option shares the question's control ``name`` (Lever's own DOM has
+    no other grouping marker); the human-readable text is each option's own
+    ``.application-answer-alternative`` span, falling back to the control's
+    raw ``value`` for a shape that omits one."""
+    control_type = str(primary.get("type") or "").lower()
+    if control_type not in {"radio", "checkbox"}:
+        return []
+    name = str(primary.get("name") or "")
+    if not name:
+        return []
+    options: list[str] = []
+    for control in node.find_all("input", attrs={"name": name}):
+        if str(control.get("type") or "").lower() not in {"radio", "checkbox"}:
+            continue
+        label_el = control.find_parent("label")
+        alt = label_el.find(class_="application-answer-alternative") if label_el is not None else None
+        text = _text(alt) if alt is not None else ""
+        if not text:
+            text = str(control.get("value") or "")
+        if text and text not in options:
+            options.append(text)
+    return options
+
+
+def _parse_lever(soup: Any) -> list[dict[str, Any]]:
+    """Lever renders one ``li.application-question`` block per question
+    (SUB-011 scout evidence, two real captured ``/apply`` pages).
+
+    System fields (``name``/``email``/``phone``/``location``/…) wrap a
+    single named control in a ``<label>``; radio/checkbox survey questions
+    (``surveysResponses[<surveyId>][responses][field<N>]``) and employer
+    custom "card" questions (``cards[<cardId>][field0]``) instead wrap a
+    plain ``<div>`` -- Lever's own DOM, not something worth normalising
+    away, so both shapes are read the same way: the block's own
+    ``.application-label`` (its nested ``.text`` div where present, so a
+    sibling ``.description`` paragraph — e.g. "Select all that apply" — is
+    never folded into the question text) names the question, and its
+    ``.application-field`` holds the control(s).
+
+    A block can hold MORE than one control for one visible question: the
+    structured-location autocomplete pairs a visible ``location`` text input
+    with a hidden ``selectedLocation`` one, and the marketing-consent
+    checkbox pairs a visible checkbox with an unchecked-by-default hidden
+    decoy input of the SAME name (Lever's own "unchecked = 0" pattern) --
+    the first VISIBLE control is always the one dedup keys on and answers
+    are typed into, matching what a human applicant actually sees.
+
+    Requiredness has NO single tell here: the ``name``/``email`` system
+    fields and the employer's own card questions all carry a real
+    ``required`` HTML attribute, but the résumé question -- confirmed
+    required on the real capture -- carries NONE; only its label's
+    ``<span class="required">✱</span>`` (see :func:`_label_text`) says so.
+    Both signals are therefore trusted, exactly like the Greenhouse parser
+    trusts ``aria-required`` alongside a trailing ``*``.
+    """
+    fields: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for node in soup.select("li.application-question"):
+        controls = [
+            control
+            for control in node.find_all(["input", "select", "textarea"])
+            if str(control.get("name") or "") != "g-recaptcha-response"
+        ]
+        if not controls:
+            continue
+        visible = [c for c in controls if str(c.get("type") or "").lower() != "hidden"]
+        primary = visible[0] if visible else controls[0]
+        name = str(primary.get("name") or "").strip()
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        label_el = node.find(class_="application-label")
+        text_el = label_el.find(class_="text") if label_el is not None else None
+        raw_label = _text(text_el if text_el is not None else label_el)
+        field_el = node.find(class_="application-field")
+        required = (
+            (label_el is not None and label_el.find("span", class_="required") is not None)
+            or any(control.has_attr("required") for control in controls)
+            or any(str(control.get("aria-required") or "").lower() == "true" for control in controls)
+            or (field_el is not None and "required-field" in _classes(field_el))
+        )
+        fields.append(
+            {
+                "name": name,
+                "label": _label_text(raw_label),
+                "kind": _kind_for(primary),
+                "required": required,
+                "options": _lever_options(node, primary),
+                "scope": None,
+            }
+        )
+    return fields
+
+
 def _parse_generic(soup: Any) -> list[dict[str, Any]]:
     """Best-effort schema for an employer's own form (incl. Google Forms).
 
@@ -510,10 +619,13 @@ def parse_form_schema(html: str, *, channel: str) -> list[dict[str, Any]]:
     The ``_parse_generic`` fallback below is NOT a submission path any more:
     ORCHESTRATOR RULING U5-F3 (2026-08-14) removed every channel that lacked a
     dedicated parser from
-    :data:`app.services.apply_channel_resolver.AUTOMATABLE_CHANNELS`, so the
-    sweep only ever calls this with ``ashby`` or ``greenhouse``. The fallback
-    stays because it is a legitimate schema READER (and the seam Track-2 slice
-    U5c builds the lever/smartrecruiters dialects against); it is
+    :data:`app.services.apply_channel_resolver.AUTOMATABLE_CHANNELS`. SUB-011
+    (Track-2 U5c) built the dedicated Lever dialect parser and its own
+    fixture-backed tests, so ``lever`` re-entered that set legitimately — the
+    sweep now calls this with ``ashby``, ``greenhouse`` or ``lever``.
+    ``smartrecruiters`` and ``generic`` still have none, so they still fall
+    through here; the fallback stays because it is a legitimate schema READER
+    (and the seam any future dedicated dialect is built against). It is
     ``AUTOMATABLE_CHANNELS`` — pinned by ``tests/test_u5_invariant_sweep.py`` —
     that decides what may be clicked, not this dispatch.
     """
@@ -522,6 +634,8 @@ def parse_form_schema(html: str, *, channel: str) -> list[dict[str, Any]]:
         return _parse_ashby(soup)
     if channel == "greenhouse":
         return _parse_greenhouse(soup)
+    if channel == "lever":
+        return _parse_lever(soup)
     return _parse_generic(soup)
 
 
@@ -1066,6 +1180,50 @@ _VERIFY_SETTLE_FILE_MS = 1500  # file uploads may re-render the form
 _PRESUBMIT_SETTLE_MS = 500  # settle before the pre-submit commit gate
 _COMBOBOX_POPUP_POLLS = 10  # x 250ms — bounded wait for an async popup
 
+# CLI-SUB-005-R2 (adversarial review FAIL, 08-adversarial-review.md): bounded
+# re-scans of the LIVE DOM for a required field the plan's static snapshot
+# never saw. A refill pass can itself reveal a FURTHER conditional (a chain
+# of branching questions), so this is never unbounded — after this many
+# passes still finding something new, the honest answer is a manual step,
+# not another loop iteration.
+_MAX_RESCAN_PASSES = 3
+
+# CLI-SUB-005-R4 (adversarial re-review FAIL,
+# RUN-20260818T0223Z/SUB-005-R3/08-adversarial-rereview.md, finding #2): R3's
+# loop counted its confirming "did anything change?" pass INSIDE the SAME
+# bounded counter as the resolving passes themselves, so a chain needing
+# exactly _MAX_CONVERGENCE_PASSES resolving passes had no budget left for the
+# pass that PROVES it is done — the R2 off-by-one moved from depth 3 to depth
+# 4 instead of being eliminated. R4 (:func:`_converge_presubmit_state`)
+# decouples the two counts structurally: the "did anything change?"
+# re-derivation always runs one extra, UNCOUNTED time after the last
+# resolving pass (it is what detects convergence, not a separate check spent
+# from the same budget), so this bound now means "resolving passes before
+# giving up honestly", never "total loop iterations including the proof that
+# it's done". Raised to 6 to give a legitimately deep conditional chain real
+# headroom without ever letting a genuinely unbounded one loop forever.
+_MAX_CONVERGENCE_PASSES = 6
+
+# CLI-SUB-005-R5 (adversarial FAIL,
+# RUN-20260818T0223Z/SUB-005-R4/08-adversarial-final.md): a required field
+# living only inside an <iframe> was invisible to every pass of
+# _uncommitted_live_required_fields, because that function's only input is
+# parse_form_schema(root.content()) — a single document. These back the
+# CONSERVATIVE REFUSE-BACKSTOP (_verify_no_unverifiable_form_surface) that
+# makes soundness independent of what any one parser call can recognize: a
+# raw structural census of form-shaped controls, checked against what
+# parse_form_schema actually turned into a field — not a re-run of any one
+# channel's own rules. Mirrors the exclusions every existing parser already
+# applies (a hidden reCAPTCHA token, the intl-tel-input library's own
+# internal state field) — those are deliberate non-questions, not unknown
+# surfaces, and flagging them would be noise that trains someone to ignore
+# this gate.
+_CENSUS_EXCLUDED_INPUT_TYPES = {"hidden", "submit", "button", "reset", "image", "search"}
+_CENSUS_INTERACTIVE_ROLES = {
+    "combobox", "radio", "checkbox", "listbox", "switch", "textbox",
+    "spinbutton", "slider", "menuitemradio", "menuitemcheckbox",
+}
+
 
 def _wait(page: Any, ms: int) -> None:
     """Best-effort settle. Unit-test fakes may not implement the clock."""
@@ -1073,6 +1231,44 @@ def _wait(page: Any, ms: int) -> None:
         page.wait_for_timeout(ms)
     except Exception:  # noqa: BLE001 — a fake page without a clock waits zero
         pass
+
+
+def _reachable_frames(page: Any) -> list[Any]:
+    """Every child frame currently attached to ``page``, main frame excluded.
+
+    CLI-SUB-005-R5: re-read FRESH by the caller on every pass — a frame can
+    attach, navigate or detach between passes exactly like any other live DOM
+    mutation, so a snapshot taken once would go stale the same way the pre-R4
+    name-ledger did. A page-like object with no frame concept at all (this
+    repo's own unit-test fakes, which predate frame support) reports zero
+    frames rather than erroring: there is nothing beyond the top document it
+    already represents, never an unknown surface to refuse over.
+    """
+    try:
+        frames = list(page.frames)
+    except Exception:  # noqa: BLE001 — no `.frames` at all is zero frames, not an error
+        return []
+    main = getattr(page, "main_frame", None)
+    reachable: list[Any] = []
+    for frame in frames:
+        if frame is main:
+            continue
+        try:
+            if frame.is_detached():
+                continue
+        except Exception:  # noqa: BLE001 — can't tell; leave it to the caller's own read
+            pass
+        reachable.append(frame)
+    return reachable
+
+
+def _frame_label(frame: Any) -> str:
+    """A human-readable pointer at one frame, for a manual-step message."""
+    try:
+        url = str(frame.url or "")
+    except Exception:  # noqa: BLE001 — an unreadable frame has no url either
+        url = ""
+    return f"embedded frame ({url})" if url else "an embedded frame"
 
 
 def _first_present(page: Any, selectors: list[str]) -> Any | None:
@@ -1186,8 +1382,15 @@ def _locate_file_input(page: Any, field: dict[str, Any]) -> Any | None:
     """
     name = str(field["name"])
     scope = str(field.get("scope") or "")
+    live_selector = str(field.get("liveSelector") or "")
     escaped = name.replace('"', '\\"')
-    candidates = ([f"{scope} input[type=file]"] if scope else []) + [
+    # CLI-SUB-005-R6: a live-census-discovered field (root cause 1) carries a
+    # `liveSelector` — a marker attribute placed directly on the control
+    # itself, which Playwright's CSS engine resolves by piercing shadow DOM —
+    # tried FIRST, ahead of the id/name guesses this control may not have.
+    candidates = ([live_selector] if live_selector else []) + (
+        [f"{scope} input[type=file]"] if scope else []
+    ) + [
         f'[id="{escaped}"]',
         f'[name="{escaped}"]',
     ]
@@ -1220,11 +1423,18 @@ def _fill_value(page: Any, field: dict[str, Any], value: Any, documents: dict[st
     name = str(field["name"])
     kind = str(field.get("kind") or "text")
     scope = str(field.get("scope") or "")
+    # CLI-SUB-005-R6 root cause 1: a live-census-discovered field's own
+    # marker-attribute locator, resolved by Playwright's shadow-DOM-piercing
+    # CSS engine — tried BEFORE the id/name guesses below, which a shadow-
+    # hosted or otherwise anonymous control may never have at all.
+    live_selector = str(field.get("liveSelector") or "")
     escaped = name.replace('"', '\\"')
     # Attribute selectors, never ``#id``: real ATS field ids start with digits
     # (Ashby's UUID-keyed questions) or carry ``[]`` (Greenhouse's checkbox
     # groups), both of which are invalid inside a CSS id selector.
-    control_selectors = [f'[id="{escaped}"]', f'[name="{escaped}"]']
+    control_selectors = ([live_selector] if live_selector else []) + [
+        f'[id="{escaped}"]', f'[name="{escaped}"]'
+    ]
     scoped_controls = (
         [
             f"{scope} input:not([type=hidden])",
@@ -1251,6 +1461,17 @@ def _fill_value(page: Any, field: dict[str, Any], value: Any, documents: dict[st
             return False
     text_value = str(value)
     if kind in {"radio", "checkbox"}:
+        if live_selector:
+            # A native shadow-DOM/anonymous checkbox or radio, tagged
+            # directly — a real `.check()` is both simpler and more reliable
+            # than the label-text guesses below, which assume Ashby/
+            # Greenhouse's own UI sugar (a sibling <label> reading the exact
+            # answer text) that a bare custom element has no reason to carry.
+            try:
+                page.locator(live_selector).first.check(timeout=_ACTION_TIMEOUT_MS)
+                return True
+            except Exception:  # noqa: BLE001 — fall through to the label-text path
+                pass
         candidates = [f'{scope} >> text="{text_value}"'] if scope else []
         candidates.append(f'label:text-is("{text_value}")')
         target = _first_present(page, candidates)
@@ -1437,8 +1658,11 @@ def _commit_state(
     name = str(field["name"])
     kind = str(field.get("kind") or "text")
     scope = str(field.get("scope") or "")
+    live_selector = str(field.get("liveSelector") or "")
     escaped = name.replace('"', '\\"')
-    control_selectors = [f'[id="{escaped}"]', f'[name="{escaped}"]']
+    control_selectors = ([live_selector] if live_selector else []) + [
+        f'[id="{escaped}"]', f'[name="{escaped}"]'
+    ]
     scoped_controls = (
         [f"{scope} input:not([type=hidden])", f"{scope} textarea", f"{scope} select"]
         if scope
@@ -1469,6 +1693,12 @@ def _commit_state(
         return False, "no file committed"
     text_value = str(value)
     if kind in {"radio", "checkbox"}:
+        if live_selector:
+            try:
+                if page.locator(live_selector).first.is_checked(timeout=_ACTION_TIMEOUT_MS):
+                    return True, "live-census control checked"
+            except Exception:  # noqa: BLE001 — fall through to the signal-selector path
+                pass
         signal_selectors = (
             [
                 f"{scope} input:checked",
@@ -1547,7 +1777,23 @@ def _commit_state(
     try:
         observed = str(target.input_value(timeout=_ACTION_TIMEOUT_MS) or "")
     except Exception:  # noqa: BLE001
-        return False, "value unreadable"
+        # CLI-SUB-005-R6: a live-census-discovered `[contenteditable]` box
+        # (root cause 1) is not an <input>/<textarea>/<select> at all, so
+        # `input_value()` always raises for it — read its committed TEXT
+        # directly instead of reporting a genuinely readable control as
+        # unreadable. Every pre-existing field has no `liveSelector`, so
+        # this branch is unreachable for them — zero behaviour change.
+        if live_selector:
+            try:
+                observed = str(
+                    page.locator(live_selector)
+                    .first.evaluate("el => (el.textContent || '').trim()")
+                    or ""
+                )
+            except Exception:  # noqa: BLE001
+                return False, "value unreadable"
+        else:
+            return False, "value unreadable"
     if kind == "tel":
         observed_digits = re.sub(r"\D", "", observed)
         expected_digits = re.sub(r"\D", "", text_value)
@@ -1674,6 +1920,1343 @@ def _presubmit_required_commit_gate(
     )
 
 
+def _live_required_fields_not_in(
+    page: Any, channel: str, known_names: set[str]
+) -> list[dict[str, Any]]:
+    """REQUIRED fields the LIVE DOM shows right now that ``known_names`` never saw.
+
+    Re-runs the channel's OWN schema parser (:func:`parse_form_schema`)
+    against the CURRENT ``page.content()`` — never the static pre-fill
+    snapshot :func:`build_form_fill_plan` was built from. This is what catches
+    a conditional/branching question (first-class on both Ashby and
+    Greenhouse: "Do you require visa sponsorship?" -> Yes -> reveals a
+    required "please explain" box) that could not have existed in an
+    unanswered snapshot taken before the browser session even opened.
+    """
+    try:
+        html = page.content()
+    except Exception:  # noqa: BLE001 — a page without a live DOM yields nothing new
+        return []
+    try:
+        live_schema = parse_form_schema(html, channel=channel)
+    except Exception:  # noqa: BLE001 — a parse failure must not crash the gate
+        return []
+    return [
+        field
+        for field in live_schema
+        if field.get("required") and str(field["name"]) not in known_names
+    ]
+
+
+def _resolve_unplanned_required_fields(
+    page: Any,
+    channel: str,
+    plan_fields: list[dict[str, Any]],
+    documents: dict[str, str],
+    *,
+    profile: dict[str, Any] | None,
+    answer_bank: Callable[[dict[str, Any]], Any] | None,
+) -> list[str]:
+    """Catch a required field the pre-fill snapshot could not have seen.
+
+    CLI-SUB-005-R2 (adversarial review FAIL, 08-adversarial-review.md):
+    :func:`build_form_fill_plan` runs exactly ONCE, against a STATIC,
+    UNANSWERED page snapshot taken before the browser session that fills and
+    submits the form ever opens (``fetch_apply_page`` -> ``page.content()``).
+    A conditional/branching question is therefore structurally invisible to
+    that plan — not a race condition, a logical impossibility for an
+    unanswered snapshot to contain a question that only exists once an
+    earlier question is answered. Both the fill loop and the pre-submit gate
+    used to iterate that same fixed ``plan["fields"]`` list and nothing
+    else, so a real required field sitting in the live DOM at submit time
+    was never attempted, never verified — and the executor reported a
+    VERIFIED, CONFIRMED submission over it (reproduced against the real
+    ``playwright_form_submitter`` in ``adversarial/attack_stale_plan.py``).
+
+    Immediately before the final pre-submit gate, re-scan the LIVE DOM with
+    the channel's own parser and resolve anything the plan never saw, via
+    the EXACT SAME ``_answer_for`` / answer-bank path
+    :func:`build_form_fill_plan` itself uses — never inventing an answer. A
+    resolved field is APPENDED to ``plan_fields`` in place, so the caller's
+    own :func:`_presubmit_required_commit_gate` re-verifies it (and catches
+    it being wiped by a later re-render) exactly like every other planned
+    field.
+
+    Filling a newly-revealed field can itself reveal a FURTHER conditional (a
+    chain of branching questions), so this re-scans again after every
+    successful pass — bounded at :data:`_MAX_RESCAN_PASSES`, after which it
+    refuses honestly rather than assume the chain has ended. Any field that
+    cannot be answered, or whose fill cannot be verified as committed, raises
+    immediately with the distinct ``"unplanned_required_field"`` reason: this
+    NEVER submits past an unplanned required field.
+
+    Returns the names of the fields it resolved (filled AND verified), for
+    the caller's own evidence sidecar — visibility that a submission needed
+    this safety net at all, not just that it eventually succeeded.
+    """
+    known = {str(field["name"]) for field in plan_fields}
+    resolved: list[str] = []
+    for _pass in range(_MAX_RESCAN_PASSES):
+        unplanned = _live_required_fields_not_in(page, channel, known)
+        if not unplanned:
+            return resolved
+        unresolved_labels: list[str] = []
+        for field in unplanned:
+            name = str(field["name"])
+            known.add(name)  # never re-attempt the same field name
+            answer = _answer_for(field, profile or {})
+            if answer is None and answer_bank is not None:
+                match = answer_bank(field)
+                if match is not None:
+                    answer = match.answer
+            if answer is None:
+                unresolved_labels.append(str(field.get("label") or name))
+                continue
+            entry = dict(field)
+            entry["value"] = answer
+            if not _fill_and_verify(page, entry, answer, documents, verify=True):
+                unresolved_labels.append(str(field.get("label") or name))
+                continue
+            plan_fields.append(entry)
+            resolved.append(name)
+        if unresolved_labels:
+            labels = "; ".join(unresolved_labels)
+            raise ManualStepRequired(
+                "unplanned_required_field",
+                (
+                    "This application revealed a required question after "
+                    "Aether had already built its plan (a conditional "
+                    "follow-up), and it could not be answered and verified, "
+                    "so nothing was submitted. Open the posting and finish "
+                    "it yourself: " + labels
+                ),
+                question=labels,
+            )
+    # Exhausted every bounded pass and the DOM is STILL revealing new
+    # required fields (a chain of conditionals deeper than any real ATS form
+    # should need) -- refuse rather than guess how many more there are.
+    still = _live_required_fields_not_in(page, channel, known)
+    labels = "; ".join(str(f.get("label") or f["name"]) for f in still)
+    raise ManualStepRequired(
+        "unplanned_required_field",
+        (
+            "This application kept revealing new required questions after "
+            "Aether's plan was built, so it stopped rather than guess how "
+            "many more there might be. Open the posting and finish it "
+            "yourself." + (f" Last seen: {labels}" if labels else "")
+        ),
+        question=labels or None,
+    )
+
+
+# ---------------------------------------------------------------------------
+# CLI-SUB-005-R6 — ROOT-CAUSE fix for the two mechanisms
+# RUN-20260818T0223Z/SUB-005-R5/08-adversarial-final.md proved underlie the
+# ENTIRE R2->R5 series (05-decision-memos/SUB-005-and-COV-3-rulings.md, "SUB-
+# 005 R5 outcome + R6 ruling"):
+#
+# (1) Every census above this point (_uncommitted_live_required_fields'
+#     `parse_form_schema(page.content())` call, _unclassifiable_controls'
+#     BeautifulSoup walk) reads `page.content()`/`frame.content()` — a
+#     SERIALIZED STRING SNAPSHOT of the light DOM only. An OPEN shadow root's
+#     content is not merely unparsed by that string: it is STRUCTURALLY
+#     ABSENT from it, so no amount of re-parsing, however fresh, can ever see
+#     a control that lives inside one (attack #6: a bare custom-element host
+#     with no role/contenteditable, whose real required control lives in its
+#     own open shadow root).
+# (2) The call site was CHECK-then-ACT: every safety net above runs, THEN
+#     `_activate_submit` clicks — and Playwright's own click dispatches a
+#     real DOM event sequence (mousedown before click, by spec, deterministic
+#     for the SAME click) a page's own handler can use to reveal a brand-new,
+#     perfectly classifiable required field in that gap, with nothing here
+#     ever re-verifying anything after (attack #7).
+#
+# _composed_live_census (below) closes (1): it runs LIVE, inside the page's
+# or frame's own JS execution context via Playwright's `evaluate()`, and
+# walks the COMPOSED tree — every element reachable through `.shadowRoot`
+# (OPEN shadow roots only; a CLOSED shadow root's content is genuinely
+# unreachable by ANY web API, Playwright's locators included — a real
+# browser-platform limit, not a gap left open by choice) — so a shadow-DOM-
+# hosted required control IS seen, read at the instant this runs, never from
+# a cached string. It feeds :func:`_uncommitted_live_required_fields` as a
+# SUPPLEMENTARY source, additive to (never replacing) the existing
+# `parse_form_schema` path, so every already-covered field (Ashby/Greenhouse/
+# generic, matched by id/name/`[data-field-path]`) is still resolved exactly
+# as before — only a control NO parser call can classify at all newly
+# appears, exactly the residual class this round must close.
+#
+# _install_submission_guard closes (2) by construction rather than by adding
+# yet another check-then-act layer (the same class of gap, merely narrower):
+# it installs a CAPTURE-PHASE 'submit' and submit-click listener, in-browser,
+# that re-runs the SAME composed census AT THE INSTANT the event fires and
+# cancels the submission outright (`preventDefault` + `stopImmediatePropagation`)
+# if anything required is still uncommitted THEN — never a Python-side gap for
+# page-authored JS to win a race against. The property this makes hold:
+# a required control uncommitted at the instant of submission => the
+# submission does not complete => Python observes no submission occurred and
+# raises an honest ManualStepRequired, never a silent submit.
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# CLI-SUB-005-R7 — FAIL CLOSED at every verification boundary, plus a
+# BUBBLE-PHASE re-check. RUN-20260818T0223Z/SUB-005-R6/08-adversarial-
+# final.md FAILed R6 on three silent submits over an empty required field
+# (05-decision-memos/SUB-005-and-COV-3-rulings.md, "SUB-005 R6 outcome + R7
+# ruling"), which split into two distinct classes:
+#
+# (1) attacks B and F — REAL correctness defects, not exotic-DOM cat-and-
+#     mouse: `_install_submission_guard` and `_composed_live_census` each
+#     wrapped their `evaluate()` call in a bare `except Exception:
+#     pass`/`return []` — an exception on EITHER (attack B: guard install
+#     poisoned via `document.addEventListener`; attack F: the census
+#     function itself poisoned via `Element.prototype.getAttribute`)
+#     resolved to "proceed as if nothing were wrong", i.e. FAIL OPEN — a
+#     direct violation of this repo's own NON-NEGOTIABLE-CONSTRAINTS (no
+#     masked errors producing false-positive success). Both now FAIL CLOSED:
+#     an exception raises ManualStepRequired rather than being swallowed —
+#     the invariant this makes hold: the ONLY way a submission ever
+#     completes is a census that ran to completion AND reported zero
+#     uncommitted required fields; any inability to run it refuses. This
+#     also converts attack C2 (a closed shadow root with zero external
+#     light-DOM signal) from a silent submit into a safe refusal —
+#     :data:`_CLOSED_SHADOW_MARKER_INIT_JS` gives the otherwise-genuinely-
+#     invisible closed shadow root an honest, page-JS-independent signal of
+#     its own EXISTENCE (never its content, which stays genuinely
+#     unreadable — a real browser-platform limit) for the pre-existing
+#     :func:`_unclassifiable_controls` backstop to flag.
+# (2) attack A — a structural ceiling, not a correctness defect: a required
+#     control created strictly INSIDE the form's own TARGET-phase `onsubmit`
+#     handler is invisible to a CAPTURE-phase-only guard by DOM event-
+#     ordering spec (capture always completes before the event ever reaches
+#     the target). A BUBBLE-phase 'submit' listener — which fires AFTER the
+#     target's own handler has run — narrows this: a field the handler
+#     reveals and LEAVES IN THE DOM is now caught. What it cannot close: a
+#     handler that reveals the field and, in that SAME synchronous
+#     execution, either fires an outbound request (`fetch()`/XHR — a
+#     completely ordinary way modern SPA-style ATS forms implement "submit")
+#     or removes the field from the DOM again before returning — by the time
+#     ANY listener on an ancestor node gets to run, that JS has already
+#     executed and, in the fetch/XHR case, may have already reached the
+#     employer. This is honestly recorded as an irreducible residual (a
+#     pinned regression test asserting the limit precisely), never claimed
+#     closed — no client-side event-listener ordering can guarantee seeing,
+#     or undoing, a same-handler side effect that completes before control
+#     ever returns to the browser's own event-dispatch machinery.
+# ---------------------------------------------------------------------------
+
+# Walks `document` plus every OPEN shadow root reachable from it, recursively,
+# and defines `window.__aetherComposedCensus()` (idempotent: a no-op if
+# already installed on THIS document — a navigation/reload replaces the
+# document, and with it this installation, so every caller re-runs this
+# rather than assuming a prior install still holds). Calling the installed
+# function returns one descriptor per REQUIRED control the composed tree
+# currently holds (native form control, a recognized interactive ARIA role
+# with no native control nested inside, or a bare `[contenteditable]` box),
+# each carrying its live-read `committed` state and a STABLE identifying
+# `marker` — persisted as a `data-aether-live-field` attribute directly on
+# the control itself, so the SAME control maps to the SAME marker (and
+# therefore the same Playwright locator) across every call for as long as
+# the document lives, exactly like a normal field's own name would.
+_COMPOSED_CENSUS_SETUP_JS = r"""
+() => {
+  if (window.__aetherComposedCensus) { return true; }
+  const EXCLUDED_TYPES = { hidden: 1, submit: 1, button: 1, reset: 1, image: 1, search: 1 };
+  const ROLES = {
+    combobox: 1, radio: 1, checkbox: 1, listbox: 1, switch: 1, textbox: 1,
+    spinbutton: 1, slider: 1, menuitemradio: 1, menuitemcheckbox: 1,
+  };
+  function walk(root, out) {
+    let all;
+    try { all = root.querySelectorAll('*'); } catch (e) { return; }
+    for (let i = 0; i < all.length; i++) {
+      const el = all[i];
+      out.push(el);
+      if (el.shadowRoot) { walk(el.shadowRoot, out); }
+    }
+  }
+  function kindFor(el) {
+    const tag = el.tagName.toLowerCase();
+    if (tag === 'textarea') { return 'textarea'; }
+    if (tag === 'select') { return 'select'; }
+    const t = (el.getAttribute('type') || 'text').toLowerCase();
+    if (t === 'radio' || t === 'checkbox' || t === 'file' || t === 'email' ||
+        t === 'tel' || t === 'number' || t === 'url' || t === 'date') { return t; }
+    return 'text';
+  }
+  function isRequired(el, tag) {
+    if ((tag === 'input' || tag === 'select' || tag === 'textarea') && el.required) { return true; }
+    return (el.getAttribute('aria-required') || '').toLowerCase() === 'true';
+  }
+  function nativeCommitted(el, kind) {
+    if (kind === 'checkbox' || kind === 'radio') { return !!el.checked; }
+    if (kind === 'file') { return !!(el.files && el.files.length); }
+    return !!(el.value && el.value.trim());
+  }
+  function fieldPathFor(el) {
+    try {
+      const w = el.closest ? el.closest('[data-field-path]') : null;
+      return w ? (w.getAttribute('data-field-path') || '') : '';
+    } catch (e) { return ''; }
+  }
+  function labelFor(el) {
+    const aria = el.getAttribute('aria-label');
+    if (aria && aria.trim()) { return aria.trim(); }
+    const id = el.id;
+    if (id) {
+      try {
+        const root = el.getRootNode();
+        const esc = (window.CSS && CSS.escape) ? CSS.escape(id) : id;
+        const lab = root.querySelector ? root.querySelector('label[for="' + esc + '"]') : null;
+        if (lab && lab.textContent && lab.textContent.trim()) { return lab.textContent.trim(); }
+      } catch (e) {}
+    }
+    try {
+      const root2 = el.getRootNode();
+      if (root2 && root2.querySelectorAll) {
+        const labels = root2.querySelectorAll('label');
+        if (labels.length === 1 && labels[0].textContent && labels[0].textContent.trim()) {
+          return labels[0].textContent.trim();
+        }
+      }
+    } catch (e) {}
+    const ph = el.getAttribute('placeholder');
+    if (ph && ph.trim()) { return ph.trim(); }
+    const txt = (el.textContent || '').trim();
+    if (txt) { return txt.slice(0, 120); }
+    return '';
+  }
+  window.__aetherComposedCensus = function () {
+    const nodes = [];
+    walk(document, nodes);
+    const results = [];
+    for (let i = 0; i < nodes.length; i++) {
+      const el = nodes[i];
+      const tag = el.tagName.toLowerCase();
+      let kind = null;
+      let isRole = false;
+      let isCE = false;
+      if (tag === 'input' || tag === 'select' || tag === 'textarea') {
+        const type = (el.getAttribute('type') || 'text').toLowerCase();
+        if (EXCLUDED_TYPES[type]) { continue; }
+        if ((el.getAttribute('aria-hidden') || '').toLowerCase() === 'true') { continue; }
+        const nameAttr = el.getAttribute('name') || '';
+        const idAttr = el.id || '';
+        if (nameAttr === 'g-recaptcha-response' || idAttr.indexOf('iti-') === 0) { continue; }
+        kind = kindFor(el);
+      } else {
+        const role = (el.getAttribute('role') || '').toLowerCase();
+        const ce = el.getAttribute('contenteditable');
+        if (role && ROLES[role]) {
+          if (el.querySelector && el.querySelector('input, select, textarea')) { continue; }
+          isRole = true; kind = 'role:' + role;
+        } else if (ce !== null && ce.toLowerCase() !== 'false') {
+          if (el.querySelector && el.querySelector('input, select, textarea')) { continue; }
+          isCE = true; kind = 'contenteditable';
+        } else { continue; }
+      }
+      if (!isRequired(el, tag)) { continue; }
+      let committed;
+      if (isRole) {
+        const ac = (el.getAttribute('aria-checked') || '').toLowerCase();
+        const asel = (el.getAttribute('aria-selected') || '').toLowerCase();
+        const ap = (el.getAttribute('aria-pressed') || '').toLowerCase();
+        committed = ac === 'true' || asel === 'true' || ap === 'true';
+      } else if (isCE) {
+        committed = !!((el.textContent || '').trim());
+      } else {
+        committed = nativeCommitted(el, kind);
+      }
+      let marker = el.getAttribute('data-aether-live-field');
+      if (!marker) {
+        window.__aetherCensusSeq = (window.__aetherCensusSeq || 0) + 1;
+        marker = 'c' + window.__aetherCensusSeq;
+        el.setAttribute('data-aether-live-field', marker);
+      }
+      results.push({
+        marker: marker,
+        kind: kind,
+        label: labelFor(el),
+        required: true,
+        committed: committed,
+        inShadow: el.getRootNode() !== document,
+        id: el.id || '',
+        controlName: el.getAttribute('name') || '',
+        fieldPath: fieldPathFor(el),
+      });
+    }
+    return results;
+  };
+  return true;
+}
+"""
+
+_COMPOSED_CENSUS_CALL_JS = "() => window.__aetherComposedCensus()"
+
+# Idempotent (per document): ensures the composed census is installed, then
+# installs a CAPTURE-PHASE 'submit' listener, a BUBBLE-PHASE 'submit'
+# listener (CLI-SUB-005-R7 — see the module note above), and a capture-phase
+# 'click' listener scoped to submit-shaped controls (the same selector shapes
+# :func:`_activate_submit` targets). Capture phase at `document` runs BEFORE
+# the event reaches the form/button at all — before any page-authored
+# handler, before the browser's own default action (the actual form
+# submission) — so a `preventDefault`+`stopImmediatePropagation` here reliably
+# stops the submission from ever happening, regardless of what the page's own
+# JS does at, or after, that point. The bubble-phase listener on the SAME
+# event runs AFTER the target's own handler has already executed — see
+# `guard`'s own re-use below — the two together are what root-cause 2's
+# module note calls "guarding the submission event itself", now at BOTH ends
+# of the target phase rather than only before it.
+#
+# CLI-SUB-005-R7 (adversarial FAIL, RUN-20260818T0223Z/SUB-005-R6/08-
+# adversarial-final.md, attack F): `guard`'s own `catch (e) { return; }`
+# around `window.__aetherComposedCensus()` was the SAME fail-open shape as
+# the Python-side wrappers, one layer deeper — a page that makes the census
+# function itself throw defeated the click-time re-check silently, in-
+# browser, even though Python's own `_composed_live_census` (used only
+# during pre-click convergence) independently closes the SAME poison earlier
+# in the flow. FAIL CLOSED here too, for defense in depth against a poison
+# that activates only at click/submit time rather than during convergence:
+# an exception from the census IS treated as an uncommitted required field
+# (a synthetic `census_unavailable` entry), never as "nothing to report".
+_SUBMIT_GUARD_INSTALL_JS = (
+    "() => {\n"
+    "  (" + _COMPOSED_CENSUS_SETUP_JS.strip() + ")();\n"
+    "  if (window.__aetherSubmitGuardInstalled) { return true; }\n"
+    "  window.__aetherSubmitGuardInstalled = true;\n"
+    "  function isSubmitControl(el) {\n"
+    "    if (!el || !el.closest) { return false; }\n"
+    "    if (el.closest('button[type=\"submit\"], input[type=\"submit\"]')) { return true; }\n"
+    "    const btn = el.closest('button');\n"
+    "    if (btn && /submit/i.test(btn.textContent || '')) { return true; }\n"
+    "    return false;\n"
+    "  }\n"
+    "  function guard(event) {\n"
+    "    let census = null;\n"
+    "    let censusFailed = false;\n"
+    "    try { census = window.__aetherComposedCensus(); }\n"
+    "    catch (e) { censusFailed = true; }\n"
+    "    const bad = censusFailed\n"
+    "      ? [{ required: true, committed: false, kind: 'census_unavailable',\n"
+    "           label: 'this page could not be verified at the instant of submitting' }]\n"
+    "      : (census || []).filter(function (c) { return c.required && !c.committed; });\n"
+    "    if (bad.length) {\n"
+    "      window.__aetherBlockedSubmit = bad;\n"
+    "      event.preventDefault();\n"
+    "      event.stopImmediatePropagation();\n"
+    "    }\n"
+    "  }\n"
+    "  document.addEventListener('submit', guard, true);\n"
+    "  document.addEventListener('submit', guard, false);\n"
+    "  document.addEventListener('click', function (event) {\n"
+    "    if (!isSubmitControl(event.target)) { return; }\n"
+    "    guard(event);\n"
+    "  }, true);\n"
+    "  return true;\n"
+    "}\n"
+)
+
+_READ_BLOCKED_SUBMIT_JS = "() => window.__aetherBlockedSubmit || null"
+
+# CLI-SUB-005-R7 (attack C2) — a CLOSED shadow root's CONTENT is unreadable
+# by any web API, by design: `element.shadowRoot` returns `null` for every
+# external accessor, including this codebase's own composed census, for a
+# host that carries no OTHER external signal (no role/aria-required/
+# contenteditable) — a genuine browser-platform limit, not a gap left open
+# by choice. Its EXISTENCE, however, is detectable, cheaply and honestly, by
+# intercepting the one call that ever creates one:
+# `Element.prototype.attachShadow`. Installed via Playwright's
+# `page.add_init_script` — the one hook that runs BEFORE any script on a
+# newly created document, including the page's own `customElements.define
+# (...)` — so this is armed before ANY custom element's `connectedCallback`
+# (where a shadow root is normally attached) ever runs, for the top document
+# and every child frame alike (`add_init_script` applies to both). The
+# marker it writes lives on the HOST element, in the LIGHT DOM — never
+# inside the closed root itself — so it is fully visible to
+# ``page.content()``'s ordinary string serialization; :func:`
+# _unclassifiable_controls` flags it exactly like any other unclassifiable
+# control, and the pre-existing :func:`_verify_no_unverifiable_form_surface`
+# backstop refuses rather than guesses. An OPEN shadow root (``mode`` is
+# always checked, never assumed) is left completely untouched — this must
+# never regress attack #6/E's own open-shadow resolution.
+_CLOSED_SHADOW_MARKER_INIT_JS = r"""
+(() => {
+  if (!window.Element || !Element.prototype.attachShadow) { return; }
+  const original = Element.prototype.attachShadow;
+  Element.prototype.attachShadow = function (init) {
+    const root = original.call(this, init);
+    try {
+      if (!init || init.mode !== 'open') {
+        this.setAttribute('data-aether-closed-shadow-host', 'true');
+      }
+    } catch (e) {
+      // Marking failed -- the shadow root itself is returned either way;
+      // only OUR OWN bookkeeping attribute is at risk here, never the
+      // page's own behaviour.
+    }
+    return root;
+  };
+})();
+"""
+
+
+def _composed_live_census(root: Any) -> list[dict[str, Any]]:
+    """Every REQUIRED control the LIVE composed DOM tree of ``root`` (the top
+    document, or one Playwright frame) holds RIGHT NOW — light DOM plus every
+    open shadow root, walked recursively — with its committed state read at
+    THIS instant. See :data:`_COMPOSED_CENSUS_SETUP_JS`.
+
+    CLI-SUB-005-R7 (adversarial FAIL,
+    RUN-20260818T0223Z/SUB-005-R6/08-adversarial-final.md, attack F): the
+    previous revision of this function caught ANY exception from either
+    ``evaluate()`` call — including ``window.__aetherComposedCensus()``
+    itself throwing, not merely an unreadable root — and returned ``[]``,
+    which :func:`_uncommitted_live_required_fields` and the in-page
+    click-time guard both then treated as "nothing required is uncommitted
+    here". A page that makes the census function itself throw (attack F:
+    ``Element.prototype.getAttribute`` poisoned for the census's own marker
+    attribute) silently reverted an otherwise-closed shadow-DOM field to
+    fully invisible, at both the point it feeds convergence AND the point
+    the click-time guard re-checks it — the exact fail-OPEN shape
+    05-decision-memos/SUB-005-and-COV-3-rulings.md's R7 ruling names: "an
+    exception ... resolves to 'proceed as if nothing were wrong,' not
+    'refuse'". FAIL CLOSED now: an exception from a root that CAN run JS at
+    all raises :class:`ManualStepRequired` — never a silent zero-results
+    return — so the ONLY way a submission ever completes is a census that
+    ran to completion and reported nothing required-and-uncommitted.
+
+    The ONE exception this still does not raise on is a root with no
+    ``evaluate`` at all (``hasattr`` false, checked BEFORE any call, never
+    from a caught exception) — this repo's own unit-test fakes predate
+    frame/JS-eval support entirely, a fact about the Python object Aether
+    itself constructed, not something page-authored JS running inside a real
+    browser could ever influence or poison. There is nothing beyond what the
+    existing parser-based census already covers for such a root to add.
+    """
+    if not hasattr(root, "evaluate"):
+        return []
+    try:
+        root.evaluate(_COMPOSED_CENSUS_SETUP_JS)
+        result = root.evaluate(_COMPOSED_CENSUS_CALL_JS)
+    except Exception as exc:  # CLI-SUB-005-R7 — FAIL CLOSED (was: return [])
+        raise ManualStepRequired(
+            "census_unavailable",
+            (
+                "Aether could not verify this application's fields — its "
+                "own in-page check failed to run — so nothing was "
+                "submitted. Open the posting and finish it yourself."
+            ),
+        ) from exc
+    return list(result or [])
+
+
+def _live_census_kind(raw_kind: str) -> str:
+    """Map a composed-census control's raw JS-reported kind onto the exact
+    vocabulary :func:`_kind_for` already produces, so :func:`_fill_value` /
+    :func:`_commit_state`'s existing kind dispatch handles a live-census
+    field exactly like any other. A custom ARIA role (other than
+    ``combobox``, which behaves enough like the existing typeahead widgets to
+    reuse that branch) or a bare ``[contenteditable]`` box has no reliable
+    native fill mechanism this codebase automates — falls through to the
+    generic text-fill attempt, which either lands (Playwright's own
+    ``fill()`` supports ``[contenteditable]`` directly) or fails cleanly and
+    is reported unfilled, never faked as committed.
+    """
+    if raw_kind == "role:combobox":
+        return "combobox"
+    if raw_kind.startswith("role:") or raw_kind == "contenteditable":
+        return "text"
+    return raw_kind or "text"
+
+
+def _install_submission_guard(root: Any) -> None:
+    """CLI-SUB-005-R6 root cause 2 — see the module note above. Installs the
+    capture-phase AND bubble-phase submission guard on ``root`` (idempotent).
+    The ONLY DOM mutation this performs is adding event listeners (plus, if
+    the guard ever fires, an inert ``data-aether-live-field`` marker
+    attribute already added by the census itself during convergence) — it
+    can never reveal, hide, or answer anything, so it does not violate the
+    "no mutation between convergence's return and the submit click"
+    invariant the call site documents; it is what CLOSES that invariant's
+    remaining gap.
+
+    CLI-SUB-005-R7 (adversarial FAIL,
+    RUN-20260818T0223Z/SUB-005-R6/08-adversarial-final.md, attack B): the
+    previous revision caught ANY exception from ``root.evaluate(...)`` and
+    silently passed — the comment's own justification ("an unreadable root
+    cannot submit anything either") is true for a genuinely DEAD page but
+    false for a LIVE one whose ``document.addEventListener`` has specifically
+    been shadowed (attack B): the page stays fully alive, fully clickable,
+    fully able to submit — only Aether's OWN instrumentation call failed,
+    leaving the click completely unguarded. FAIL CLOSED now: an exception
+    from a root that CAN run JS at all raises :class:`ManualStepRequired`
+    rather than letting an unguarded click through.
+
+    Same ``hasattr`` carve-out as :func:`_composed_live_census`, for the
+    identical reason: a root with no ``evaluate`` at all is a fact about the
+    Python object itself, never something page-authored JS could influence.
+    """
+    if not hasattr(root, "evaluate"):
+        return
+    try:
+        installed = root.evaluate(_SUBMIT_GUARD_INSTALL_JS)
+    except Exception as exc:  # CLI-SUB-005-R7 — FAIL CLOSED (was: pass)
+        raise ManualStepRequired(
+            "guard_install_failed",
+            (
+                "Aether could not arm its own submission safety check on "
+                "this page, so nothing was submitted. Open the posting and "
+                "finish it yourself."
+            ),
+        ) from exc
+    if not installed:
+        # RUN-20260818T0223Z/SUB-011 adversarial review (P0,
+        # 06-u5d4-adversarial-review.md): a call that raised nothing is not
+        # proof the guard actually armed — ``_SUBMIT_GUARD_INSTALL_JS``
+        # always ``return true`` on every code path that does not throw, so
+        # anything else back is itself a signal something is wrong. FAIL
+        # CLOSED here too, exactly like the exception path above: an
+        # unverified install must never be treated as an armed one.
+        raise ManualStepRequired(
+            "guard_install_failed",
+            (
+                "Aether could not verify its own submission safety check was "
+                "armed on this page, so nothing was submitted. Open the "
+                "posting and finish it yourself."
+            ),
+        )
+
+
+def _read_blocked_submission(root: Any) -> list[dict[str, Any]] | None:
+    """Whatever :data:`_SUBMIT_GUARD_INSTALL_JS` blocked on ``root``'s most
+    recent submit attempt, or ``None`` if nothing was blocked.
+
+    CLI-SUB-005-R7 — deliberately NOT converted to fail-closed like
+    :func:`_composed_live_census`/:func:`_install_submission_guard`: this
+    runs strictly AFTER :func:`_activate_submit`'s click, when a genuinely
+    SUCCESSFUL native submission may have already navigated the page,
+    destroying this exact JS execution context — an entirely ordinary,
+    expected outcome for a well-behaved form, not a hostile-page signal, and
+    raising here would turn every such legitimate success into a false
+    refusal. Safety does not depend on this call succeeding: if the guard
+    truly blocked the submission, its `preventDefault()` means the page
+    never navigated, so this read reliably succeeds; and independent of
+    this function entirely, :func:`_confirmation_signal` downstream still
+    demands PROOF (a real confirmation or a real navigation) before
+    ``submitted`` is ever reported true — a call that fails here can widen
+    who gets asked to double-check, never who gets a silent success.
+    """
+    try:
+        result = root.evaluate(_READ_BLOCKED_SUBMIT_JS)
+    except Exception:  # noqa: BLE001 — see docstring: a post-click read, not a verification boundary
+        return None
+    return list(result) if result else None
+
+
+def _blocked_submission_on(page: Any) -> list[dict[str, Any]] | None:
+    """Whatever :data:`_SUBMIT_GUARD_INSTALL_JS` blocked on ``page`` or any
+    :func:`_reachable_frames` frame's most recent submit attempt, or
+    ``None``.
+
+    U5d-4: checked after EVERY submit click the executor makes — the
+    employer form's own first click AND the code-entry resubmit
+    :func:`_resolve_verification_gate` issues once a verification code has
+    been typed in — so a required field the guard catches refuses
+    identically no matter which of the two clicks revealed it. This is what
+    makes it structurally impossible for the verification-code loop to
+    create a path around CLI-SUB-005-R7's fail-closed submission guard: the
+    guard is armed once, for the page's whole lifetime, and every click this
+    module ever issues is read back through this same function.
+    """
+    blocked = _read_blocked_submission(page)
+    if blocked:
+        return blocked
+    for frame in _reachable_frames(page):
+        frame_blocked = _read_blocked_submission(frame)
+        if frame_blocked:
+            return frame_blocked
+    return None
+
+
+def _manual_step_for_blocked_submission(
+    blocked_submission: list[dict[str, Any]],
+) -> ManualStepRequired:
+    """The CLI-SUB-005-R6/R7 decisive-invariant outcome for a guard-blocked
+    submit click, factored out so both call sites (the form's own first
+    click, and U5d-4's code-entry resubmit) raise the exact same honest
+    reason and message rather than two copies that could quietly diverge.
+    """
+    labels = "; ".join(
+        str(item.get("label") or item.get("kind") or "a required field")
+        for item in blocked_submission
+    )
+    # CLI-SUB-005-R7 — the in-browser guard's own fail-closed path (see
+    # _SUBMIT_GUARD_INSTALL_JS) reports a census that could not run as a
+    # synthetic `census_unavailable` entry, never a real field — an HONEST,
+    # distinct reason from a genuine unanswered question.
+    unverifiable = all(
+        item.get("kind") == "census_unavailable" for item in blocked_submission
+    )
+    if unverifiable:
+        return ManualStepRequired(
+            "unverifiable_form_surface",
+            (
+                "This application's own submit handling could not be "
+                "verified at the instant of submitting — Aether's "
+                "browser-level guard refused to let the submission go "
+                "through rather than guess, so nothing was sent."
+            ),
+            question=labels,
+        )
+    return ManualStepRequired(
+        "unplanned_required_field",
+        (
+            "This application revealed a required question (sometimes "
+            "hidden inside a shadow-DOM widget, sometimes only at the "
+            "exact instant of submitting) that Aether could not verify "
+            "was answered — its own browser-level guard refused to let "
+            "the submission go through, so nothing was sent: " + labels
+        ),
+        question=labels,
+    )
+
+
+def _uncommitted_live_required_fields(
+    page: Any,
+    channel: str,
+    plan_fields: list[dict[str, Any]],
+    documents: dict[str, str],
+) -> list[dict[str, Any]]:
+    """Every field the channel's OWN schema parser (:func:`parse_form_schema`)
+    can recognize as required, right now, in ``page``'s content (the top
+    document, or — since CLI-SUB-005-R5 — a single frame's content, passed
+    here as ``page``) that is not, right now, committed. A TOTAL
+    re-derivation over what THAT parser call can see, never a delta against
+    a ledger of names or flags seen on some earlier pass.
+
+    CLI-SUB-005-R5 (adversarial FAIL,
+    RUN-20260818T0223Z/SUB-005-R4/08-adversarial-final.md): the previous
+    revision of this docstring called this "the COMPLETE set of fields the
+    LIVE DOM marks required" and "a fact only the LIVE DOM holds" — language
+    this review proved false as written. :func:`parse_form_schema` runs over
+    ``page.content()``, one document's serialized HTML; it does not descend
+    into ``<iframe>`` documents, so a required field that exists only inside
+    one was invisible here no matter how many times this re-parsed. This
+    function does NOT close that gap by itself, and no longer claims to:
+    :func:`_converge_presubmit_state` now calls it once per reachable
+    Playwright frame as well as the top document (closing the iframe
+    instance of the class), and :func:`_verify_no_unverifiable_form_surface`
+    is the CONSERVATIVE BACKSTOP that makes the overall submit-safety
+    property hold independent of parser vocabulary — any form-shaped control
+    on any reachable surface that no parser call anywhere in this path can
+    classify, or any frame whose content cannot even be read, refuses
+    instead of submitting. What THIS function alone guarantees is exact and
+    narrower: every field ITS OWN parser call recognizes as required, on the
+    one root it was given, is proven committed or reported uncommitted —
+    never silently skipped by a stale ledger.
+
+    CLI-SUB-005-R4 (adversarial re-review FAIL,
+    RUN-20260818T0223Z/SUB-005-R3/08-adversarial-rereview.md, finding #1):
+    R3's two convergence signals were both DELTAS against state captured at
+    plan-build time or on an earlier pass — a required field's NAME being new
+    to a ``known_names`` set, or a PLANNED field's own frozen ``required``
+    flag going uncommitted. Neither one re-checks whether a field that was
+    already known — present, but OPTIONAL, in the original snapshot — has
+    since turned required live in the DOM (a sibling ``<select>``'s
+    ``onchange`` marking an already-rendered, already-planned-but-optional
+    node ``aria-required="true"``: no new node, same name, exactly how a
+    React-driven ATS conditional would toggle an existing field's
+    requiredness). Reproduced
+    (``adversarial/attack2_required_toggle_escapes_ledger.py``):
+    ``_converge_presubmit_state`` converged on pass 1 because the toggled
+    field's name was already ``known`` and its PLAN entry still said
+    ``required=False, value=None`` — both delta signals are blind to a fact
+    only the LIVE DOM holds, and there was never anything to update them.
+
+    This function never asks "is this name new?" or "does the plan's OWN
+    stale copy say uncommitted?" as its ONLY test for requiredness. It
+    re-parses ``page.content()`` with the channel's own
+    :func:`parse_form_schema` FRESH on every single call, and treats a field
+    as required-right-now if EITHER source says so:
+
+    * the FRESH live parse marks it required (catches a toggle-to-required
+      the plan's frozen copy cannot see — the fix for finding #1), OR
+    * the PLAN's own ``required`` flag says so (preserves the pre-existing
+      invariant that a plan's own requiredness decision is always honoured
+      even if a re-render happens to strip the ``required``/``aria-required``
+      markup along with the value it wiped — a plan is never LESS trusted
+      than the live markup, only ever supplemented by it).
+
+    Every such field is then checked against the live DOM's actual committed
+    state via :func:`_commit_state`. A field's name being ``known`` from an
+    earlier pass, or its plan entry's own stale ``required`` flag being the
+    ONLY thing consulted, is never how requiredness is decided here — there
+    is no ledger for a live requiredness toggle to escape, by construction.
+
+    A field with no planned value yet (truly new to the plan, OR
+    known-but-was-optional-and-just-turned-required — the two are
+    indistinguishable from here, and both need the identical treatment:
+    resolve via a real answer, or refuse) is always reported uncommitted. A
+    field that already has a planned value is reported uncommitted only if
+    the live DOM does not currently hold that value (a re-render wipe).
+    """
+    try:
+        html = page.content()
+    except Exception:  # noqa: BLE001 — a page without a live DOM has nothing to check
+        html = None
+    live_fields: list[dict[str, Any]] = []
+    if html is not None:
+        try:
+            live_fields = parse_form_schema(html, channel=channel)
+        except Exception:  # noqa: BLE001 — a parse failure must not crash the gate
+            live_fields = []
+
+    # CLI-SUB-005-R6 root cause 1 (see the module note above
+    # _uncommitted_live_required_fields' neighbourhood): `parse_form_schema`
+    # above can only ever see what `page.content()`'s STRING serialized —
+    # never an open shadow root's content, which is structurally absent from
+    # that string, not merely unparsed. Supplement (never replace) the
+    # parser-derived `live_fields` with the LIVE, shadow-DOM-piercing
+    # composed census — but only for a control the parser could NOT already
+    # classify (matched by its own id/name/`[data-field-path]` ancestor
+    # against every name the parser DID recognize): a field the parser
+    # already covers is already handled, correctly, by the two loops below,
+    # and must not be double-processed under a second, synthetic name.
+    known_field_names = {str(f["name"]) for f in live_fields}
+    for item in _composed_live_census(page):
+        if item.get("committed"):
+            continue  # already satisfied — not this census's job to report
+        control_id = str(item.get("id") or "")
+        control_name = str(item.get("controlName") or "")
+        field_path = str(item.get("fieldPath") or "")
+        if (
+            (control_id and control_id in known_field_names)
+            or (control_name and control_name in known_field_names)
+            or (field_path and field_path in known_field_names)
+        ):
+            continue
+        marker = str(item.get("marker") or "")
+        if not marker:
+            continue
+        synthetic_name = f"__aether_live_census_{marker}"
+        if synthetic_name in known_field_names:
+            continue
+        known_field_names.add(synthetic_name)
+        live_fields.append(
+            {
+                "name": synthetic_name,
+                "label": str(item.get("label") or "an embedded control"),
+                "kind": _live_census_kind(str(item.get("kind") or "")),
+                "required": True,
+                "options": [],
+                "scope": "",
+                # A direct, shadow-DOM-piercing locator (Playwright's CSS
+                # engine pierces open shadow roots by default) — never
+                # assembled from an id/name this control may not have.
+                "liveSelector": f'[data-aether-live-field="{marker}"]',
+            }
+        )
+
+    live_required_names = {str(f["name"]) for f in live_fields if f.get("required")}
+
+    seen: set[str] = set()
+    uncommitted: list[dict[str, Any]] = []
+
+    # Every PLANNED field required either by the plan's own flag or by the
+    # fresh live parse — this is what catches a known-but-optional field
+    # turning required live (name already in the plan, plan's own flag still
+    # False, but now present in live_required_names) without ever trusting
+    # the plan's frozen flag as the SOLE signal.
+    for field in plan_fields:
+        name = str(field["name"])
+        if name in seen or not (field.get("required") or name in live_required_names):
+            continue
+        seen.add(name)
+        value = field.get("value")
+        if value is None:
+            uncommitted.append(field)
+            continue
+        committed, _observed = _commit_state(page, field, value, documents)
+        if not committed:
+            uncommitted.append(field)
+
+    # Every field the LIVE DOM marks required RIGHT NOW that the plan never
+    # saw at all — structurally new, not merely toggled (the loop above
+    # already covers a plan-known name via live_required_names).
+    for live_field in live_fields:
+        name = str(live_field["name"])
+        if name in seen or not live_field.get("required"):
+            continue
+        seen.add(name)
+        uncommitted.append(live_field)
+
+    return uncommitted
+
+
+def _resolve_uncommitted_live_required_once(
+    page: Any,
+    plan_fields: list[dict[str, Any]],
+    documents: dict[str, str],
+    uncommitted: list[dict[str, Any]],
+    *,
+    profile: dict[str, Any] | None,
+    answer_bank: Callable[[dict[str, Any]], Any] | None,
+) -> list[str]:
+    """Resolve every field ONE fresh :func:`_uncommitted_live_required_fields`
+    snapshot just reported. The caller's fixed-point loop controls the bound
+    and re-derives a brand-new, total snapshot on the NEXT pass rather than
+    trusting anything decided here — this function never marks a name as
+    "handled" for future passes to skip.
+
+    Two cases, handled differently on purpose:
+
+    * A field that ALREADY has a planned value (a committed answer the live
+      DOM no longer shows — a re-render wipe) is simply REFILLED with that
+      SAME answer, and is never counted into the return value: it was
+      already planned and already accounted for in the caller's ``filled``.
+      A refill that does not stick this pass is left for the NEXT pass's
+      fresh, total re-derivation to see and retry — never an immediate
+      refusal here, exactly like the pre-existing gate's own wipe-refill
+      behaviour.
+    * A field with NO planned value (truly new, or known-but-was-optional-
+      and-just-turned-required-live) is resolved via the EXACT SAME
+      ``_answer_for``/answer-bank path :func:`build_form_fill_plan` itself
+      uses, never inventing an answer — an existing plan entry gets its
+      ``value``/``required`` updated in place; a genuinely new one is
+      appended. Anything that cannot be answered AND verified raises
+      ``ManualStepRequired("unplanned_required_field")`` immediately: this
+      NEVER submits past a live-required field with no honest answer.
+      Successfully resolved names ARE returned, for the caller's
+      ``unplannedFilled`` evidence — this is exactly the class of field that
+      needed this safety net at all, whether it was structurally invisible
+      to the original snapshot or merely optional in it at the time.
+    """
+    plan_by_name = {str(field["name"]): field for field in plan_fields}
+    resolved: list[str] = []
+    unresolved_labels: list[str] = []
+    for field in uncommitted:
+        name = str(field["name"])
+        existing = plan_by_name.get(name)
+        value = existing.get("value") if existing else None
+        if existing is not None and value is not None:
+            _fill_and_verify(page, existing, value, documents, verify=True)
+            continue
+        answer = _answer_for(field, profile or {})
+        if answer is None and answer_bank is not None:
+            match = answer_bank(field)
+            if match is not None:
+                answer = match.answer
+        if answer is None:
+            unresolved_labels.append(str(field.get("label") or name))
+            continue
+        if existing is not None:
+            existing["value"] = answer
+            existing["required"] = True
+            target = existing
+        else:
+            target = dict(field)
+            target["value"] = answer
+            target["required"] = True
+            plan_fields.append(target)
+            plan_by_name[name] = target
+        if _fill_and_verify(page, target, answer, documents, verify=True):
+            resolved.append(name)
+        else:
+            unresolved_labels.append(str(target.get("label") or name))
+    if unresolved_labels:
+        labels = "; ".join(unresolved_labels)
+        raise ManualStepRequired(
+            "unplanned_required_field",
+            (
+                "This application revealed a required question after "
+                "Aether had already built its plan (a conditional "
+                "follow-up), and it could not be answered and verified, "
+                "so nothing was submitted. Open the posting and finish "
+                "it yourself: " + labels
+            ),
+            question=labels,
+        )
+    return resolved
+
+
+def _plan_entry_for(
+    name: str, *sources: dict[str, dict[str, Any]]
+) -> dict[str, Any] | None:
+    """The first known plan entry for ``name`` across one or more plans — the
+    top document's and, since CLI-SUB-005-R5, each frame's own — checked in
+    the order given, never merged: the same ``name`` string appearing in two
+    genuinely different documents is a coincidence, not the same field."""
+    for source in sources:
+        entry = source.get(name)
+        if entry is not None:
+            return entry
+    return None
+
+
+def _converge_presubmit_state(
+    page: Any,
+    channel: str,
+    plan_fields: list[dict[str, Any]],
+    documents: dict[str, str],
+    *,
+    profile: dict[str, Any] | None,
+    answer_bank: Callable[[dict[str, Any]], Any] | None,
+) -> list[str]:
+    """Fixed point over a TOTAL re-derivation of live-required-field state,
+    across the top document AND every reachable Playwright frame — the ONLY
+    thing between the last fill and the submit click, and the last thing it
+    ever does is that SAME re-derivation, read-only, with zero mutation
+    after it.
+
+    CLI-SUB-005-R4 (adversarial re-review FAIL,
+    RUN-20260818T0223Z/SUB-005-R3/08-adversarial-rereview.md): R3 folded a
+    live-DOM rescan and a stale-planned-field refill into one bounded loop,
+    but its "has anything changed?" ledger tracked two DELTAS — a required
+    field's NAME being new to a ``known_names`` set, and a PLANNED field's
+    OWN frozen ``required`` flag going uncommitted — neither of which can see
+    an already-known, already-OPTIONAL field turning required LIVE via a
+    mutation the loop's own actions triggered (finding #1: a sibling
+    ``<select>``'s ``onchange`` marking an already-rendered, already-known,
+    already-optional node ``aria-required="true"``; no new node, no changed
+    plan flag, invisible to both deltas by construction). Separately,
+    counting the confirming "nothing changed" pass INSIDE the same bounded
+    counter as the resolving passes left a chain needing exactly
+    ``_MAX_CONVERGENCE_PASSES`` resolving passes with no budget left for the
+    pass that proves it is done — the R2 off-by-one, reproduced one bound
+    deeper instead of eliminated (finding #2).
+
+    R4 replaces both DELTA signals with ONE total enumeration
+    (:func:`_uncommitted_live_required_fields`): every pass, re-parse the
+    live DOM from scratch with the channel's own schema parser, and check
+    EVERY field it reports required RIGHT NOW against the live DOM's actual
+    committed state — never a name-ledger, never a plan's own stale copy of
+    its ``required`` flag. There is no ledger here for a live requiredness
+    toggle to escape, by construction: what matters is only ever what the DOM
+    says THIS INSTANT.
+
+    The loop and the "did it converge?" check are the SAME re-derivation, run
+    at the TOP of every pass, which is what decouples "prove it's done" from
+    "resolve one more thing" and eliminates the off-by-one structurally
+    rather than by picking a bigger number:
+
+    * If this pass's total re-derivation reports nothing live-required and
+      uncommitted, the loop stops immediately — this IS the read-only,
+      zero-mutation confirming pass, and it is NEVER counted against the
+      resolving-pass bound, because it did not resolve anything. A chain
+      that finishes after exactly ``_MAX_CONVERGENCE_PASSES`` resolving
+      passes still gets this free, uncounted check on the very next
+      iteration — a legitimately-terminating chain of any depth up to the
+      bound is always given the pass that proves it is finished, because
+      that pass is never the thing being bounded.
+    * Otherwise a resolving pass runs
+      (:func:`_resolve_uncommitted_live_required_once` — refills a wiped
+      planned value, or answers and fills a never-answered one via the exact
+      ``_answer_for``/answer-bank path, raising immediately if anything
+      discovered cannot be answered AND verified) and the resolving-pass
+      counter increments. Only genuine resolving work counts toward
+      :data:`_MAX_CONVERGENCE_PASSES` — an application whose form keeps
+      changing under it, or keeps losing typed answers, faster than that
+      many resolving passes can keep up is exactly the case a manual step
+      exists for.
+
+    CLI-SUB-005-R5 (adversarial FAIL,
+    RUN-20260818T0223Z/SUB-005-R4/08-adversarial-final.md): R4's "TOTAL
+    re-derivation" was total only over the TOP-LEVEL document —
+    :func:`parse_form_schema` runs on ``page.content()``, which does not
+    descend into ``<iframe>`` documents, so a required field revealed only
+    inside an iframe was invisible on every pass, forever. This function now
+    re-derives EACH :func:`_reachable_frames` frame's own uncommitted-required
+    state (re-read fresh every pass, exactly like the top document) the
+    IDENTICAL way it re-derives the top document's — against a SEPARATE,
+    per-frame plan (a frame was never part of the original static snapshot,
+    so every field it reveals starts unplanned there, just like an unplanned
+    top-document field does), resolved or refused through the exact same
+    :func:`_resolve_uncommitted_live_required_once` path. Convergence is now
+    "the top document AND every reachable frame each report nothing
+    uncommitted" — a resolving pass anywhere (top or any frame) still counts
+    once against the SAME bound, and the free confirming pass is still the
+    one where NOTHING anywhere changed.
+
+    This still is not an ABSOLUTE claim: a frame whose content cannot be
+    read at all, or a control no parser call anywhere in this path can
+    recognize, is exactly what :func:`_verify_no_unverifiable_form_surface`
+    exists to catch as a LAST, CONSERVATIVE gate right before the submit
+    click — this function's own guarantee stays scoped to what its parser
+    calls can see, on every surface it can enumerate.
+
+    Returns the names of every field resolved (top document or any frame)
+    because it had NO planned value yet (truly new to the plan, or
+    known-but-turned-required-live) — never a field that was only refilled
+    after a wipe, which was already planned and already accounted for in the
+    caller's ``filled``.
+    """
+    resolving_passes = 0
+    resolved: list[str] = []
+    frame_plan_fields: dict[int, list[dict[str, Any]]] = {}
+    while True:
+        _wait(page, _PRESUBMIT_SETTLE_MS)
+        # TOTAL, read-only re-derivation — see _uncommitted_live_required_fields.
+        # An empty result here is, itself, the zero-mutation confirming pass:
+        # nothing below this branch runs, and the function returns.
+        uncommitted = _uncommitted_live_required_fields(
+            page, channel, plan_fields, documents
+        )
+        # CLI-SUB-005-R5: the SAME re-derivation, once per reachable frame,
+        # against that frame's OWN plan — never the top document's, since a
+        # frame field was never in the original static snapshot.
+        frame_batches: list[
+            tuple[Any, list[dict[str, Any]], list[dict[str, Any]]]
+        ] = []
+        for frame in _reachable_frames(page):
+            frame_fields = frame_plan_fields.setdefault(id(frame), [])
+            frame_uncommitted = _uncommitted_live_required_fields(
+                frame, channel, frame_fields, documents
+            )
+            if frame_uncommitted:
+                frame_batches.append((frame, frame_fields, frame_uncommitted))
+
+        if not uncommitted and not frame_batches:
+            return resolved
+
+        resolving_passes += 1
+        if resolving_passes > _MAX_CONVERGENCE_PASSES:
+            combined = list(uncommitted)
+            for _frame, _frame_fields, batch in frame_batches:
+                combined.extend(batch)
+            plan_by_name = {str(field["name"]): field for field in plan_fields}
+            frame_plan_by_name = {
+                str(field["name"]): field
+                for fields_for_frame in frame_plan_fields.values()
+                for field in fields_for_frame
+            }
+            still_unanswered = [
+                field
+                for field in combined
+                if (
+                    entry := _plan_entry_for(
+                        str(field["name"]), plan_by_name, frame_plan_by_name
+                    )
+                )
+                is None
+                or entry.get("value") is None
+            ]
+            if still_unanswered:
+                raise ManualStepRequired(
+                    "unplanned_required_field",
+                    (
+                        "This application kept revealing new required "
+                        "questions — or kept turning already-visible fields "
+                        "required — faster than Aether could keep resolving "
+                        "them, so it stopped rather than guess how many "
+                        "more passes it might take. Open the posting and "
+                        "finish it yourself."
+                    ),
+                )
+            labels = "; ".join(
+                str(field.get("label") or field["name"]) for field in combined
+            )
+            raise ManualStepRequired(
+                "form_fill_failed",
+                (
+                    "Aether typed the answers but this application form "
+                    "kept losing them (the page re-rendered or rejected the "
+                    "values) faster than it could keep refilling them, so "
+                    "it submitted nothing. Open the posting and apply "
+                    "yourself: " + labels
+                ),
+                question=labels,
+            )
+
+        if uncommitted:
+            resolved.extend(
+                _resolve_uncommitted_live_required_once(
+                    page,
+                    plan_fields,
+                    documents,
+                    uncommitted,
+                    profile=profile,
+                    answer_bank=answer_bank,
+                )
+            )
+        for frame, frame_fields, batch in frame_batches:
+            resolved.extend(
+                _resolve_uncommitted_live_required_once(
+                    frame,
+                    frame_fields,
+                    documents,
+                    batch,
+                    profile=profile,
+                    answer_bank=answer_bank,
+                )
+            )
+
+
+def _unclassifiable_controls(html: str, channel: str) -> list[str]:
+    """Form-shaped controls in ``html`` that :func:`parse_form_schema`
+    (``channel``'s own dialect) cannot turn into a field entry AT ALL — a
+    raw structural DOM census, not a re-run of any one parser's rules, so it
+    catches what NO current or future channel dialect happens to recognize: a
+    control with neither an ``id`` nor a ``name`` and no
+    ``[data-field-path]`` ancestor, a custom ARIA widget with no underlying
+    native control, a ``contenteditable`` question box with none either.
+    This is the structural counterpart to the iframe gap
+    (RUN-20260818T0223Z/SUB-005-R4/08-adversarial-final.md): that review's
+    own "other angles" section separately named a Greenhouse-shaped
+    contenteditable widget with no wrapped ``<input>`` as the SAME root
+    cause one level shallower ("parser vocabulary is the ceiling on what the
+    safety net can ever see") — this closes that class too, not just the
+    iframe instance of it.
+
+    A control already accounted for by ``g-recaptcha-response``'s name, an
+    ``iti-``-prefixed id (the international-phone-input library's own
+    internal state field), or any of the input types every parser already
+    treats as non-data-entry is excluded here for the identical reason the
+    parsers exclude them: a hidden reCAPTCHA token or a widget's own
+    bookkeeping is not a question a human applicant answers, and flagging it
+    would not be conservative — it would be noise that trains someone to
+    ignore this gate.
+    """
+    soup = _soup(html)
+    try:
+        schema = parse_form_schema(html, channel=channel)
+    except Exception:  # noqa: BLE001 — an unparseable page IS the finding
+        return ["the page's own schema could not be parsed"]
+    covered = {str(field["name"]) for field in schema}
+
+    def _covered(node: Any) -> bool:
+        node_id = str(node.get("id") or "")
+        node_name = str(node.get("name") or "")
+        if node_id and node_id in covered:
+            return True
+        if node_name and node_name in covered:
+            return True
+        wrapper = node.find_parent(attrs={"data-field-path": True})
+        if wrapper is not None and str(wrapper.get("data-field-path") or "") in covered:
+            return True
+        return False
+
+    findings: list[str] = []
+    flagged: set[int] = set()
+
+    def _flag(node: Any, why: str) -> None:
+        if id(node) in flagged:
+            return
+        flagged.add(id(node))
+        findings.append(why)
+
+    for control in soup.find_all(["input", "select", "textarea"]):
+        control_type = str(control.get("type") or "").lower()
+        if control_type in _CENSUS_EXCLUDED_INPUT_TYPES:
+            continue
+        if str(control.get("aria-hidden") or "").lower() == "true":
+            continue
+        control_id = str(control.get("id") or "")
+        control_name = str(control.get("name") or "")
+        if control_name == "g-recaptcha-response" or control_id.startswith("iti-"):
+            continue
+        if not _covered(control):
+            _flag(control, f"unclassified <{control.name}> control")
+
+    for node in soup.find_all(attrs={"role": True}):
+        if node.name in {"input", "select", "textarea"}:
+            continue
+        role = str(node.get("role") or "").lower()
+        if role not in _CENSUS_INTERACTIVE_ROLES:
+            continue
+        if node.find(["input", "select", "textarea"]) is not None:
+            continue  # a native control inside it is censused on its own
+        if not _covered(node):
+            _flag(node, f'unclassified [role="{role}"] control')
+
+    for node in soup.find_all(attrs={"contenteditable": True}):
+        if str(node.get("contenteditable") or "").lower() == "false":
+            continue
+        if node.find(["input", "select", "textarea"]) is not None:
+            continue
+        if not _covered(node):
+            _flag(node, "unclassified contenteditable control")
+
+    # CLI-SUB-005-R7 (attack C2) — a host tagged by
+    # :data:`_CLOSED_SHADOW_MARKER_INIT_JS` carries a CLOSED shadow root
+    # whose content no code in this browser process (Aether's, Playwright's,
+    # or the page's own) can ever read — flagged UNCONDITIONALLY, never
+    # gated on `_covered`: even a host whose id/name happens to match an
+    # already-recognized field cannot have that field's FILL verified either,
+    # since verification itself would need to read the same unreadable
+    # content. An open shadow root never carries this marker at all (see the
+    # init script), so this can never fire for attack #6/E's own resolved
+    # construction.
+    for node in soup.find_all(attrs={"data-aether-closed-shadow-host": True}):
+        _flag(
+            node,
+            "a closed shadow root whose content cannot be inspected",
+        )
+
+    return findings
+
+
+def _verify_no_unverifiable_form_surface(page: Any, channel: str) -> None:
+    """CLI-SUB-005-R5 CONSERVATIVE REFUSE-BACKSTOP — the decisive invariant.
+
+    Immediately before :func:`_activate_submit`: every reachable surface
+    (the top document and every :func:`_reachable_frames` frame, re-read
+    fresh here) must be READABLE, and everything on it that LOOKS like a
+    control a human applicant could interact with must be something
+    :func:`parse_form_schema` actually turned into a field — never assumed
+    empty of meaning just because no parser call happened to recognize it.
+
+    RUN-20260818T0223Z/SUB-005-R4/08-adversarial-final.md proved
+    :func:`_uncommitted_live_required_fields` (top-document-only at the
+    time) could never see a required field embedded in an iframe, no matter
+    how many times it re-parsed — a residual
+    ``05-decision-memos/SUB-005-and-COV-3-rulings.md`` accepted as bounded IN
+    KIND ("the safety net can only see what parse_form_schema can see") and
+    ordered closed two ways: (a) extend the re-derivation across frames
+    (:func:`_converge_presubmit_state`, above) and (b) THIS function — a
+    backstop that no longer depends on any parser recognizing a control AT
+    ALL. Unknown ⇒ manual refusal. Never unknown ⇒ submit.
+
+    This is not a claim that the census below is a total enumeration of
+    every ATS convention that will ever exist — it cannot be, by the exact
+    argument that produced it. It is a claim that nothing shaped like a
+    control on any surface this function could read goes unaccounted for,
+    and that a surface it could NOT read is refused rather than assumed
+    clean.
+    """
+    unreadable: list[str] = []
+    unclassifiable: list[str] = []
+    try:
+        html = page.content()
+    except Exception:  # noqa: BLE001 — an unreadable top document IS the finding
+        html = None
+    if html is None:
+        unreadable.append("the application page itself")
+    else:
+        unclassifiable.extend(_unclassifiable_controls(html, channel))
+    for frame in _reachable_frames(page):
+        try:
+            frame_html = frame.content()
+        except Exception:  # noqa: BLE001 — an unreadable frame IS the finding
+            unreadable.append(_frame_label(frame))
+            continue
+        unclassifiable.extend(
+            f"{_frame_label(frame)}: {finding}"
+            for finding in _unclassifiable_controls(frame_html, channel)
+        )
+    if not unreadable and not unclassifiable:
+        return
+    details = "; ".join(unreadable + unclassifiable)
+    raise ManualStepRequired(
+        "unverifiable_form_surface",
+        (
+            "This application page has a part Aether could not fully read "
+            "and account for before submitting — rather than guess whether "
+            "it held a required question, it stopped and left the form "
+            "untouched: " + details
+        ),
+        question=details,
+    )
+
+
 def _resume_suffix(data: bytes) -> str:
     """Name the uploaded résumé for what it ACTUALLY is (RFMT-5).
 
@@ -1712,6 +3295,10 @@ def playwright_form_submitter(
     resume_pdf_bytes: bytes,
     cover_letter_text: str,
     evidence_dir: str,
+    profile: dict[str, Any] | None = None,
+    answer_bank: Callable[[dict[str, Any]], Any] | None = None,
+    user_id: str | None = None,
+    company: str | None = None,
 ) -> dict[str, Any]:
     """Fill and submit the application in a REAL headless Chromium.
 
@@ -1721,9 +3308,26 @@ def playwright_form_submitter(
     tests and by re-running a captured page — and the returned summary says so
     in ``mode``, so an audit can always tell the two apart.
 
+    ``profile``/``answer_bank`` (CLI-SUB-005-R2) are consulted ONLY to resolve
+    a required field the live DOM reveals that the plan's static snapshot
+    never saw — see :func:`_resolve_unplanned_required_fields`. Omitting them
+    reproduces the pre-R2 behaviour for that (rare, additive) safety net: no
+    stored answer means an honest refusal, exactly like every other unanswered
+    required field.
+
+    ``user_id``/``company`` (U5d-4) are needed only if the employer's ATS
+    demands an emailed verification code after the submit click: the code is
+    read from THAT user's own connected Gmail, and the employer is named in
+    the manual step raised when it cannot be. Without a ``user_id`` (replay,
+    or a direct call) a verification gate is an honest manual step rather
+    than anything Aether tries to work around — and the gate is only ever
+    even looked for AFTER CLI-SUB-005-R7's submission guard has cleared the
+    click, so this can never open a path around it.
+
     Returns ``{"submitted", "evidencePath", "destination", "filled",
-    "unfilled", "mode"}``. Raises :class:`ApplyExecutorTransportError` if the
-    browser itself could not be driven — never a fake success.
+    "unfilled", "unplannedFilled", "mode", "verification"}``. Raises
+    :class:`ApplyExecutorTransportError` if the browser itself could not be
+    driven — never a fake success.
     """
     try:
         from playwright.sync_api import sync_playwright
@@ -1747,7 +3351,9 @@ def playwright_form_submitter(
     filled: list[str] = []
     unfilled: list[str] = []
     blocked_required: list[str] = []
+    unplanned_filled: list[str] = []
     mode = "live" if apply_url else "replay"
+    verification: dict[str, Any] | None = None
     screenshot = _evidence_path(evidence_dir, application_id, "confirmation.png")
     try:
         with sync_playwright() as runner:  # noqa: SIM117 — cleanup handled below
@@ -1758,6 +3364,11 @@ def playwright_form_submitter(
             _renice_browser_tree()
             try:
                 page = browser.new_page(viewport={"width": 1280, "height": 1600})
+                # CLI-SUB-005-R7 (attack C2) — armed BEFORE any navigation, so
+                # it is in place before the page's own scripts (and therefore
+                # any custom element's connectedCallback) ever run. See the
+                # module note above _CLOSED_SHADOW_MARKER_INIT_JS.
+                page.add_init_script(_CLOSED_SHADOW_MARKER_INIT_JS)
                 if apply_url:
                     page.goto(apply_url, wait_until="domcontentloaded", timeout=45000)
                     page.wait_for_timeout(2000)
@@ -1770,6 +3381,26 @@ def playwright_form_submitter(
                     # host that no longer answers.
                     page.route("**/*", lambda route: route.abort())
                     page.set_content(page_html or "", wait_until="domcontentloaded")
+                if _hcaptcha_widget_mounted(page):
+                    # SUB-011: an hCaptcha widget needs a REAL human to solve
+                    # it — nothing here does, or tries to, and there is no
+                    # point filling the rest of the form first: the outcome
+                    # is already decided. Screenshot the page as evidence
+                    # and refuse honestly, distinctly from a TRIGGERED
+                    # challenge (`detect_blocking_state`'s "captcha" reason,
+                    # checked earlier while the PLAN was built) — this is a
+                    # MOUNT, caught here because build_form_fill_plan's
+                    # static snapshot cannot see the live DOM's widget.
+                    page.screenshot(path=str(screenshot), full_page=True)
+                    raise ManualStepRequired(
+                        "captcha_challenge",
+                        (
+                            "This application is protected by an hCaptcha "
+                            "challenge Aether cannot solve or bypass, so "
+                            "nothing was submitted. Open the posting and "
+                            "finish it yourself."
+                        ),
+                    )
                 # CLI-SUB-005: live mode verifies every fill's committed DOM
                 # state (read-back + one retry); replay keeps the raw fills —
                 # a replayed page is a JS-dead capture no employer can
@@ -1798,17 +3429,66 @@ def playwright_form_submitter(
                         question="; ".join(blocked_required),
                     )
                 if verify_commit:
-                    # CLI-SUB-005 PRE-SUBMIT GATE: re-verify every REQUIRED
-                    # planned field is still committed in the DOM (a résumé
-                    # upload can re-render the form and wipe earlier fills);
-                    # one refill pass, then an honest refusal — the submit
-                    # control is never activated over an empty required field.
+                    # CLI-SUB-005-R3 (adversarial review FAIL,
+                    # RUN-20260818T0223Z/SUB-005-R2/08-adversarial-review-
+                    # premerge.md): the plan was built from a STATIC,
+                    # unanswered page snapshot — a conditional/branching
+                    # question (first-class on Ashby/Greenhouse) only exists
+                    # in the live DOM once an earlier question is answered,
+                    # so it is structurally invisible to that plan, AND the
+                    # gate's own refill of a wiped field can itself trigger
+                    # the same reveal. Both halves are now ONE bounded
+                    # fixed-point loop (_converge_presubmit_state) that
+                    # rescans and refills together until a pass changes
+                    # nothing, then a final READ-ONLY pass confirms it before
+                    # returning. CLI-SUB-005-R6: the ONLY thing that happens
+                    # between this call returning and the submit click below
+                    # is installing our OWN defensive instrumentation
+                    # (_install_submission_guard) — an inert marker attribute
+                    # plus an event listener that can never itself reveal,
+                    # hide, or answer anything — never a change to any
+                    # question's requiredness or committed state.
                     try:
-                        _presubmit_required_commit_gate(page, plan["fields"], documents)
+                        unplanned_filled = _converge_presubmit_state(
+                            page,
+                            channel,
+                            plan["fields"],
+                            documents,
+                            profile=profile,
+                            answer_bank=answer_bank,
+                        )
+                        # CLI-SUB-005-R5 CONSERVATIVE REFUSE-BACKSTOP — see
+                        # _verify_no_unverifiable_form_surface. Runs AFTER
+                        # convergence has resolved everything it CAN see,
+                        # still strictly before the submit click below: the
+                        # decisive check that nothing shaped like a control,
+                        # on any readable or unreadable surface, was left
+                        # unaccounted for. Read-only, like everything above it.
+                        _verify_no_unverifiable_form_surface(page, channel)
+                        # CLI-SUB-005-R6 root cause 2 (RUN-20260818T0223Z/
+                        # SUB-005-R5/08-adversarial-final.md attack #7):
+                        # everything above is a CHECK; the click below is the
+                        # ACT, and a page's own mousedown/focus handler on the
+                        # submit control can reveal a brand-new required field
+                        # in that exact gap — deterministically, by DOM
+                        # event-ordering spec, not a race. Rather than add
+                        # another check-then-act layer, GUARD THE SUBMISSION
+                        # EVENT ITSELF: install a capture-phase listener, in
+                        # the browser, that re-runs the identical shadow-DOM-
+                        # piercing live census (root cause 1) at the literal
+                        # instant the submit/click event fires and cancels the
+                        # submission outright if anything required is still
+                        # uncommitted THEN. Installed on the top document and
+                        # every reachable frame, mirroring the backstop above.
+                        _install_submission_guard(page)
+                        for frame in _reachable_frames(page):
+                            _install_submission_guard(frame)
                     except ManualStepRequired:
                         page.screenshot(path=str(screenshot), full_page=True)
                         raise
+                    filled.extend(unplanned_filled)
                 before_url = page.url
+                submitted_at = time.time()
                 # SUB-007: probe the form's own state BEFORE the click — the
                 # submit control's armed/disabled state, the errors already on
                 # screen and any confirmation wording the form page itself
@@ -1818,7 +3498,74 @@ def playwright_form_submitter(
                 before_probe = _submit_state_probe(page) if apply_url else {}
                 activation = _activate_submit(page)
                 submitted = activation.clicked
+                # CLI-SUB-005-R6/R7 — THE DECISIVE INVARIANT, and it runs
+                # BEFORE any classification of this click: the click above can
+                # succeed (Playwright's own actionability check is satisfied)
+                # even when our capture-phase guard cancelled the SUBMISSION
+                # itself — `activation.clicked` alone cannot tell the two
+                # apart, so read back what the guard actually blocked, on
+                # every surface it was installed on, before SUB-007's
+                # classify_post_submit ever runs. A required control
+                # uncommitted at the instant of submission ⇒ the submission
+                # never completed ⇒ this is an honest refusal, never a
+                # submitted:true outcome. The employer received NOTHING — the
+                # guard cancelled the browser's own default action before it
+                # ever fired. (Merge rationale, RUN-20260818T0223Z/BATCH-2:
+                # the guard-block check is the supreme, fail-closed safety
+                # invariant and must gate classification, not run beside or
+                # after it — see 02-apply-stack-reconcile.md.)
+                blocked_submission = _blocked_submission_on(page)
+                if blocked_submission:
+                    page.screenshot(path=str(screenshot), full_page=True)
+                    raise _manual_step_for_blocked_submission(blocked_submission)
                 page.wait_for_timeout(1500)
+                # U5d-4 — verification-code loop. Sited strictly AFTER the
+                # guard-check above: a click the R7 guard blocked never
+                # reaches this line at all, so the code loop can never run
+                # instead of, or ahead of, that fail-closed check — it can
+                # only ever run once the guard has already cleared the
+                # click. _resolve_verification_gate re-arms the SAME guard
+                # for its own resubmit (page + every reachable frame,
+                # fail-closed on any install anomaly) and re-checks THAT
+                # click through the identical _blocked_submission_on before
+                # it ever returns — see its own docstring.
+                #
+                # It also RE-CAPTURES a fresh before_probe/activation right
+                # before that resubmit and hands both back here, and
+                # SUB-007's classify_post_submit below is repointed at them
+                # instead of the pre-first-click snapshot. This is
+                # deliberate, not incidental: classify_post_submit's own
+                # honesty floor (a confirmation phrase already sitting on the
+                # page before the classified click is NOT proof —
+                # ``test_a_confirmation_phrase_already_on_the_form_page_is_
+                # not_proof``) depends on ``before_probe`` describing the
+                # page immediately before the LAST click actually made. A
+                # verification gate can be a genuine top-level navigation to
+                # a different document (proven live by the u5d4 P0 fix,
+                # 06-u5d4-adversarial-review.md); comparing that document's
+                # after-state against a stale before_probe from the ORIGINAL
+                # form would let a confirmation-shaped phrase already
+                # sitting on the gate page (e.g. "Thanks for applying! Enter
+                # the code we emailed you to finish.") count as "new" and
+                # therefore as proof, silently bypassing a protection SUB-007
+                # was adversarially hardened against. Recapturing keeps that
+                # protection intact on the gated path exactly as it holds on
+                # the ungated one.
+                if apply_url and submitted and _detect_verification_gate(page):
+                    verification = _resolve_verification_gate(
+                        page,
+                        application_id=application_id,
+                        evidence_dir=evidence_dir,
+                        since_epoch=submitted_at,
+                        user_id=user_id,
+                        company=company,
+                        form_email=_planned_form_email(plan),
+                    )
+                    before_url = str(verification.get("beforeUrl") or before_url)
+                    before_probe = verification.get("beforeProbe") or before_probe
+                    resubmit_control = verification.get("submitControl")
+                    if resubmit_control:
+                        activation = SubmitActivation(**resubmit_control)
                 post_submit = (
                     classify_post_submit(
                         page,
@@ -1893,9 +3640,17 @@ def playwright_form_submitter(
                 "submitStateBefore": before_probe or None,
                 "submitStateAfter": post_submit.probe_after if post_submit else None,
                 "submitControl": activation.as_evidence(),
+                # U5d-4: what the verification gate did, when there was one.
+                # Never the code itself — that is the user's secret and it
+                # has no business in an evidence file.
+                "verification": verification,
                 "commitVerified": verify_commit,
                 "fieldsFilled": filled,
                 "fieldsNotFilled": unfilled,
+                # CLI-SUB-005-R2: which of the above were NOT in the plan's
+                # static snapshot and only resolved by the live-DOM rescan —
+                # visible in the audit even on a successful submission.
+                "unplannedFieldsFilled": unplanned_filled,
                 "screenshot": screenshot.name,
             },
             indent=2,
@@ -1909,10 +3664,12 @@ def playwright_form_submitter(
         # can tell a greyed-out submit control from an absent one without
         # re-deriving it (or defaulting to "not found", as it used to).
         "submitControl": activation.as_evidence(),
+        "verification": verification,
         "evidencePath": str(screenshot),
         "destination": destination,
         "filled": filled,
         "unfilled": unfilled,
+        "unplannedFilled": unplanned_filled,
         "mode": mode,
     }
 
@@ -2494,6 +4251,50 @@ def classify_post_submit(
     )
 
 
+def _hcaptcha_widget_mounted(page: Any) -> bool:
+    """An hCaptcha widget is present in the live DOM at the point of submit.
+
+    SUB-011 scout evidence: every real Lever ``/apply`` page captured so far
+    mounts hCaptcha (``#h-captcha`` widget div + a hidden
+    ``h-captcha-response`` input) — and unlike the invisible Google
+    reCAPTCHA v3 widget every real Ashby/Greenhouse capture ALSO mounts (see
+    :func:`detect_blocking_state`'s docstring), a mere MOUNT is not harmless
+    here: hCaptcha's checkbox widget requires a genuine human interaction to
+    mint a valid response token, so nothing short of a person solving it can
+    make the hidden ``h-captcha-response`` input non-empty. Clicking submit
+    anyway would not bypass it — it would just submit an application missing
+    the token the employer's own server checks for, which is indistinguishable
+    from "submitted" until the employer silently drops it. Detecting the
+    MOUNT and refusing here, honestly, is the only choice that is not either
+    an attempted bypass or a false "submitted" claim.
+
+    CLI-SUB-005-R7 fail-closed discipline (SUB-011-R2 rebase — see
+    :func:`_composed_live_census` / :func:`_install_submission_guard` for the
+    identical pattern this mirrors) applies here too: this check exists
+    BECAUSE a mount cannot be safely bypassed, so an exception while reading
+    a LIVE page's own DOM must not silently report "not mounted" and let the
+    fill/submit proceed — that would be exactly the fail-open shape R7's
+    ruling named ("an exception ... resolves to 'proceed as if nothing were
+    wrong,' not 'refuse'"), applied to a check whose whole job is to catch
+    the one case (a captcha widget on the page) that makes "proceed anyway"
+    genuinely unsafe. FAIL CLOSED: an unreadable LIVE page raises
+    :class:`ManualStepRequired` here, never a silent ``False``.
+    """
+    try:
+        return (
+            page.locator("#h-captcha, .h-captcha, iframe[src*='hcaptcha.com']").count() > 0
+        )
+    except Exception as exc:  # CLI-SUB-005-R7 pattern — FAIL CLOSED (was: return False)
+        raise ManualStepRequired(
+            "captcha_verification_failed",
+            (
+                "Aether could not verify whether this application is "
+                "protected by a captcha challenge, so nothing was "
+                "submitted. Open the posting and finish it yourself."
+            ),
+        ) from exc
+
+
 def _activate_submit(page: Any) -> SubmitActivation:
     """Press the form's OWN submit control — after PROBING that it is armed.
 
@@ -2573,6 +4374,509 @@ def _activate_submit(page: Any) -> SubmitActivation:
         selector=disabled_selector,
         failure=MANUAL_STEP_SUBMIT_CONTROL_DISABLED,
     )
+
+
+# ---------------------------------------------------------------------------
+# U5d-4 — the employer's own email verification code.
+#
+# Some ATS forms answer the submit click with an anti-bot gate: "enter the
+# security code we just emailed you". Until the code is typed the employer has
+# NOT received the application, so the executor stopped at ``no_confirmation``
+# and an approved submission never landed.
+#
+# The loop below closes that, under an absolute honesty floor:
+#   * the code is read ONLY from the user's OWN connected Gmail — it is never
+#     generated, never guessed, and no third-party OTP service is involved;
+#   * it must be FRESHER than this attempt's submit click, because each click
+#     invalidates the previous code;
+#   * no mailbox, no code, or a code we cannot type ⇒ an honest, actionable
+#     ``ManualStepRequired("verification_code_email")`` on the row;
+#   * the CONFIRMATION claim is unchanged — it still comes only from
+#     ``_confirmation_signal`` re-run after the code submit, so entering a code
+#     can never by itself be read as "the employer received this";
+#   * this loop is only ever reached AFTER CLI-SUB-005-R7's submission guard
+#     has cleared the click (see the call site in ``playwright_form_submitter``
+#     and ``_blocked_submission_on``'s docstring) — a guard-blocked click never
+#     reaches ``_detect_verification_gate`` at all — and the code-entry
+#     resubmit below is read back through that SAME guard, so a required field
+#     revealed at that instant refuses exactly like the first click would.
+# ---------------------------------------------------------------------------
+
+#: Text an ATS shows when it is holding the application for a code. Only ever
+#: evaluated AFTER the submit click, and only together with a real code field
+#: (below), so a page that merely mentions a code — or a confirmation page — is
+#: never mistaken for a gate.
+_VERIFICATION_GATE_TEXT = re.compile(
+    r"verification code|security code|confirmation code"
+    r"|one[- ]time (code|passcode)|code we (just )?emailed",
+    re.I,
+)
+
+#: The code field in every shape observed: the WCAG one-time-code input, a
+#: named/labelled single input, and the row of ``maxlength="1"`` boxes
+#: Greenhouse renders (eight of them, auto-advancing).
+_CODE_INPUT_SELECTOR = (
+    'input[autocomplete="one-time-code"], '
+    'input[name*="security" i], '
+    'input[id*="security" i], '
+    '[class*="security" i] input, '
+    'input[aria-label*="code" i], '
+    'input[maxlength="1"]'
+)
+
+#: Per-character typing delay (ms). The boxes auto-advance on each keystroke
+#: and drop characters typed faster than a human can produce them.
+_CODE_TYPE_DELAY_MS = 110
+
+#: Senders that carry an ATS's code mail. This is PLATFORM infrastructure, not
+#: an employer: Greenhouse is first-class because it is the shape proven against
+#: a real submission, and the tuple is where the next ATS is added. No employer
+#: name ever enters the query — the employer does not send this mail, their ATS
+#: does, so filtering on a company name would drop the very message being
+#: waited for.
+_CODE_EMAIL_SENDERS: tuple[str, ...] = (
+    "greenhouse-mail.io",
+    "ashbyhq.com",
+    "hire.lever.co",
+    "smartrecruiters.com",
+)
+
+#: Subject markers for that same mail from an ATS we have no sender for yet.
+_CODE_EMAIL_SUBJECTS: tuple[str, ...] = (
+    "security code",
+    "verification code",
+    "confirmation code",
+)
+
+#: Clock skew tolerated between the sender's mail server and this VM.
+_CODE_FRESHNESS_SKEW_SECONDS = 30.0
+
+#: Label-anchored ONLY. A code is 6–8 mixed-case alphanumerics and may contain
+#: no digits at all ("OzUAaXYB"), so an unanchored token match would return any
+#: word in the message. Each pattern names the label its ATS puts in front of
+#: the code; Greenhouse's is first, being the one proven live.
+_CODE_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"application:\s*([A-Za-z0-9]{8})\b"),
+    re.compile(r"code field[^:]*:?\s*([A-Za-z0-9]{8})\b", re.I),
+    re.compile(
+        r"(?:verification|security|confirmation)\s+code[^A-Za-z0-9]{0,24}([A-Za-z0-9]{6,8})\b",
+        re.I,
+    ),
+)
+
+#: An address the plan actually put in the form — that is where a code goes.
+_EMAIL_VALUE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+#: Why the code could not be used. Each is a real, distinct thing that happened.
+_VERIFICATION_CAUSES: dict[str, str] = {
+    "gmail_unavailable": (
+        "could not read your connected Gmail (it is not connected to Aether, "
+        "or the connection has expired)"
+    ),
+    "no_mailbox": "had no connected mailbox to read that code from",
+    "code_not_found": "did not find that code email in your connected Gmail in time",
+    "code_entry_failed": "could not type the code into the site's code field",
+}
+
+
+def _env_float(name: str, default: float) -> float:
+    try:
+        value = float(os.environ.get(name, "") or default)
+    except (TypeError, ValueError):
+        return default
+    return value if value > 0 else default
+
+
+def _build_verification_query() -> str:
+    """The Gmail search for a code mail — generic, with no employer literal.
+
+    ``newer_than`` accepts d/m/y units only, so it is used purely to keep the
+    result set small; the real freshness test is :func:`_is_fresh_code_email`
+    against THIS attempt's submit click.
+    """
+    senders = " OR ".join(f"from:{sender}" for sender in _CODE_EMAIL_SENDERS)
+    subjects = " OR ".join(f'subject:"{subject}"' for subject in _CODE_EMAIL_SUBJECTS)
+    return f"(({senders}) OR ({subjects})) newer_than:1d"
+
+
+def _is_fresh_code_email(header: dict[str, Any], since_epoch: float) -> bool:
+    """``True`` only for mail that arrived AFTER this attempt's submit click.
+
+    Every submit invalidates the previous code, so a message from an earlier
+    attempt is worse than useless: typing it would fail the gate while looking
+    like a genuine try. A date that cannot be parsed proves nothing about when
+    the mail arrived, so it is rejected rather than assumed fresh.
+    """
+    raw = str((header or {}).get("date") or "").strip()
+    if not raw:
+        return False
+    try:
+        received = parsedate_to_datetime(raw).timestamp()
+    except Exception:  # noqa: BLE001 — an unparseable date is simply not proof
+        return False
+    return received >= since_epoch - _CODE_FRESHNESS_SKEW_SECONDS
+
+
+def _received_epoch(header: dict[str, Any]) -> float:
+    try:
+        return parsedate_to_datetime(str((header or {}).get("date") or "")).timestamp()
+    except Exception:  # noqa: BLE001
+        return 0.0
+
+
+def _extract_code_from_body(body: dict[str, Any]) -> str | None:
+    """The code an ATS mailed the user, or ``None``.
+
+    Both body alternatives are searched: Greenhouse's text part is empty and the
+    code lives in the HTML one, where tags sit BETWEEN the label and the code —
+    so the tags are stripped (and entities decoded) before any pattern runs.
+    """
+    parts = [
+        str((body or {}).get("text") or ""),
+        str((body or {}).get("html") or ""),
+    ]
+    merged = " ".join(part for part in parts if part)
+    if not merged.strip():
+        return None
+    text = unescape(re.sub(r"<[^>]+>", " ", merged))
+    for pattern in _CODE_PATTERNS:
+        match = pattern.search(text)
+        if match:
+            return match.group(1)
+    return None
+
+
+def _planned_form_email(plan: dict[str, Any]) -> str | None:
+    """The address THIS application typed into the form — where a code goes."""
+    for field in (plan or {}).get("fields") or []:
+        value = field.get("value") if isinstance(field, dict) else None
+        if isinstance(value, str) and _EMAIL_VALUE.match(value.strip()):
+            return value.strip()
+    return None
+
+
+def _verification_manual_step(
+    cause: str, *, company: str | None = None, form_email: str | None = None
+) -> ManualStepRequired:
+    """The honest, actionable outcome when the code cannot be used.
+
+    It names the employer and the address the code was sent to, because those
+    are the two facts the user needs to finish the application themselves.
+    The code itself is never carried here — the user reads it in their own
+    inbox, and it has no business being persisted on the row.
+
+    No ``question`` is attached on purpose: there is no employer question to
+    answer here, and leaving it unset is what makes ``record_manual_step``
+    persist this whole explanation as the row's ``manualStepDetail`` — the text
+    the card and its tooltip actually show.
+    """
+    employer = (company or "").strip() or "This employer"
+    where = (form_email or "").strip() or "the email address on this application"
+    detail = _VERIFICATION_CAUSES.get(cause, _VERIFICATION_CAUSES["code_not_found"])
+    return ManualStepRequired(
+        "verification_code_email",
+        (
+            f"{employer} asked for a verification code before it would accept "
+            f"this application, and emailed the code to {where}. Aether "
+            f"{detail}, so the application was NOT accepted. Open the posting, "
+            "enter the code from that email and submit it there."
+        ),
+    )
+
+
+def _poll_verification_code(
+    user_id: str,
+    *,
+    since_epoch: float,
+    company: str | None = None,
+    form_email: str | None = None,
+    gmail_factory: Callable[[str], Any] | None = None,
+    sleeper: Callable[[float], None] | None = None,
+    monotonic: Callable[[], float] | None = None,
+    interval_seconds: float | None = None,
+    timeout_seconds: float | None = None,
+) -> dict[str, Any] | None:
+    """Wait for the user's OWN mailbox to receive the code. ``None`` on timeout.
+
+    Gmail's search index lags delivery by 10–60 seconds, so a single look is
+    always too early: this polls (5s, up to 5 minutes by default) and takes the
+    NEWEST message that both passes the freshness gate and actually contains a
+    label-anchored code. A transient Gmail failure is retried; a missing or
+    revoked Gmail grant is not something waiting can fix, so it becomes the
+    honest manual step immediately.
+
+    The returned mapping carries the code under ``"code"`` for the caller to
+    type — and nothing that goes into an audit record ever carries it onward.
+    """
+    from app.services.gmail_service import (
+        GmailAuthError,
+        GmailNotConnectedError,
+        GmailService,
+    )
+
+    factory: Callable[[str], Any] = gmail_factory or GmailService
+    sleep = sleeper or time.sleep
+    clock = monotonic or time.monotonic
+    interval = (
+        interval_seconds
+        if interval_seconds is not None
+        else _env_float("AETHER_APPLY_CODE_POLL_INTERVAL_SECONDS", 5.0)
+    )
+    timeout = (
+        timeout_seconds
+        if timeout_seconds is not None
+        else _env_float("AETHER_APPLY_CODE_POLL_TIMEOUT_SECONDS", 300.0)
+    )
+    query = _build_verification_query()
+    started = clock()
+    deadline = started + max(timeout, 0.0)
+    attempts = 0
+    while True:
+        attempts += 1
+        service: Any = None
+        headers: list[dict[str, Any]] = []
+        try:
+            service = factory(user_id)
+            headers = list(service.list_message_headers(query=query, max_results=10) or [])
+        except (GmailNotConnectedError, GmailAuthError) as exc:
+            raise _verification_manual_step(
+                "gmail_unavailable", company=company, form_email=form_email
+            ) from exc
+        except Exception as exc:  # noqa: BLE001 — a transient Gmail error is retried
+            logger.info(
+                "apply-executor: verification-code mailbox poll %d failed (%s) — retrying",
+                attempts,
+                type(exc).__name__,
+            )
+        for header in sorted(headers, key=_received_epoch, reverse=True):
+            if service is None or not _is_fresh_code_email(header, since_epoch):
+                continue
+            try:
+                body = service.get_message_bodies(str(header.get("id") or ""))
+            except Exception:  # noqa: BLE001 — try the next candidate message
+                continue
+            code = _extract_code_from_body(body)
+            if not code:
+                continue
+            return {
+                "code": code,
+                "messageId": str(header.get("id") or ""),
+                "from": str(header.get("from") or ""),
+                "subject": str(header.get("subject") or ""),
+                "receivedAt": str(header.get("date") or ""),
+                "pollAttempts": attempts,
+                "pollSeconds": round(clock() - started, 1),
+            }
+        if clock() >= deadline:
+            return None
+        sleep(interval)
+
+
+def _detect_verification_gate(page: Any) -> bool:
+    """Is the page holding this application for an emailed code?
+
+    Both halves are required — the wording AND a real code field — so neither a
+    confirmation page that happens to say "security code" nor a form that has a
+    code field it never asked us to fill can trip the loop.
+    """
+    try:
+        content = page.content() or ""
+    except Exception:  # noqa: BLE001 — an unreadable page is not a gate
+        return False
+    if not _VERIFICATION_GATE_TEXT.search(content):
+        return False
+    try:
+        return int(page.locator(_CODE_INPUT_SELECTOR).count()) > 0
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _enter_code_into_form(page: Any, code: str) -> bool:
+    """Type the code the way a human does. ``False`` iff it did not go in.
+
+    Two real shapes: one input per character (Greenhouse renders eight, each
+    auto-advancing — click the first and let the keyboard walk the row), or a
+    single full-length input, which is cleared first so a retry cannot append.
+    Both are typed on the keyboard rather than filled, because the widgets
+    listen for key events and ignore a programmatic value set.
+    """
+    try:
+        boxes = page.locator(_CODE_INPUT_SELECTOR)
+        count = int(boxes.count())
+    except Exception:  # noqa: BLE001
+        return False
+    if count <= 0:
+        return False
+    try:
+        boxes.first.click(timeout=_ACTION_TIMEOUT_MS)
+        if count < len(code):
+            boxes.first.fill("", timeout=_ACTION_TIMEOUT_MS)
+        page.keyboard.type(code, delay=_CODE_TYPE_DELAY_MS)
+        page.wait_for_timeout(800)
+    except Exception:  # noqa: BLE001 — an un-typeable field is an honest failure
+        return False
+    return True
+
+
+def _resolve_verification_gate(
+    page: Any,
+    *,
+    application_id: str,
+    evidence_dir: str,
+    since_epoch: float,
+    user_id: str | None,
+    company: str | None = None,
+    form_email: str | None = None,
+    gmail_factory: Callable[[str], Any] | None = None,
+    sleeper: Callable[[float], None] | None = None,
+    interval_seconds: float | None = None,
+    timeout_seconds: float | None = None,
+) -> dict[str, Any]:
+    """Read the code from the user's mailbox, type it, submit again.
+
+    Returns the metadata for the evidence sidecar — which deliberately does NOT
+    include the code — or raises :class:`ManualStepRequired` with reason
+    ``verification_code_email`` (or, if the resubmit itself trips
+    CLI-SUB-005-R7's guard, the same guard reason a first-click block would
+    raise — see :func:`_blocked_submission_on`). Never returns a "resolved"
+    gate it did not actually resolve.
+
+    RUN-20260818T0223Z/SUB-011 adversarial review (P0,
+    06-u5d4-adversarial-review.md): ``_install_submission_guard`` arms the R6/
+    R7 guard via a one-shot ``evaluate()`` call — event listeners on THAT
+    document — not ``page.add_init_script``, so it does NOT survive a real
+    top-level navigation. A standard multi-page (non-SPA) ATS reaching its
+    verification-code gate via exactly such a navigation would otherwise
+    leave this function's own resubmit click completely unguarded, reopening
+    every mousedown/focus-reveal race CLI-SUB-005 R2-R7 closed for the FIRST
+    click. Re-arm it here — on the (possibly new) document and every
+    reachable frame — as the very first thing this function does, strictly
+    before any code-entry or resubmit interaction below.
+
+    RUN-20260818T0223Z/BATCH-2 apply-stack reconcile (SUB-007 fold-in): the
+    returned dict now also carries ``beforeProbe`` (a fresh
+    :func:`_submit_state_probe` of THIS page, taken immediately before the
+    resubmit click below) and ``submitControl`` (the resubmit's own
+    :class:`SubmitActivation`, as evidence). The caller feeds both into
+    SUB-007's ``classify_post_submit`` in place of the pre-first-click
+    snapshot, so classification is always anchored to the state right before
+    the LAST click this executor actually made — never a stale snapshot from
+    a document a real navigation may have already replaced. See the merge
+    rationale in ``docs/delivery/evidence/RUN-20260818T0223Z/BATCH-2/
+    02-apply-stack-reconcile.md`` for why a stale before_probe would silently
+    defeat SUB-007's own "a confirmation phrase already on the page is not
+    proof" protection whenever a verification gate intervenes.
+    """
+    # Idempotent (`if (window.__aetherSubmitGuardInstalled) { return true; }`
+    # inside `_SUBMIT_GUARD_INSTALL_JS`) — a safe no-op when no navigation
+    # intervened, and the ONLY thing that makes the guard armed at all when
+    # one did. Fails closed via `_install_submission_guard` itself: an
+    # exception, or a JS call that ran but did not verifiably arm the guard,
+    # raises `ManualStepRequired("guard_install_failed", ...)` — never a
+    # resubmit with the guard's state merely assumed.
+    _install_submission_guard(page)
+    for frame in _reachable_frames(page):
+        _install_submission_guard(frame)
+    gate_shot = _evidence_path(evidence_dir, application_id, "code-gate.png")
+    _capture(page, gate_shot)
+    logger.info(
+        "apply-executor: application %s hit an email verification gate — "
+        "reading the code from the user's connected Gmail",
+        application_id,
+    )
+    if not user_id:
+        raise _verification_manual_step("no_mailbox", company=company, form_email=form_email)
+    found = _poll_verification_code(
+        user_id,
+        since_epoch=since_epoch,
+        company=company,
+        form_email=form_email,
+        gmail_factory=gmail_factory,
+        sleeper=sleeper,
+        interval_seconds=interval_seconds,
+        timeout_seconds=timeout_seconds,
+    )
+    if not found:
+        logger.warning(
+            "apply-executor: no verification code for application %s arrived in "
+            "the user's connected Gmail within the wait window",
+            application_id,
+        )
+        raise _verification_manual_step(
+            "code_not_found", company=company, form_email=form_email
+        )
+    code = str(found["code"])
+    logger.info(
+        "apply-executor: verification code for application %s retrieved from the "
+        "connected Gmail (%d characters, from %s) after %s attempt(s)",
+        application_id,
+        len(code),
+        found.get("from") or "unknown sender",
+        found.get("pollAttempts"),
+    )
+    if not _enter_code_into_form(page, code):
+        raise _verification_manual_step(
+            "code_entry_failed", company=company, form_email=form_email
+        )
+    entered_shot = _evidence_path(evidence_dir, application_id, "code-entered.png")
+    _capture(page, entered_shot)
+    # The URL the gate itself sits on: the confirmation check that follows must
+    # measure navigation caused by the CODE submit, never by the first click.
+    try:
+        gate_url = str(page.url)
+    except Exception:  # noqa: BLE001
+        gate_url = ""
+    # SUB-007 fold-in: probe THIS page's own state immediately before the
+    # resubmit click, exactly like the first click's before_probe is taken
+    # immediately before ITS click — the caller repoints classify_post_submit
+    # at this snapshot instead of the pre-first-click one. See the docstring.
+    gate_before_probe = _submit_state_probe(page)
+    resubmit_activation = _activate_submit(page)
+    resubmitted = resubmit_activation.clicked
+    page.wait_for_timeout(2500)
+    # CLI-SUB-005-R7 parity — see _blocked_submission_on's docstring: the
+    # code-entry click above is a submit click exactly like the form's own
+    # first one, and the SAME capture-phase guard (armed once, for the whole
+    # page lifetime) is still watching it. A required field it reveals at
+    # THIS instant must refuse exactly as the first click would, never a
+    # silent "resubmitted" success — this is what makes it structurally
+    # impossible for the verification-code loop to create a path around the
+    # guard.
+    blocked_submission = _blocked_submission_on(page)
+    if blocked_submission:
+        blocked_shot = _evidence_path(
+            evidence_dir, application_id, "code-resubmit-blocked.png"
+        )
+        _capture(page, blocked_shot)
+        raise _manual_step_for_blocked_submission(blocked_submission)
+    return {
+        "gateDetected": True,
+        "codeSource": "connected_gmail",
+        "codeLength": len(code),
+        "from": found.get("from"),
+        "subject": found.get("subject"),
+        "receivedAt": found.get("receivedAt"),
+        "pollAttempts": found.get("pollAttempts"),
+        "pollSeconds": found.get("pollSeconds"),
+        "codeEnteredAt": datetime.now(timezone.utc).isoformat(),
+        "resubmitted": resubmitted,
+        "beforeUrl": gate_url,
+        # SUB-007 fold-in — see docstring: fed back into classify_post_submit
+        # by the caller so the "before" state it compares against always
+        # reflects the state right before THIS click, never a stale one from
+        # before a possible navigation to this gate.
+        "beforeProbe": gate_before_probe,
+        "submitControl": resubmit_activation.as_evidence(),
+        "screenshots": [gate_shot.name, entered_shot.name],
+    }
+
+
+def _capture(page: Any, path: Path) -> None:
+    """Best-effort evidence screenshot: a failed capture never fails a step."""
+    try:
+        page.screenshot(path=str(path), full_page=True)
+    except Exception:  # noqa: BLE001
+        logger.info("apply-executor: could not capture %s", path.name)
 
 
 # ---------------------------------------------------------------------------
@@ -2683,6 +4987,17 @@ def execute_site_application(
             resume_pdf_bytes=resume_pdf_bytes,
             cover_letter_text=cover_letter_text,
             evidence_dir=evidence_dir,
+            # CLI-SUB-005-R2: so a required field the live DOM reveals AFTER
+            # this static plan was built (a conditional/branching question)
+            # can still be resolved via the same profile/answer-bank path —
+            # never a guess, and never silently unattempted.
+            profile=profile,
+            answer_bank=resolver,
+            # U5d-4: whose mailbox the employer's verification code may be
+            # read from, and whose name the manual step must carry if it
+            # cannot be.
+            user_id=user_id,
+            company=company,
         )
     except ManualStepRequired as exc:
         record_manual_step(
@@ -2791,4 +5106,5 @@ def execute_site_application(
         "classification": outcome.get("classification"),
         "fieldsFilled": outcome.get("filled") or [],
         "fieldsNotFilled": outcome.get("unfilled") or [],
+        "unplannedFieldsFilled": outcome.get("unplannedFilled") or [],
     }
