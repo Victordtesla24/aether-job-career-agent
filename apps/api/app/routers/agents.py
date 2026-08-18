@@ -6622,6 +6622,78 @@ def anthropic_oauth_refresh(current_user: AdminUser) -> dict[str, Any]:
     return _provider_status_object("anthropic", current_user["id"])
 
 
+# ---------------------------------------------------------------------------
+# Per-user "Connect with Anthropic" subscription-token MINT (UPO-1).
+#
+# The operator routes above are admin-gated because their exchange overwrites
+# the deployment-wide ``ProviderCredential('anthropic')`` row every bare
+# ``claude-*`` run bills against (F-01). That left an ordinary customer with no
+# in-app way to obtain a Claude subscription token at all — the per-user dialog
+# offered only a manual paste of a token the customer had to mint themselves
+# with ``claude setup-token`` on their own machine.
+#
+# These two routes are the per-user twin. They reuse the SAME authorize and
+# redeem helpers, and differ in exactly one respect: the exchange PERSISTS
+# NOTHING. It returns the freshly minted token to the customer who just
+# authenticated, so the dialog can populate its OAuth-token field; the
+# customer then clicks Save, which stores it through the existing
+# ``PUT /agents/user/providers/{provider}/credential`` path. Keeping Save as
+# the single write path is what makes a non-admin route safe here — there is
+# no deployment-wide side effect to escalate into.
+# ---------------------------------------------------------------------------
+
+
+@router.post("/user/providers/anthropic/oauth/start")
+def user_anthropic_oauth_start(current_user: CurrentUser) -> dict[str, Any]:
+    """Begin the customer's own Connect-with-Anthropic flow.
+
+    Open to any AUTHENTICATED user: nothing this route touches is shared. It
+    persists only a short-lived PKCE state row bound to the caller, and returns
+    Anthropic's own authorize URL for the caller to approve with their OWN
+    Claude Pro/Max account. 503 when the vault key is absent (fail closed —
+    see ``_begin_anthropic_oauth``).
+    """
+    return {"authorizeUrl": _begin_anthropic_oauth(current_user["id"])}
+
+
+@router.post("/user/providers/anthropic/oauth/exchange")
+def user_anthropic_oauth_exchange(
+    body: AnthropicOAuthExchangeBody, response: Response, current_user: CurrentUser
+) -> dict[str, Any]:
+    """Redeem the pasted ``code#state`` and RETURN the minted token to its owner.
+
+    This is the only response in the application that carries a live
+    credential, so it is deliberately narrow:
+
+    * The token returned belongs to the caller — it was minted seconds earlier
+      from an authorization the caller personally approved on Anthropic's own
+      pages, against their own subscription. It is the same value they would
+      otherwise paste in by hand from ``claude setup-token``, so this widens no
+      trust boundary; it removes a manual step.
+    * ``Cache-Control: no-store`` so no browser, proxy or bfcache retains it.
+    * Nothing is written: not the deployment-wide ``ProviderCredential`` row
+      (that would re-bill the whole deployment to this customer), and not the
+      ``AnthropicOAuthToken`` refresh store (that would make the operator's
+      auto-refresh hook rotate a session this flow does not own). Save is the
+      single write path.
+    * The refresh token is deliberately NOT returned: it is refresh material
+      for the operator flow and has no use in a browser.
+
+    Status contract: see ``_mint_anthropic_token``.
+    """
+    tok = _mint_anthropic_token(body.pastedCode, current_user["id"])
+    access = tok["access_token"]
+    expires_at = tok.get("expires_at")
+    response.headers["Cache-Control"] = "no-store"
+    return {
+        "token": access,
+        "authMode": "oauth_token",
+        "secretHint": credential_vault.secret_hint(access),
+        "expiresAt": _iso_or_none(expires_at),
+        "scope": tok.get("scope"),
+    }
+
+
 @router.get("/stats")
 def agent_stats(current_user: CurrentUser) -> dict[str, Any]:
     """Real aggregate stats derived from AgentRun history (no hardcoded values)."""
