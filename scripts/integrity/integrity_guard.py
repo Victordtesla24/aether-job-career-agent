@@ -20,7 +20,7 @@ Rules (exit 1 on any violation):
 Waivers: scripts/integrity/waivers.txt as `path::rule::reason`. No reason = violation.
 """
 from __future__ import annotations
-import os, re, sys, pathlib, collections
+import os, re, sys, pathlib, collections, subprocess
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 WAIVERS = ROOT / "scripts/integrity/waivers.txt"
@@ -34,6 +34,36 @@ APPROVED = ("apps/api/app","apps/api/scripts","apps/web/src","apps/web/e2e","pac
             "scripts","ci","deploy",".github","design","ops")
 # Framework config must sit at the app root — not a misplaced file.
 CONFIG_OK = re.compile(r"^apps/(web|api)/[^/]*(config|env)[^/]*\.(ts|mjs|js|cjs|d\.ts)$")
+
+
+def git_ignored_paths(root: pathlib.Path) -> set[str]:
+    """Repo-relative paths git ignores.
+
+    Used by R5 only. R5 asks whether SHIPPED source sits outside an approved
+    directory; a git-ignored file is never committed and never deployed, so it
+    is not shipped and R5 cannot truthfully apply to it. Tool scratch such as
+    `.remember/tmp/*.ts` regenerates continuously and would otherwise re-break
+    the pre-commit hook every few minutes.
+
+    This is NOT applied to the other rules on purpose: `.env` files are ignored
+    by git but are real deployed configuration, and R3 must keep reading them.
+
+    Returns an empty set outside a git checkout, so the guard degrades to its
+    previous behaviour rather than silently exempting everything.
+    """
+    try:
+        out = subprocess.run(
+            ["git", "ls-files", "--others", "--ignored", "--exclude-standard", "-z"],
+            cwd=root, capture_output=True, text=True, timeout=60,
+        )
+        if out.returncode != 0:
+            return set()
+        return {p for p in out.stdout.split("\0") if p}
+    except (OSError, subprocess.SubprocessError):
+        return set()
+
+
+IGNORED = git_ignored_paths(ROOT)
 
 def strip_comments(text: str, py: bool) -> str:
     """Blank out comments/strings so prose never triggers a rule."""
@@ -126,7 +156,8 @@ def main():
                     src = raw if ("ts-" in pat or "eslint" in pat or "noqa" in pat or "type:" in pat) else code
                     for m in re.finditer(pat, src, re.M):
                         add(rel, "R6", msg, src[:m.start()].count("\n")+1)
-                if not rel.startswith(APPROVED) and not CONFIG_OK.match(rel):
+                if (not rel.startswith(APPROVED) and not CONFIG_OK.match(rel)
+                        and rel not in IGNORED):
                     add(rel, "R5", "shipped source outside approved directories")
             for pat, msg in R7_SRC:
                 for m in re.finditer(pat, code):
