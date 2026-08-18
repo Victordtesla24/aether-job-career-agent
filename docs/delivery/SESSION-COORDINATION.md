@@ -1322,6 +1322,11 @@ Pushing to `origin/main` for VPS Delivery; then clear Dovetail
 `unverifiable_form_surface` and re-enqueue `apply_sweep_user` for Vikram
 only. Held Databricks/Xero rows stay held.
 
+**Continuation 2026-08-18T18:38Z:** VPS Delivery `32171527038` failed verify on
+`rail-plan-quota.test.tsx` (wrapper present, copy still empty). Same class of
+vitest race as the prior catalog-pricing flake. Hardening that waitFor so
+deploy can proceed; not a production UI change.
+
 ---
 
 ## SESSION IC-VISIBLE — 2026-08-18T18:25Z — Interview Center empty / wrong employer

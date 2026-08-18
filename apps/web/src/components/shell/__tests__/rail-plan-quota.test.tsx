@@ -118,8 +118,12 @@ describe("Rail plan/quota indicator (MV-dashboard-006)", () => {
     fetchSubscriptionMock.mockRejectedValue(new Error("network error"));
     render(<Rail />);
 
-    await waitFor(() => expect(screen.getByTestId("sidebar-plan-quota")).toBeTruthy());
-    expect(screen.getByTestId("sidebar-plan-quota").textContent).toMatch(/plan unavailable/i);
+    // The wrapper is always mounted (even during the skeleton). Wait for the
+    // honest error copy, not the empty container — otherwise a fast assertion
+    // races the rejected fetch and fails VPS Delivery with `expected ''`.
+    await waitFor(() =>
+      expect(screen.getByTestId("sidebar-plan-quota").textContent).toMatch(/plan unavailable/i),
+    );
   });
 });
 
