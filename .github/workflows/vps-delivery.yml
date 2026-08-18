@@ -1,0 +1,80 @@
+# Aether continuous delivery on the Hostinger VPS self-hosted runner.
+#
+# A push to main flows: verify -> dev -> test -> production.
+# Production deploys automatically and is designed not to fail:
+#   * every gate runs BEFORE production is touched
+#   * the current production commit is recorded, then the deploy is smoke-tested
+#   * a failed smoke test rolls production back to that commit and re-verifies
+# The Abacus VM is decommissioned and is not referenced anywhere here.
+
+name: VPS Delivery
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: vps-delivery
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify (integrity, lint, types, tests, build)
+    runs-on: [self-hosted, hostinger-vps]
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.9.0 --activate
+      - name: Integrity guard (blocking)
+        run: python3 scripts/integrity/integrity_guard.py
+      - name: Install workspace
+        run: pnpm install --frozen-lockfile
+      - name: Lint
+        run: pnpm lint
+      - name: Type-check
+        run: pnpm type-check
+      - name: Test
+        run: pnpm test
+      - name: Build
+        run: pnpm build
+
+  deploy-dev:
+    name: Deploy dev
+    needs: verify
+    runs-on: [self-hosted, hostinger-vps]
+    timeout-minutes: 30
+    steps:
+      - name: Deploy and smoke-test dev
+        run: |
+          set -euo pipefail
+          bash /opt/aether-guardian/deploy_env.sh dev
+
+  deploy-test:
+    name: Deploy test
+    needs: deploy-dev
+    runs-on: [self-hosted, hostinger-vps]
+    timeout-minutes: 30
+    steps:
+      - name: Deploy and smoke-test test
+        run: |
+          set -euo pipefail
+          bash /opt/aether-guardian/deploy_env.sh test
+
+  deploy-prod:
+    name: Deploy production (auto, with rollback)
+    needs: deploy-test
+    runs-on: [self-hosted, hostinger-vps]
+    timeout-minutes: 40
+    environment: production
+    steps:
+      - name: Deploy production with automatic rollback
+        run: |
+          set -euo pipefail
+          bash /opt/aether-guardian/deploy_env.sh prod --rollback-on-failure
+
+      - name: Guardian post-deploy sweep
+        run: python3 /opt/aether-guardian/guardian.py prod --apply

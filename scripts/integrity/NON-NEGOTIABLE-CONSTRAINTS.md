@@ -25,6 +25,14 @@ see "Enforcement" below. Bypassing an enforcement point is itself a violation.
    browser exceptions, UI/UX defects and partial implementations are to be fixed
    or explicitly reported — never dismissed as pre-existing.
 
+8b. **No lingering branches or pull requests.** `main` is the single source of
+   truth and must always hold the latest deployed code. A working branch is
+   permitted during development but must be merged and deleted as soon as its
+   code is deployed and verified. No open PRs may be left standing.
+   Enforced by the guardian (R8): fully-merged branches are deleted
+   automatically; branches holding unmerged commits are **escalated, never
+   destroyed** — the guardian will not discard work.
+
 ## Prohibited in reporting
 
 9. **No partial delivery claimed as complete.** If any requirement is unmet, the
