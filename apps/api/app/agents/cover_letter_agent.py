@@ -306,13 +306,17 @@ SYSTEM_PROMPT = (
     "posting / advertisement / listing / description asked, and never reference "
     "'the instructions', 'the posting', or the act of complying with them. Write "
     "ONLY about the candidate's genuine fit for the role. "
-    "The opening line naming the role and company is added for you — but you "
-    "must supply the reason the reader should keep reading. Respond with "
+    "\"hook_reason\" IS the letter's opening sentence — the reader's first "
+    "impression — so write it as a complete, self-contained lead sentence, "
+    "not a clause that trails a naming of the role or company (a separate, "
+    "deterministic sentence names the exact role and company for you "
+    "afterwards; do not duplicate that naming yourself). Respond with "
     'JSON: {"hook_reason": "<one sentence>", "body": "<2 paragraphs>"}. '
     "\"hook_reason\": exactly ONE specific sentence stating why the candidate "
     "is a strong match for THIS role at THIS company, grounded in a concrete "
     "responsibility, technology or outcome named literally in the job "
-    "description — never generic flattery about the company. "
+    "description — never generic flattery about the company, and never a "
+    "generic, fit-unaware claim of simply being 'a direct match'. "
     "Write the ENTIRE letter in the FIRST PERSON as the candidate speaking "
     "('I', 'my', 'me'). NEVER refer to the candidate in the third person: do "
     "not use the candidate's name in the possessive ('<Name>'s ...') and never "
@@ -980,21 +984,26 @@ def hook_position_phrase(position: str) -> str:
 def build_body(
     llm_body: str, job: dict[str, Any], position: str, hook_reason: str = ""
 ) -> str:
-    """Assemble the §10.2 three-paragraph body: a deterministic hook naming the
-    exact role + company + current position, followed by the model's evidence
-    and call-to-action paragraphs. The role/company clause of the hook is
-    composed (not model-authored) so the letter always addresses the real
-    role — never a hallucinated one. ``hook_reason`` is a model-authored,
-    JD-grounded sentence (still subject to the FabricationGuard below) that
-    turns the generic template into a specific, persuasive opener rather than
-    a boilerplate "direct match" claim repeated for every company."""
-    hook = (
-        f"My background {hook_position_phrase(position)} is a direct match for "
-        f"the {job['title']} role at {job['company']}."
+    """Assemble the §10.2 three-paragraph body: a substantive opener followed
+    by the model's evidence and call-to-action paragraphs.
+
+    AUD-COV-1: the opener used to be an UNCONDITIONAL "... is a direct match
+    for the <role> role at <company>." claim as sentence 1 — asserted even on
+    a poor fit, with the model's JD-grounded ``hook_reason`` only trailing it
+    (so every letter's substantive opening claim was identical text, only
+    role/company varying). ``hook_reason`` now LEADS as the substantive
+    opening sentence; the deterministic clause that follows only NAMES the
+    real role + company + current position (never a hallucinated one) — it
+    makes no fit-strength claim, earned or not. When ``hook_reason`` is empty
+    (honest fallback: no model-authored reason available), the deterministic
+    clause alone still names the role/company without asserting a "direct
+    match" or any other fit-unaware claim."""
+    role_clause = (
+        f"My background {hook_position_phrase(position)} led me to the "
+        f"{job['title']} role at {job['company']}."
     )
     hook_reason = hook_reason.strip()
-    if hook_reason:
-        hook = f"{hook} {hook_reason}"
+    hook = f"{hook_reason} {role_clause}" if hook_reason else role_clause
     return "\n\n".join([hook, *split_paragraphs(llm_body)])
 
 
@@ -1060,10 +1069,13 @@ def strip_letter_scaffolding(text: str) -> str:
         # Addressee block ("Hiring Team / <company> / Re: <title>").
         if low.startswith("hiring team") or low.startswith("re:"):
             continue
-        # Remove any echoed deterministic hook sentence so build_body re-adds it
-        # exactly once ("… is a direct match for the <role> role at <company>.").
+        # Remove any echoed deterministic role/company clause so build_body
+        # re-adds it exactly once ("… led me to the <role> role at
+        # <company>."). AUD-COV-1: kept in lockstep with build_body's opener
+        # wording — this anchor phrase must always match whatever
+        # build_body's deterministic clause currently says.
         cleaned = re.sub(
-            r"[^.!?\n]*\bis a direct match for the\b[^.!?\n]*[.!?]\s*",
+            r"[^.!?\n]*\bled me to the\b[^.!?\n]*[.!?]\s*",
             "",
             stripped,
             flags=re.I,
