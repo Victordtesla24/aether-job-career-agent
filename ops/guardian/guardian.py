@@ -150,11 +150,27 @@ def process_ancestors(pid: int) -> set[int]:
 
 
 def foreign_runner_jobs() -> list[int]:
-    """Live GitHub Actions job processes that this guardian is NOT running under."""
+    """Live GitHub Actions job processes that this guardian is NOT running under.
+
+    ``pgrep -f Runner.Worker`` also matches operator monitor shells that merely
+    *mention* that token in their command line. Those are not CI jobs; treating
+    them as busy would defer hygiene forever and flake the lock tests.
+    """
     rc, out, _ = run(["pgrep", "-f", "Runner.Worker"])
     pids = [int(tok) for tok in out.split() if tok.isdigit()]
     mine = process_ancestors(os.getpid())
-    return sorted(p for p in pids if p not in mine)
+    live: list[int] = []
+    for pid in pids:
+        if pid in mine:
+            continue
+        try:
+            comm = Path(f"/proc/{pid}/comm").read_text().strip()
+        except OSError:
+            continue
+        if comm in {"bash", "sh", "dash", "pgrep", "grep", "rg"}:
+            continue
+        live.append(pid)
+    return sorted(live)
 
 
 class Guardian:
