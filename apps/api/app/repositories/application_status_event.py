@@ -194,6 +194,29 @@ def list_status_events(application_id: str) -> list[dict[str, Any]]:
             return rows_to_dicts(cur)
 
 
+def list_status_events_for_applications(
+    application_ids: list[str],
+) -> list[dict[str, Any]]:
+    """Bulk-fetch transitions for many applications, oldest first per row order.
+
+    Returns a flat list ordered by ``at`` ASC, ``seq`` ASC across all requested
+    ids (callers group by ``applicationId``). Empty input → empty list; never
+    invents events.
+    """
+    if not application_ids:
+        return []
+    ensure_application_status_event_table()
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                f'SELECT {_COLUMNS} FROM "ApplicationStatusEvent"'
+                ' WHERE "applicationId" = ANY(%s)'
+                ' ORDER BY "at" ASC, "seq" ASC',
+                (list(application_ids),),
+            )
+            return rows_to_dicts(cur)
+
+
 def current_status(application_id: str) -> str | None:
     """The application's status as stored TODAY — read before a transition so
     the recorded ``fromStatus`` is observed rather than assumed."""

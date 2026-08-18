@@ -243,6 +243,67 @@ def apply_sweep_status(current_user: CurrentUser) -> dict[str, Any]:
     return {"sweepEnabled": sweep_enabled()}
 
 
+
+@router.get("/timeline")
+def applications_timeline(current_user: CurrentUser) -> dict[str, Any]:
+    """Horizontal Application Tracker timeline — status-event swimlanes.
+
+    SESSION TL-VIZ. Same board identity as ``GET /applications`` (RT-004
+    DISTINCT ON jobId), plus every observed ``ApplicationStatusEvent`` for
+    those displayed application ids only. Backfill genesis rows
+    (``fromStatus`` null, ``source = backfill:current-status``) are returned
+    verbatim — never expanded into invented prior stages.
+
+    Empty account: ``items: []`` and ``range.start`` / ``range.end`` are
+    ``null`` so the client cannot paint a fake "today" axis.
+
+    Registered ahead of ``GET /{application_id}`` so the literal path segment
+    ``timeline`` is never swallowed as an id.
+    """
+    from app.repositories.application_status_event import (
+        list_status_events_for_applications,
+    )
+
+    apps = list_applications(current_user)
+    app_ids = [a["id"] for a in apps]
+    raw_events = list_status_events_for_applications(app_ids)
+
+    def _iso(value: Any) -> str | None:
+        if value is None:
+            return None
+        if hasattr(value, "isoformat"):
+            return value.isoformat()
+        return str(value)
+
+    by_app: dict[str, list[dict[str, Any]]] = {aid: [] for aid in app_ids}
+    all_ats: list[str] = []
+    for ev in raw_events:
+        aid = str(ev["applicationId"])
+        at = _iso(ev.get("at"))
+        row = {
+            "id": ev["id"],
+            "applicationId": aid,
+            "fromStatus": ev.get("fromStatus"),
+            "toStatus": ev["toStatus"],
+            "at": at,
+            "source": ev["source"],
+        }
+        if aid in by_app:
+            by_app[aid].append(row)
+        if at is not None:
+            all_ats.append(at)
+
+    items = [
+        {"application": app, "events": by_app.get(app["id"], [])}
+        for app in apps
+    ]
+    if not all_ats:
+        rng: dict[str, str | None] = {"start": None, "end": None}
+    else:
+        rng = {"start": min(all_ats), "end": max(all_ats)}
+    return {"items": items, "range": rng}
+
+
 @router.get("")
 def list_applications(
     current_user: CurrentUser,
