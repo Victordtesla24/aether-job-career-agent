@@ -456,8 +456,12 @@ describe("loading, polling and failure", () => {
 
   it("refreshes on demand", async () => {
     render(<AdminExecutiveDashboardPage />);
-    await waitFor(() => expect(fetchAdminExecutiveMetricsMock).toHaveBeenCalledTimes(1));
-    fireEvent.click(screen.getByRole("button", { name: /refresh/i }));
+    const refresh = await waitFor(() => {
+      const btn = screen.getByRole("button", { name: /^refresh$/i }) as HTMLButtonElement;
+      expect(btn.disabled).toBe(false);
+      return btn;
+    });
+    fireEvent.click(refresh);
     await waitFor(() => expect(fetchAdminExecutiveMetricsMock).toHaveBeenCalledTimes(2));
   });
 
