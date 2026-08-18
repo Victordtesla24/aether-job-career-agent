@@ -148,6 +148,20 @@ export default function SettingsClient({
     return section && SECTIONS.some((entry) => entry.id === section) ? section : "profile";
   });
   const [profile, setProfile] = useState({ fullName: "", email: "", targetRole: "", location: "" });
+  // CR-P1-1 (commercial-readiness audit RUN-20260818T0223Z, P1): a brand-new
+  // subscriber's targetRole/location are genuinely blank at registration, so
+  // the Profile tab's required-field errors used to render red before the
+  // user had touched anything — the first thing a new subscriber saw. These
+  // two flags gate DISPLAY only (never the validation itself, which still
+  // runs unconditionally below and still blocks Save): `profileTouched`
+  // records which fields the user has actually interacted with (blur), and
+  // `profileSaveAttempted` flips true the moment a save is attempted so a
+  // real failed save still shows every invalid field, touched or not.
+  const [profileTouched, setProfileTouched] = useState<Record<string, boolean>>({});
+  const [profileSaveAttempted, setProfileSaveAttempted] = useState(false);
+  const markProfileTouched = useCallback((field: string) => {
+    setProfileTouched((prev) => (prev[field] ? prev : { ...prev, [field]: true }));
+  }, []);
   const [agentConfig, setAgentConfig] = useState({
     autoApply: false,
     approvalGate: true,
@@ -502,6 +516,11 @@ export default function SettingsClient({
     void loadReadiness();
   }, [loadReadiness]);
 
+  // The actual validation truth — unconditional, and still what Save gates
+  // on below. CR-P1-1 only changed WHEN a non-empty entry here is allowed to
+  // render as a visible error (see `profileTouched`/`profileSaveAttempted`
+  // and the `showError` prop on `Input`); it never changed what counts as
+  // invalid.
   const validation = useMemo(() => {
     const errors: Record<string, string> = {};
     if (!profile.fullName.trim()) errors.fullName = "Full name is required";
@@ -515,6 +534,10 @@ export default function SettingsClient({
     setSaving(true);
     setError(null);
     setSavedNotice(null);
+    // CR-P1-1: a save attempt (even a failed one) is the other honest signal
+    // (alongside blur) that the user has "done something" — from here on,
+    // every invalid field's error is allowed to render, not just touched ones.
+    setProfileSaveAttempted(true);
     try {
       // Flush screening drafts first. A new subscriber often has no target
       // role or location yet; those fields must not discard answers already
@@ -775,12 +798,20 @@ export default function SettingsClient({
 
               <div className="grid gap-4 md:grid-cols-2">
                 <Input label="Full name" value={profile.fullName} error={validation.fullName} testId="settings-fullname"
+                  showError={profileSaveAttempted || Boolean(profileTouched.fullName)}
+                  onBlur={() => markProfileTouched("fullName")}
                   onChange={(v) => setProfile((p) => ({ ...p, fullName: v }))} />
                 <Input label="Email" value={profile.email} error={validation.email} testId="settings-email"
+                  showError={profileSaveAttempted || Boolean(profileTouched.email)}
+                  onBlur={() => markProfileTouched("email")}
                   onChange={(v) => setProfile((p) => ({ ...p, email: v }))} />
                 <Input label="Target role" value={profile.targetRole} error={validation.targetRole} testId="settings-targetrole"
+                  showError={profileSaveAttempted || Boolean(profileTouched.targetRole)}
+                  onBlur={() => markProfileTouched("targetRole")}
                   onChange={(v) => setProfile((p) => ({ ...p, targetRole: v }))} />
                 <Input label="Location" value={profile.location} error={validation.location} testId="settings-location"
+                  showError={profileSaveAttempted || Boolean(profileTouched.location)}
+                  onBlur={() => markProfileTouched("location")}
                   onChange={(v) => setProfile((p) => ({ ...p, location: v }))} />
               </div>
             </section>
@@ -1776,15 +1807,25 @@ function Input({
   label,
   value,
   onChange,
+  onBlur,
   error,
+  showError,
   testId,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
+  onBlur?: () => void;
   error?: string;
+  /** CR-P1-1: `error` is the real, always-computed validation result — but
+   * the red border/message must only ever be DISPLAYED once the user has
+   * interacted with this field or attempted to save, never on pristine
+   * first render. Defaults to true (always show) for any caller that
+   * doesn't opt into touch-gating, so this stays backward-compatible. */
+  showError?: boolean;
   testId: string;
 }) {
+  const displayError = (showError ?? true) ? error : undefined;
   return (
     <label className="block">
       <span className="mb-1 block text-xs text-aether-muted">{label}</span>
@@ -1793,12 +1834,13 @@ function Input({
         value={value}
         data-testid={testId}
         onChange={(e) => onChange(e.target.value)}
-        aria-invalid={Boolean(error)}
+        onBlur={onBlur}
+        aria-invalid={Boolean(displayError)}
         className={`w-full rounded-lg border bg-white/5 px-3 py-2 text-sm outline-none ${
-          error ? "border-red-500/50" : "border-white/10 focus:border-aether-coral/50"
+          displayError ? "border-red-500/50" : "border-white/10 focus:border-aether-coral/50"
         }`}
       />
-      {error ? <span className="mt-1 block text-[11px] text-red-300">{error}</span> : null}
+      {displayError ? <span className="mt-1 block text-[11px] text-red-300">{displayError}</span> : null}
     </label>
   );
 }
