@@ -147,7 +147,11 @@ function todayMetrics(): AdminExecutiveMetrics {
       stages: [
         { key: "signup", label: "Signed up", count: 10, shareOfSignups: 1 },
         { key: "firstRun", label: "Ran an agent", count: 4, shareOfSignups: 0.4 },
-        { key: "firstSubmission", label: "Submitted an application", count: 1, shareOfSignups: 0.1 },
+        // AUD-META-1 (r2): "status <> 'draft'" is preparation, not proof of a
+        // send — never labelled "submitted"/"applied". The verified-send
+        // count is its own, distinct stage, "firstTransmission".
+        { key: "firstSubmission", label: "Prepared an application", count: 1, shareOfSignups: 0.1 },
+        { key: "firstTransmission", label: "Sent an application", count: 0, shareOfSignups: 0 },
         { key: "paid", label: "Paid", count: 0, shareOfSignups: 0 },
       ],
       definitions: {
