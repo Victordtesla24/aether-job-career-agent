@@ -174,17 +174,22 @@ getToken.mockResolvedValue("test-token");
 apiBaseUrl.mockReturnValue("http://test.local");
 fetchScoutSources.mockResolvedValue([]);
 
-/** Default backend availability: mirrors production (seek gated, linkedin/
- * indeed fixture-only). Individual tests override this to prove the FE is
+/** Default backend availability: full adapter registry (live + gated +
+ * fixture-only). Individual tests override this to prove the FE is
  * backend-driven, not hardcoded (ML-audit-seek-fe-hardcode-001). */
 const DEFAULT_AVAILABILITY = [
+  { source: "adzuna", available: true, reason: null },
+  { source: "ashby", available: true, reason: null },
   { source: "greenhouse", available: true, reason: null },
-  { source: "lever", available: true, reason: null },
-  { source: "remotive", available: true, reason: null },
-  { source: "remoteok", available: true, reason: null },
-  { source: "seek", available: false, reason: "compliance-gated (ADR-P6-SEEK): ToS-prohibited scraping; enable only via AETHER_ENABLE_SEEK" },
-  { source: "linkedin", available: false, reason: "no live discovery implementation (fixture-only legacy adapter)" },
   { source: "indeed", available: false, reason: "no live discovery implementation (fixture-only legacy adapter)" },
+  { source: "lever", available: true, reason: null },
+  { source: "linkedin", available: false, reason: "no live discovery implementation (fixture-only legacy adapter)" },
+  { source: "remoteok", available: true, reason: null },
+  { source: "remotive", available: true, reason: null },
+  { source: "seek", available: false, reason: "compliance-gated (ADR-P6-SEEK): ToS-prohibited scraping; enable only via AETHER_ENABLE_SEEK" },
+  { source: "smartrecruiters", available: true, reason: null },
+  { source: "wellfound", available: true, reason: null },
+  { source: "workable", available: true, reason: null },
 ];
 fetchSourceAvailability.mockResolvedValue(DEFAULT_AVAILABILITY);
 
@@ -218,11 +223,30 @@ describe("Backend-driven source availability (ML-audit-seek-fe-hardcode-001)", (
         expect(option.textContent).toContain("(unavailable)");
       }
     });
-    for (const src of ["greenhouse", "lever", "remotive", "remoteok"]) {
+    for (const src of ["greenhouse", "lever", "remotive", "remoteok", "ashby", "adzuna"]) {
       const option = sourceOption(src);
       expect(option.disabled).toBe(false);
       expect(option.textContent).not.toContain("(unavailable)");
     }
+  });
+
+  it("lists every registry board including ashby/adzuna and never invents jora/workforce", async () => {
+    render(<JobsPage />);
+    await waitFor(() => expect(screen.getAllByText("AU Product Manager").length).toBeGreaterThan(0));
+    await waitFor(() => expect(fetchSourceAvailability).toHaveBeenCalled());
+
+    await waitFor(() => {
+      expect(sourceOption("ashby")).toBeTruthy();
+      expect(sourceOption("adzuna")).toBeTruthy();
+      expect(sourceOption("smartrecruiters")).toBeTruthy();
+      expect(sourceOption("workable")).toBeTruthy();
+      expect(sourceOption("wellfound")).toBeTruthy();
+    });
+
+    const select = screen.getByTestId("job-source-filter") as HTMLSelectElement;
+    const values = Array.from(select.options).map((o) => o.value);
+    expect(values).not.toContain("jora");
+    expect(values).not.toContain("workforce");
   });
 
   it("re-enables seek when the backend reports it available (env gate ON)", async () => {

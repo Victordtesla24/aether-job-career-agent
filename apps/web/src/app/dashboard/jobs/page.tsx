@@ -37,6 +37,11 @@ import {
 import { fetchScoutSources, fetchSourceAvailability } from "../../../lib/api/jobs";
 import type { Job, ScoutSourceStatus, SourceAvailability } from "../../../lib/api/jobs";
 import type { TailorRunResult } from "../../../lib/api/resumes";
+import {
+  ALL_SOURCE_IDS,
+  SOURCE_DISPLAY_NAMES,
+  sourceDisplayName,
+} from "../../../lib/discovery/sourceLabels";
 import MetricTooltip from "../../../components/MetricTooltip";
 import { sourceStatusView } from "../../../components/dashboard/sourceStatus";
 import PageHeader from "../../../components/shell/PageHeader";
@@ -92,17 +97,8 @@ interface Insights {
 
 type Market = "au" | "intl" | "saved";
 
-const SOURCE_FILTERS = [
-  "all",
-  "greenhouse",
-  "lever",
-  "remotive",
-  "remoteok",
-  "seek",
-  "linkedin",
-  "indeed",
-] as const;
-type SourceFilter = (typeof SOURCE_FILTERS)[number];
+/** Source filter value: "all" or any adapter-registry source id. */
+type SourceFilter = string;
 
 /** Minimum-salary bands (in thousands, "0" = no filter) — MV-job-discovery-004. */
 const SALARY_FILTERS = ["0", "100", "150", "200"] as const;
@@ -151,18 +147,9 @@ const FIELD =
   "outline-none transition-colors duration-[--dur-fast] hover:border-hairline-strong " +
   "focus-visible:ring-2 focus-visible:ring-aether-coral/70";
 
-/** Display label + badge for a job source (wireframe source bar naming). */
-const SOURCE_LABEL: Record<string, string> = {
-  seek: "Seek.com.au",
-  linkedin: "LinkedIn AU",
-  indeed: "Indeed AU",
-  jora: "Jora",
-  greenhouse: "Greenhouse",
-  lever: "Lever",
-  remotive: "Remotive",
-  remoteok: "RemoteOK",
-  workforce: "Workforce AU",
-};
+/** Display label for a job source — shared with Settings (sourceLabels.ts).
+ * Never invent boards without an adapter (no jora / workforce). */
+const SOURCE_LABEL = SOURCE_DISPLAY_NAMES;
 
 /** Badge initials for a job source key (wireframe jd24–jd28 source bar). */
 function sourceBadge(source: string): string {
@@ -738,6 +725,16 @@ export default function JobsPage() {
     [sourceAvailability],
   );
 
+  /** Filter options from backend availability when loaded; otherwise the full
+   * adapter-registry catalog (never invent jora/workforce). */
+  const sourceFilterOptions = useMemo(() => {
+    const ids =
+      sourceAvailability !== null
+        ? Object.keys(sourceAvailability).sort()
+        : [...ALL_SOURCE_IDS].sort();
+    return ["all", ...ids];
+  }, [sourceAvailability]);
+
   const selected = visible.find((j) => j.id === selectedId) ?? (market === "saved" ? undefined : visible[0]);
   /**
    * Where the selected job sits INSIDE the rendered window, so the windowed
@@ -1271,8 +1268,8 @@ export default function JobsPage() {
 
               Bounded by construction: `sourceCards` has one entry per DISTINCT
               real source in the loaded jobs, so this grid is capped by the
-              number of connected boards (9 in SOURCE_LABEL), not by the job
-              count — it cannot grow with the data the way the old list did.
+              adapter-registry catalog size, not by the job count — it cannot
+              grow with the data the way the old list did.
             */}
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3" data-testid="source-card-grid">
               {sourceCards.map((s) => (
@@ -1398,14 +1395,14 @@ export default function JobsPage() {
           data-testid="job-source-filter"
           className={FIELD}
         >
-          {SOURCE_FILTERS.map((s) => (
+          {sourceFilterOptions.map((s) => (
             <option
               key={s}
               value={s}
               disabled={isSourceUnavailable(s)}
               className="bg-black"
             >
-              {s === "all" ? "All sources" : SOURCE_LABEL[s] ?? s}
+              {s === "all" ? "All sources" : sourceDisplayName(s)}
               {isSourceUnavailable(s) ? " (unavailable)" : ""}
             </option>
           ))}
