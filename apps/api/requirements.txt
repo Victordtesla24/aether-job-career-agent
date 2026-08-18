@@ -1,5 +1,18 @@
 # Runtime dependencies for the Aether API.
 fastapi>=0.115
+# Required by FastAPI's Form()/UploadFile handling (app/routers/networking.py's
+# /linkedin/import-contacts and any other multipart/form-data endpoint) at
+# IMPORT time, not just at request time — fastapi.dependencies.utils raises
+# RuntimeError("Form data requires \"python-multipart\" to be installed")
+# the first time such a route is registered if it's missing. It was an
+# undeclared transitive gap (requirements.txt never named it, prod/CI venvs
+# happened to already carry it): a from-scratch venv (DR / new host) hard-
+# fails at API startup. >=0.0.18 is FastAPI's own declared floor for its
+# "standard"/"all" extras across the >=0.115 range pinned above (verified via
+# `importlib.metadata.requires("fastapi")`); 0.0.32 is what a fresh install
+# resolves to as of this pin (RUN-20260818T0223Z AUTO-APPLY killswitch
+# adversarial review, LOW finding).
+python-multipart>=0.0.18
 uvicorn[standard]>=0.30
 pydantic>=2.7
 pydantic-settings>=2.3
