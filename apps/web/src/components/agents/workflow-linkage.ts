@@ -383,7 +383,7 @@ const HOP = {
     mechanism:
       "one synced thread per run; never mutates the Email Agent's triage labels",
     evidence:
-      "apps/api/app/agents/sentiment_analysis_agent.py:13,113; catalog copy apps/api/app/routers/agents.py:362",
+      "apps/api/app/agents/sentiment_analysis_agent.py:13,113; catalog copy apps/api/app/routers/agents.py:363",
     discoveryEvidence:
       "apps/api/app/agents/sentiment_analysis_agent.py:51; catalog copy agents.py:343",
     anchors: [
@@ -411,7 +411,7 @@ const HOP = {
     // actually-merged tree, not copied from either parent. batch-2's later
     // merge into lane/integration-wave-02 shifted them again; re-resolved once
     // more against the actually-merged tree.
-    evidence: "apps/api/app/routers/agents.py:4093,4136",
+    evidence: "apps/api/app/routers/agents.py:4098,4141",
     discoveryEvidence: "apps/api/app/routers/agents.py:3380",
     anchors: [
       "def _pipeline_core(",
@@ -501,7 +501,7 @@ const HOP = {
     // RUN-20260818T0223Z: batch-2 merge shifted routers/agents.py again;
     // re-resolved against the live tree.
     evidence:
-      "apps/api/app/agents/company_research_agent.py:53,183; narrative opt-in at apps/api/app/routers/agents.py:1914,2535",
+      "apps/api/app/agents/company_research_agent.py:53,183; narrative opt-in at apps/api/app/routers/agents.py:1919,2540",
     discoveryEvidence:
       "apps/api/app/agents/company_research_agent.py:53; narrative opt-in at apps/api/app/routers/agents.py:2020-2027",
     anchors: [
