@@ -86,8 +86,19 @@ function thresholdNumber(bag: Record<string, unknown> | null | undefined, key: s
  *  stringified into something that looks like a setting. */
 const KNOB_LABEL: Record<string, string> = {
   maxIterations: "scoring iterations",
-  targetScore: "ATS target",
+  // AUD-TAILOR-1: 0 of 5 real production tailoring runs ever reached this
+  // score (best observed: 67.34/100 — see
+  // docs/delivery/evidence/RUN-20260818T0223Z/AUD-TAILOR-1/01-scout-reproduction.log).
+  // The label must read as the loop's own tuning knob, never as a promise
+  // made to the user.
+  targetScore: "internal ATS target",
   coverLetterRetries: "cover-letter retries",
+};
+
+/** Not-a-promise captions for knobs whose plain label could otherwise read
+ *  as an outcome guarantee. Only `targetScore` needs one today. */
+const KNOB_CAPTION: Record<string, string> = {
+  targetScore: "A tuning target for the tailoring loop — not a promised outcome.",
 };
 
 function knobChips(knobs: Record<string, unknown> | null | undefined) {
@@ -268,6 +279,8 @@ export default function AgentPolicyPanel({
           {knobs.map((knob) => (
             <li
               key={knob.key}
+              data-testid={knob.key === "targetScore" ? "agent-policy-knob-target-score" : undefined}
+              title={KNOB_CAPTION[knob.key]}
               className="flex items-baseline gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-1"
             >
               <span className="mono text-[13px] font-semibold tabular-nums">{knob.value}</span>
