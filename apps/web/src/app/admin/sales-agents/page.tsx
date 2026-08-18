@@ -399,7 +399,7 @@ export default function AdminSalesAgentsPage() {
         <Link
           href="/admin/sales-agent"
           data-testid="admin-sales-agents-native-link"
-          className="text-aether-coral hover:underline"
+          className="text-gold hover:underline"
         >
           Sales AI agent
         </Link>{" "}

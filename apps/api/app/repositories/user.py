@@ -11,6 +11,7 @@ from app.db import (
     ensure_user_avatar_columns,
     ensure_user_lifecycle_columns,
     ensure_user_profile_columns,
+    ensure_user_signup_source_column,
     get_connection,
     new_id,
     rows_to_dicts,
@@ -86,6 +87,18 @@ class UserRepository:
         if not rows:
             raise DuplicateEmailError(email)
         return rows[0]
+
+    def stamp_signup_source(self, user_id: str, source: str) -> None:
+        """First-touch ``utm_source`` only. Never overwrites a stored value."""
+        ensure_user_signup_source_column()
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    'UPDATE "User" SET "signupSource" = %s '
+                    'WHERE "id" = %s AND "signupSource" IS NULL',
+                    (source, user_id),
+                )
+            conn.commit()
 
     def get_by_email(self, email: str) -> dict[str, Any] | None:
         return self._get_one('"email" = %s', (email,))

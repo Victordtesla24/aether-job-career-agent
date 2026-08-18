@@ -1,7 +1,8 @@
-# Fires the sales agent every 30 minutes, offset to :15/:45 so it does not
-# contend with aether-discovery.timer (:00/:30) for DB connections/LLM budget.
+# HOSTINGER: do not enable this timer. Production scheduling is ARQ
+# sales_agent_cron on aether-prod-worker. This unit is disaster-recovery only.
+# Enabling it alongside the ARQ cron would double-run the pipeline.
 [Unit]
-Description=Run the Aether Sales Agent every 30 minutes
+Description=Run the Aether Sales Agent every 30 minutes (do not enable alongside ARQ cron)
 
 [Timer]
 OnCalendar=*-*-* *:15/30

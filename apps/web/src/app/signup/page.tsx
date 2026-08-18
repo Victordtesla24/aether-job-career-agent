@@ -31,6 +31,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { validateSignupForm, type SignupFormErrors } from "../../components/auth/validation";
 import PublicFooter from "../../components/PublicFooter";
 import { AuthApiError, login, registerAccount } from "../../lib/api/auth";
+import { persistSessionToken, persistSessionTokenFromStorage } from "../../lib/auth/session-cookie";
 
 const TOKEN_STORAGE_KEY = "aether_token";
 
@@ -41,6 +42,7 @@ export default function SignupPage() {
     // An already-authenticated visitor shouldn't be re-shown the create-account
     // form (MV-signup-002) — forward them to the workspace instead.
     if (window.localStorage.getItem(TOKEN_STORAGE_KEY)) {
+      persistSessionTokenFromStorage();
       setRedirecting(true);
       router.replace("/dashboard");
     }
@@ -48,11 +50,15 @@ export default function SignupPage() {
   // Read client-side only, like /login's own query handling — no Suspense
   // boundary needed for a static page, unlike `useSearchParams`.
   const [referralCode, setReferralCode] = useState<string | null>(null);
+  const [utmSource, setUtmSource] = useState<string | null>(null);
   useEffect(() => {
-    const raw = new URLSearchParams(window.location.search).get("ref");
+    const params = new URLSearchParams(window.location.search);
+    const raw = params.get("ref");
     const code = (raw ?? "").trim();
     // A blank `?ref=` is no referral, not an empty one.
     setReferralCode(code ? code : null);
+    const utm = (params.get("utm_source") ?? "").trim();
+    setUtmSource(utm ? utm : null);
   }, []);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -83,13 +89,14 @@ export default function SignupPage() {
         password,
         name: name.trim() || undefined,
         ...(referralCode ? { ref: referralCode } : {}),
+        ...(utmSource ? { utmSource } : {}),
       });
 
       // Auto-login with the same credentials, then go straight to the
       // dashboard. The account now exists regardless of what happens next.
       try {
         const session = await login(email, password);
-        window.localStorage.setItem(TOKEN_STORAGE_KEY, session.accessToken);
+        persistSessionToken(session.accessToken);
         router.push("/dashboard");
       } catch {
         router.push("/login?registered=1");

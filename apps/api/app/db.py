@@ -2073,3 +2073,42 @@ def ensure_user_lifecycle_columns() -> None:
             )
         conn.commit()
     _user_lifecycle_columns_ready = True
+
+
+#: Guard so the additive Sales AI first-touch column is ensured once per process.
+_user_signup_source_ready = False
+
+
+def ensure_user_signup_source_column() -> None:
+    """Idempotently add ``User.signupSource`` (first-touch ``utm_source``).
+
+    Sales AI stamps ``utm_source=aether_sales_agent`` on outbound product URLs.
+    Without this column the executive board could not count those landings and
+    had to say attribution was impossible. NULL on every pre-existing row is
+    "not attributed". Additive only — no backfill of historical signups.
+    """
+    global _user_signup_source_ready
+    if _user_signup_source_ready:
+        return
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT count(*) FROM information_schema.columns"
+                " WHERE table_name = 'User'"
+                " AND table_schema = ANY(current_schemas(false))"
+                " AND column_name = 'signupSource'"
+            )
+            row = cur.fetchone()
+            if row and row[0] == 1:
+                _user_signup_source_ready = True
+                return
+            cur.execute("SELECT pg_advisory_xact_lock(%s)", (7420260818,))
+            cur.execute(
+                'ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "signupSource" text'
+            )
+            cur.execute(
+                'CREATE INDEX IF NOT EXISTS "User_signupSource_idx"'
+                ' ON "User" ("signupSource")'
+            )
+        conn.commit()
+    _user_signup_source_ready = True

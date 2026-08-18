@@ -54,7 +54,6 @@ from __future__ import annotations
 
 import logging
 import os
-import re
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
@@ -82,19 +81,21 @@ from app.services.sales_branding import (
     render_sales_outreach_html,
     strip_exclamation_marks,
 )
-from app.services.stripe_gateway import StripeNotConfiguredError, app_base_url
+from app.services.stripe_gateway import (
+    StripeNotConfiguredError,
+    app_base_url,
+    rewrite_retired_product_urls,
+)
 
 logger = logging.getLogger("aether.sales_agent")
 
 AGENT_KEY = "salesAgent"
 
-#: Query param stamped on generated marketing URLs so orchestrator analytics
-#: can see Sales AI traffic without claiming a signup join that does not exist.
-SALES_AI_UTM = "utm_source=aether_sales_agent"
-_RETIRED_PRODUCT_URL_RE = re.compile(
-    r"https?://(?:www\.)?(?:5cb5f0620\.)?abacusai\.cloud",
-    re.IGNORECASE,
-)
+#: Query param stamped on generated marketing URLs. First-touch is persisted
+#: on ``User.signupSource`` at registration; that count is a landing, not a
+#: proven causal conversion.
+SALES_AI_UTM_SOURCE = "aether_sales_agent"
+SALES_AI_UTM = f"utm_source={SALES_AI_UTM_SOURCE}"
 
 
 def compliance_footer() -> str:
@@ -106,12 +107,6 @@ def compliance_footer() -> str:
         "You received this email because you contacted us or hold an Aether "
         "account. Reply 'unsubscribe' to stop receiving these emails."
     )
-
-
-def rewrite_retired_product_urls(text: str) -> str:
-    """Replace decommissioned Abacus hosts with the live product origin."""
-    live = app_base_url()
-    return _RETIRED_PRODUCT_URL_RE.sub(live, text or "")
 
 
 def with_tracked_product_url(text: str) -> str:
@@ -300,22 +295,26 @@ AGENT_PROMO_CODE = "AETHERAGENT20"
 AGENT_PROMO_PERCENT = 20.0
 AGENT_PROMO_MAX_REDEMPTIONS = 100
 
-#: Human-authored product update for consented network contacts. Prices and
-#: features are copied from :func:`grounded_facts` — this is not LLM output.
-#: The retired Abacus host is rewritten at use time (ADM-001).
-NETWORK_NURTURE_TEMPLATE = (
-    "Hi {{name}},\n\n"
-    "A short update on Aether Career Agent, the job-search product I have been "
-    "building.\n\n"
-    "It sources roles from licensed job APIs (listings no older than 30 days), "
-    "scores fit with a reason you can read, and never sends an application "
-    "without your explicit approval.\n\n"
-    "Free plan is A$0 (5 agent runs a month, no card). Starter is A$19/month. "
-    "Pro is A$39/month. Power is A$69/month (AUD, GST inclusive).\n\n"
-    "If this is useful for you or someone in your network, they can try it at "
-    "https://5cb5f0620.abacusai.cloud\n\n"
-    "Vik\nAether Career Agent"
-)
+def network_nurture_template() -> str:
+    """Human-authored product update for consented network contacts.
+
+    Prices and features are copied from :func:`grounded_facts` — this is not
+    LLM output. The product URL is the live origin, never the retired Abacus
+    host.
+    """
+    return (
+        "Hi {{name}},\n\n"
+        "A short update on Aether Career Agent, the job-search product I have been "
+        "building.\n\n"
+        "It sources roles from licensed job APIs (listings no older than 30 days), "
+        "scores fit with a reason you can read, and never sends an application "
+        "without your explicit approval.\n\n"
+        "Free plan is A$0 (5 agent runs a month, no card). Starter is A$19/month. "
+        "Pro is A$39/month. Power is A$69/month (AUD, GST inclusive).\n\n"
+        "If this is useful for you or someone in your network, they can try it at "
+        f"{app_base_url()}\n\n"
+        "Vik\nAether Career Agent"
+    )
 
 
 
@@ -1791,7 +1790,7 @@ class SalesAgent:
                 continue
             body = append_compliance_footer(
                 rewrite_retired_product_urls(
-                    personalize_template(NETWORK_NURTURE_TEMPLATE, cand.get("name"))
+                    personalize_template(network_nurture_template(), cand.get("name"))
                 )
             )
             self.repo.record_outreach(

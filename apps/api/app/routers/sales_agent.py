@@ -80,8 +80,9 @@ def strategy(_admin: AdminUser) -> dict[str, Any]:
     """Read-only handoff for the founder and the orchestrator.
 
     This is not a second marketing agent. It reports live Sales AI facts and
-    the next human actions. It cannot attribute a signup or a paid conversion
-    to a campaign: there is no campaignId/UTM join to User.
+    the next human actions. First-touch landings are accounts whose signup
+    URL carried ``utm_source=aether_sales_agent``. That is a landing count,
+    not a proven causal conversion.
     """
     from app.repositories.admin_metrics import sales_ai_cost_usd_30d
     from app.services.stripe_gateway import app_base_url
@@ -99,6 +100,17 @@ def strategy(_admin: AdminUser) -> dict[str, Any]:
     ]
     h = health(_admin)
     next_actions: list[str] = []
+    if h.get("status") == "error":
+        next_actions.append(
+            "The sales scheduler is not healthy. Read the health detail "
+            "before treating outbound as running."
+        )
+    if h.get("status") == "stale":
+        next_actions.append(
+            "The sales scheduler is stale. Production expects an ARQ cron "
+            "tick every 30 minutes on aether-prod-worker. Live mode does not "
+            "mean the agent is working until lastRunAt is fresh."
+        )
     if h.get("dryRun"):
         next_actions.append(
             "Outbound is in shadow mode. Keep it there until every live "
@@ -119,8 +131,9 @@ def strategy(_admin: AdminUser) -> dict[str, Any]:
             "No real sends yet, so replyRate stays not measured."
         )
     next_actions.append(
-        "Do not attribute signups or paid conversions to Sales AI. There is "
-        "no UTM or campaignId join to User."
+        "Sales AI first-touch landings are accounts whose signup URL carried "
+        "utm_source=aether_sales_agent. Treat attributedPaid as a landing "
+        "count, not a proven causal conversion."
     )
     next_actions.append(
         "Keep AETHERAGENT20 inactive until a human chooses to run that "
@@ -143,11 +156,14 @@ def strategy(_admin: AdminUser) -> dict[str, Any]:
         "inactiveGeneratedNames": generated,
         "linkedinDraftsQueued": ov["linkedinDraftsQueued"],
         "suppressionCount": ov["suppressionCount"],
+        "attributedSignups": int(ov.get("attributedSignups") or 0),
+        "attributedPaid": int(ov.get("attributedPaid") or 0),
         "llmCostUsd30d": sales_ai_cost_usd_30d(),
-        "cannotAttribute": True,
+        "cannotAttribute": False,
         "cannotAttributeReason": (
-            "Sales AI cannot attribute a signup or paid conversion: outreach "
-            "rows are not joined to User via UTM or campaignId."
+            "First-touch count of accounts whose signup URL carried "
+            "utm_source=aether_sales_agent. That is a landing, not a proven "
+            "causal conversion."
         ),
         "nextActions": next_actions,
     }
@@ -207,14 +223,19 @@ def campaign_preview(campaign_id: str, _admin: AdminUser) -> dict[str, Any]:
     from app.agents.sales_agent import (
         append_compliance_footer,
         personalize_template,
+        rewrite_retired_product_urls,
     )
     from app.services.sales_branding import render_sales_outreach_html
 
-    campaign = _repo().get_campaign(campaign_id)
+    repo = _repo()
+    repo.seed_default_campaigns()
+    campaign = repo.get_campaign(campaign_id)
     if campaign is None:
         raise HTTPException(status_code=404, detail="Campaign not found.")
     body = append_compliance_footer(
-        personalize_template(campaign["templateBody"], "Alex")
+        rewrite_retired_product_urls(
+            personalize_template(campaign["templateBody"], "Alex")
+        )
     )
     return {
         "campaignId": campaign["id"],
@@ -267,7 +288,9 @@ def outreach_log(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
 ) -> dict[str, Any]:
-    rows, total = _repo().list_outreach(
+    repo = _repo()
+    repo.seed_default_campaigns()
+    rows, total = repo.list_outreach(
         outcome=outcome, channel=channel, limit=limit, offset=offset
     )
     return {"entries": rows, "total": total, "limit": limit, "offset": offset}
@@ -544,11 +567,45 @@ def brand_document_preview(
     }
 
 
+def _arq_sales_cron_registered() -> bool:
+    try:
+        from app.workers.sales_cron import sales_agent_cron
+        from app.workers.settings import WorkerSettings
+
+        jobs = getattr(WorkerSettings, "cron_jobs", None) or []
+        return any(
+            getattr(job, "coroutine", None) is sales_agent_cron for job in jobs
+        )
+    except Exception:  # noqa: BLE001 — absence of the scheduler is the signal
+        return False
+
+
+def _systemd_sales_timer_active() -> bool:
+    try:
+        import subprocess
+
+        completed = subprocess.run(
+            ["systemctl", "is-active", "aether-sales-agent.timer"],
+            capture_output=True,
+            text=True,
+            timeout=2,
+            check=False,
+        )
+        return completed.stdout.strip() == "active"
+    except Exception:  # noqa: BLE001 — no systemctl means the unit is not active
+        return False
+
+
 # -------------------------------------------------------------------- health
 @router.get("/health")
 def health(_admin: AdminUser) -> dict[str, Any]:
-    """Timer health from the run ledger (mirrors the discovery scheduler's
-    honest pattern): ok ≤ 60 min (2× the 30-min interval), else stale."""
+    """Scheduler health: mechanism on this VPS first, then the run ledger.
+
+    Hostinger production schedules this agent as an ARQ cron on
+    ``aether-prod-worker`` (minutes 15 and 45). The Abacus systemd timer must
+    not be enabled alongside ARQ. A fresh AgentRun row is not enough if the
+    scheduler itself is missing.
+    """
     from datetime import datetime, timezone
 
     repo = _repo()
@@ -558,13 +615,19 @@ def health(_admin: AdminUser) -> dict[str, Any]:
     sending_accounts = (
         len(repo.sales_sending_accounts(admin_id)) if admin_id else 0
     )
+    scheduler_registered = _arq_sales_cron_registered()
+    systemd_timer_active = _systemd_sales_timer_active()
     base: dict[str, Any] = {
         "enabled": enabled,
         "dryRun": dry_run,
         "sendingAccounts": sending_accounts,
         "intervalMinutes": 30,
         "staleAfterMinutes": _HEALTH_STALE_MINUTES,
+        "schedulerKind": "arq_cron",
+        "schedulerRegistered": scheduler_registered,
+        "systemdTimerActive": systemd_timer_active,
     }
+    last = None
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
@@ -576,8 +639,49 @@ def health(_admin: AdminUser) -> dict[str, Any]:
                 row = cur.fetchone()
         last = row[0] if row else None
     except Exception:  # noqa: BLE001 — DB probe failure is itself the signal
+        if not scheduler_registered:
+            return {
+                **base,
+                "status": "error",
+                "detail": (
+                    "sales_agent_cron is not registered on WorkerSettings. "
+                    "Hostinger schedules Sales AI via ARQ on aether-prod-worker."
+                ),
+                "lastRunAt": None,
+            }
         return {**base, "status": "error",
-                "detail": "Could not read the sales agent run ledger."}
+                "detail": "Could not read the sales agent run ledger.",
+                "lastRunAt": None}
+    if last is not None and last.tzinfo is None:
+        last = last.replace(tzinfo=timezone.utc)
+    last_iso = last.isoformat() if last is not None else None
+
+    if not scheduler_registered:
+        detail = (
+            "sales_agent_cron is not registered on WorkerSettings. "
+            "Hostinger schedules Sales AI via ARQ cron on aether-prod-worker."
+        )
+        if systemd_timer_active:
+            detail += (
+                " aether-sales-agent.timer is also active; disable it."
+            )
+        return {
+            **base,
+            "status": "error",
+            "detail": detail,
+            "lastRunAt": last_iso,
+        }
+    if systemd_timer_active:
+        return {
+            **base,
+            "status": "error",
+            "detail": (
+                "Both ARQ sales_agent_cron and aether-sales-agent.timer are "
+                "active. Disable the systemd timer on this VPS to prevent "
+                "double-sends."
+            ),
+            "lastRunAt": last_iso,
+        }
     if last is None:
         return {
             **base,
@@ -585,24 +689,22 @@ def health(_admin: AdminUser) -> dict[str, Any]:
             "detail": "No sales agent runs recorded yet.",
             "lastRunAt": None,
         }
-    if last.tzinfo is None:
-        last = last.replace(tzinfo=timezone.utc)
     age_min = int((datetime.now(timezone.utc) - last).total_seconds() // 60)
     if age_min <= _HEALTH_STALE_MINUTES:
         return {
             **base,
             "status": "ok",
-            "detail": f"Last run {age_min} min ago (timer fires every 30 min).",
-            "lastRunAt": last.isoformat(),
+            "detail": f"Last run {age_min} min ago (ARQ cron fires every 30 min).",
+            "lastRunAt": last_iso,
         }
     return {
         **base,
         "status": "stale",
         "detail": (
             f"Sales agent has not run in {age_min} min "
-            "(expected every 30 min)."
+            "(expected every 30 min via ARQ cron on aether-prod-worker)."
         ),
-        "lastRunAt": last.isoformat(),
+        "lastRunAt": last_iso,
     }
 
 

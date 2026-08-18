@@ -73,7 +73,7 @@ export default function AdminSalesAgentReportPage() {
           {error}
         </p>
         <p className="type-meta mt-3">
-          <Link href="/admin/sales-agents" className="text-aether-coral hover:underline">
+          <Link href="/admin/sales-agents" className="text-gold hover:underline">
             ← All sales agents
           </Link>
         </p>
@@ -286,7 +286,7 @@ export default function AdminSalesAgentReportPage() {
       </div>
 
       <p className="type-meta mt-4">
-        <Link href="/admin/sales-agents" className="text-aether-coral hover:underline">
+        <Link href="/admin/sales-agents" className="text-gold hover:underline">
           ← All sales agents
         </Link>
       </p>

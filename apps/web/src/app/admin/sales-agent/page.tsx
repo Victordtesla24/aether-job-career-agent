@@ -4,11 +4,11 @@
  * /admin/sales-agent — the NATIVE Sales AI Agent console.
  *
  * This page replaced the old "external growth engine" placeholder: the sales
- * agent now runs INSIDE this app (30-min systemd timer + admin "Run now"),
- * with its own AdminUser-gated API under /api/admin/sales-agent/*. Everything
- * shown here is a live database query — no estimates, no fabricated metrics.
- * Reply rate is a real fraction once a sent thread has an observed reply;
- * it stays null when nothing has been sent.
+ * agent now runs INSIDE this app (ARQ cron on aether-prod-worker at :15/:45
+ * plus admin "Run now"), with its own AdminUser-gated API under
+ * /api/admin/sales-agent/*. Everything shown here is a live database query —
+ * no estimates, no fabricated metrics. Reply rate is a real fraction once a
+ * sent thread has an observed reply; it stays null when nothing has been sent.
  *
  * Compliance surfaced in the UI: LinkedIn items are DRAFTS ONLY (copy button,
  * never a post button — LinkedIn's Terms prohibit automated posting), the
@@ -18,6 +18,10 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { AdminPageHeader } from "../../../components/admin/admin-shell";
+import {
+  containsRetiredHost,
+  liveProductCopy,
+} from "../../../lib/admin/live-product-copy";
 // Aether Career Design System skin — every rule is scoped under
 // `.aether-ds-scope`, so ONLY this console is restyled (not the admin shell).
 import "./sales-agent.css";
@@ -312,14 +316,17 @@ export default function SalesAgentPage() {
 
   const copyDraft = useCallback(async (id: string, body: string | null) => {
     if (!body) return;
+    const text = liveProductCopy(body, strategy?.productUrl);
     try {
-      await navigator.clipboard.writeText(body);
+      await navigator.clipboard.writeText(text);
       setCopiedId(id);
       setTimeout(() => setCopiedId(null), 2000);
     } catch {
-      /* clipboard unavailable — non-fatal */
+      setError(
+        "Could not copy to the clipboard. Select the draft text and copy it yourself.",
+      );
     }
-  }, []);
+  }, [strategy?.productUrl]);
 
   // Health alarm: red banner when the timer has been silent past the stale
   // line (2× the 30-min interval) or the ledger itself errored.
@@ -330,7 +337,7 @@ export default function SalesAgentPage() {
     <div className="aether-ds-scope">
       <div className="sa-header">
         <AdminPageHeader
-          title="Sales Agent"
+          title="Sales AI agent"
           subtitle="Native in-app growth agent — inbound leads, lifecycle emails, LinkedIn drafts. Every number below is a live database query."
         />
       </div>
@@ -369,6 +376,11 @@ export default function SalesAgentPage() {
           </span>
           <span className="sa-meta">
             Last run: {fmtDate(health?.lastRunAt)} · fires every {health?.intervalMinutes ?? 30} min
+            {health?.schedulerKind ? ` · ${health.schedulerKind}` : ""}
+            {health?.schedulerRegistered === false ? " · cron not registered" : ""}
+            {health?.systemdTimerActive
+              ? " · systemd timer ALSO active (double-run)"
+              : ""}
           </span>
           <button
             type="button"
@@ -440,6 +452,11 @@ export default function SalesAgentPage() {
       <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <StatCard label="Signups" value={overview ? String(overview.signups) : "…"} />
         <StatCard
+          label="Sales AI first-touch"
+          value={overview ? String(overview.attributedSignups) : "…"}
+          note={`${overview ? overview.attributedPaid : "…"} later paid — landing, not causal`}
+        />
+        <StatCard
           label="Paid conversions"
           value={overview ? String(overview.paidConversions) : "…"}
         />
@@ -498,7 +515,8 @@ export default function SalesAgentPage() {
         <div className="space-y-4">
           <p className="sa-meta">
             Operator and orchestrator handoff — facts plus next actions. This is
-            not a second agent. Signups are not attributed to a campaign.
+            not a second agent. First-touch landings are accounts whose signup
+            URL carried utm_source=aether_sales_agent, not a proven causal conversion.
           </p>
           {strategy ? (
             <>
@@ -524,7 +542,10 @@ export default function SalesAgentPage() {
                 />
               </div>
               <div className="sa-card p-4">
-                <p className="sa-eyebrow">Cannot attribute</p>
+                <p className="sa-eyebrow">First-touch landings</p>
+                <p className="sa-figure mt-1">
+                  {strategy.attributedSignups} signups · {strategy.attributedPaid} later paid
+                </p>
                 <p className="sa-meta mt-1">{strategy.cannotAttributeReason}</p>
               </div>
               <div className="sa-card p-4">
@@ -613,7 +634,7 @@ export default function SalesAgentPage() {
                   type="button"
                   onClick={() => {
                     setEditing(editing === c.id ? null : c.id);
-                    setEditBody(c.templateBody);
+                    setEditBody(liveProductCopy(c.templateBody, strategy?.productUrl));
                   }}
                   className="sa-btn-ghost ml-auto px-3 py-1 text-xs"
                 >
@@ -627,6 +648,9 @@ export default function SalesAgentPage() {
                 >
                   {previewing === c.id ? "Hide preview" : "Branded preview"}
                 </button>
+                {containsRetiredHost(c.templateBody) ? (
+                  <span className="sa-badge sa-badge-warn">retired host in stored copy</span>
+                ) : null}
               </div>
               {previewing === c.id && previewHtml ? (
                 <div
@@ -667,7 +691,7 @@ export default function SalesAgentPage() {
                   className="sa-well mt-3 max-h-48 overflow-y-auto whitespace-pre-wrap p-3 text-xs"
                   style={{ color: "var(--fg-2)" }}
                 >
-                  {c.templateBody}
+                  {liveProductCopy(c.templateBody, strategy?.productUrl)}
                 </pre>
               )}
             </div>
@@ -750,6 +774,9 @@ export default function SalesAgentPage() {
                   </td>
                   <td className="px-4 py-3">
                     <OutcomeBadge outcome={o.outcome} />
+                    {containsRetiredHost(o.body) && (o.outcome === "sent" || o.outcome === "dry_run") ? (
+                      <span className="sa-badge sa-badge-warn ml-2">historical retired host</span>
+                    ) : null}
                   </td>
                   <td className="sa-meta px-4 py-3">{o.detail ?? "—"}</td>
                 </tr>
@@ -791,7 +818,7 @@ export default function SalesAgentPage() {
                 className="sa-well mt-3 whitespace-pre-wrap p-3 text-xs"
                 style={{ color: "var(--fg-2)" }}
               >
-                {d.body ?? d.detail ?? "(no body)"}
+                {liveProductCopy(d.body ?? d.detail ?? "(no body)", strategy?.productUrl)}
               </pre>
             </div>
           ))}

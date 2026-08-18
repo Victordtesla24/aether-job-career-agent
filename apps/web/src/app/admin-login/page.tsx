@@ -44,6 +44,7 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 
 import { AuthApiError, login } from "../../lib/api/auth";
+import { persistSessionToken } from "../../lib/auth/session-cookie";
 
 const TOKEN_STORAGE_KEY = "aether_token";
 
@@ -60,7 +61,7 @@ export default function AdminLoginPage() {
     setSubmitting(true);
     try {
       const session = await login(email, password);
-      window.localStorage.setItem(TOKEN_STORAGE_KEY, session.accessToken);
+      persistSessionToken(session.accessToken);
       router.push("/admin");
     } catch (err) {
       setError(err instanceof AuthApiError ? err.message : "Could not reach the API. Please try again.");

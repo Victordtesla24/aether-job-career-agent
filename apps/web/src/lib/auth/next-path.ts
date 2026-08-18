@@ -7,8 +7,8 @@
  * returns them there instead of always dropping them on bare /dashboard. The
  * value rides in the URL and is therefore attacker-controllable, so it is
  * validated down to a clean, same-origin path confined to the authenticated
- * dashboard area. Anything else — external hosts, protocol-relative URLs,
- * backslash tricks, path traversal, or non-dashboard routes — falls back to
+ * dashboard or the admin console. Anything else — external hosts, protocol-relative URLs,
+ * backslash tricks, path traversal, or non-dashboard/admin routes — falls back to
  * /dashboard.
  */
 const DEFAULT_POST_LOGIN_PATH = "/dashboard";
@@ -34,13 +34,21 @@ export function safeNextPath(raw: string | null | undefined): string {
     return DEFAULT_POST_LOGIN_PATH;
   }
 
-  // Confine the destination to the authenticated dashboard area. The character
-  // after "/dashboard" must be a path/query boundary — a bare
-  // startsWith("/dashboard") would also accept "/dashboardevil.com".
+  // Confine the destination to the authenticated dashboard or admin console.
+  // The character after the prefix must be a path/query boundary — a bare
+  // startsWith("/admin") would also accept "/administrator".
   const isDashboard =
     decoded === "/dashboard" ||
     decoded.startsWith("/dashboard/") ||
     decoded.startsWith("/dashboard?");
+  const isAdmin =
+    decoded === "/admin" ||
+    decoded.startsWith("/admin/") ||
+    decoded.startsWith("/admin?");
+  const isAdminLogin =
+    decoded === "/admin-login" ||
+    decoded.startsWith("/admin-login/") ||
+    decoded.startsWith("/admin-login?");
 
-  return isDashboard ? decoded : DEFAULT_POST_LOGIN_PATH;
+  return isDashboard || isAdmin || isAdminLogin ? decoded : DEFAULT_POST_LOGIN_PATH;
 }

@@ -258,6 +258,8 @@ const SalesAiSchema = z.object({
   leads: OptNum,
   linkedinDraftsQueued: OptNum,
   llmCostUsd30d: OptNum,
+  attributedSignups: OptNum,
+  attributedPaid: OptNum,
   cannotAttributeSignups: z
     .boolean()
     .nullish()

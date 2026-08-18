@@ -1180,3 +1180,31 @@ Rules of engagement unchanged: locks (git/deploy/test), runbook deploys, append-
 **Does not touch:** Board/Sankey restyle, agents map, profile avatar, email, networking, sales.
 **Deploy:** push → merge `main` → VPS Delivery; delete branch; no standing PR.
 
+---
+
+## SESSION ADM-ADV — 2026-08-18T11:15Z — Admin portal + Sales AI adversarial close-out (R2)
+
+**By:** Cursor Grok session. Isolated worktree `/root/dev/aether-wt-admin-sales-r2` on `feat/admin-sales-adv` from `origin/main`. Independent GPT-5.5 adversarial review of `/admin` and `/admin/sales-agent` vs production (verdict DO-NOT-SHIP). This session closes every remaining requirement in product code.
+
+**Scope claimed:**
+- `apps/api/app/workers/sales_cron.py` (new) + `apps/api/app/workers/settings.py` — ARQ `sales_agent_cron` at :15/:45 on aether-prod-worker. Do **not** enable `aether-sales-agent.timer` alongside it.
+- `deploy/aether-sales-agent.service` + `.timer` — Hostinger paths; disaster-recovery only; comments forbid double-run.
+- `apps/api/app/services/stripe_gateway.py` — `rewrite_retired_product_urls` (shared)
+- `apps/api/app/agents/sales_agent.py` — live host, UTM stamp, re-export rewrite
+- `apps/api/app/repositories/sales.py` — persist rewrite on campaign write + unposted LinkedIn drafts; `User.signupSource` first-touch counts
+- `apps/api/app/db.py` — `ensure_user_signup_source_column` only
+- `apps/api/app/repositories/user.py` — `stamp_signup_source` (first-touch, NULL-only)
+- `apps/api/app/routers/auth.py` — optional `utmSource` / `utm_source`; never blocks registration
+- `apps/api/app/routers/sales_agent.py` — health fails if ARQ cron is unregistered or systemd timer is also active; strategy first-touch honesty
+- `apps/api/app/repositories/admin_metrics.py` — `salesAi` attributed counts; `cannotAttributeSignups: false`
+- `apps/web/src/middleware.ts` + `next.config.mjs` — HTTP-level `/admin/*` gate + `Cache-Control: private, no-store`
+- `apps/web/src/lib/auth/session-cookie.ts`, `next-path.ts` — cookie mirror; allow `/admin` return path
+- `apps/web/src/app/login/page.tsx`, `signup/page.tsx`, `admin-login/page.tsx`, `auth-guard.tsx`, `admin-guard.tsx` — persist cookie; forward `utm_source`
+- `apps/web/src/app/admin/sales-agent/page.tsx`, `admin/page.tsx`, `admin-shell.tsx` — gilt active nav, live-host display, clipboard error, title "Sales AI agent"
+- Tests: `test_sales_agent.py`, `test_auth.py`, `test_admin2_exec_metrics.py`; vitest next-path, session-cookie, middleware, live-product-copy, signup-utm, executive-dashboard, admin-nav
+
+**Does not touch:** email center, applications timeline, profile avatar, provider OAuth, networking CRM UI, screening questionnaire, `AETHER_SALES_AGENT_DRY_RUN`, SESSION NW-ADV `_run_network_nurture` fence.
+
+**Deploy:** rebase onto `origin/main`, push this branch then merge to `origin/main` → VPS Delivery. Do not hand-restart prod units. Do not enable `aether-sales-agent.timer`. Do not POST run-now. No leftover PR.
+
+

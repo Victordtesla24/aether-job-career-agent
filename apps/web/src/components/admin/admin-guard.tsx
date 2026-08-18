@@ -14,6 +14,7 @@ import { useEffect, useState } from "react";
 
 import { ApiError } from "../../lib/api/client";
 import { fetchMe } from "../../lib/api/admin";
+import { persistSessionTokenFromStorage } from "../../lib/auth/session-cookie";
 
 const TOKEN_STORAGE_KEY = "aether_token";
 
@@ -26,9 +27,11 @@ export function AdminGuard({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let cancelled = false;
     if (!window.localStorage.getItem(TOKEN_STORAGE_KEY)) {
-      router.replace("/login");
+      const intended = window.location.pathname + window.location.search;
+      router.replace(`/login?next=${encodeURIComponent(intended)}`);
       return;
     }
+    persistSessionTokenFromStorage();
     // C-04 (QA-v2): the admin health page was observed permanently stuck on
     // "Verifying admin access..." — if fetchMe() never settles (a hung
     // request, a chunk that failed to load, a flaky network) the gate stayed
@@ -65,7 +68,8 @@ export function AdminGuard({ children }: { children: React.ReactNode }) {
         // the authority, matching the "never strand a real admin" goal.
         if (err instanceof ApiError && err.status === 401) {
           setState("denied");
-          router.replace("/login");
+          const intended = window.location.pathname + window.location.search;
+          router.replace(`/login?next=${encodeURIComponent(intended)}`);
         } else if (err instanceof ApiError && err.status === 403) {
           setState("denied");
           router.replace("/dashboard");

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from datetime import datetime
 from typing import Any
 
@@ -30,6 +31,19 @@ from app.security import create_access_token, hash_password, verify_password
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+#: First-touch ``utm_source`` from a landing URL. Invalid values are ignored
+#: rather than refusing the account — same shape as ``?ref=``.
+_UTM_SOURCE_RE = re.compile(r"^[A-Za-z0-9._-]{1,80}$")
+
+
+def _sanitize_utm_source(raw: str | None) -> str | None:
+    if not raw:
+        return None
+    value = raw.strip()
+    if not _UTM_SOURCE_RE.fullmatch(value):
+        return None
+    return value
 
 
 def _send_subscriber_welcome(user: dict[str, Any]) -> None:
@@ -82,6 +96,8 @@ class RegisterRequest(BaseModel):
     # link. Optional and inert: absent (the normal case) means the registration
     # path performs exactly the work it did before this field existed.
     ref: str | None = None
+    # First-touch Sales AI / campaign ``utm_source``. Optional and inert.
+    utmSource: str | None = None
 
     @field_validator("password")
     @classmethod
@@ -132,6 +148,7 @@ def register(
     request: Request,
     body: RegisterRequest,
     ref: str | None = Query(default=None),
+    utm_source: str | None = Query(default=None),
 ) -> UserResponse:
     # Public-registration gate (§15 admin settings): when an admin has turned
     # signup off, self-service registration is refused. Checked before the rate
@@ -177,6 +194,16 @@ def register(
             logger.warning(
                 "Referral attribution failed for a new account; the account was "
                 "created and is simply unattributed.",
+                exc_info=True,
+            )
+    first_touch = _sanitize_utm_source(body.utmSource or utm_source)
+    if first_touch:
+        try:
+            UserRepository().stamp_signup_source(user["id"], first_touch)
+        except Exception:  # noqa: BLE001 — never block a registration
+            logger.warning(
+                "Signup source attribution failed for a new account; the "
+                "account was created and is simply unattributed.",
                 exc_info=True,
             )
     # Branded welcome email — same non-fatal shape as referral attribution.

@@ -21,6 +21,8 @@ export const SalesOverviewSchema = z.object({
   dryRunLogged: z.number(),
   linkedinDraftsQueued: z.number(),
   suppressionCount: z.number(),
+  attributedSignups: z.number().optional().default(0),
+  attributedPaid: z.number().optional().default(0),
 });
 export type SalesOverview = z.infer<typeof SalesOverviewSchema>;
 
@@ -316,6 +318,9 @@ export const SalesHealthSchema = z.object({
   status: z.string(),
   detail: z.string(),
   lastRunAt: z.string().nullable().optional().default(null),
+  schedulerKind: z.string().nullish(),
+  schedulerRegistered: z.boolean().nullish(),
+  systemdTimerActive: z.boolean().nullish(),
 });
 export type SalesHealth = z.infer<typeof SalesHealthSchema>;
 
@@ -433,6 +438,8 @@ export const SalesStrategySchema = z.object({
   inactiveGeneratedNames: z.array(z.string()),
   linkedinDraftsQueued: z.number(),
   suppressionCount: z.number(),
+  attributedSignups: z.number().optional().default(0),
+  attributedPaid: z.number().optional().default(0),
   llmCostUsd30d: z.number(),
   cannotAttribute: z.boolean(),
   cannotAttributeReason: z.string(),

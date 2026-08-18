@@ -36,10 +36,16 @@ import psycopg2
 
 from app.db import (
     ensure_user_lifecycle_columns,
+    ensure_user_signup_source_column,
     get_connection,
     new_id,
     rows_to_dicts,
 )
+from app.services.stripe_gateway import rewrite_retired_product_urls
+
+#: First-touch utm_source Sales AI stamps on product URLs. Must match
+#: ``app.agents.sales_agent.SALES_AI_UTM_SOURCE``.
+SALES_AI_SIGNUP_SOURCE = "aether_sales_agent"
 
 #: Ratified consent types (build brief §4.1). Anything else is refused.
 CONSENT_TYPES = frozenset(
@@ -431,6 +437,7 @@ class SalesRepository:
             raise ValueError(f"unknown campaign type {ctype!r}")
         if not (name or "").strip() or not (template_body or "").strip():
             raise ValueError("name and templateBody are required")
+        template_body = rewrite_retired_product_urls(template_body)
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
@@ -460,7 +467,7 @@ class SalesRepository:
             params.append(name.strip())
         if template_body is not None:
             sets.append('"templateBody" = %s')
-            params.append(template_body)
+            params.append(rewrite_retired_product_urls(template_body))
         if active is not None:
             sets.append('"active" = %s')
             params.append(bool(active))
@@ -477,14 +484,59 @@ class SalesRepository:
         return rows[0] if rows else None
 
     def seed_default_campaigns(self) -> int:
-        """Insert the default template set once (skipped if any campaign exists)."""
-        if self.list_campaigns():
-            return 0
+        """Insert the default template set once (skipped if any campaign exists).
+
+        Always rewrites retired Abacus hosts in stored operator copy so a
+        template seeded before the Hostinger cutover cannot be copied or
+        previewed with a dead URL.
+        """
         created = 0
-        for name, ctype, body in DEFAULT_CAMPAIGNS:
-            self.create_campaign(name=name, ctype=ctype, template_body=body)
-            created += 1
+        if not self.list_campaigns():
+            for name, ctype, body in DEFAULT_CAMPAIGNS:
+                self.create_campaign(name=name, ctype=ctype, template_body=body)
+                created += 1
+        self.rewrite_retired_product_hosts()
         return created
+
+    def rewrite_retired_product_hosts(self) -> dict[str, int]:
+        """Persist the live product origin into live operator copy.
+
+        Campaign templates and unposted LinkedIn drafts are artefacts the
+        founder will send or copy. Historical ``sent`` / ``dry_run`` outreach
+        is left alone — that is the audit of what actually left the mailbox.
+        """
+        campaigns_rewritten = 0
+        for row in self.list_campaigns():
+            body = row.get("templateBody") or ""
+            rewritten = rewrite_retired_product_urls(body)
+            if rewritten != body:
+                self.update_campaign(row["id"], template_body=rewritten)
+                campaigns_rewritten += 1
+
+        drafts_rewritten = 0
+        drafts, _total = self.list_outreach(
+            outcome=DRAFT_QUEUED, channel="linkedin_draft", limit=200
+        )
+        for row in drafts:
+            body = row.get("body") or ""
+            rewritten = rewrite_retired_product_urls(body)
+            if rewritten != body:
+                self._update_outreach_body(row["id"], rewritten)
+                drafts_rewritten += 1
+        return {
+            "campaigns": campaigns_rewritten,
+            "linkedinDrafts": drafts_rewritten,
+        }
+
+    def _update_outreach_body(self, outreach_id: str, body: str) -> None:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    'UPDATE "SalesOutreachLog" SET "body" = %s '
+                    'WHERE "id" = %s AND "outcome" = %s',
+                    (body, outreach_id, DRAFT_QUEUED),
+                )
+            conn.commit()
 
     # ------------------------------------------------------ outreach log
     def record_outreach(
@@ -721,6 +773,7 @@ class SalesRepository:
         ``_lifecycle_candidates``: the column post-dates this repository.
         """
         ensure_user_lifecycle_columns()
+        ensure_user_signup_source_column()
         with get_connection() as conn:
             with conn.cursor() as cur:
                 # Same population as /admin/metrics/executive (admin_metrics.py:
@@ -773,6 +826,24 @@ class SalesRepository:
                 replied_threads = int(cur.fetchone()[0])
                 cur.execute('SELECT COUNT(*) FROM "SalesLead"')
                 lead_count = int(cur.fetchone()[0])
+                cur.execute(
+                    'SELECT COUNT(*) FROM "User"'
+                    ' WHERE "deletedAt" IS NULL AND "isAdmin" = false'
+                    ' AND "signupSource" = %s',
+                    (SALES_AI_SIGNUP_SOURCE,),
+                )
+                attributed_signups = int(cur.fetchone()[0])
+                cur.execute(
+                    "SELECT COUNT(*) FROM \"User\" u"
+                    " JOIN \"Subscription\" s ON s.\"userId\" = u.\"id\""
+                    " JOIN \"Plan\" p ON p.\"id\" = s.\"planId\""
+                    " WHERE u.\"deletedAt\" IS NULL AND u.\"isAdmin\" = false"
+                    " AND u.\"signupSource\" = %s"
+                    " AND s.\"status\" IN ('active','trialing','past_due')"
+                    " AND LOWER(p.\"name\") <> 'free'",
+                    (SALES_AI_SIGNUP_SOURCE,),
+                )
+                attributed_paid = int(cur.fetchone()[0])
         # Distinct mailed threads in the denominator. repliesObserved stays
         # the COUNT of replied rows. Rate is null until a real send exists —
         # 0.0% with zero sends would invent a measurement.
@@ -790,6 +861,8 @@ class SalesRepository:
             "dryRunLogged": int(dry_run),
             "linkedinDraftsQueued": int(drafts),
             "suppressionCount": self.suppression_count(),
+            "attributedSignups": attributed_signups,
+            "attributedPaid": attributed_paid,
         }
 
     # ------------------------------------------------------------ watermark

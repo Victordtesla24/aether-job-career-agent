@@ -11,6 +11,8 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { persistSessionTokenFromStorage } from "../lib/auth/session-cookie";
+
 const TOKEN_STORAGE_KEY = "aether_token";
 
 export function AuthGuard({ children }: { children: React.ReactNode }) {
@@ -19,6 +21,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (window.localStorage.getItem(TOKEN_STORAGE_KEY)) {
+      persistSessionTokenFromStorage();
       setAuthed(true);
     } else {
       const path = window.location.pathname;

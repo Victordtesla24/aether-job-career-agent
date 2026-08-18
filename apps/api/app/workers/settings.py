@@ -11,6 +11,7 @@ import os
 from app.workers.apply_sweep import apply_sweep_cron, apply_sweep_user
 from app.workers.board_sweep import board_sweep_cron, board_sweep_user
 from app.workers.queue import job_timeout_seconds
+from app.workers.sales_cron import sales_agent_cron
 from app.workers.tasks import (
     reconcile_abandoned_agent_runs_cron,
     run_agent_job,
@@ -50,6 +51,11 @@ def _cron_jobs():
             # no-op unless AETHER_APPLY_SWEEP_ENABLED is on AND the user has
             # applications sitting on an APPROVED gate with no terminal state.
             cron(apply_sweep_cron, minute=set(range(7, 60, 15))),
+            # Native Sales AI — every 30 min at :15/:45, offset from discovery
+            # and board-sweep. Honest no-op unless AETHER_SALES_AGENT_ENABLED
+            # is on. This is the Hostinger scheduler; do not also enable the
+            # Abacus-era systemd timer (double-run).
+            cron(sales_agent_cron, minute={15, 45}),
         ]
     except Exception:  # noqa: BLE001 — cron optional; enqueue path is primary
         return []

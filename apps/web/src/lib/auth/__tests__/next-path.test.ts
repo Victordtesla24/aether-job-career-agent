@@ -34,7 +34,7 @@ describe("safeNextPath", () => {
       "\\\\evil.com",
       "/dashboardevil.com", // prefix-boundary bypass
       "/dashboard-admin",
-      "/admin",
+      "/administrator",
       "/etc/passwd",
       "/login",
       "javascript:alert(1)",
@@ -50,5 +50,13 @@ describe("safeNextPath", () => {
 
   it("falls back on malformed percent-encoding without throwing", () => {
     expect(safeNextPath("%E0%A4")).toBe("/dashboard");
+  });
+
+  it("preserves admin console and admin-login return paths", () => {
+    expect(safeNextPath("/admin")).toBe("/admin");
+    expect(safeNextPath("/admin/")).toBe("/admin/");
+    expect(safeNextPath("/admin/sales-agent")).toBe("/admin/sales-agent");
+    expect(safeNextPath("/admin?tab=strategy")).toBe("/admin?tab=strategy");
+    expect(safeNextPath("/admin-login")).toBe("/admin-login");
   });
 });

@@ -237,8 +237,10 @@ def test_sales_ai_block_is_the_outreach_agent_not_human_resellers(client):
     block = _metrics(client, headers)["salesAi"]
     assert "enabled" in block
     assert "dryRun" in block
-    assert block["cannotAttributeSignups"] is True
-    assert "UTM" in block["cannotAttributeReason"]
+    assert block["cannotAttributeSignups"] is False
+    assert "first-touch" in block["cannotAttributeReason"].lower()
+    assert "attributedSignups" in block
+    assert "attributedPaid" in block
     assert "emailsSent" in block
     assert "repliesObserved" in block
 

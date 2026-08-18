@@ -14,6 +14,7 @@ time (do-not-crash requirement).
 from __future__ import annotations
 
 import os
+import re
 from typing import Any
 
 
@@ -39,6 +40,10 @@ def webhook_secret() -> str | None:
 #: or sales copy.
 LIVE_APP_BASE_URL = "https://aether.srv1356245.hstgr.cloud"
 _RETIRED_APP_HOST_MARKERS = ("5cb5f0620.abacusai.cloud", "abacusai.cloud")
+_RETIRED_PRODUCT_URL_RE = re.compile(
+    r"https?://(?:www\.)?(?:5cb5f0620\.)?abacusai\.cloud",
+    re.IGNORECASE,
+)
 
 
 def app_base_url() -> str:
@@ -52,6 +57,16 @@ def app_base_url() -> str:
     if not raw or any(marker in raw for marker in _RETIRED_APP_HOST_MARKERS):
         return LIVE_APP_BASE_URL
     return raw
+
+
+def rewrite_retired_product_urls(text: str) -> str:
+    """Replace decommissioned Abacus hosts with the live product origin.
+
+    Path suffixes are kept (``/pricing`` stays ``/pricing``). Used at send
+    time, preview time, and when persisting campaign / LinkedIn copy so the
+    operator never copies a dead URL out of the admin console.
+    """
+    return _RETIRED_PRODUCT_URL_RE.sub(app_base_url(), text or "")
 
 
 def _stripe() -> Any:

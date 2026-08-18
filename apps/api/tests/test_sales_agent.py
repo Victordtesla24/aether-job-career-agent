@@ -475,13 +475,17 @@ def test_strategy_route_is_a_handoff_not_a_second_agent(client, admin_headers, s
     resp = client.get("/admin/sales-agent/strategy", headers=admin_headers)
     assert resp.status_code == 200, resp.text
     body = resp.json()
-    assert body["cannotAttribute"] is True
-    assert "campaignId" in body["cannotAttributeReason"]
+    assert body["cannotAttribute"] is False
+    assert "first-touch" in body["cannotAttributeReason"].lower()
+    assert "attributedSignups" in body
+    assert "attributedPaid" in body
     assert "5cb5f0620.abacusai.cloud" not in (body.get("productUrl") or "")
     assert "aether.srv1356245.hstgr.cloud" in body["productUrl"]
     assert isinstance(body["nextActions"], list)
     assert body["nextActions"]
     assert all(isinstance(a, str) and a.strip() for a in body["nextActions"])
+    if body.get("healthStatus") == "stale":
+        assert any("stale" in a.lower() for a in body["nextActions"])
 
 
 def test_live_mode_sends_exactly_once(repo, sales_env, monkeypatch):
@@ -651,7 +655,8 @@ def test_admin_overview_and_health(client, admin_headers, monkeypatch):
     assert ov.status_code == 200
     data = ov.json()
     # Honest metrics: replyRate is null (not 0) when not observable.
-    for key in ("signups", "paidConversions", "mrrAud", "suppressionCount"):
+    for key in ("signups", "paidConversions", "mrrAud", "suppressionCount",
+                "attributedSignups", "attributedPaid"):
         assert key in data
     assert "replyRate" in data
 
@@ -661,6 +666,9 @@ def test_admin_overview_and_health(client, admin_headers, monkeypatch):
     assert hd["enabled"] is False
     assert hd["dryRun"] is True  # shadow mode is the DEFAULT
     assert hd["intervalMinutes"] == 30
+    assert hd["schedulerKind"] == "arq_cron"
+    assert hd["schedulerRegistered"] is True
+    assert hd["systemdTimerActive"] is False
 
     # Seeded campaigns exist and templates NEVER embed the footer (it is
     # appended server-side at send time).
@@ -814,6 +822,144 @@ def test_campaign_preview_route_renders_branded_html(client, admin_headers):
         "/admin/sales-agent/campaigns/nope/preview", headers=admin_headers
     )
     assert missing.status_code == 404
+
+
+def test_campaign_write_and_preview_rewrite_retired_abacus_host(
+    client, admin_headers
+):
+    created = client.post(
+        "/admin/sales-agent/campaigns",
+        headers=admin_headers,
+        json={
+            "name": "Abacus leftover",
+            "type": "welcome",
+            "templateBody": (
+                "Hi {{name}}, see https://5cb5f0620.abacusai.cloud/pricing"
+            ),
+            "active": False,
+        },
+    )
+    assert created.status_code == 201, created.text
+    row = created.json()
+    assert "abacusai.cloud" not in row["templateBody"]
+    assert "aether.srv1356245.hstgr.cloud/pricing" in row["templateBody"]
+    prev = client.get(
+        f"/admin/sales-agent/campaigns/{row['id']}/preview",
+        headers=admin_headers,
+    )
+    assert prev.status_code == 200
+    html = prev.json()["html"]
+    assert "abacusai.cloud" not in html
+    assert "aether.srv1356245.hstgr.cloud" in html
+
+
+def test_rewrite_hosts_migrates_campaigns_and_unposted_drafts_only(repo):
+    from app.db import get_connection
+
+    campaign = repo.create_campaign(
+        name="legacy-abacus",
+        ctype="welcome",
+        template_body="See https://aether.srv1356245.hstgr.cloud/signup",
+        active=False,
+    )
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'UPDATE "SalesCampaign" SET "templateBody" = %s WHERE "id" = %s',
+                ("See https://5cb5f0620.abacusai.cloud/signup", campaign["id"]),
+            )
+        conn.commit()
+    draft = repo.record_outreach(
+        channel="linkedin_draft",
+        outcome="draft_queued",
+        subject="draft",
+        body="Try https://5cb5f0620.abacusai.cloud today",
+    )
+    sent = repo.record_outreach(
+        channel="email",
+        outcome="sent",
+        subject="old send",
+        body="Went to https://5cb5f0620.abacusai.cloud/pricing",
+        recipient="someone@example.com",
+    )
+    result = repo.rewrite_retired_product_hosts()
+    assert result["campaigns"] >= 1
+    assert result["linkedinDrafts"] >= 1
+    refreshed = repo.get_campaign(campaign["id"])
+    assert refreshed is not None
+    assert "abacusai.cloud" not in (refreshed["templateBody"] or "")
+    assert "aether.srv1356245.hstgr.cloud/signup" in refreshed["templateBody"]
+    drafts, _ = repo.list_outreach(
+        outcome="draft_queued", channel="linkedin_draft"
+    )
+    match = next(r for r in drafts if r["id"] == draft["id"])
+    assert "abacusai.cloud" not in (match["body"] or "")
+    sent_rows, _ = repo.list_outreach(outcome="sent", channel="email")
+    historical = next(r for r in sent_rows if r["id"] == sent["id"])
+    assert "5cb5f0620.abacusai.cloud" in (historical["body"] or "")
+
+
+def test_network_nurture_template_uses_live_host():
+    from app.agents.sales_agent import network_nurture_template
+
+    body = network_nurture_template()
+    assert "abacusai.cloud" not in body
+    assert "aether.srv1356245.hstgr.cloud" in body
+
+
+def test_sales_agent_cron_is_registered_on_the_hostinger_worker():
+    from app.workers.sales_cron import sales_agent_cron
+    from app.workers.settings import WorkerSettings
+
+    assert any(
+        getattr(job, "coroutine", None) is sales_agent_cron
+        for job in WorkerSettings.cron_jobs
+    )
+
+
+def test_sales_agent_cron_is_noop_when_disabled(monkeypatch):
+    import asyncio
+
+    from app.workers.sales_cron import sales_agent_cron
+
+    monkeypatch.setenv("AETHER_SALES_AGENT_ENABLED", "false")
+    result = asyncio.run(sales_agent_cron({}))
+    assert result["ran"] is False
+    assert result["reason"] == "disabled"
+
+
+def test_health_errors_when_arq_cron_is_not_registered(
+    client, admin_headers, monkeypatch
+):
+    monkeypatch.setattr(
+        "app.routers.sales_agent._arq_sales_cron_registered", lambda: False
+    )
+    monkeypatch.setattr(
+        "app.routers.sales_agent._systemd_sales_timer_active", lambda: False
+    )
+    he = client.get("/admin/sales-agent/health", headers=admin_headers)
+    assert he.status_code == 200
+    body = he.json()
+    assert body["status"] == "error"
+    assert body["schedulerRegistered"] is False
+    assert "WorkerSettings" in body["detail"]
+
+
+def test_health_errors_when_systemd_timer_and_arq_both_active(
+    client, admin_headers, monkeypatch
+):
+    monkeypatch.setattr(
+        "app.routers.sales_agent._arq_sales_cron_registered", lambda: True
+    )
+    monkeypatch.setattr(
+        "app.routers.sales_agent._systemd_sales_timer_active", lambda: True
+    )
+    he = client.get("/admin/sales-agent/health", headers=admin_headers)
+    assert he.status_code == 200
+    body = he.json()
+    assert body["status"] == "error"
+    assert body["systemdTimerActive"] is True
+    assert "timer" in body["detail"].lower()
 
 
 def test_admin_creates_branded_poster_and_identical_request_reuses_it(

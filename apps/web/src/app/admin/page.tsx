@@ -362,15 +362,15 @@ export default function AdminExecutiveDashboardPage() {
             action={
               <Link
                 href="/admin/sales-agent"
-                className="type-mono-micro text-aether-coral hover:underline"
+                className="type-mono-micro text-gold hover:underline"
               >
                 Open →
               </Link>
             }
             guidance={{
               tellsYou:
-                "whether the in-app Sales AI agent is live or in shadow mode, how many emails it has actually sent, and how many inbound replies it has observed. Signups are not attributed to it.",
-              next: "open /admin/sales-agent, read the Strategy tab, and post LinkedIn drafts yourself. Do not treat this panel as revenue.",
+                "whether the in-app Sales AI agent is live or in shadow mode, how many emails it has actually sent, how many inbound replies it has observed, and first-touch landings whose signup URL carried utm_source=aether_sales_agent. Those landings are not a proven causal conversion.",
+              next: "open /admin/sales-agent, read the Strategy tab, and post LinkedIn drafts yourself. Do not treat first-touch paid landings as revenue.",
             }}
           >
             {metrics?.salesAi ? (
@@ -405,9 +405,21 @@ export default function AdminExecutiveDashboardPage() {
                       : `${Math.round(metrics.salesAi.replyRate * 1000) / 10}%`}
                   </p>
                 </div>
+                <div>
+                  <p className="type-mono-micro text-aether-muted-dim">First-touch signups</p>
+                  <p className="mono text-sm font-semibold tabular-nums text-aether-text">
+                    {metrics.salesAi.attributedSignups ?? "Not measured"}
+                  </p>
+                </div>
+                <div>
+                  <p className="type-mono-micro text-aether-muted-dim">First-touch later paid</p>
+                  <p className="mono text-sm font-semibold tabular-nums text-aether-text">
+                    {metrics.salesAi.attributedPaid ?? "Not measured"}
+                  </p>
+                </div>
                 <p className="type-meta col-span-2 sm:col-span-4 text-aether-muted">
                   {metrics.salesAi.cannotAttributeReason ??
-                    "Signups cannot be attributed to Sales AI."}
+                    "First-touch count of accounts whose signup URL carried utm_source=aether_sales_agent. That is a landing, not a proven causal conversion."}
                 </p>
               </div>
             ) : (

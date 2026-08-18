@@ -13,6 +13,7 @@ import { FormEvent, useEffect, useState } from "react";
 
 import PublicFooter from "../../components/PublicFooter";
 import { AuthApiError, login } from "../../lib/api/auth";
+import { persistSessionToken, persistSessionTokenFromStorage } from "../../lib/auth/session-cookie";
 import { safeNextPath } from "../../lib/auth/next-path";
 
 const TOKEN_STORAGE_KEY = "aether_token";
@@ -51,6 +52,7 @@ export default function LoginPage() {
     // Already signed in? Don't re-present the form — forward to the intended
     // destination (MV-login-001 / MV-login-002).
     if (window.localStorage.getItem(TOKEN_STORAGE_KEY)) {
+      persistSessionTokenFromStorage();
       setRedirecting(true);
       router.replace(dest);
     }
@@ -66,7 +68,7 @@ export default function LoginPage() {
     setSubmitting(true);
     try {
       const session = await login(email, password);
-      window.localStorage.setItem(TOKEN_STORAGE_KEY, session.accessToken);
+      persistSessionToken(session.accessToken);
       router.push(nextPath);
     } catch (err) {
       setError(err instanceof AuthApiError ? err.message : "Could not reach the API. Please try again.");

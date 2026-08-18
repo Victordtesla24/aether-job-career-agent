@@ -194,9 +194,11 @@ function todayMetrics(): AdminExecutiveMetrics {
       leads: 2,
       linkedinDraftsQueued: 1,
       llmCostUsd30d: 0,
-      cannotAttributeSignups: true,
+      cannotAttributeSignups: false,
       cannotAttributeReason:
-        "User rows do not store campaignId or UTM, so signups cannot be attributed to Sales AI.",
+        "First-touch count of accounts whose signup URL carried utm_source=aether_sales_agent. That is a landing, not a proven causal conversion.",
+      attributedSignups: 1,
+      attributedPaid: 0,
       sampleSize: 4,
       insufficientData: true,
     },
@@ -399,7 +401,7 @@ describe("the operational strip", () => {
     const panel = await screen.findByTestId("admin-exec-sales-ai");
     expect(panel.getAttribute("data-measured")).toBe("true");
     expect(panel.textContent).toMatch(/Shadow/);
-    expect(panel.textContent).toMatch(/cannot be attributed/i);
+    expect(panel.textContent).toMatch(/first-touch/i);
     expect(panel.querySelector("a")?.getAttribute("href")).toBe("/admin/sales-agent");
   });
 

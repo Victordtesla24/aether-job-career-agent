@@ -167,7 +167,7 @@ describe("<AdminShell>", () => {
  * on the reseller page. Cheap to pin now, invisible to catch later.
  */
 describe("the two sales routes do not highlight each other", () => {
-  const ACTIVE = "bg-aether-coral/20";
+  const ACTIVE = "bg-gold/20";
 
   function classesFor(label: string): string {
     return screen.getByRole("link", { name: label }).getAttribute("class") ?? "";

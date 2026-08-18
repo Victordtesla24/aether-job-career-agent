@@ -429,3 +429,89 @@ class TestAdminSeed:
         monkeypatch.setenv("ADMIN_PASSWORD", "password")
         with pytest.raises(SystemExit, match="known-weak denylist"):
             seed_admin_user()
+
+
+class TestSignupSource:
+    def test_register_stamps_first_touch_utm_source(self, client, db_session):
+        email = f"utm-{uuid.uuid4().hex[:8]}@example.com"
+        response = client.post(
+            "/auth/register?utm_source=aether_sales_agent",
+            json={"email": email, "password": "hunter2024"},
+        )
+        assert response.status_code == 201, response.text
+        with db_session.cursor() as cur:
+            cur.execute(
+                'SELECT "signupSource" FROM "User" WHERE "email" = %s',
+                (email,),
+            )
+            row = cur.fetchone()
+        assert row is not None
+        assert row[0] == "aether_sales_agent"
+
+    def test_register_stamps_utm_from_body(self, client, db_session):
+        email = f"utm-body-{uuid.uuid4().hex[:8]}@example.com"
+        response = client.post(
+            "/auth/register",
+            json={
+                "email": email,
+                "password": "hunter2024",
+                "utmSource": "aether_sales_agent",
+            },
+        )
+        assert response.status_code == 201, response.text
+        with db_session.cursor() as cur:
+            cur.execute(
+                'SELECT "signupSource" FROM "User" WHERE "email" = %s',
+                (email,),
+            )
+            row = cur.fetchone()
+        assert row is not None
+        assert row[0] == "aether_sales_agent"
+
+    def test_register_ignores_invalid_utm_and_still_creates_the_account(
+        self, client, db_session
+    ):
+        from app.db import ensure_user_signup_source_column
+
+        ensure_user_signup_source_column()
+        email = f"utm-bad-{uuid.uuid4().hex[:8]}@example.com"
+        response = client.post(
+            "/auth/register",
+            json={
+                "email": email,
+                "password": "hunter2024",
+                "utmSource": "not a valid source!!",
+            },
+        )
+        assert response.status_code == 201, response.text
+        with db_session.cursor() as cur:
+            cur.execute(
+                'SELECT "signupSource" FROM "User" WHERE "email" = %s',
+                (email,),
+            )
+            row = cur.fetchone()
+        assert row is not None
+        assert row[0] is None
+
+    def test_signup_source_is_first_touch_only(self, client, db_session):
+        from app.repositories.user import UserRepository
+
+        email = f"utm-once-{uuid.uuid4().hex[:8]}@example.com"
+        response = client.post(
+            "/auth/register",
+            json={
+                "email": email,
+                "password": "hunter2024",
+                "utmSource": "aether_sales_agent",
+            },
+        )
+        assert response.status_code == 201, response.text
+        user_id = response.json()["id"]
+        UserRepository().stamp_signup_source(user_id, "other_source")
+        with db_session.cursor() as cur:
+            cur.execute(
+                'SELECT "signupSource" FROM "User" WHERE "id" = %s',
+                (user_id,),
+            )
+            row = cur.fetchone()
+        assert row[0] == "aether_sales_agent"

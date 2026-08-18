@@ -382,6 +382,8 @@ def _sales_ai_block() -> dict[str, Any]:
 
     ov = SalesRepository().overview()
     sample = int(ov.get("emailsSent") or 0)
+    attributed_signups = int(ov.get("attributedSignups") or 0)
+    attributed_paid = int(ov.get("attributedPaid") or 0)
     return {
         "enabled": sales_agent_enabled(),
         "dryRun": sales_agent_dry_run(),
@@ -392,10 +394,13 @@ def _sales_ai_block() -> dict[str, Any]:
         "leads": ov["leads"],
         "linkedinDraftsQueued": ov["linkedinDraftsQueued"],
         "llmCostUsd30d": sales_ai_cost_usd_30d(),
-        "cannotAttributeSignups": True,
+        "attributedSignups": attributed_signups,
+        "attributedPaid": attributed_paid,
+        "cannotAttributeSignups": False,
         "cannotAttributeReason": (
-            "Sales AI outreach is not joined to User via UTM or campaignId, "
-            "so this block cannot claim a signup or paid conversion."
+            "First-touch count of accounts whose signup URL carried "
+            "utm_source=aether_sales_agent. That is a landing, not a proven "
+            "causal conversion."
         ),
         "sampleSize": sample,
         "insufficientData": _insufficient(sample),

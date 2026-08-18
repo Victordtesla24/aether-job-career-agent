@@ -1169,7 +1169,7 @@ export default function AdminUserDetailPage() {
           <p className="mt-2 text-[11px] text-aether-muted-dim">
             Append-only. Password changes record the event, never the value. The full
             platform log lives at{" "}
-            <Link href="/admin/audit-log" className="text-aether-coral hover:underline">
+            <Link href="/admin/audit-log" className="text-gold hover:underline">
               /admin/audit-log
             </Link>
             .

@@ -38,6 +38,12 @@ interface RegisterInput {
    * entirely when the visitor arrived without a code.
    */
   ref?: string;
+  /**
+   * First-touch `utm_source` from a `/signup?utm_source=…` landing. The API
+   * stamps `User.signupSource` after the account exists and never blocks
+   * registration. Omitted when the visitor arrived without one.
+   */
+  utmSource?: string;
 }
 
 interface RegisterResult {
