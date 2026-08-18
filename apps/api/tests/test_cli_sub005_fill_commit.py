@@ -1722,3 +1722,366 @@ def test_live_submitter_still_submits_a_well_behaved_form_with_the_guard_install
     )
     assert outcome["submitted"] is True
     assert outcome["confirmation"] and "thank you" in str(outcome["confirmation"]).lower()
+
+
+# ---------------------------------------------------------------------------
+# 12. CLI-SUB-005-R7 (FAIL CLOSED + bubble-phase, RUN-20260818T0223Z/SUB-005-
+#     R6/08-adversarial-final.md attacks A/B/C2/F, per 05-decision-memos/
+#     SUB-005-and-COV-3-rulings.md "SUB-005 R6 outcome + R7 ruling"):
+#
+#     Attacks B and F are REAL correctness defects (fail-open): R6's
+#     _install_submission_guard/_composed_live_census each swallowed ANY
+#     exception from their evaluate() call and proceeded as if nothing were
+#     wrong. R7 fails closed at both boundaries — an exception now raises
+#     ManualStepRequired rather than being treated as "zero findings"/"guard
+#     not needed". This also converts attack C2 (a closed shadow root with
+#     ZERO external light-DOM signal — a genuine browser-platform read
+#     limit) into a safe refusal, via an attachShadow-interception marker
+#     that gives the host's own EXISTENCE (never its content) an honest
+#     signal the pre-existing _unclassifiable_controls backstop can flag.
+#
+#     Attack A is a structural ceiling, not a correctness defect: a required
+#     control created strictly INSIDE the form's own TARGET-phase 'onsubmit'
+#     handler is invisible to a CAPTURE-phase-only guard by DOM spec. A new
+#     BUBBLE-phase 'submit' listener (fires AFTER the target's own handler)
+#     narrows this — a field the handler reveals and LEAVES IN THE DOM is
+#     now caught (test 12e). What it cannot close, and does not claim to: a
+#     handler that reveals the field and, in that SAME synchronous
+#     execution, fires an outbound request and/or removes the field again
+#     before returning (test 12f, the honestly-recorded residual).
+# ---------------------------------------------------------------------------
+
+_GUARD_INSTALL_EXCEPTION_FORM = """
+<title>mousedown-reveal-plus-addeventlistener-poison</title>
+<script>
+  // Poison ONLY document.addEventListener (an own-property override shadows
+  // the inherited EventTarget.prototype method for calls made specifically
+  // as `document.addEventListener(...)` -- exactly the calls R6/R7's own
+  // guard-install JS makes). Element-level addEventListener (used below for
+  // the submit button's own mousedown listener) is untouched.
+  document.addEventListener = function () {
+    throw new Error('hostile page: document.addEventListener is unavailable');
+  };
+</script>
+<form onsubmit="event.preventDefault();
+    document.body.innerHTML = '<h1>Thank you for applying</h1>';">
+  <div data-field-path="name">
+    <label class="_required_abc123">Full name</label>
+    <input id="name" name="name" type="text">
+  </div>
+  <button id="submit-btn" type="submit">Submit Application</button>
+</form>
+<script>
+  document.getElementById('submit-btn').addEventListener('mousedown', function () {
+    if (document.getElementById('late_reveal')) { return; }
+    var input = document.createElement('input');
+    input.type = 'text';
+    input.id = 'late_reveal';
+    input.setAttribute('aria-required', 'true');
+    var label = document.createElement('label');
+    label.setAttribute('for', 'late_reveal');
+    label.textContent = 'Late reveal question';
+    document.querySelector('form').appendChild(label);
+    document.querySelector('form').appendChild(input);
+  });
+</script>
+"""
+
+
+def test_live_submitter_refuses_when_the_guards_own_installation_throws(
+    tmp_path,
+) -> None:
+    """THE R6->R7 ADVERSARIAL-REVIEW BREAK (attack B), ported exactly from
+    adversarial/attackB_guard_install_exception.py: document.
+    addEventListener poisoned as an OWN property (an unaffected Element-
+    level addEventListener still lets the page's own mousedown listener
+    register normally) makes _install_submission_guard's own
+    document.addEventListener(...) calls throw, uncaught inside the page's
+    JS. On the unfixed R6 branch the bare `except Exception: pass` swallowed
+    this and the mousedown-revealed required field (attack #7's exact
+    construction) was submitted over, empty, unverified. R7 fails closed: an
+    exception during the guard's own installation must now refuse rather
+    than proceed with an unguarded click."""
+    from app.services.apply_executor import playwright_form_submitter
+
+    with pytest.raises(ManualStepRequired) as exc_info:
+        playwright_form_submitter(
+            application_id="sub005r7-guard-install-exception",
+            channel="ashby",
+            page_html="",
+            apply_url=_data_url(_GUARD_INSTALL_EXCEPTION_FORM),
+            plan=_name_only_plan(),
+            resume_pdf_bytes=b"%PDF-1.4 fake",
+            cover_letter_text="Dear Hiring Manager,",
+            evidence_dir=str(tmp_path),
+            profile={},
+            answer_bank=None,
+        )
+    err = exc_info.value
+    assert err.reason == "guard_install_failed"
+
+
+_CENSUS_THROWS_FORM = """
+<title>shadow-dom-census-throws</title>
+<script>
+  // Poison Element.prototype.getAttribute to throw the FIRST time it is
+  // asked for the census's own marker attribute -- reached only after the
+  // required-and-uncommitted classification logic has already run for that
+  // node, so this targets the census's own bookkeeping write, not merely a
+  // required-check read.
+  const _origGetAttribute = Element.prototype.getAttribute;
+  Element.prototype.getAttribute = function (name) {
+    if (name === 'data-aether-live-field') {
+      throw new Error('hostile page: getAttribute is unavailable for this name');
+    }
+    return _origGetAttribute.call(this, name);
+  };
+</script>
+<form onsubmit="event.preventDefault();
+    document.body.innerHTML = '<h1>Thank you for applying</h1>';">
+  <div data-field-path="name">
+    <label class="_required_abc123">Full name</label>
+    <input id="name" name="name" type="text">
+  </div>
+  <x-legal-consent></x-legal-consent>
+  <button type="submit">Submit Application</button>
+</form>
+<script>
+  class LegalConsent extends HTMLElement {
+    connectedCallback() {
+      const shadow = this.attachShadow({mode: 'open'});
+      shadow.innerHTML =
+        '<label>I agree to the background-check policy (required)</label>' +
+        '<input type="text" aria-required="true">';
+    }
+  }
+  customElements.define('x-legal-consent', LegalConsent);
+</script>
+"""
+
+
+def test_live_submitter_refuses_when_the_composed_census_itself_throws(
+    tmp_path,
+) -> None:
+    """THE R6->R7 ADVERSARIAL-REVIEW BREAK (attack F), ported exactly from
+    adversarial/attackF_composed_census_throws.py: Element.prototype.
+    getAttribute poisoned to throw specifically for the census's own marker
+    attribute name against attack #6's exact open-shadow-DOM construction.
+    window.__aetherComposedCensus() itself throws (not merely the per-node
+    walk() helper, which already guards its own querySelectorAll call). On
+    the unfixed R6 branch the bare `except Exception: return []` swallowed
+    this and silently reported zero results, reverting the shadow-DOM field
+    to fully invisible again at both the convergence AND click-time census
+    calls. R7 fails closed: an exception from the census must now refuse
+    rather than be treated as 'nothing found'."""
+    from app.services.apply_executor import playwright_form_submitter
+
+    with pytest.raises(ManualStepRequired) as exc_info:
+        playwright_form_submitter(
+            application_id="sub005r7-census-throws",
+            channel="ashby",
+            page_html="",
+            apply_url=_data_url(_CENSUS_THROWS_FORM),
+            plan=_name_only_plan(),
+            resume_pdf_bytes=b"%PDF-1.4 fake",
+            cover_letter_text="Dear Hiring Manager,",
+            evidence_dir=str(tmp_path),
+            profile={},
+            answer_bank=None,
+        )
+    err = exc_info.value
+    assert err.reason == "census_unavailable"
+
+
+_CLOSED_SHADOW_NO_SIGNAL_FORM = """
+<title>closed-shadow-unconditional-success</title>
+<form onsubmit="event.preventDefault();
+    document.body.innerHTML = '<h1>Thank you for applying</h1>';">
+  <div data-field-path="name">
+    <label class="_required_abc123">Full name</label>
+    <input id="name" name="name" type="text">
+  </div>
+  <x-closed-consent></x-closed-consent>
+  <button type="submit">Submit Application</button>
+</form>
+<script>
+  class ClosedConsent extends HTMLElement {
+    connectedCallback() {
+      const shadow = this.attachShadow({mode: 'closed'});
+      shadow.innerHTML =
+        '<label>I agree to the background-check policy (required)</label>' +
+        '<input type="text" aria-required="true">';
+    }
+  }
+  customElements.define('x-closed-consent', ClosedConsent);
+</script>
+"""
+
+
+def test_live_submitter_refuses_a_closed_shadow_root_with_zero_external_signal(
+    tmp_path,
+) -> None:
+    """THE R6->R7 ADVERSARIAL-REVIEW BREAK (attack C2), ported exactly from
+    adversarial/attackC2_closed_shadow_unconditional_success.py: a required
+    control living entirely inside a CLOSED shadow root, on a host with no
+    role/aria-required/contenteditable of its own, is genuinely unreadable
+    by ANY web API — element.shadowRoot returns null for every external
+    accessor, including this codebase's own composed census. On the unfixed
+    R6 branch this returned submitted:true, confirmation:"Thank you for
+    applying", filled:["name"] — the closed-shadow field was never seen,
+    never attempted, never verified. R7's attachShadow-interception marker
+    (installed via page.add_init_script, armed before ANY page script runs)
+    gives the host's own EXISTENCE — never its content, which stays
+    genuinely unreadable, a real browser-platform limit — an honest, page-
+    JS-independent signal for the pre-existing _unclassifiable_controls
+    backstop to flag, so the submission refuses rather than guesses."""
+    from app.services.apply_executor import playwright_form_submitter
+
+    with pytest.raises(ManualStepRequired) as exc_info:
+        playwright_form_submitter(
+            application_id="sub005r7-closed-shadow-no-signal",
+            channel="ashby",
+            page_html="",
+            apply_url=_data_url(_CLOSED_SHADOW_NO_SIGNAL_FORM),
+            plan=_name_only_plan(),
+            resume_pdf_bytes=b"%PDF-1.4 fake",
+            cover_letter_text="Dear Hiring Manager,",
+            evidence_dir=str(tmp_path),
+            profile={},
+            answer_bank=None,
+        )
+    err = exc_info.value
+    assert err.reason == "unverifiable_form_surface"
+    assert err.question is not None and "closed shadow" in err.question.lower()
+
+
+_SUBMIT_HANDLER_REVEAL_NATIVE_FORM = """
+<title>submit-handler-reveal-native</title>
+<form onsubmit="
+    if (!document.getElementById('late_in_submit')) {
+      var label = document.createElement('label');
+      label.setAttribute('for', 'late_in_submit');
+      label.textContent = 'Consent (revealed inside the submit handler)';
+      var input = document.createElement('input');
+      input.type = 'text';
+      input.id = 'late_in_submit';
+      input.setAttribute('aria-required', 'true');
+      document.querySelector('form').appendChild(label);
+      document.querySelector('form').appendChild(input);
+    }">
+  <div data-field-path="name">
+    <label class="_required_abc123">Full name</label>
+    <input id="name" name="name" type="text">
+  </div>
+  <button id="submit-btn" type="submit">Submit Application</button>
+</form>
+"""
+
+
+def test_live_submitter_never_submits_over_a_field_revealed_inside_the_forms_own_submit_handler(
+    tmp_path,
+) -> None:
+    """CLI-SUB-005-R7 bubble-phase closure of attack A for a genuinely
+    NATIVE submit: the form's own 'onsubmit' handler reveals a brand-new
+    required field and does NOT call preventDefault() itself, relying on the
+    browser's own native default action (or, here, on Aether's own guard) to
+    decide whether the submission proceeds — deliberately distinct from
+    _SUBMIT_HANDLER_REVEAL_SYNC_FETCH_FORM below, which fakes success and
+    destroys the field within the SAME synchronous handler. R6's capture-
+    phase-only guard runs BEFORE the event ever reaches the target (DOM
+    spec), so it cannot see this field; R7's new BUBBLE-phase 'submit'
+    listener runs AFTER the target's own handler completes, sees the field
+    still present in the DOM, and cancels the submission itself — the exact
+    case 05-decision-memos/SUB-005-and-COV-3-rulings.md's R7 ruling names as
+    the one attack-A construction the bubble-phase check DOES close."""
+    from app.services.apply_executor import playwright_form_submitter
+
+    with pytest.raises(ManualStepRequired) as exc_info:
+        playwright_form_submitter(
+            application_id="sub005r7-submit-handler-reveal-native",
+            channel="ashby",
+            page_html="",
+            apply_url=_data_url(_SUBMIT_HANDLER_REVEAL_NATIVE_FORM),
+            plan=_name_only_plan(),
+            resume_pdf_bytes=b"%PDF-1.4 fake",
+            cover_letter_text="Dear Hiring Manager,",
+            evidence_dir=str(tmp_path),
+            profile={},
+            answer_bank=None,
+        )
+    err = exc_info.value
+    assert err.reason == "unplanned_required_field"
+    assert err.question is not None and "consent" in err.question.lower()
+
+
+_SUBMIT_HANDLER_REVEAL_SYNC_FETCH_FORM = """
+<title>submit-handler-reveal-synchronous-fetch</title>
+<form onsubmit="event.preventDefault();
+    if (!document.getElementById('late_in_submit')) {
+      var label = document.createElement('label');
+      label.setAttribute('for', 'late_in_submit');
+      label.textContent = 'Consent (revealed inside the submit handler)';
+      var input = document.createElement('input');
+      input.type = 'text';
+      input.id = 'late_in_submit';
+      input.setAttribute('aria-required', 'true');
+      document.querySelector('form').appendChild(label);
+      document.querySelector('form').appendChild(input);
+    }
+    // A synchronous-style outbound submission fired INSIDE the same target-
+    // phase handler that revealed the field (a self-contained data: URL
+    // target -- zero real network egress -- purely to prove the ORDERING
+    // property deterministically in a sandboxed test) followed by an
+    // OPTIMISTIC success DOM replacement, both synchronous, both complete
+    // (destroying the just-created field along with the rest of the form)
+    // before ANY subsequent listener -- capture OR bubble -- gets a chance
+    // to run.
+    fetch('data:text/plain,submitted');
+    document.body.innerHTML = '<h1>Thank you for applying</h1>';">
+  <div data-field-path="name">
+    <label class="_required_abc123">Full name</label>
+    <input id="name" name="name" type="text">
+  </div>
+  <button id="submit-btn" type="submit">Submit Application</button>
+</form>
+"""
+
+
+def test_live_submitter_records_the_honest_synchronous_submission_ceiling_for_attack_a(
+    tmp_path,
+) -> None:
+    """CLI-SUB-005-R7 — the irreducible residual, recorded HONESTLY rather
+    than claimed closed: a required field revealed inside the form's own
+    'onsubmit' handler, where that SAME synchronous handler also fires an
+    outbound request and replaces the DOM (destroying the field) before
+    returning, is invisible to R7's new bubble-phase check too — bubble
+    phase runs AFTER the target handler has ALREADY completed, by which
+    point the field no longer exists to be seen, and the "success" DOM state
+    is already showing. This is the ABSOLUTE stop
+    05-decision-memos/SUB-005-and-COV-3-rulings.md's R7 ruling names: "if it
+    still finds a silent submit, it can only be the pure attack-A ceiling
+    (field created at the submit instant), which is irreducible for any
+    pre-submit guard" — no client-side event-listener ordering can guarantee
+    seeing, or undoing, a same-handler side effect that completes before
+    control ever returns to the browser's own event-dispatch machinery. This
+    test asserts the HONEST limit — the field is genuinely unfilled and the
+    outcome genuinely reports submitted — never a false green pretending
+    this is closed. PH0-PAUSE-1 (auto-apply OFF) is the production guarantee
+    against this residual, not this code path."""
+    from app.services.apply_executor import playwright_form_submitter
+
+    outcome = playwright_form_submitter(
+        application_id="sub005r7-submit-handler-reveal-sync-fetch",
+        channel="ashby",
+        page_html="",
+        apply_url=_data_url(_SUBMIT_HANDLER_REVEAL_SYNC_FETCH_FORM),
+        plan=_name_only_plan(),
+        resume_pdf_bytes=b"%PDF-1.4 fake",
+        cover_letter_text="Dear Hiring Manager,",
+        evidence_dir=str(tmp_path),
+        profile={},
+        answer_bank=None,
+    )
+    assert outcome["submitted"] is True
+    assert outcome["confirmation"] and "thank you" in str(outcome["confirmation"]).lower()
+    assert "late_in_submit" not in outcome["filled"]

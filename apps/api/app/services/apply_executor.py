@@ -1934,6 +1934,53 @@ def _resolve_unplanned_required_fields(
 # raises an honest ManualStepRequired, never a silent submit.
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# CLI-SUB-005-R7 — FAIL CLOSED at every verification boundary, plus a
+# BUBBLE-PHASE re-check. RUN-20260818T0223Z/SUB-005-R6/08-adversarial-
+# final.md FAILed R6 on three silent submits over an empty required field
+# (05-decision-memos/SUB-005-and-COV-3-rulings.md, "SUB-005 R6 outcome + R7
+# ruling"), which split into two distinct classes:
+#
+# (1) attacks B and F — REAL correctness defects, not exotic-DOM cat-and-
+#     mouse: `_install_submission_guard` and `_composed_live_census` each
+#     wrapped their `evaluate()` call in a bare `except Exception:
+#     pass`/`return []` — an exception on EITHER (attack B: guard install
+#     poisoned via `document.addEventListener`; attack F: the census
+#     function itself poisoned via `Element.prototype.getAttribute`)
+#     resolved to "proceed as if nothing were wrong", i.e. FAIL OPEN — a
+#     direct violation of this repo's own NON-NEGOTIABLE-CONSTRAINTS (no
+#     masked errors producing false-positive success). Both now FAIL CLOSED:
+#     an exception raises ManualStepRequired rather than being swallowed —
+#     the invariant this makes hold: the ONLY way a submission ever
+#     completes is a census that ran to completion AND reported zero
+#     uncommitted required fields; any inability to run it refuses. This
+#     also converts attack C2 (a closed shadow root with zero external
+#     light-DOM signal) from a silent submit into a safe refusal —
+#     :data:`_CLOSED_SHADOW_MARKER_INIT_JS` gives the otherwise-genuinely-
+#     invisible closed shadow root an honest, page-JS-independent signal of
+#     its own EXISTENCE (never its content, which stays genuinely
+#     unreadable — a real browser-platform limit) for the pre-existing
+#     :func:`_unclassifiable_controls` backstop to flag.
+# (2) attack A — a structural ceiling, not a correctness defect: a required
+#     control created strictly INSIDE the form's own TARGET-phase `onsubmit`
+#     handler is invisible to a CAPTURE-phase-only guard by DOM event-
+#     ordering spec (capture always completes before the event ever reaches
+#     the target). A BUBBLE-phase 'submit' listener — which fires AFTER the
+#     target's own handler has run — narrows this: a field the handler
+#     reveals and LEAVES IN THE DOM is now caught. What it cannot close: a
+#     handler that reveals the field and, in that SAME synchronous
+#     execution, either fires an outbound request (`fetch()`/XHR — a
+#     completely ordinary way modern SPA-style ATS forms implement "submit")
+#     or removes the field from the DOM again before returning — by the time
+#     ANY listener on an ancestor node gets to run, that JS has already
+#     executed and, in the fetch/XHR case, may have already reached the
+#     employer. This is honestly recorded as an irreducible residual (a
+#     pinned regression test asserting the limit precisely), never claimed
+#     closed — no client-side event-listener ordering can guarantee seeing,
+#     or undoing, a same-handler side effect that completes before control
+#     ever returns to the browser's own event-dispatch machinery.
+# ---------------------------------------------------------------------------
+
 # Walks `document` plus every OPEN shadow root reachable from it, recursively,
 # and defines `window.__aetherComposedCensus()` (idempotent: a no-op if
 # already installed on THIS document — a navigation/reload replaces the
@@ -2083,14 +2130,31 @@ _COMPOSED_CENSUS_SETUP_JS = r"""
 _COMPOSED_CENSUS_CALL_JS = "() => window.__aetherComposedCensus()"
 
 # Idempotent (per document): ensures the composed census is installed, then
-# installs a CAPTURE-PHASE 'submit' listener and a capture-phase 'click'
-# listener scoped to submit-shaped controls (the same selector shapes
+# installs a CAPTURE-PHASE 'submit' listener, a BUBBLE-PHASE 'submit'
+# listener (CLI-SUB-005-R7 — see the module note above), and a capture-phase
+# 'click' listener scoped to submit-shaped controls (the same selector shapes
 # :func:`_activate_submit` targets). Capture phase at `document` runs BEFORE
 # the event reaches the form/button at all — before any page-authored
 # handler, before the browser's own default action (the actual form
 # submission) — so a `preventDefault`+`stopImmediatePropagation` here reliably
 # stops the submission from ever happening, regardless of what the page's own
-# JS does at, or after, that point.
+# JS does at, or after, that point. The bubble-phase listener on the SAME
+# event runs AFTER the target's own handler has already executed — see
+# `guard`'s own re-use below — the two together are what root-cause 2's
+# module note calls "guarding the submission event itself", now at BOTH ends
+# of the target phase rather than only before it.
+#
+# CLI-SUB-005-R7 (adversarial FAIL, RUN-20260818T0223Z/SUB-005-R6/08-
+# adversarial-final.md, attack F): `guard`'s own `catch (e) { return; }`
+# around `window.__aetherComposedCensus()` was the SAME fail-open shape as
+# the Python-side wrappers, one layer deeper — a page that makes the census
+# function itself throw defeated the click-time re-check silently, in-
+# browser, even though Python's own `_composed_live_census` (used only
+# during pre-click convergence) independently closes the SAME poison earlier
+# in the flow. FAIL CLOSED here too, for defense in depth against a poison
+# that activates only at click/submit time rather than during convergence:
+# an exception from the census IS treated as an uncommitted required field
+# (a synthetic `census_unavailable` entry), never as "nothing to report".
 _SUBMIT_GUARD_INSTALL_JS = (
     "() => {\n"
     "  (" + _COMPOSED_CENSUS_SETUP_JS.strip() + ")();\n"
@@ -2104,9 +2168,14 @@ _SUBMIT_GUARD_INSTALL_JS = (
     "    return false;\n"
     "  }\n"
     "  function guard(event) {\n"
-    "    let census;\n"
-    "    try { census = window.__aetherComposedCensus(); } catch (e) { return; }\n"
-    "    const bad = (census || []).filter(function (c) { return c.required && !c.committed; });\n"
+    "    let census = null;\n"
+    "    let censusFailed = false;\n"
+    "    try { census = window.__aetherComposedCensus(); }\n"
+    "    catch (e) { censusFailed = true; }\n"
+    "    const bad = censusFailed\n"
+    "      ? [{ required: true, committed: false, kind: 'census_unavailable',\n"
+    "           label: 'this page could not be verified at the instant of submitting' }]\n"
+    "      : (census || []).filter(function (c) { return c.required && !c.committed; });\n"
     "    if (bad.length) {\n"
     "      window.__aetherBlockedSubmit = bad;\n"
     "      event.preventDefault();\n"
@@ -2114,6 +2183,7 @@ _SUBMIT_GUARD_INSTALL_JS = (
     "    }\n"
     "  }\n"
     "  document.addEventListener('submit', guard, true);\n"
+    "  document.addEventListener('submit', guard, false);\n"
     "  document.addEventListener('click', function (event) {\n"
     "    if (!isSubmitControl(event.target)) { return; }\n"
     "    guard(event);\n"
@@ -2124,22 +2194,95 @@ _SUBMIT_GUARD_INSTALL_JS = (
 
 _READ_BLOCKED_SUBMIT_JS = "() => window.__aetherBlockedSubmit || null"
 
+# CLI-SUB-005-R7 (attack C2) — a CLOSED shadow root's CONTENT is unreadable
+# by any web API, by design: `element.shadowRoot` returns `null` for every
+# external accessor, including this codebase's own composed census, for a
+# host that carries no OTHER external signal (no role/aria-required/
+# contenteditable) — a genuine browser-platform limit, not a gap left open
+# by choice. Its EXISTENCE, however, is detectable, cheaply and honestly, by
+# intercepting the one call that ever creates one:
+# `Element.prototype.attachShadow`. Installed via Playwright's
+# `page.add_init_script` — the one hook that runs BEFORE any script on a
+# newly created document, including the page's own `customElements.define
+# (...)` — so this is armed before ANY custom element's `connectedCallback`
+# (where a shadow root is normally attached) ever runs, for the top document
+# and every child frame alike (`add_init_script` applies to both). The
+# marker it writes lives on the HOST element, in the LIGHT DOM — never
+# inside the closed root itself — so it is fully visible to
+# ``page.content()``'s ordinary string serialization; :func:`
+# _unclassifiable_controls` flags it exactly like any other unclassifiable
+# control, and the pre-existing :func:`_verify_no_unverifiable_form_surface`
+# backstop refuses rather than guesses. An OPEN shadow root (``mode`` is
+# always checked, never assumed) is left completely untouched — this must
+# never regress attack #6/E's own open-shadow resolution.
+_CLOSED_SHADOW_MARKER_INIT_JS = r"""
+(() => {
+  if (!window.Element || !Element.prototype.attachShadow) { return; }
+  const original = Element.prototype.attachShadow;
+  Element.prototype.attachShadow = function (init) {
+    const root = original.call(this, init);
+    try {
+      if (!init || init.mode !== 'open') {
+        this.setAttribute('data-aether-closed-shadow-host', 'true');
+      }
+    } catch (e) {
+      // Marking failed -- the shadow root itself is returned either way;
+      // only OUR OWN bookkeeping attribute is at risk here, never the
+      // page's own behaviour.
+    }
+    return root;
+  };
+})();
+"""
+
 
 def _composed_live_census(root: Any) -> list[dict[str, Any]]:
     """Every REQUIRED control the LIVE composed DOM tree of ``root`` (the top
     document, or one Playwright frame) holds RIGHT NOW — light DOM plus every
     open shadow root, walked recursively — with its committed state read at
-    THIS instant. See :data:`_COMPOSED_CENSUS_SETUP_JS`. A root this cannot
-    read (no ``evaluate`` at all — this repo's own unit-test fakes predate
-    frame/JS-eval support, or a genuinely dead page) reports zero controls
-    rather than erroring: there is nothing beyond what the existing
-    parser-based census already covers for it to add.
+    THIS instant. See :data:`_COMPOSED_CENSUS_SETUP_JS`.
+
+    CLI-SUB-005-R7 (adversarial FAIL,
+    RUN-20260818T0223Z/SUB-005-R6/08-adversarial-final.md, attack F): the
+    previous revision of this function caught ANY exception from either
+    ``evaluate()`` call — including ``window.__aetherComposedCensus()``
+    itself throwing, not merely an unreadable root — and returned ``[]``,
+    which :func:`_uncommitted_live_required_fields` and the in-page
+    click-time guard both then treated as "nothing required is uncommitted
+    here". A page that makes the census function itself throw (attack F:
+    ``Element.prototype.getAttribute`` poisoned for the census's own marker
+    attribute) silently reverted an otherwise-closed shadow-DOM field to
+    fully invisible, at both the point it feeds convergence AND the point
+    the click-time guard re-checks it — the exact fail-OPEN shape
+    05-decision-memos/SUB-005-and-COV-3-rulings.md's R7 ruling names: "an
+    exception ... resolves to 'proceed as if nothing were wrong,' not
+    'refuse'". FAIL CLOSED now: an exception from a root that CAN run JS at
+    all raises :class:`ManualStepRequired` — never a silent zero-results
+    return — so the ONLY way a submission ever completes is a census that
+    ran to completion and reported nothing required-and-uncommitted.
+
+    The ONE exception this still does not raise on is a root with no
+    ``evaluate`` at all (``hasattr`` false, checked BEFORE any call, never
+    from a caught exception) — this repo's own unit-test fakes predate
+    frame/JS-eval support entirely, a fact about the Python object Aether
+    itself constructed, not something page-authored JS running inside a real
+    browser could ever influence or poison. There is nothing beyond what the
+    existing parser-based census already covers for such a root to add.
     """
+    if not hasattr(root, "evaluate"):
+        return []
     try:
         root.evaluate(_COMPOSED_CENSUS_SETUP_JS)
         result = root.evaluate(_COMPOSED_CENSUS_CALL_JS)
-    except Exception:  # noqa: BLE001 — an unreadable/uneval-able root adds nothing
-        return []
+    except Exception as exc:  # CLI-SUB-005-R7 — FAIL CLOSED (was: return [])
+        raise ManualStepRequired(
+            "census_unavailable",
+            (
+                "Aether could not verify this application's fields — its "
+                "own in-page check failed to run — so nothing was "
+                "submitted. Open the posting and finish it yourself."
+            ),
+        ) from exc
     return list(result or [])
 
 
@@ -2164,26 +2307,68 @@ def _live_census_kind(raw_kind: str) -> str:
 
 def _install_submission_guard(root: Any) -> None:
     """CLI-SUB-005-R6 root cause 2 — see the module note above. Installs the
-    capture-phase submission guard on ``root`` (idempotent). The ONLY DOM
-    mutation this performs is adding an event listener (plus, if the guard
-    ever fires, an inert ``data-aether-live-field`` marker attribute already
-    added by the census itself during convergence) — it can never reveal,
-    hide, or answer anything, so it does not violate the "no mutation
-    between convergence's return and the submit click" invariant the call
-    site documents; it is what CLOSES that invariant's remaining gap.
+    capture-phase AND bubble-phase submission guard on ``root`` (idempotent).
+    The ONLY DOM mutation this performs is adding event listeners (plus, if
+    the guard ever fires, an inert ``data-aether-live-field`` marker
+    attribute already added by the census itself during convergence) — it
+    can never reveal, hide, or answer anything, so it does not violate the
+    "no mutation between convergence's return and the submit click"
+    invariant the call site documents; it is what CLOSES that invariant's
+    remaining gap.
+
+    CLI-SUB-005-R7 (adversarial FAIL,
+    RUN-20260818T0223Z/SUB-005-R6/08-adversarial-final.md, attack B): the
+    previous revision caught ANY exception from ``root.evaluate(...)`` and
+    silently passed — the comment's own justification ("an unreadable root
+    cannot submit anything either") is true for a genuinely DEAD page but
+    false for a LIVE one whose ``document.addEventListener`` has specifically
+    been shadowed (attack B): the page stays fully alive, fully clickable,
+    fully able to submit — only Aether's OWN instrumentation call failed,
+    leaving the click completely unguarded. FAIL CLOSED now: an exception
+    from a root that CAN run JS at all raises :class:`ManualStepRequired`
+    rather than letting an unguarded click through.
+
+    Same ``hasattr`` carve-out as :func:`_composed_live_census`, for the
+    identical reason: a root with no ``evaluate`` at all is a fact about the
+    Python object itself, never something page-authored JS could influence.
     """
+    if not hasattr(root, "evaluate"):
+        return
     try:
         root.evaluate(_SUBMIT_GUARD_INSTALL_JS)
-    except Exception:  # noqa: BLE001 — an unreadable root cannot submit anything either
-        pass
+    except Exception as exc:  # CLI-SUB-005-R7 — FAIL CLOSED (was: pass)
+        raise ManualStepRequired(
+            "guard_install_failed",
+            (
+                "Aether could not arm its own submission safety check on "
+                "this page, so nothing was submitted. Open the posting and "
+                "finish it yourself."
+            ),
+        ) from exc
 
 
 def _read_blocked_submission(root: Any) -> list[dict[str, Any]] | None:
     """Whatever :data:`_SUBMIT_GUARD_INSTALL_JS` blocked on ``root``'s most
-    recent submit attempt, or ``None`` if nothing was blocked."""
+    recent submit attempt, or ``None`` if nothing was blocked.
+
+    CLI-SUB-005-R7 — deliberately NOT converted to fail-closed like
+    :func:`_composed_live_census`/:func:`_install_submission_guard`: this
+    runs strictly AFTER :func:`_activate_submit`'s click, when a genuinely
+    SUCCESSFUL native submission may have already navigated the page,
+    destroying this exact JS execution context — an entirely ordinary,
+    expected outcome for a well-behaved form, not a hostile-page signal, and
+    raising here would turn every such legitimate success into a false
+    refusal. Safety does not depend on this call succeeding: if the guard
+    truly blocked the submission, its `preventDefault()` means the page
+    never navigated, so this read reliably succeeds; and independent of
+    this function entirely, :func:`_confirmation_signal` downstream still
+    demands PROOF (a real confirmation or a real navigation) before
+    ``submitted`` is ever reported true — a call that fails here can widen
+    who gets asked to double-check, never who gets a silent success.
+    """
     try:
         result = root.evaluate(_READ_BLOCKED_SUBMIT_JS)
-    except Exception:  # noqa: BLE001 — an unreadable root never reports a block
+    except Exception:  # noqa: BLE001 — see docstring: a post-click read, not a verification boundary
         return None
     return list(result) if result else None
 
@@ -2743,6 +2928,22 @@ def _unclassifiable_controls(html: str, channel: str) -> list[str]:
         if not _covered(node):
             _flag(node, "unclassified contenteditable control")
 
+    # CLI-SUB-005-R7 (attack C2) — a host tagged by
+    # :data:`_CLOSED_SHADOW_MARKER_INIT_JS` carries a CLOSED shadow root
+    # whose content no code in this browser process (Aether's, Playwright's,
+    # or the page's own) can ever read — flagged UNCONDITIONALLY, never
+    # gated on `_covered`: even a host whose id/name happens to match an
+    # already-recognized field cannot have that field's FILL verified either,
+    # since verification itself would need to read the same unreadable
+    # content. An open shadow root never carries this marker at all (see the
+    # init script), so this can never fire for attack #6/E's own resolved
+    # construction.
+    for node in soup.find_all(attrs={"data-aether-closed-shadow-host": True}):
+        _flag(
+            node,
+            "a closed shadow root whose content cannot be inspected",
+        )
+
     return findings
 
 
@@ -2904,6 +3105,11 @@ def playwright_form_submitter(
             _renice_browser_tree()
             try:
                 page = browser.new_page(viewport={"width": 1280, "height": 1600})
+                # CLI-SUB-005-R7 (attack C2) — armed BEFORE any navigation, so
+                # it is in place before the page's own scripts (and therefore
+                # any custom element's connectedCallback) ever run. See the
+                # module note above _CLOSED_SHADOW_MARKER_INIT_JS.
+                page.add_init_script(_CLOSED_SHADOW_MARKER_INIT_JS)
                 if apply_url:
                     page.goto(apply_url, wait_until="domcontentloaded", timeout=45000)
                     page.wait_for_timeout(2000)
@@ -3028,6 +3234,27 @@ def playwright_form_submitter(
                         str(item.get("label") or item.get("kind") or "a required field")
                         for item in blocked_submission
                     )
+                    # CLI-SUB-005-R7 — the in-browser guard's own fail-closed
+                    # path (see _SUBMIT_GUARD_INSTALL_JS) reports a census
+                    # that could not run as a synthetic `census_unavailable`
+                    # entry, never a real field — an HONEST, distinct reason
+                    # from a genuine unanswered question.
+                    unverifiable = all(
+                        item.get("kind") == "census_unavailable"
+                        for item in blocked_submission
+                    )
+                    if unverifiable:
+                        raise ManualStepRequired(
+                            "unverifiable_form_surface",
+                            (
+                                "This application's own submit handling "
+                                "could not be verified at the instant of "
+                                "submitting — Aether's browser-level guard "
+                                "refused to let the submission go through "
+                                "rather than guess, so nothing was sent."
+                            ),
+                            question=labels,
+                        )
                     raise ManualStepRequired(
                         "unplanned_required_field",
                         (
