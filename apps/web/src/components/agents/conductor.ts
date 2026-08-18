@@ -196,9 +196,14 @@ export function providerFromModelId(model: string | null | undefined): string | 
 /**
  * The supervisor's LIVE binding, or null when nothing has been read.
  *
- * The catalog row is preferred for the model because it is the model the agent
- * ACTUALLY runs on (the server resolves overrides into it); the AgentConfig
- * row supplies provider + auth mode, which the catalog does not carry.
+ * The catalog row is preferred for the model because it is the model
+ * CONFIGURED for the orchestrator role (the server resolves overrides into
+ * it) — the AgentConfig row supplies provider + auth mode, which the catalog
+ * does not carry. AUD-AGENT-2: this is the role's ASSIGNMENT, not a claim
+ * that a run executes on it — today's sequencing (`_PIPELINE_PLAN`) is a
+ * hardcoded constant and the backend makes no LLM call, so nothing here
+ * "actually runs" this model yet. See {@link supervisorModelChipTitle} for
+ * the honest disclosure shown alongside the chip.
  */
 export function supervisorBinding(
   config: SupervisorConfig | null,
@@ -214,6 +219,26 @@ export function supervisorBinding(
 
 /** Shown in place of a chip when no config/catalog row has resolved yet. */
 export const BINDING_UNREAD_TEXT = "model binding not read yet";
+
+/**
+ * The model chip's tooltip, honest either way (AUD-AGENT-2).
+ *
+ * Mirrors the disclosure the AGENT_CATALOG "orchestration" tip and the
+ * AgentConfigGrid card's tooltip already carry (ML-U1X-b, commit
+ * 63bb47088): the assignment is real and user-switchable, but today's
+ * sequencing is deterministic code, so nothing here EXECUTES on that model
+ * yet. Never "the model this supervisor actually runs on" — that claim is
+ * false by construction (`output.model` is hard-forced to `None` for every
+ * "supervisor" AgentRun row).
+ */
+export function supervisorModelChipTitle(binding: SupervisorBinding | null): string {
+  if (!binding) return "This console has not read the orchestration agent's configuration yet.";
+  return (
+    "The model configured for the orchestrator role — not what a run executes " +
+    "on. Today's sequencing is deterministic (fixed code, no model call), so " +
+    "this assignment costs nothing until a genuine planning call runs on it."
+  );
+}
 
 export interface FallbackLink {
   id: string;
@@ -241,10 +266,22 @@ export const SUPERVISOR_FALLBACK_CHAIN: readonly FallbackLink[] = [
   { id: "google", label: "Google", role: "fallback", note: "on quota or credit exhaustion" },
 ];
 
+/**
+ * AUD-AGENT-2: this chain is CONFIGURATION, not a live mechanism — today's
+ * sequencing is deterministic (`_PIPELINE_PLAN`, a hardcoded constant) and
+ * the supervisor backend makes no model call, so the chain below cannot
+ * engage on any run yet. Stated here, visibly, rather than only on a
+ * different card's tooltip (the scout-log gap this fixes): the ONE prior
+ * disclosure lived solely on the AgentConfigGrid card (ML-U1X-b), never on
+ * this more prominent Conductor panel.
+ */
 export const FALLBACK_DISCLOSURE =
-  "Fallbacks engage only on a quota or credit exhaustion signal, one attempt at " +
-  "a time, and never silently: the model a run was actually served by is " +
-  "recorded on the run and shown here when it differs.";
+  "Configuration only, currently inert: today's sequencing is deterministic, " +
+  "so the supervisor makes no model call and this chain does not engage on " +
+  "any run. Were it live, fallbacks would apply only on a quota or credit " +
+  "exhaustion signal, one attempt at a time, and never silently: the model a " +
+  "run was actually served by is recorded on the run and shown here when it " +
+  "differs.";
 
 export interface FallbackEngagement {
   requestedModel: string;

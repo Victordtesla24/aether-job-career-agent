@@ -52,6 +52,7 @@ import {
   planRunView,
   runEverythingLabel,
   supervisorBinding,
+  supervisorModelChipTitle,
   type PlanCard,
   type SupervisorCatalogAgent,
   type SupervisorConfig,
@@ -209,11 +210,7 @@ export default function ConductorBand({
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <span
             data-testid="conductor-model-chip"
-            title={
-              binding
-                ? "The model and credential this supervisor actually runs on, from its own configuration"
-                : "This console has not read the orchestration agent's configuration yet"
-            }
+            title={supervisorModelChipTitle(binding)}
             className="inline-flex min-w-0 max-w-full items-center gap-2 rounded-md border border-hairline-strong bg-surface-1 px-2.5 py-1.5 text-[11.5px]"
           >
             <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-state-ok" aria-hidden="true" />
