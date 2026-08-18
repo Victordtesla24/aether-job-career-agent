@@ -1054,3 +1054,17 @@ Rules of engagement unchanged: locks (git/deploy/test), runbook deploys, append-
 **ADM-009 (2026-08-18T04:30Z):** live prod `"User"."agentConfig"` column default is `'{"autoApply": false, "approvalGate": true, "matchThreshold": 80}'::jsonb` with no migration file (read-only `information_schema` + `pg_get_expr` this session; 0 NULL rows, 2 of 3 users at 80). Settings display and `GET /settings` already default to 80. Code fallback was 50 — a missing key would auto-submit 50–79 while the slider showed 80. Reconcile all three to 80: `DEFAULT_MATCH_THRESHOLD` in `application_submission.py` + Settings client, `DEFAULT_AGENT_CONFIG_JSON` owned by `ensure_user_profile_columns`, `workspaces._build_settings` imports the same constant. Does not flip auto-apply, does not rewrite stored user values.
 
 **Deploy:** push `main` → VPS Delivery. No hand-restart of prod units. No leftover branch or PR for this session.
+
+---
+
+## SESSION ORCH-RUN-20260818T0223Z — DEPLOY WINDOW — batch-1 integration push
+
+**By:** DEPLOYER agent, isolated worktree `.claude/worktrees/agent-ae46e55256f3ae7c7`, branch `integration/wave-01`.
+
+**Batch-1 content merged (in order, `origin/main` base):** TEST-PAR-1 (`origin/fix/test-par-1`) · local `main` 6d31f43d (3 guardian-ops commits + R5 git-ignore fix, byte-identical to `origin/main`'s `b405c40e`) · SUITE-RED 26-fix baseline (`lane/suite-red-baseline`) · SUB-006/007/010 (`origin/fix/ledger-r2-submission`) · AUD-COV-2 fit gate + STORM-1 + RT-007 tests (`origin/fix/ledger-r1-integrity`) · RT-007 sender guard (`origin/cli/ui-overlap-fixes`) · AUD-TAILOR-1 (`lane/aud-tailor-1`) · AUD-MON-1-R2 (`lane/aud-mon-1-r2`) · SUB-008-R2 (`lane/sub-008-r2`) · w01-redfix (`lane/w01-redfix`, 8 test-fixture fixes for the live `matchThreshold:80` schema default) · `origin/main` deltas merged during the integration window through commits f9b8d5bc and 74e7b471 (ORCH-ADV plan-driven pipeline loop, AUD-UX-1 matchThreshold reconciliation, StoryEntry citation retarget, guardian-ops dedup, sales/networking/branding fixes) plus 2 coordinator-authorized intent-preserving test updates tracking AUD-UX-1's 50→80 fallback change (`test_cov2_generation_fit_gate.py`, `test_mv_resume_studio.py`, `test_pipeline.py`).
+
+**NOT in this batch (batch 2, excluded per orchestrator instruction — pre-merge adversarial reviews still running):** `lane/sub-005-r2`, `lane/aud-cov-1`, `lane/sub-011`. **Also NOT in this batch:** AUD-AGENT-3's `AETHER_AGI_DIRECTIVES_ENABLED` prod env flag and AUD-ECON-2's `AETHER_MODEL_REASONING` pin — both ship with batch 2, not this push.
+
+**Verification:** full Python battery (4914 tests) ran clean-except-8 pre-existing-conflict failures, all 8 resolved by `lane/w01-redfix` + 2 coordinator-authorized post-delta test fixes (see `docs/delivery/evidence/RUN-20260818T0223Z/DEPLOY-W01/` for every raw log); JS/TS gate green throughout (lint, type-check, vitest, build); `integrity_guard.py` + `verify_guard_detects.py` both green.
+
+**Deploy:** push `integration/wave-01` → `main` → VPS Delivery (verify → deploy-dev → deploy-test → deploy-prod). No hand-restart of prod units — the pipeline handles it. No leftover branch for this session; source branches are not deleted here (post-verification job owns that per NON-NEGOTIABLE-CONSTRAINTS.md 8b).
