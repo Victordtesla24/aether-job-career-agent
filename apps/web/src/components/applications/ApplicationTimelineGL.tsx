@@ -117,15 +117,23 @@ export default function ApplicationTimelineGL({
   nodes,
   edges,
   rails,
+  hoverId = null,
+  hoverAppId = null,
 }: {
   width: number;
   height: number;
   nodes: TimelineGlNode[];
   edges: TimelineGlEdge[];
   rails: TimelineGlRail[];
+  hoverId?: string | null;
+  hoverAppId?: string | null;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
+  const hoverRef = useRef({ hoverId, hoverAppId });
+  hoverRef.current = { hoverId, hoverAppId };
 
+  // Geometry mount — intentionally ignores hover so the WebGL context is not
+  // destroyed on every mouse move (adversarial P1-3).
   useEffect(() => {
     const host = hostRef.current;
     if (!host || width <= 0 || height <= 0) return;
@@ -229,8 +237,11 @@ export default function ApplicationTimelineGL({
 
     const auras: Array<{
       sprite: THREE.Sprite;
+      ring: THREE.Sprite | null;
       base: number;
-      highlighted: boolean;
+      baseScale: number;
+      nodeId: string;
+      applicationId: string;
     }> = [];
     for (const node of nodes) {
       const material = new THREE.SpriteMaterial({
@@ -239,39 +250,40 @@ export default function ApplicationTimelineGL({
         transparent: true,
         depthWrite: false,
         blending: THREE.AdditiveBlending,
-        opacity: node.highlighted ? 0.55 : node.genesis ? 0.1 : 0.2,
+        opacity: node.genesis ? 0.1 : 0.2,
       });
       disposables.push(material);
       const sprite = new THREE.Sprite(material);
       sprite.position.set(node.x, node.y, 0);
-      const scale = node.highlighted ? 48 : node.genesis ? 20 : 28;
-      sprite.scale.set(scale, scale, 1);
+      const baseScale = node.genesis ? 20 : 28;
+      sprite.scale.set(baseScale, baseScale, 1);
       scene.add(sprite);
+
+      const ringMat = new THREE.SpriteMaterial({
+        map: glow,
+        color: GOLD,
+        transparent: true,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        opacity: 0,
+      });
+      disposables.push(ringMat);
+      const ring = new THREE.Sprite(ringMat);
+      ring.position.set(node.x, node.y, 1);
+      ring.scale.set(64, 64, 1);
+      scene.add(ring);
+
       auras.push({
         sprite,
+        ring,
         base: material.opacity,
-        highlighted: node.highlighted,
+        baseScale,
+        nodeId: node.id,
+        applicationId: node.applicationId,
       });
-
-      if (node.highlighted) {
-        const ringMat = new THREE.SpriteMaterial({
-          map: glow,
-          color: GOLD,
-          transparent: true,
-          depthWrite: false,
-          blending: THREE.AdditiveBlending,
-          opacity: 0.28,
-        });
-        disposables.push(ringMat);
-        const ring = new THREE.Sprite(ringMat);
-        ring.position.set(node.x, node.y, 1);
-        ring.scale.set(64, 64, 1);
-        scene.add(ring);
-        auras.push({ sprite: ring, base: 0.28, highlighted: true });
-      }
     }
 
-    const animated = auras.some((a) => a.highlighted);
+    // Hover brightening focuses on auras (sufficient for P1-3).
     const timeOriginMs = performance.now();
     let raf = 0;
     let running = false;
@@ -279,22 +291,47 @@ export default function ApplicationTimelineGL({
     let onScreen = true;
 
     const draw = () => {
-      const t = (performance.now() - timeOriginMs) / 1000;
+      const now = (performance.now() - timeOriginMs) / 1000;
+      const { hoverId: hid, hoverAppId: haid } = hoverRef.current;
+      let anyHot = false;
       for (const a of auras) {
-        if (!a.highlighted) continue;
+        const hot = hid === a.nodeId || haid === a.applicationId;
         const mat = a.sprite.material as THREE.SpriteMaterial;
-        mat.opacity = a.base * (0.78 + 0.22 * Math.sin(t * 2.1));
+        if (hot) {
+          anyHot = true;
+          const pulse = 0.78 + 0.22 * Math.sin(now * 2.1);
+          mat.opacity = Math.min(0.7, (hid === a.nodeId ? 0.55 : a.base * 1.4) * pulse);
+          a.sprite.scale.set(
+            hid === a.nodeId ? 48 : a.baseScale * 1.15,
+            hid === a.nodeId ? 48 : a.baseScale * 1.15,
+            1,
+          );
+          if (a.ring) {
+            (a.ring.material as THREE.SpriteMaterial).opacity =
+              hid === a.nodeId ? 0.28 * pulse : 0;
+          }
+        } else {
+          mat.opacity = a.base;
+          a.sprite.scale.set(a.baseScale, a.baseScale, 1);
+          if (a.ring) (a.ring.material as THREE.SpriteMaterial).opacity = 0;
+        }
       }
       renderer.render(scene, camera);
+      return anyHot;
     };
 
     const tick = () => {
-      draw();
-      raf = requestAnimationFrame(tick);
+      const hot = draw();
+      if (hot && visible && onScreen) {
+        raf = requestAnimationFrame(tick);
+        running = true;
+      } else {
+        running = false;
+      }
     };
 
     const start = () => {
-      if (running || !animated || !visible || !onScreen) return;
+      if (running || !visible || !onScreen) return;
       running = true;
       raf = requestAnimationFrame(tick);
     };
@@ -314,6 +351,12 @@ export default function ApplicationTimelineGL({
     };
     document.addEventListener("visibilitychange", onVisibility);
 
+    const onHoverKick = () => {
+      draw();
+      start();
+    };
+    host.addEventListener("timeline-gl-hover", onHoverKick);
+
     let io: IntersectionObserver | null = null;
     if (typeof IntersectionObserver !== "undefined") {
       io = new IntersectionObserver(
@@ -330,6 +373,7 @@ export default function ApplicationTimelineGL({
     return () => {
       stop();
       document.removeEventListener("visibilitychange", onVisibility);
+      host.removeEventListener("timeline-gl-hover", onHoverKick);
       io?.disconnect();
       for (const d of disposables) d.dispose();
       scene.clear();
@@ -338,6 +382,15 @@ export default function ApplicationTimelineGL({
       if (canvas.parentNode === host) host.removeChild(canvas);
     };
   }, [width, height, nodes, edges, rails]);
+
+  // Hover-only: kick the parked draw loop without remounting the renderer.
+  useEffect(() => {
+    // The mount effect owns the RAF; poking hoverRef is enough for the next
+    // visibility/start cycle. Force one frame via a custom event on the host.
+    const host = hostRef.current;
+    if (!host) return;
+    host.dispatchEvent(new Event("timeline-gl-hover"));
+  }, [hoverId, hoverAppId]);
 
   return (
     <div

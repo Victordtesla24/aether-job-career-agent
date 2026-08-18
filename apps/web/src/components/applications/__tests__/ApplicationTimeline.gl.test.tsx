@@ -1,18 +1,37 @@
 // @vitest-environment jsdom
 /**
  * GL overlay gating — Three.js must not load under reduced motion / no WebGL.
+ * Hover must not remount the dynamic overlay (adv P1-3).
  */
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../../../hooks/useRenderCapabilities", () => ({
   useRenderCapabilities: vi.fn(),
 }));
 
+const glMounts = { count: 0, lastHover: null as string | null };
+
 vi.mock("next/dynamic", () => ({
   __esModule: true,
   default: () => {
-    const Mock = () => <div data-testid="timeline-gl-mock" />;
+    const { useEffect } = require("react") as typeof import("react");
+    function Mock(props: {
+      hoverId?: string | null;
+      hoverAppId?: string | null;
+    }) {
+      useEffect(() => {
+        glMounts.count += 1;
+      }, []);
+      glMounts.lastHover = props.hoverId ?? null;
+      return (
+        <div
+          data-testid="timeline-gl-mock"
+          data-hover={props.hoverId ?? ""}
+          data-hover-app={props.hoverAppId ?? ""}
+        />
+      );
+    }
     Mock.displayName = "DynamicTimelineGL";
     return Mock;
   },
@@ -62,6 +81,8 @@ const PAYLOAD: TimelinePayload = {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  glMounts.count = 0;
+  glMounts.lastHover = null;
 });
 
 describe("ApplicationTimeline GL gating", () => {
@@ -78,5 +99,24 @@ describe("ApplicationTimeline GL gating", () => {
     render(<ApplicationTimeline payload={PAYLOAD} onOpenDetail={vi.fn()} />);
     expect(screen.queryByTestId("timeline-gl-mock")).toBeNull();
     expect(screen.getByText("Senior Product Owner")).toBeTruthy();
+  });
+
+  it("forwards hover without remounting the GL host (adv P1-3)", async () => {
+    caps.mockReturnValue({ reducedMotion: false, webgl: true, allowGl: true });
+    render(<ApplicationTimeline payload={PAYLOAD} onOpenDetail={vi.fn()} />);
+    await waitFor(() => {
+      expect(screen.getByTestId("timeline-gl-mock")).toBeTruthy();
+    });
+    const mountsAfterFirst = glMounts.count;
+    expect(mountsAfterFirst).toBeGreaterThanOrEqual(1);
+    fireEvent.mouseEnter(screen.getByTestId("timeline-node-e0"));
+    await waitFor(() => {
+      expect(screen.getByTestId("timeline-gl-mock").getAttribute("data-hover")).toBe(
+        "e0",
+      );
+    });
+    // StrictMode may double-invoke; hover must not cause another mount cycle.
+    expect(glMounts.count).toBe(mountsAfterFirst);
+    expect(glMounts.lastHover).toBe("e0");
   });
 });

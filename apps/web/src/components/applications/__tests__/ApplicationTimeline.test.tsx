@@ -3,7 +3,7 @@
  * ApplicationTimeline — DOM contract (SESSION TL-VIZ).
  */
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import ApplicationTimeline from "../ApplicationTimeline";
 import { BACKFILL_SOURCE, type TimelinePayload } from "../timeline-model";
@@ -57,6 +57,12 @@ afterEach(() => {
   cleanup();
 });
 
+beforeAll(() => {
+  // jsdom lacks PointerEvent capture APIs used by the pan handler
+  Element.prototype.setPointerCapture = vi.fn();
+  Element.prototype.releasePointerCapture = vi.fn();
+});
+
 describe("ApplicationTimeline", () => {
   it("renders empty honesty copy with no invented dates", () => {
     render(
@@ -102,5 +108,73 @@ describe("ApplicationTimeline", () => {
     );
     expect(screen.getByTestId("timeline-retry")).toBeTruthy();
     expect(screen.queryByTestId("timeline-lane-app-1")).toBeNull();
+  });
+
+  it("allows vertical scroll when many lanes exceed the viewport (adv P0)", () => {
+    const many: TimelinePayload = {
+      items: Array.from({ length: 14 }, (_, i) => ({
+        application: app({
+          id: `app-${i}`,
+          jobId: `job-${i}`,
+          jobTitle: `Role ${i}`,
+          company: `Co ${i}`,
+        }),
+        events: [
+          {
+            id: `e-${i}`,
+            applicationId: `app-${i}`,
+            fromStatus: null,
+            toStatus: "submitted",
+            at: "2026-07-10T00:00:00Z",
+            source: BACKFILL_SOURCE,
+          },
+        ],
+      })),
+      range: { start: "2026-07-10T00:00:00Z", end: "2026-07-10T00:00:00Z" },
+    };
+    render(<ApplicationTimeline payload={many} onOpenDetail={vi.fn()} />);
+    const scroller = screen.getByTestId("timeline-scroller");
+    expect(scroller.className).toMatch(/overflow-y-auto/);
+  });
+
+  it("insets SVG connectors to match node PAD_X positioning (adv P1)", () => {
+    render(<ApplicationTimeline payload={PAYLOAD} onOpenDetail={vi.fn()} />);
+    const svg = screen.getByTestId("timeline-connectors");
+    expect(svg.getAttribute("style") || "").toMatch(/left:\s*28px/);
+    expect(svg.getAttribute("style") || "").toMatch(/right:\s*28px/);
+  });
+
+  it("suppresses node click after a drag pan (adv P1)", () => {
+    const onOpen = vi.fn();
+    render(<ApplicationTimeline payload={PAYLOAD} onOpenDetail={onOpen} />);
+    const track = screen.getByTestId("timeline-track");
+
+    const dispatchPointer = (
+      type: "pointerdown" | "pointermove" | "pointerup",
+      clientX: number,
+    ) => {
+      const ev = new Event(type, { bubbles: true, cancelable: true }) as Event & {
+        button: number;
+        buttons: number;
+        clientX: number;
+        pointerId: number;
+      };
+      Object.assign(ev, {
+        button: 0,
+        buttons: type === "pointerup" ? 0 : 1,
+        clientX,
+        pointerId: 1,
+      });
+      fireEvent(track, ev);
+    };
+
+    dispatchPointer("pointerdown", 100);
+    dispatchPointer("pointermove", 160);
+    expect(track.getAttribute("style") || "").toMatch(/translateX\(48px\)/);
+    dispatchPointer("pointerup", 160);
+    fireEvent.click(screen.getByTestId("timeline-node-e1"));
+    expect(onOpen).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId("timeline-node-e1"));
+    expect(onOpen).toHaveBeenCalledWith("app-1");
   });
 });

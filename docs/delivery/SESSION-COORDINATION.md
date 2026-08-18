@@ -1182,6 +1182,19 @@ Rules of engagement unchanged: locks (git/deploy/test), runbook deploys, append-
 
 ---
 
+## SESSION TL-VIZ-R3 — 2026-08-18T11:10Z — Timeline adversarial defect close-out
+
+**By:** Cursor Grok session. Continues SESSION TL-VIZ / TL-VIZ-R2 on `feat/tl-viz-r3`. Does not reopen foreign PRs.
+**Why:** Independent adversarial review (FAIL) found P0 vertical clip and P1 WebGL remount-on-hover, SVG/PAD_X misalignment, unbounded pan, and drag→detail click. This session closes those defects only.
+**Scope claimed:**
+- `apps/web/src/components/applications/ApplicationTimeline.tsx`
+- `apps/web/src/components/applications/ApplicationTimelineGL.tsx`
+- Matching vitest under `apps/web/src/components/applications/__tests__/`
+**Does not touch:** Board/Sankey, agents map, profile avatar, email, networking, sales, API timeline contract.
+**Deploy:** push → merge `main` → Hostinger prod (`aether.srv1356245.hstgr.cloud`); delete branch; no standing PR.
+
+---
+
 ## SESSION ADM-ADV — 2026-08-18T11:15Z — Admin portal + Sales AI adversarial close-out (R2)
 
 **By:** Cursor Grok session. Isolated worktree `/root/dev/aether-wt-admin-sales-r2` on `feat/admin-sales-adv` from `origin/main`. Independent GPT-5.5 adversarial review of `/admin` and `/admin/sales-agent` vs production (verdict DO-NOT-SHIP). This session closes every remaining requirement in product code.

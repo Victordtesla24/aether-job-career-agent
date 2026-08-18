@@ -69,11 +69,13 @@ export default function ApplicationTimeline({
   const velocityRef = useRef(0);
   const lastMoveRef = useRef<{ x: number; t: number } | null>(null);
   const inertiaRaf = useRef(0);
-  const dragRef = useRef<{ active: boolean; startX: number; origin: number }>({
+  const dragRef = useRef<{ active: boolean; startX: number; origin: number; moved: boolean }>({
     active: false,
     startX: 0,
     origin: 0,
+    moved: false,
   });
+  const suppressClickRef = useRef(false);
 
   const model = useMemo(() => {
     if (!payload) {
@@ -97,6 +99,8 @@ export default function ApplicationTimeline({
     return () => ro.disconnect();
   }, [model.lanes.length, model.empty]);
 
+  // Hover is applied imperatively inside ApplicationTimelineGL — including it
+  // here would rebuild the WebGL context on every mouse move (adv P1-3).
   const glGeo = useMemo(
     () =>
       buildTimelineGlGeometry(model, {
@@ -104,10 +108,10 @@ export default function ApplicationTimeline({
         labelW: LABEL_W,
         padX: PAD_X,
         laneH: LANE_H,
-        hoverId,
-        hoverAppId,
+        hoverId: null,
+        hoverAppId: null,
       }),
-    [model, glSize.w, hoverId, hoverAppId],
+    [model, glSize.w],
   );
 
   const focusNode = useMemo(() => {
@@ -126,6 +130,18 @@ export default function ApplicationTimeline({
     }
   }, []);
 
+  const clampPan = useCallback((x: number) => {
+    const track = trackRef.current;
+    if (!track) return x;
+    const max = Math.max(0, track.scrollWidth - track.clientWidth);
+    // translateX positive shifts content right; clamp so content stays reachable
+    return Math.min(48, Math.max(-max - 48, x));
+  }, []);
+
+  useEffect(() => {
+    setPanX(0);
+    stopInertia();
+  }, [filter, sort, model.lanes.length, model.range.start, model.range.end, stopInertia]);
   const startInertia = useCallback(() => {
     stopInertia();
     if (reduceMotion || Math.abs(velocityRef.current) < 0.4) return;
@@ -136,66 +152,91 @@ export default function ApplicationTimeline({
         inertiaRaf.current = 0;
         return;
       }
-      setPanX((x) => x + velocityRef.current);
+      setPanX((x) => clampPan(x + velocityRef.current));
       inertiaRaf.current = requestAnimationFrame(step);
     };
     inertiaRaf.current = requestAnimationFrame(step);
-  }, [reduceMotion, stopInertia]);
+  }, [reduceMotion, stopInertia, clampPan]);
 
   useEffect(() => () => stopInertia(), [stopInertia]);
 
+
   const onPointerDown = useCallback(
     (e: React.PointerEvent) => {
-      if (e.button !== 0) return;
+      // button may be undefined on some synthetic PointerEvents; only reject
+      // known non-primary buttons (adv P1 drag→click).
+      if (e.button > 0) return;
       stopInertia();
       velocityRef.current = 0;
+      suppressClickRef.current = false;
       lastMoveRef.current = { x: e.clientX, t: performance.now() };
-      dragRef.current = { active: true, startX: e.clientX, origin: panX };
+      dragRef.current = {
+        active: true,
+        startX: e.clientX,
+        origin: panX,
+        moved: false,
+      };
       (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     },
     [panX, stopInertia],
   );
 
-  const onPointerMove = useCallback((e: React.PointerEvent) => {
-    if (!dragRef.current.active) return;
-    const now = performance.now();
-    const prev = lastMoveRef.current;
-    if (prev) {
-      const dt = Math.max(now - prev.t, 1);
-      velocityRef.current = ((e.clientX - prev.x) / dt) * 16;
-    }
-    lastMoveRef.current = { x: e.clientX, t: now };
-    const dx = e.clientX - dragRef.current.startX;
-    setPanX(dragRef.current.origin + dx);
-  }, []);
+  const onPointerMove = useCallback(
+    (e: React.PointerEvent) => {
+      if (!dragRef.current.active) return;
+      const now = performance.now();
+      const prev = lastMoveRef.current;
+      if (prev) {
+        const dt = Math.max(now - prev.t, 1);
+        velocityRef.current = ((e.clientX - prev.x) / dt) * 16;
+      }
+      lastMoveRef.current = { x: e.clientX, t: now };
+      const dx = e.clientX - dragRef.current.startX;
+      if (Math.abs(dx) > 6) {
+        dragRef.current.moved = true;
+        suppressClickRef.current = true;
+      }
+      setPanX(clampPan(dragRef.current.origin + dx));
+    },
+    [clampPan],
+  );
 
   const onPointerUp = useCallback(() => {
+    if (dragRef.current.moved) {
+      suppressClickRef.current = true;
+    }
     dragRef.current.active = false;
     startInertia();
   }, [startInertia]);
 
-  const onKeyDownScroller = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === "ArrowLeft") {
-      e.preventDefault();
-      setPanX((x) => x + 64);
-    } else if (e.key === "ArrowRight") {
-      e.preventDefault();
-      setPanX((x) => x - 64);
-    } else if (e.key === "Home") {
-      e.preventDefault();
-      setPanX(0);
-    }
-  }, []);
+  const onKeyDownScroller = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        setPanX((x) => clampPan(x + 64));
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        setPanX((x) => clampPan(x - 64));
+      } else if (e.key === "Home") {
+        e.preventDefault();
+        setPanX(0);
+      }
+    },
+    [clampPan],
+  );
 
-  const onWheel = useCallback((e: React.WheelEvent) => {
-    if (!e.shiftKey) return;
-    e.preventDefault();
-    setPanX((x) => x - e.deltaY);
-  }, []);
+  const onWheel = useCallback(
+    (e: React.WheelEvent) => {
+      if (!e.shiftKey) return;
+      // Native non-passive listener attached below — React's synthetic wheel is passive.
+      setPanX((x) => clampPan(x - e.deltaY));
+    },
+    [clampPan],
+  );
 
   return (
     <section
-      className="elev-1 relative overflow-hidden rounded-[14px] border border-white/[0.06]"
+      className="elev-1 relative flex flex-col overflow-hidden rounded-[14px] border border-white/[0.06]"
       data-testid="timeline-view"
       style={{ maxHeight: VIEWPORT_H }}
     >
@@ -289,8 +330,8 @@ export default function ApplicationTimeline({
           tabIndex={0}
           onKeyDown={onKeyDownScroller}
           onWheel={onWheel}
-          className="relative outline-none focus-visible:ring-1 focus-visible:ring-gold/40"
-          style={{ maxHeight: VIEWPORT_H }}
+          className="relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden outline-none focus-visible:ring-1 focus-visible:ring-gold/40"
+          data-testid="timeline-scroller"
         >
           <div
             className="sticky top-0 z-10 flex border-b border-white/[0.05] bg-[#0F0F12]/95 backdrop-blur-sm"
@@ -311,6 +352,7 @@ export default function ApplicationTimeline({
 
           <div
             ref={trackRef}
+            data-testid="timeline-track"
             className="relative cursor-grab active:cursor-grabbing"
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
@@ -328,6 +370,8 @@ export default function ApplicationTimeline({
                 nodes={glGeo.nodes}
                 edges={glGeo.edges}
                 rails={glGeo.rails}
+                hoverId={hoverId}
+                hoverAppId={hoverAppId}
               />
             ) : null}
             {model.lanes.map((lane, i) => {
@@ -370,14 +414,18 @@ export default function ApplicationTimeline({
                     ) : null}
                   </div>
 
-                  <div className="relative flex-1" style={{ minWidth: 560 }}>
+                  <div className="relative min-w-0 flex-1" style={{ minWidth: "min(100%, 560px)" }}>
                     <div
                       aria-hidden="true"
                       className="absolute left-7 right-7 top-1/2 h-px -translate-y-1/2 bg-white/[0.08]"
                     />
+                    {/* Inset matches node left: calc(PAD_X + (100%-2*PAD_X)*x)
+                        so connectors do not miss dots (adv P1-4). */}
                     <svg
-                      className="pointer-events-none absolute inset-0 h-full w-full"
+                      className="pointer-events-none absolute inset-y-0 h-full"
+                      style={{ left: PAD_X, right: PAD_X }}
                       aria-hidden="true"
+                      data-testid="timeline-connectors"
                     >
                       {lane.nodes.slice(0, -1).map((n, idx) => {
                         const next = lane.nodes[idx + 1]!;
@@ -414,7 +462,13 @@ export default function ApplicationTimeline({
                               ? `${node.label} · ${node.note}`
                               : `${node.label} · ${new Date(node.at).toLocaleDateString("en-AU")}`
                           }
-                          onClick={() => onOpenDetail(lane.applicationId)}
+                          onClick={() => {
+                            if (suppressClickRef.current) {
+                              suppressClickRef.current = false;
+                              return;
+                            }
+                            onOpenDetail(lane.applicationId);
+                          }}
                           onMouseEnter={() => {
                             setHoverId(node.id);
                             setHoverAppId(lane.applicationId);
