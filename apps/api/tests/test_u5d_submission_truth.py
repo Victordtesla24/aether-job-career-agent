@@ -287,10 +287,10 @@ class TestProductionRegression:
         ready draft plus a NEWER already-'submitted' row. Every run claimed
         *"Submitted your application …"* while writing nothing at all.
 
-        The honest answer is "no change": the database reserves ONE active
-        application per job, so the draft cannot be promoted while the
-        submitted row holds the slot — and that submitted row has no
-        transmission evidence, so nothing may claim it was sent."""
+        The database still reserves ONE active application per job, so the
+        draft is not promoted. The submitted row has no ``transmittedAt``, so
+        the agent must keep working that row (resolve the channel / queue or
+        record the honest obstacle) and must NEVER claim it was sent."""
         job_id = _seed_job(db_session, user_id)
         resume_id = _seed_resume(db_session, user_id, source_job_id=job_id)
         draft_id = _seed_application(
@@ -301,45 +301,41 @@ class TestProductionRegression:
             status="submitted", created_offset_minutes=30,
         )
         draft_before = _application_row(db_session, draft_id)
-        submitted_before = _application_row(db_session, newer_submitted_id)
 
         result = _run_agent(user_id)
 
-        assert result.submissionState == "no_change"
         assert result.recorded is False
         assert result.transmitted is False
         assert result.applicationId == newer_submitted_id
+        assert result.reason != "already_recorded"
+        assert result.submissionState != "no_change"
         assert "Submitted your application" not in result.message
-        assert not re.search(r"\bsubmitted\b", result.message, re.I)
-        # BOTH rows are exactly as they were — the defect wrote nothing and
-        # the fix must not start writing something to compensate.
         draft_after = _application_row(db_session, draft_id)
         submitted_after = _application_row(db_session, newer_submitted_id)
         assert draft_after["updatedAt"] == draft_before["updatedAt"]
         assert draft_after["status"] == "draft"
-        assert submitted_after["updatedAt"] == submitted_before["updatedAt"]
         assert submitted_after["transmittedAt"] is None
 
     def test_already_recorded_run_reports_no_change_not_a_submission(
         self, db_session, user_id
     ):
-        """An explicit job whose only application is already recorded: the
-        honest answer is "no change", never a second claimed submission."""
+        """An explicit job whose only application is recorded as submitted
+        with no transmission evidence: keep driving it, never claim a send."""
         job_id = _seed_job(db_session, user_id)
         resume_id = _seed_resume(db_session, user_id, source_job_id=job_id)
         app_id = _seed_application(
             db_session, user_id, job_id, resume_id, status="submitted"
         )
-        before = _application_row(db_session, app_id)
 
         result = _run_agent(user_id, job_id=job_id)
 
         assert result.recorded is False
         assert result.transmitted is False
-        assert result.submissionState == "no_change"
+        assert result.applicationId == app_id
+        assert result.reason != "already_recorded"
+        assert result.submissionState != "no_change"
         assert "Submitted your application" not in result.message
-        after = _application_row(db_session, app_id)
-        assert after["updatedAt"] == before["updatedAt"]
+        assert _application_row(db_session, app_id)["transmittedAt"] is None
 
     def test_backend_reason_is_propagated_not_discarded(self, db_session, user_id):
         """The engine's own honest machine-readable verdict must reach the run
@@ -437,12 +433,13 @@ class TestRunRecordTellsTheTruth:
         card = next(c for c in cards if c["key"] == "submission")
         tip = card["tip"]
         assert not tip.startswith("Submits ")
-        # U5d-2: the card no longer describes tracker bookkeeping (the agent no
-        # longer does any). What it must still never do is promise a
-        # transmission — so the tip has to name what actually gates one.
-        assert "transmits NOTHING itself" in tip
+        # The agent opens the employer's site and submits when auto-apply is
+        # on and the approval is granted. It must not pretend the run itself
+        # is only bookkeeping, and it must not claim a send without evidence.
+        assert "transmits NOTHING itself" not in tip
+        assert "employer's site" in tip.lower() or "employer site" in tip.lower()
         assert "approv" in tip.lower()
-        assert "transmit" in tip.lower()
+        assert "submit" in tip.lower()
 
 
 # ---------------------------------------------------------------------------

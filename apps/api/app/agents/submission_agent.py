@@ -84,12 +84,18 @@ from app.routers.jobs import (
     _resume_for_apply,
 )
 from app.services.application_submission import (
+    auto_apply_enabled,
+    load_agent_config,
     queue_submission_approval,
     resolve_job_apply_recipient,
 )
 from app.services.apply_channel_resolver import (
     AUTOMATABLE_CHANNELS,
     resolve_and_persist_apply_channel,
+)
+from app.services.apply_executor import (
+    RETRYABLE_MANUAL_REASONS,
+    retryable_manual_reason_sql,
 )
 
 #: Terminal states a run can honestly report. They are DISTINCT — a caller
@@ -202,18 +208,26 @@ class SubmissionResult:
 #: reach the caller's other ready drafts. It is a tie-break, not a filter — a
 #: blocked row is still selectable when it is the only one, and re-reporting
 #: its honest obstacle is the correct answer in that case.
+#:
+#: Submitted-not-transmitted rows stay eligible: the tracker "Submitted"
+#: swimlane is bookkeeping until ``transmittedAt`` is set. Retryable misses
+#: (submit control not found, form not ready) sort with unblocked rows so a
+#: one-shot SPA race is retried instead of parked forever.
+_READY_RETRYABLE_SQL = retryable_manual_reason_sql("a")
 _READY_TO_APPLY_SQL = '''
     SELECT a."id", a."jobId"
     FROM "Application" a
     WHERE a."userId" = %s
-      AND a."status" = 'draft'::"ApplicationStatus"
+      AND a."status"::text IN ('draft', 'submitted')
+      AND a."transmittedAt" IS NULL
+      AND ''' + _READY_RETRYABLE_SQL + '''
       AND NULLIF(BTRIM(a."coverLetter"), '') IS NOT NULL
       AND EXISTS (
           SELECT 1 FROM "Resume" r
           WHERE r."userId" = a."userId" AND r."sourceJobId" = a."jobId"
       )
       {job_clause}
-    ORDER BY (a."manualStepReason" IS NULL) DESC, a."updatedAt" DESC
+    ORDER BY ''' + _READY_RETRYABLE_SQL + ''' DESC, a."updatedAt" DESC
     LIMIT 1
 '''
 
@@ -318,19 +332,19 @@ class SubmissionAgent:
             )
             return result
 
-        if truth.get("manualStepReason"):
+        manual_reason = truth.get("manualStepReason")
+        if manual_reason and str(manual_reason) not in RETRYABLE_MANUAL_REASONS:
             return self._manual_step_result(
                 result,
                 where,
-                str(truth["manualStepReason"]),
+                str(manual_reason),
                 truth.get("manualStepDetail"),
             )
 
-        if str(truth.get("status") or "") != "draft":
-            # The exact state the three production runs were really in.
-            # Counted in NO bucket on purpose: a run that changed nothing is
-            # not a "recorded-only" run, and conflating the two is how a
-            # dashboard starts reporting work that never happened.
+        status = str(truth.get("status") or "")
+        if status not in ("draft", "submitted"):
+            # Screening / interview / offer / withdrawn: this agent does not
+            # re-apply. Draft and submitted-not-transmitted still need a send.
             result.submissionState = STATE_NO_CHANGE
             result.reason = "already_recorded"
             result.nextStep = (
@@ -372,7 +386,9 @@ class SubmissionAgent:
                     "your resume first."
                 ),
             )
-        if not _cover_letter_for_apply(user_id, job_id):
+        if not _cover_letter_for_apply(user_id, job_id) and not self._row_has_cover_letter(
+            user_id, application_id
+        ):
             from fastapi import HTTPException
 
             raise HTTPException(
@@ -420,23 +436,41 @@ class SubmissionAgent:
                 apply_url=apply_url,
             )
         if approval is not None:
-            # A W-SUB approval card exists. Nothing has left the system, and
-            # nothing will until the user approves AND executes it.
+            # A W-SUB approval card exists. Nothing has left the system. With
+            # auto-apply on, the card is granted here so the apply sweep can
+            # open the employer's site; the agent still does not transmit.
+            if auto_apply_enabled(load_agent_config(user_id)):
+                from app.repositories.approval import ApprovalRepository
+
+                granted = ApprovalRepository().approve(str(approval["id"]), user_id)
+                if granted is not None:
+                    approval = granted
             result.submissionState = STATE_AWAITING_APPROVAL
             result.approvalId = str(approval["id"])
             result.counts["assisted"] = 1
             result.reason = "awaiting_approval"
-            result.nextStep = (
-                "Approve it in Approvals (or press Submit on the application "
-                "card) to transmit — nothing has been sent yet."
-            )
-            recipient = (approval.get("payload") or {}).get("recipient") \
-                if isinstance(approval.get("payload"), dict) else None
-            result.message = (
-                f"Prepared {where} for submission via "
-                f"{recipient or channel} and queued it for your approval — "
-                "NOT transmitted yet. Approve it to send."
-            )
+            if approval.get("status") == "approved":
+                result.nextStep = (
+                    "The apply sweep will open the employer's site and submit "
+                    "— nothing has been sent yet."
+                )
+                result.message = (
+                    f"Prepared {where} for submission via "
+                    f"{channel} — queued and approved for the apply sweep, "
+                    "NOT transmitted yet."
+                )
+            else:
+                result.nextStep = (
+                    "Approve it in Approvals (or press Submit on the application "
+                    "card) to transmit — nothing has been sent yet."
+                )
+                recipient = (approval.get("payload") or {}).get("recipient") \
+                    if isinstance(approval.get("payload"), dict) else None
+                result.message = (
+                    f"Prepared {where} for submission via "
+                    f"{recipient or channel} and queued it for your approval — "
+                    "NOT transmitted yet. Approve it to send."
+                )
             return result
 
         # No approval is possible for this channel. Record the honest,
@@ -571,6 +605,7 @@ class SubmissionAgent:
         """This job's ready DRAFT — the same gate as :data:`_READY_TO_APPLY_SQL`,
         scoped to one job."""
         ensure_application_manual_step_columns()
+        ensure_application_transmission_columns()
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(_READY_FOR_JOB_SQL, (user_id, job_id))
@@ -590,8 +625,27 @@ class SubmissionAgent:
         return str(rows[0]["id"]) if rows else None
 
     @staticmethod
+    def _row_has_cover_letter(user_id: str, application_id: str) -> bool:
+        """True when THIS application already carries a non-empty letter.
+
+        ``_cover_letter_for_apply`` only looks at ``status='draft'`` rows
+        (the Jobs Apply button copies from Studio). A submitted-not-
+        transmitted card already has the letter on the row being driven.
+        """
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    'SELECT 1 FROM "Application" '
+                    'WHERE "id" = %s AND "userId" = %s '
+                    "AND NULLIF(BTRIM(\"coverLetter\"), '') IS NOT NULL",
+                    (application_id, user_id),
+                )
+                return cur.fetchone() is not None
+
+    @staticmethod
     def _ready_to_apply(user_id: str) -> dict[str, str] | None:
         ensure_application_manual_step_columns()
+        ensure_application_transmission_columns()
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(_READY_ACCOUNT_SQL, (user_id,))

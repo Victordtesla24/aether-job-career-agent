@@ -102,6 +102,8 @@ _STANDARD_FIELDS: dict[str, str] = {
     "_systemfield_linkedin": "linkedin",
     "linkedin": "linkedin",
     "linkedin_url": "linkedin",
+    "github": "github",
+    "github_url": "github",
     "website": "website",
 }
 
@@ -147,6 +149,9 @@ _LABEL_STANDARD_FIELDS: dict[str, str] = {
     "linkedin profile": "linkedin",
     "linkedin url": "linkedin",
     "linkedin profile url": "linkedin",
+    "github": "github",
+    "github profile": "github",
+    "github url": "github",
     "website": "website",
     "personal website": "website",
     "portfolio": "website",
@@ -666,10 +671,15 @@ def _standard_answer(key: str, profile: dict[str, Any]) -> Any:
         "location": str(profile.get("location") or ""),
         "country": str(profile.get("country") or ""),
         "linkedin": str(profile.get("linkedin") or ""),
+        "github": str(profile.get("github") or ""),
         "website": str(profile.get("website") or ""),
         "resume": RESUME_DOCUMENT,
         "cover_letter": COVER_LETTER_DOCUMENT,
     }
+    if not str(values.get("country") or "").strip():
+        loc = str(values.get("location") or "")
+        if loc.lower().rstrip(".").endswith("australia"):
+            values["country"] = "Australia"
     value = values.get(key)
     if isinstance(value, str) and not value.strip():
         return None
@@ -720,6 +730,52 @@ def _answer_for(field: dict[str, Any], profile: dict[str, Any]) -> Any:
             return RESUME_DOCUMENT
         if "cover" in label:
             return COVER_LETTER_DOCUMENT
+    derived = _derived_answer(field, profile)
+    if derived is not None:
+        return derived
+    return None
+
+
+_WHY_ROLE_RE = re.compile(
+    r"(?i)\bwhy\b.{0,80}\b(this role|this job|this position|the role|this company)\b"
+)
+_LOCATED_IN_RE = re.compile(
+    r"(?i)located in ([a-z][a-z .'-]+?)(?:\s+and\b|,|$)"
+)
+_HEAR_ABOUT_RE = re.compile(
+    r"(?i)where did you (?:first )?hear|how did you (?:hear|find|learn) about"
+)
+
+
+def _derived_answer(field: dict[str, Any], profile: dict[str, Any]) -> Any:
+    """Answers taken from the user's own artefacts — never invented facts.
+
+    * A "why this role" statement reuses the cover letter written for THIS job.
+    * A "located in {city}" yes/no is compared to the résumé location string.
+    * A "where did you hear" source uses a stored value, otherwise ``Other``.
+    Pronouns, visa status, salary, and prior-employer questions stay unanswered.
+    """
+    label = str(field.get("label") or "")
+    kind = field.get("kind")
+    if kind in {"textarea", "text"} and _WHY_ROLE_RE.search(label):
+        letter = str(profile.get("coverLetter") or "").strip()
+        return letter or None
+    if kind in {"checkbox", "radio", "select", "combobox"}:
+        located = _LOCATED_IN_RE.search(label)
+        if located:
+            city = located.group(1).strip().lower()
+            loc = str(profile.get("location") or "").lower()
+            if not city or not loc:
+                return None
+            return "Yes" if city in loc else "No"
+    if _HEAR_ABOUT_RE.search(label):
+        stored = str(profile.get("hearAbout") or "").strip()
+        if stored:
+            return stored
+        for option in field.get("options") or []:
+            if str(option).strip().lower() == "other":
+                return str(option).strip()
+        return "Other"
     return None
 
 
@@ -3371,7 +3427,7 @@ def playwright_form_submitter(
                 page.add_init_script(_CLOSED_SHADOW_MARKER_INIT_JS)
                 if apply_url:
                     page.goto(apply_url, wait_until="domcontentloaded", timeout=45000)
-                    page.wait_for_timeout(2000)
+                    wait_for_application_form(page, live=True)
                 else:
                     # Replay: the DOM was captured elsewhere, so every
                     # subresource in it (CDN CSS, fonts, the employer's
@@ -3401,12 +3457,16 @@ def playwright_form_submitter(
                             "finish it yourself."
                         ),
                     )
-                # CLI-SUB-005: live mode verifies every fill's committed DOM
-                # state (read-back + one retry); replay keeps the raw fills —
-                # a replayed page is a JS-dead capture no employer can
-                # receive anything from, and React widgets cannot mirror
-                # state without their scripts.
-                verify_commit = bool(apply_url)
+                # CLI-SUB-005: live HTTP(S) mode verifies every fill's
+                # committed DOM state (read-back + one retry) and runs the
+                # unverifiable-surface backstop. A data: URL is a local SPA
+                # fixture used to exercise wait/CTA/submit — it is not an
+                # employer ATS page, so the conservative census does not
+                # apply. Replay (no URL) keeps raw fills: a captured page
+                # is JS-dead and no employer can receive anything from it.
+                verify_commit = bool(apply_url) and str(apply_url).startswith(
+                    ("http://", "https://")
+                )
                 filled, unfilled, blocked_required = _run_fill_plan(
                     page, plan["fields"], documents, verify=verify_commit
                 )
@@ -3703,10 +3763,12 @@ def fetch_apply_page(apply_url: str) -> str:
             try:
                 page = browser.new_page(viewport={"width": 1280, "height": 1600})
                 page.goto(apply_url, wait_until="domcontentloaded", timeout=45000)
-                page.wait_for_timeout(2500)
+                wait_for_application_form(page, live=True)
                 return str(page.content())
             finally:
                 browser.close()
+    except ApplyExecutorTransportError:
+        raise
     except Exception as exc:  # noqa: BLE001 — a fetch failure is not a submission
         raise ApplyExecutorTransportError(
             "page_fetch_failed",
@@ -3775,12 +3837,94 @@ _CONFIRMATION_TEXT = re.compile("|".join(_CONFIRMATION_PHRASES), re.I)
 #: and by the pre/post-click state probe, so the probe always reports on the
 #: SAME control that was (or would have been) clicked.
 _SUBMIT_SELECTORS: tuple[str, ...] = (
+    ".ashby-application-form-submit-button",
+    "button.ashby-application-form-submit-button",
     'button[type="submit"]',
     'input[type="submit"]',
     "button:has-text('Submit application')",
     "button:has-text('Submit Application')",
     "button:has-text('Submit')",
 )
+
+#: Job-posting CTAs a human clicks before the form exists. Must NOT match
+#: "Submit Application" (Playwright ``has-text('Apply')`` would).
+_APPLY_CTA_SELECTORS: tuple[str, ...] = (
+    "button:has-text('Apply for this job')",
+    "a:has-text('Apply for this job')",
+    "button:has-text('Apply now')",
+    "a:has-text('Apply now')",
+    "button:has-text('Apply for this role')",
+    "a:has-text('Apply for this role')",
+    ".ashby-job-posting-apply-button",
+    "a#apply_button",
+    "button#apply_button",
+)
+
+
+def _form_is_ready(page: Any) -> bool:
+    """True when the live page exposes a fillable application form."""
+    try:
+        fields = page.locator(
+            "form input, form textarea, form select, "
+            ".ashby-application-form input, input[type='email']"
+        )
+        if int(fields.count()) == 0:
+            return False
+    except Exception:  # noqa: BLE001 — an unreadable DOM is not a form
+        return False
+    for selector in _SUBMIT_SELECTORS:
+        try:
+            if int(page.locator(selector).count()) > 0:
+                return True
+        except Exception:  # noqa: BLE001 — try the next submit shape
+            continue
+    return False
+
+
+def _click_apply_cta(page: Any) -> bool:
+    """Click the posting's Apply control when the form is not yet on screen."""
+    if _form_is_ready(page):
+        return False
+    for selector in _APPLY_CTA_SELECTORS:
+        try:
+            control = page.locator(selector).first
+            if int(control.count()) == 0:
+                continue
+            if not bool(control.is_visible(timeout=_PROBE_TIMEOUT_MS)):
+                continue
+            control.click(timeout=_ACTION_TIMEOUT_MS)
+            return True
+        except Exception:  # noqa: BLE001 — try the next CTA shape
+            continue
+    return False
+
+
+def wait_for_application_form(
+    page: Any, *, live: bool = True, timeout_ms: int = 20000
+) -> None:
+    """Wait until the employer's application form is actually on the page.
+
+    Production miss (Xero Ashby, 2026-08-18): a ~2s sleep screenshotted
+    "Fetching application form" and recorded ``submit_control_not_found``.
+    A human waits for the SPA, clicks Apply when the posting still shows
+    a CTA, then fills. This is that wait. A timeout is a retryable
+    transport miss — not a finished application.
+    """
+    if not live:
+        return
+    deadline = time.monotonic() + (max(1, int(timeout_ms)) / 1000)
+    clicked_cta = False
+    while time.monotonic() < deadline:
+        if _form_is_ready(page):
+            return
+        if not clicked_cta:
+            clicked_cta = _click_apply_cta(page)
+        page.wait_for_timeout(250)
+    raise ApplyExecutorTransportError(
+        "form_not_ready",
+        "The application form did not appear in time — nothing was submitted.",
+    )
+
 
 #: Elements an ATS uses to mark a field or a form as rejected. Only VISIBLE
 #: matches count (every one of these is routinely present-but-hidden in the
@@ -3852,6 +3996,26 @@ MANUAL_STEP_SUBMIT_CONTROL_NOT_FOUND = "submit_control_not_found"
 #: was covered by an overlay, detached mid-click, …). Nothing was submitted and
 #: the page was never in a post-submit state, so this is its own honest ending.
 MANUAL_STEP_SUBMIT_CLICK_FAILED = "submit_click_failed"
+#: The SPA never exposed a form in time. Transport-class: the sweep retries it.
+MANUAL_STEP_FORM_NOT_READY = "form_not_ready"
+
+#: Misses that mean "try the site again", not "the user must answer a question".
+#: ``unknown_required_question``, captcha, login walls and assisted channels
+#: stay terminal until the user acts.
+RETRYABLE_MANUAL_REASONS: frozenset[str] = frozenset({
+    MANUAL_STEP_SUBMIT_CONTROL_NOT_FOUND,
+    MANUAL_STEP_SUBMIT_CLICK_FAILED,
+    MANUAL_STEP_FORM_NOT_READY,
+})
+
+
+def retryable_manual_reason_sql(alias: str = "a") -> str:
+    """SQL predicate: no manual step, or a retryable miss that is not finished."""
+    listed = ", ".join(f"'{reason}'" for reason in sorted(RETRYABLE_MANUAL_REASONS))
+    return (
+        f'({alias}."manualStepReason" IS NULL '
+        f'OR {alias}."manualStepReason" IN ({listed}))'
+    )
 
 #: Post-submit classification -> the manual-step reason it is recorded under.
 #: ``confirmed`` is deliberately absent: it is the only ending that is NOT a
@@ -4956,6 +5120,9 @@ def execute_site_application(
             "This application was already submitted — nothing was submitted again.",
             http_status=409,
         )
+    if cover_letter_text and str(cover_letter_text).strip():
+        profile = dict(profile or {})
+        profile["coverLetter"] = str(cover_letter_text).strip()
     resolver = answer_bank
     if resolver is None:
         resolver = build_answer_bank_resolver(user_id, profile, company=company)

@@ -1273,3 +1273,37 @@ evidence: `docs/delivery/evidence/RUN-20260818T0223Z/commercial-readiness/ec-adv
 - Tests: `test_llm_retry_after_headers.py`, `orch-run-controls.test.tsx`, `agents-feedback.test.ts`, `sui1-agents-shell.test.tsx`
 **Does not touch:** silent model swap (ADR-ML-3), `llm_client` fallback chain, email light_retry, ats_engine, sales, networking, timeline, profile avatar.
 **Deploy:** rebase onto `origin/main`, push `feat/loop-429-resume` then merge to `origin/main` → VPS Delivery. Do not hand-restart prod units. Delete branch after land. No standing PR.
+**Landed on `main`:** `d28842be` (recovery), `b56d0d2c` (Retry-After HTTP tests), then linkage retargets through `2ae2f689`. Remote `feat/loop-429-resume` deleted; no standing PR. Local worktree branch name still `feat/loop-429-resume` tracking `origin/main`.
+**VPS Delivery:** run `32163270651` for `2ae2f689` succeeded (Verify + deploy dev/test/prod + guardian sweep). Do not hand-restart.
+**Prod verify (×2) against Hostinger `https://aether.srv1356245.hstgr.cloud` (2026-08-18T17:15–17:25Z):** served tree SHA `2ae2f689`; units active, NRestarts=0, ExecMainStartTimestamp 17:15:50 UTC; `/api/health` 200 `{status:ok,version:0.2.0}` twice; journalctl -p err since start empty; no Traceback. Prod bundle contains `orchestration-run-resume` and `Rate limited`. Latest windowed tailor/coverLetter runs **completed** (16:50–16:54Z); historical tailor 429s remain at 15:58Z in the 200-row window. Playwright Agents ×2: 0 console errors, 0 pageerrors, tailor node status `completed`, no in-session Resume (no halt). **Did not re-run the 19-agent owner loop** (would 429 again). Owner **Stop All** is on (catalog `enabled=false` all 22 cards; POST `/agents/tailor/run` → 409 `agent_paused`, no Retry-After, no LLM spend). Map cards still read IDLE; sidebar still says "20 agents ready" from engine pulse — pre-existing honesty, not this claim.
+
+---
+
+## SESSION SUB-LIVE-APPLY — 2026-08-18T16:25Z — one real production apply
+
+**By:** Cursor agent on branch `feat/submission-live-apply` from `origin/main` (`54bf3d68`).
+**Owner mandate:** the Submission Agent must open the employer's site, click Apply, fill
+Vikram Deshpande's details, attach the tailored résumé + cover letter, accept
+acknowledgements, and Submit — one real job in production as end-to-end proof.
+Bookkeeping-only "Submitted" cards are not proof.
+**Proof target (revised):** Dovetail Senior Platform Engineer, Ashby,
+application `c491af869c7d552ca47574246` (draft, cover letter on the row).
+Xero Engineering Manager - Data (`c4b45905451434f02b9f3a76d`) already failed
+live with `submit_control_not_found` before the form-wait fix; it is a retry
+candidate after deploy, not the first proof. Do not apply as `aeth***@example.com`.
+
+**Files claimed:**
+- `apps/api/app/services/apply_executor.py` (form wait, Apply CTA, Ashby submit selector)
+- `apps/api/app/workers/apply_sweep.py` (retryable pending SQL, country from résumé text)
+- `apps/api/app/agents/submission_agent.py` (submitted-not-transmitted is still ready)
+- `apps/api/app/routers/agents.py` (catalog tip: opens the site and submits when approved)
+- matching tests under `apps/api/tests/`
+- `.gitignore` (`.playwright-mcp/` so R5 does not fail on MCP scratch)
+- this coordination note
+
+**Does not touch:** Lever/SmartRecruiters/generic auto-submit (still ASSISTED);
+Databricks visa / salary / pronouns invented answers (sensitive, never invented).
+
+**Deploy window:** claimed for VPS Delivery after this lands on `origin/main`.
+No hand-restart of `aether-prod-*` unless VPS Delivery fails and this file is
+re-read. Delete `feat/submission-live-apply` after land (R8).

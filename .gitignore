@@ -25,6 +25,7 @@ test-results/
 playwright-report/
 blob-report/
 playwright/.cache/
+.playwright-mcp/
 
 # ---- Python ----
 __pycache__/

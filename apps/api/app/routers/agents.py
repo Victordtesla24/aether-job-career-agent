@@ -258,18 +258,17 @@ AGENT_CATALOG: list[dict[str, Any]] = [
      "accent": "green", "backend": "submission", "recommended": "deterministic",
      "tip": "Takes one of your OWN ready applications (a job-tailored resume "
             "plus a non-empty Cover Letter Studio draft — the exact gate the "
-            "Jobs board's Apply button enforces), works out how that posting "
-            "can actually be applied to, and queues it for your approval. It "
-            "transmits NOTHING itself: a run ends as a pending card in "
-            "Approvals, and the application only reaches the employer when you "
-            "approve it there or press Submit on the application card. Where "
-            "Aether will not auto-submit — Lever, SmartRecruiters, an "
-            "employer's own form, Seek — it says so and hands you the direct "
-            "link instead of pretending. Every run reports its real state — "
-            "transmitted, awaiting approval, manual step required, or no "
-            "change — read back from the row, never assumed. With no job "
-            "specified it picks your most recently updated ready application "
-            "and reports which one. Deterministic, no LLM cost."},
+            "Jobs board's Apply button enforces), opens the employer's site, "
+            "clicks Apply, fills your stored details, attaches the tailored "
+            "resume and cover letter, and submits when auto-apply is on. A run "
+            "queues an approval first; with auto-apply on that approval is "
+            "granted so the apply sweep can transmit. With auto-apply off the "
+            "card waits in Approvals until you approve it. Where Aether will "
+            "not auto-submit — SmartRecruiters, an employer's own form, Seek "
+            "— it says so after inspecting the live page and hands you the "
+            "direct link. Every run reports its real state — transmitted, "
+            "awaiting approval, manual step required, or no change — read "
+            "back from the row. Deterministic, no LLM cost."},
     {"key": "matchScoring", "name": "Match Scoring Agent", "icon": "fa-bullseye",
      "accent": "indigo", "backend": "fitScorer", "recommended": "deterministic",
      "tip": "Deterministic 10-dimension fit scoring + ATS keyword/semantic engine — "

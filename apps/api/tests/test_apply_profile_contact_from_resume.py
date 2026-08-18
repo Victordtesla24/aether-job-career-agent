@@ -29,6 +29,8 @@ def test_extracts_every_standard_contact_field_from_raw_text() -> None:
     assert got["phone"] == "+61 400 000 111"
     assert got["linkedin"] == "linkedin.com/in/sample-profile"
     assert got["github"] == "github.com/sample-handle"
+    assert got["location"] == "Melbourne, VIC, Australia"
+    assert got["country"] == "Australia"
     # No third-party website in this résumé → key absent, never guessed.
     assert "website" not in got
 
@@ -169,3 +171,57 @@ def test_html_type_hints_answer_phone_and_email_even_with_odd_labels() -> None:
     # is still answered because type="tel" is unambiguous in HTML itself.
     assert _answer_for({"name": "contact_no", "kind": "tel"}, _RESUME_PROFILE)
     assert _answer_for({"name": "your_email_here", "kind": "email"}, _RESUME_PROFILE)
+
+
+def test_why_this_role_textarea_uses_the_users_own_cover_letter() -> None:
+    letter = "I have architected real-time infrastructure at scale."
+    field = {
+        "name": "c25f8fb0-8069-42f7-88a0-031387d8e878",
+        "label": "Why Dovetail & this role?",
+        "kind": "textarea",
+        "required": True,
+    }
+    assert _answer_for(field, {**_RESUME_PROFILE, "coverLetter": letter}) == letter
+    assert _answer_for(field, _RESUME_PROFILE) in (None, "")
+
+
+def test_located_in_city_yes_no_is_read_off_the_resume_location() -> None:
+    field = {
+        "name": "ae3bed6a-cfd1-4d1d-9e87-1ba027d8e5c5",
+        "label": "Are you currently located in Sydney and happy to work in-person 4 days a week?",
+        "kind": "checkbox",
+        "required": True,
+        "options": ["Yes", "No"],
+    }
+    assert _answer_for(field, _RESUME_PROFILE) == "No"
+    melbourne = {
+        **_RESUME_PROFILE,
+        "location": "Sydney NSW, Australia",
+    }
+    assert _answer_for(field, melbourne) == "Yes"
+    assert _answer_for(field, {**_RESUME_PROFILE, "location": ""}) in (None, "")
+
+
+def test_hear_about_source_uses_other_when_the_user_did_not_record_one() -> None:
+    field = {
+        "name": "ae7ec1e6-ab27-406b-8499-f61e210602f9",
+        "label": "Where did you first hear about this role or about Dovetail?",
+        "kind": "combobox",
+        "required": True,
+        "options": ["LinkedIn application", "Job board (Seek, Indeed etc.)", "Other"],
+    }
+    assert _answer_for(field, _RESUME_PROFILE) == "Other"
+    assert _answer_for(
+        field, {**_RESUME_PROFILE, "hearAbout": "LinkedIn application"}
+    ) == "LinkedIn application"
+
+
+def test_previously_employed_is_not_invented() -> None:
+    field = {
+        "name": "xero-emp",
+        "label": "Have you previously been employed by Xero?",
+        "kind": "checkbox",
+        "required": True,
+        "options": ["Yes", "No"],
+    }
+    assert _answer_for(field, _RESUME_PROFILE) in (None, "")

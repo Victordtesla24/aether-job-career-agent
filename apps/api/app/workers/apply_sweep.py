@@ -88,6 +88,7 @@ from app.db import (
     get_connection,
     rows_to_dicts,
 )
+from app.services.apply_executor import retryable_manual_reason_sql
 
 logger = logging.getLogger(__name__)
 
@@ -191,15 +192,16 @@ def evidence_root() -> str:
 # ---------------------------------------------------------------------------
 
 
-#: The queue, written ONCE: approved gate, no ``transmittedAt``, no
-#: ``manualStepReason``, newest approval per application. ``approvedAt`` is the
+#: The queue, written ONCE: approved gate, no ``transmittedAt``, and either
+#: no ``manualStepReason`` or a retryable miss (submit button not found /
+#: form not ready). Newest approval per application. ``approvedAt`` is the
 #: DECISION time (``resolvedAt``, falling back to ``createdAt`` for rows that
 #: predate that column being stamped) — the clock the stale-approval guard
 #: reads and the key the backlog drains by. ``fitScore`` rides along (LEFT
 #: JOIN, so the selection itself is unchanged even for an application whose
 #: Job row is gone) for the D2 match-threshold gate; NULL means "unscored",
 #: which the gate treats as below every threshold.
-_PENDING_SELECT = '''
+_PENDING_SELECT = f'''
     SELECT DISTINCT ON (a."id")
            a."id" AS "applicationId",
            ar."id" AS "approvalId",
@@ -213,7 +215,7 @@ _PENDING_SELECT = '''
       AND ar."type" = 'application_submit'::"ApprovalType"
       AND ar."status" = 'approved'::"ApprovalStatus"
       AND a."transmittedAt" IS NULL
-      AND a."manualStepReason" IS NULL
+      AND {retryable_manual_reason_sql("a")}
     ORDER BY a."id", ar."createdAt" DESC
 '''
 
@@ -275,7 +277,7 @@ def users_with_pending_transmissions(limit: int | None = None) -> list[str]:
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                '''
+                f'''
                 SELECT DISTINCT a."userId"
                 FROM "Application" a
                 JOIN "ApprovalRequest" ar ON ar."applicationId" = a."id"
@@ -283,7 +285,7 @@ def users_with_pending_transmissions(limit: int | None = None) -> list[str]:
                 WHERE ar."type" = 'application_submit'::"ApprovalType"
                   AND ar."status" = 'approved'::"ApprovalStatus"
                   AND a."transmittedAt" IS NULL
-                  AND a."manualStepReason" IS NULL
+                  AND {retryable_manual_reason_sql("a")}
                   AND (u."agentConfig"->>'autoApply') = 'true'
                 ORDER BY a."userId"
                 ''',
@@ -338,6 +340,10 @@ _PHONE_RE = re.compile(r"(?<!\w)(\+?\d[\d\s().-]{7,}\d)(?!\w)")
 _LINKEDIN_RE = re.compile(r"(?:https?://)?(?:www\.)?linkedin\.com/[^\s|,;]+", re.I)
 _GITHUB_RE = re.compile(r"(?:https?://)?(?:www\.)?github\.com/[^\s|,;]+", re.I)
 _URL_RE = re.compile(r"https?://[^\s|,;]+", re.I)
+#: A CONTACT-block city line the candidate typed, e.g. "Melbourne, VIC, Australia".
+_LOCATION_LINE_RE = re.compile(
+    r"(?im)^([A-Za-z][A-Za-z .'-]+,\s*[A-Z]{2,3},?\s+([A-Za-z][A-Za-z .'-]+))\s*$"
+)
 
 
 def _extract_contact_from_text(raw_text: str) -> dict[str, Any]:
@@ -368,6 +374,14 @@ def _extract_contact_from_text(raw_text: str) -> dict[str, Any]:
     m = _GITHUB_RE.search(text)
     if m:
         out["github"] = m.group(0).strip().rstrip("/.")
+    for line in text.splitlines():
+        loc = _LOCATION_LINE_RE.match(line.strip())
+        if loc:
+            out["location"] = loc.group(1).strip()
+            country = loc.group(2).strip()
+            if country:
+                out["country"] = country
+            break
     for url in _URL_RE.finditer(text):
         u = url.group(0)
         if "linkedin.com" in u.lower() or "github.com" in u.lower():
@@ -452,7 +466,7 @@ def build_apply_profile(
         or user.get("location")
         or contact.get("location")
         or "",
-        "country": apply_profile.get("country") or "",
+        "country": apply_profile.get("country") or contact.get("country") or "",
         "linkedin": apply_profile.get("linkedin") or contact.get("linkedin") or "",
         "github": apply_profile.get("github") or contact.get("github") or "",
         "website": apply_profile.get("website") or contact.get("website") or "",

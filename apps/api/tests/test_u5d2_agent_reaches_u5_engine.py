@@ -526,7 +526,8 @@ class TestU5dInvariantsSurvive:
     ):
         """PROD REPRO (FORENSICS §2.2): one job, an untouched ready draft plus
         an already-active row. Queueing the draft would put a SECOND
-        application in front of the same employer."""
+        application in front of the same employer. The active submitted row
+        is the one to transmit — it has no ``transmittedAt`` yet."""
         job_id = _seed_job(db_session, user_id, source_url=ASHBY_URL)
         resume_id = _seed_resume(db_session, user_id, source_job_id=job_id)
         draft_id = _seed_application(db_session, user_id, job_id, resume_id)
@@ -537,10 +538,15 @@ class TestU5dInvariantsSurvive:
 
         result = _run(user_id)
 
-        assert result.submissionState == "no_change"
         assert result.applicationId == active_id
-        assert _approvals(db_session, user_id) == []
+        assert result.transmitted is False
+        assert result.reason != "already_recorded"
+        assert result.submissionState == "awaiting_approval"
+        assert result.approvalId
         assert _row(db_session, draft_id)["updatedAt"] == before["updatedAt"]
+        approvals = _approvals(db_session, user_id)
+        assert len(approvals) == 1
+        assert approvals[0]["applicationId"] == active_id
 
     def test_rerunning_reuses_the_pending_approval_instead_of_stacking(
         self, db_session, user_id
