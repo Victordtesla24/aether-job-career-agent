@@ -424,7 +424,6 @@ CONCEPTS: tuple[Concept, ...] = (
             ("confirm", "true"),
             ("confirm", "accurate"),
             ("confirm", "correct"),
-            ("confirm", "information"),
             ("information", "true"),
             ("information", "accurate"),
             ("declare", "true"),

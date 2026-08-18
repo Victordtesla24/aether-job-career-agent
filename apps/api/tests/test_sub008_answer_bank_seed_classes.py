@@ -213,6 +213,30 @@ class TestAcknowledgementConcept:
         if concept is not None:
             assert classify_sensitivity(asked) != SENSITIVITY_FACTUAL
 
+    def test_a_sanctions_eligibility_disclosure_is_never_a_pure_acknowledgement(self):
+        """SUB-008-R2 regression. Real Databricks/Greenhouse wording: the
+        applicant is asked to disclose sanctions/export-control status, and
+        the surrounding boilerplate happens to co-occur "confirm" with
+        "information" — a bare pair that used to fire the acknowledgement
+        class on ANY co-occurrence, auto-ticking a box that in fact asks the
+        candidate to self-disclose residency/citizenship in sanctioned
+        countries. That must never be auto-answered."""
+        from app.services.answer_bank import (
+            SENSITIVITY_FACTUAL,
+            classify_sensitivity,
+            detect_concept,
+        )
+
+        asked = (
+            "Please confirm whether any of the below applies to you.  Select "
+            "all that apply.\n\nNote: This information will only be used to "
+            "ensure compliance with U.S. sanctions and export controls."
+        )
+        concept = detect_concept(asked)
+        assert concept is None or concept.key != "acknowledgement"
+        if concept is not None:
+            assert classify_sensitivity(asked) != SENSITIVITY_FACTUAL
+
     def test_a_banked_acknowledgement_never_answers_a_consent_tick(self):
         from app.services.answer_bank import find_match
 
