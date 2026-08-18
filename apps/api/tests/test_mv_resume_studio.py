@@ -18,6 +18,8 @@ default); the async worker shares the same service + refund plumbing.
 """
 from __future__ import annotations
 
+import json
+
 import pytest
 from conftest import seed_own_resume, seed_search_target
 
@@ -50,6 +52,21 @@ def _clear_agent_config(conn, user_id: str) -> None:
     """
     with conn.cursor() as cur:
         cur.execute('UPDATE "User" SET "agentConfig" = NULL WHERE "id" = %s', (user_id,))
+    conn.commit()
+
+
+def _set_match_threshold(conn, user_id: str, threshold: int) -> None:
+    """Write the SAME ``agentConfig.matchThreshold`` the Settings screen
+    writes (mirrors ``test_cov2_generation_fit_gate.py``'s helper of the same
+    name) — used where a test needs the AUD-COV-2 fit gate to reliably CLEAR
+    for a real (replay-scored) scout-fixture job, rather than routing around
+    the gate entirely via ``_clear_agent_config``.
+    """
+    with conn.cursor() as cur:
+        cur.execute(
+            'UPDATE "User" SET "agentConfig" = %s WHERE "id" = %s',
+            (json.dumps({"matchThreshold": threshold}), user_id),
+        )
     conn.commit()
 
 
@@ -334,10 +351,16 @@ class TestNoSilentBilledNoOp:
         """A no-op tailor inside the full pipeline must NOT fail the whole run —
         the cover-letter step draws on the base résumé regardless."""
         # AUD-COV-2 gates auto-generation on the caller's OWN matchThreshold;
-        # this test is about no-op-tailor tolerance, not that gate (which has
-        # its own suite), so route around the live schema's out-of-band
-        # agentConfig column default (see _clear_agent_config).
-        _clear_agent_config(db_session, user_id)
+        # this test's SUBJECT is no-op-tailor tolerance, which requires the
+        # job to reach the tailor/coverLetter steps at all, i.e. CLEAR the
+        # fit gate — so pin an explicit threshold comfortably below the real
+        # (replay-scored) scout-fixture job's fitScore, rather than
+        # _clear_agent_config, which now resolves to the AUD-UX-1 fallback of
+        # 80 and would put this job below the bar (the fixture's real score
+        # is ~55, per _clear_agent_config's own docstring) and fit-gate it —
+        # exercising the low-fit-skip path this test does NOT test (that is
+        # test_cov2_generation_fit_gate.py's subject).
+        _set_match_threshold(db_session, user_id, 40)
         # The pipeline's cover-letter step runs the real (replay) generation, so
         # seed the operator-PDF text the canned fixture was recorded against —
         # a synthetic résumé would make that step 422 on fabrication grounds.

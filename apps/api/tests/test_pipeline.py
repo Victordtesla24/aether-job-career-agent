@@ -124,10 +124,22 @@ class TestPipelineRun:
         assert "supervisor" in agents_in_order and "matcher" in agents_in_order
         # Fresh user: scout fixtures may or may not persist jobs; if none were
         # persisted the pipeline must complete gracefully with matched == 0.
+        #
+        # Key the guard off the MATCHER's own top_job_id, not the top-level
+        # status/approvalRequired combo: AUD-UX-1 (matchThreshold fallback
+        # 50->80) means a scout-fixture job can now legitimately MATCH
+        # (top_job_id set, matched > 0) and still finish with
+        # status=="completed" and approvalRequired==False, because AUD-COV-2
+        # fit-gates it below the 80 bar. That is a DIFFERENT, correctly
+        # tested outcome (see test_cov2_generation_fit_gate.py) — not this
+        # test's "nothing matched" contract, which top_job_id is None
+        # identifies precisely and the status/approvalRequired combo no
+        # longer does alone.
         matcher = next(s for s in body["steps"] if s["agent"] == "matcher")["output"]
-        if body["status"] == "completed" and not body["approvalRequired"]:
+        if matcher.get("top_job_id") is None:
             assert matcher["matched"] == 0
-            assert matcher["top_job_id"] is None
+            assert body["status"] == "completed"
+            assert not body["approvalRequired"]
 
 
 def test_pipeline_degrades_gracefully_on_cover_fabrication(monkeypatch):
