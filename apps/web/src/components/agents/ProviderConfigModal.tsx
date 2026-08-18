@@ -42,7 +42,7 @@ import {
 } from "./api";
 import AnthropicOAuthPanel from "./AnthropicOAuthPanel";
 import { normalizeCredentialSecret, providerSourceBadge, type ProviderSourceBadge } from "./logic";
-import { providerCredentialErrorNotice, type Notice } from "../../lib/agents-feedback";
+import { extractApiDetail, providerCredentialErrorNotice, type Notice } from "../../lib/agents-feedback";
 
 interface AuthModeOption {
   value: ProviderAuthMode;
@@ -82,6 +82,20 @@ function authModeOptions(providerId: string): AuthModeOption[] {
       placeholder: "Paste API key",
     },
   ];
+}
+
+/**
+ * Human-readable text for the modal's own inline error slot (P3-2,
+ * RUN-20260818T0223Z third-party adversarial review). Never the raw
+ * `METHOD /path failed (status): {json}` string `apiRequest` embeds in
+ * `Error.message` — that is an internal route path and JSON error shape, not
+ * something a customer should read, and it duplicated (less honestly than)
+ * the friendly banner `providerCredentialErrorNotice` already renders one
+ * line above it. `extractApiDetail` lifts the same backend `detail` string
+ * that notice uses; still bounded to the historical 160-char cap.
+ */
+function inlineErrorMessage(e: unknown, fallback: string): string {
+  return (extractApiDetail(e) ?? fallback).slice(0, 160);
 }
 
 /** Short, accurate billing implication — the whole point of the feature. */
@@ -332,7 +346,7 @@ export default function ProviderConfigModal({
       await onSaved();
     } catch (e) {
       onNotice(providerCredentialErrorNotice(e, `Saving ${view.name} credential`));
-      setError(e instanceof Error ? e.message.slice(0, 160) : "Save failed");
+      setError(inlineErrorMessage(e, "Save failed"));
     } finally {
       setBusy(null);
     }
@@ -359,7 +373,7 @@ export default function ProviderConfigModal({
       await onSaved();
     } catch (e) {
       onNotice(providerCredentialErrorNotice(e, `Removing ${view.name} credential`));
-      setError(e instanceof Error ? e.message.slice(0, 160) : "Remove failed");
+      setError(inlineErrorMessage(e, "Remove failed"));
     } finally {
       setBusy(null);
     }
@@ -374,7 +388,7 @@ export default function ProviderConfigModal({
       await fn();
     } catch (e) {
       onNotice(providerCredentialErrorNotice(e, `Connecting ${view.name}`));
-      setError(e instanceof Error ? e.message.slice(0, 160) : "Connect failed");
+      setError(inlineErrorMessage(e, "Connect failed"));
     } finally {
       setBusy(null);
     }
@@ -447,7 +461,7 @@ export default function ProviderConfigModal({
       await onSaved();
     } catch (e) {
       onNotice(providerCredentialErrorNotice(e, `Renewing ${view.name} session`));
-      setError(e instanceof Error ? e.message.slice(0, 160) : "Renew failed");
+      setError(inlineErrorMessage(e, "Renew failed"));
     } finally {
       setBusy(null);
     }
@@ -523,7 +537,7 @@ export default function ProviderConfigModal({
       await onSaved();
     } catch (e) {
       onNotice(providerCredentialErrorNotice(e, `Testing ${view.name} connection`));
-      setError(e instanceof Error ? e.message.slice(0, 160) : "Verify failed");
+      setError(inlineErrorMessage(e, "Verify failed"));
     } finally {
       setBusy(null);
     }

@@ -18,6 +18,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { ApiError } from "../../../lib/api/client";
 import ProviderConfigModal from "../ProviderConfigModal";
 import type { Provider } from "../api";
 
@@ -319,6 +320,62 @@ describe("GAP-PROVIDER-OAUTH-1 — user-scope Connect button", () => {
       expect(screen.getByTestId("provider-config-hint").textContent).toContain("be2f");
     });
     expect(onSaved).toHaveBeenCalled();
+  });
+
+  it("P3-2 (RUN-20260818T0223Z third-party adversarial review): a forced exchange error renders a friendly message, never the raw 'METHOD path failed (status): {json}' backend string", async () => {
+    startUserProviderOAuth.mockResolvedValue({
+      authorizeUrl: "https://platform.claude.com/oauth/code/callback?client_id=abc&state=xyz",
+      flow: "code_relay",
+      provider: "anthropic",
+    });
+    // The exact shape apiRequest() throws on a real backend 400 — mirrors the
+    // live prod repro in 12-thirdparty-prod-adversarial.md verbatim.
+    exchangeUserProviderOAuth.mockRejectedValue(
+      new ApiError(
+        'POST /agents/user/providers/anthropic/oauth/exchange failed (400): ' +
+          '{"detail":"Authorization state is unknown, expired, or already used — restart Connect."}',
+        400,
+      ),
+    );
+    vi.spyOn(window, "open").mockReturnValue({
+      location: { href: "" },
+      close: vi.fn(),
+      closed: false,
+    } as unknown as Window);
+
+    render(
+      <ProviderConfigModal
+        provider={provider({ id: "anthropic" })}
+        onClose={noop}
+        onSaved={asyncNoop}
+        onNotice={noop}
+        scope="user"
+      />,
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("user-oauth-connect"));
+    });
+    await waitFor(() => screen.getByTestId("user-oauth-code-input"));
+
+    fireEvent.change(screen.getByTestId("user-oauth-code-input"), {
+      target: { value: "BADCODE#xyz" },
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("user-oauth-complete"));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("provider-config-error")).toBeTruthy();
+    });
+    const rendered = screen.getByTestId("provider-config-error").textContent ?? "";
+    // Still an honest failure — the user learns it failed and can retry —
+    // just never the raw backend echo.
+    expect(rendered).toContain(
+      "Authorization state is unknown, expired, or already used — restart Connect.",
+    );
+    expect(rendered).not.toContain("failed (400)");
+    expect(rendered).not.toContain("POST /agents/user/providers");
+    expect(rendered).not.toContain('"detail"');
   });
 
   it("a key-only provider (no OAuth descriptor) shows ONLY the key field — no Connect button", () => {

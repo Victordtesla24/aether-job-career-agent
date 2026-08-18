@@ -391,8 +391,15 @@ export function missingResumeNotice(output: Record<string, unknown>): Notice | n
  * unavailable"}`); this pulls the JSON `detail` string out when present and
  * otherwise falls back to the raw message text. Mirrors the extraction
  * already used for email-send errors (see lib/api/workspaces.ts).
+ *
+ * Exported (P3-2, RUN-20260818T0223Z third-party adversarial review):
+ * `ProviderConfigModal`'s inline error slot used to render `Error.message`
+ * verbatim, which is exactly the raw `METHOD /path failed (status): {json}`
+ * string this function exists to strip — so the modal showed a clean top
+ * banner AND a raw backend echo directly below it. Reusing this same
+ * extraction for the modal's inline error keeps both surfaces in agreement.
  */
-function extractApiDetail(err: unknown): string | null {
+export function extractApiDetail(err: unknown): string | null {
   if (!(err instanceof Error) || !err.message.trim()) return null;
   // Shared JSON-detail core lives in extractApiJsonDetail (hoisted declaration);
   // this variant adds the documented raw-message fallback.
