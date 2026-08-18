@@ -44,7 +44,10 @@ import os
 import re
 import shutil
 import tempfile
+import time
 from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
+from html import unescape
 from pathlib import Path
 from typing import Any, Callable, Iterable
 
@@ -2484,6 +2487,74 @@ def _read_blocked_submission(root: Any) -> list[dict[str, Any]] | None:
     return list(result) if result else None
 
 
+def _blocked_submission_on(page: Any) -> list[dict[str, Any]] | None:
+    """Whatever :data:`_SUBMIT_GUARD_INSTALL_JS` blocked on ``page`` or any
+    :func:`_reachable_frames` frame's most recent submit attempt, or
+    ``None``.
+
+    U5d-4: checked after EVERY submit click the executor makes — the
+    employer form's own first click AND the code-entry resubmit
+    :func:`_resolve_verification_gate` issues once a verification code has
+    been typed in — so a required field the guard catches refuses
+    identically no matter which of the two clicks revealed it. This is what
+    makes it structurally impossible for the verification-code loop to
+    create a path around CLI-SUB-005-R7's fail-closed submission guard: the
+    guard is armed once, for the page's whole lifetime, and every click this
+    module ever issues is read back through this same function.
+    """
+    blocked = _read_blocked_submission(page)
+    if blocked:
+        return blocked
+    for frame in _reachable_frames(page):
+        frame_blocked = _read_blocked_submission(frame)
+        if frame_blocked:
+            return frame_blocked
+    return None
+
+
+def _manual_step_for_blocked_submission(
+    blocked_submission: list[dict[str, Any]],
+) -> ManualStepRequired:
+    """The CLI-SUB-005-R6/R7 decisive-invariant outcome for a guard-blocked
+    submit click, factored out so both call sites (the form's own first
+    click, and U5d-4's code-entry resubmit) raise the exact same honest
+    reason and message rather than two copies that could quietly diverge.
+    """
+    labels = "; ".join(
+        str(item.get("label") or item.get("kind") or "a required field")
+        for item in blocked_submission
+    )
+    # CLI-SUB-005-R7 — the in-browser guard's own fail-closed path (see
+    # _SUBMIT_GUARD_INSTALL_JS) reports a census that could not run as a
+    # synthetic `census_unavailable` entry, never a real field — an HONEST,
+    # distinct reason from a genuine unanswered question.
+    unverifiable = all(
+        item.get("kind") == "census_unavailable" for item in blocked_submission
+    )
+    if unverifiable:
+        return ManualStepRequired(
+            "unverifiable_form_surface",
+            (
+                "This application's own submit handling could not be "
+                "verified at the instant of submitting — Aether's "
+                "browser-level guard refused to let the submission go "
+                "through rather than guess, so nothing was sent."
+            ),
+            question=labels,
+        )
+    return ManualStepRequired(
+        "unplanned_required_field",
+        (
+            "This application revealed a required question (sometimes "
+            "hidden inside a shadow-DOM widget, sometimes only at the "
+            "exact instant of submitting) that Aether could not verify "
+            "was answered — its own browser-level guard refused to let "
+            "the submission go through, so nothing was sent: " + labels
+        ),
+        question=labels,
+    )
+
+
 def _uncommitted_live_required_fields(
     page: Any,
     channel: str,
@@ -3161,6 +3232,8 @@ def playwright_form_submitter(
     evidence_dir: str,
     profile: dict[str, Any] | None = None,
     answer_bank: Callable[[dict[str, Any]], Any] | None = None,
+    user_id: str | None = None,
+    company: str | None = None,
 ) -> dict[str, Any]:
     """Fill and submit the application in a REAL headless Chromium.
 
@@ -3177,8 +3250,17 @@ def playwright_form_submitter(
     stored answer means an honest refusal, exactly like every other unanswered
     required field.
 
+    ``user_id``/``company`` (U5d-4) are needed only if the employer's ATS
+    demands an emailed verification code after the submit click: the code is
+    read from THAT user's own connected Gmail, and the employer is named in
+    the manual step raised when it cannot be. Without a ``user_id`` (replay,
+    or a direct call) a verification gate is an honest manual step rather
+    than anything Aether tries to work around — and the gate is only ever
+    even looked for AFTER CLI-SUB-005-R7's submission guard has cleared the
+    click, so this can never open a path around it.
+
     Returns ``{"submitted", "evidencePath", "destination", "filled",
-    "unfilled", "unplannedFilled", "mode"}``. Raises
+    "unfilled", "unplannedFilled", "mode", "verification"}``. Raises
     :class:`ApplyExecutorTransportError` if the browser itself could not be
     driven — never a fake success.
     """
@@ -3206,6 +3288,7 @@ def playwright_form_submitter(
     blocked_required: list[str] = []
     unplanned_filled: list[str] = []
     mode = "live" if apply_url else "replay"
+    verification: dict[str, Any] | None = None
     screenshot = _evidence_path(evidence_dir, application_id, "confirmation.png")
     try:
         with sync_playwright() as runner:  # noqa: SIM117 — cleanup handled below
@@ -3340,19 +3423,14 @@ def playwright_form_submitter(
                         raise
                     filled.extend(unplanned_filled)
                 before_url = page.url
+                submitted_at = time.time()
                 submitted = _activate_submit(page)
                 # The click above can succeed (Playwright's own actionability
                 # check is satisfied) even when our capture-phase guard
                 # cancelled the SUBMISSION itself — `submitted` alone cannot
                 # tell the two apart, so read back what the guard actually
                 # blocked, on every surface it was installed on.
-                blocked_submission = _read_blocked_submission(page)
-                if not blocked_submission:
-                    for frame in _reachable_frames(page):
-                        frame_blocked = _read_blocked_submission(frame)
-                        if frame_blocked:
-                            blocked_submission = frame_blocked
-                            break
+                blocked_submission = _blocked_submission_on(page)
                 if blocked_submission:
                     # CLI-SUB-005-R6 — THE DECISIVE INVARIANT: a required
                     # control uncommitted at the instant of submission ⇒ the
@@ -3361,45 +3439,27 @@ def playwright_form_submitter(
                     # NOTHING — the guard cancelled the browser's own default
                     # action before it ever fired.
                     page.screenshot(path=str(screenshot), full_page=True)
-                    labels = "; ".join(
-                        str(item.get("label") or item.get("kind") or "a required field")
-                        for item in blocked_submission
-                    )
-                    # CLI-SUB-005-R7 — the in-browser guard's own fail-closed
-                    # path (see _SUBMIT_GUARD_INSTALL_JS) reports a census
-                    # that could not run as a synthetic `census_unavailable`
-                    # entry, never a real field — an HONEST, distinct reason
-                    # from a genuine unanswered question.
-                    unverifiable = all(
-                        item.get("kind") == "census_unavailable"
-                        for item in blocked_submission
-                    )
-                    if unverifiable:
-                        raise ManualStepRequired(
-                            "unverifiable_form_surface",
-                            (
-                                "This application's own submit handling "
-                                "could not be verified at the instant of "
-                                "submitting — Aether's browser-level guard "
-                                "refused to let the submission go through "
-                                "rather than guess, so nothing was sent."
-                            ),
-                            question=labels,
-                        )
-                    raise ManualStepRequired(
-                        "unplanned_required_field",
-                        (
-                            "This application revealed a required question "
-                            "(sometimes hidden inside a shadow-DOM widget, "
-                            "sometimes only at the exact instant of "
-                            "submitting) that Aether could not verify was "
-                            "answered — its own browser-level guard refused "
-                            "to let the submission go through, so nothing "
-                            "was sent: " + labels
-                        ),
-                        question=labels,
-                    )
+                    raise _manual_step_for_blocked_submission(blocked_submission)
                 page.wait_for_timeout(1500)
+                # U5d-4 — verification-code loop. Sited strictly AFTER the
+                # guard-check above: a click the R7 guard blocked never
+                # reaches this line at all, so the code loop can never run
+                # instead of, or ahead of, that fail-closed check — it can
+                # only ever run once the guard has already cleared the
+                # click. See _resolve_verification_gate for the read from
+                # the user's own Gmail; its own resubmit click is held to
+                # the identical guard via _blocked_submission_on.
+                if apply_url and submitted and _detect_verification_gate(page):
+                    verification = _resolve_verification_gate(
+                        page,
+                        application_id=application_id,
+                        evidence_dir=evidence_dir,
+                        since_epoch=submitted_at,
+                        user_id=user_id,
+                        company=company,
+                        form_email=_planned_form_email(plan),
+                    )
+                    before_url = str(verification.get("beforeUrl") or before_url)
                 confirmation = (
                     _confirmation_signal(page, before_url) if apply_url else None
                 )
@@ -3450,6 +3510,10 @@ def playwright_form_submitter(
                 "capturedAt": datetime.now(timezone.utc).isoformat(),
                 "submitted": submitted,
                 "confirmation": confirmation,
+                # U5d-4: what the verification gate did, when there was one.
+                # Never the code itself — that is the user's secret and it
+                # has no business in an evidence file.
+                "verification": verification,
                 "commitVerified": verify_commit,
                 "fieldsFilled": filled,
                 "fieldsNotFilled": unfilled,
@@ -3465,6 +3529,7 @@ def playwright_form_submitter(
     return {
         "submitted": submitted,
         "confirmation": confirmation,
+        "verification": verification,
         "evidencePath": str(screenshot),
         "destination": destination,
         "filled": filled,
@@ -3619,6 +3684,461 @@ def _activate_submit(page: Any) -> bool:
 
 
 # ---------------------------------------------------------------------------
+# U5d-4 — the employer's own email verification code.
+#
+# Some ATS forms answer the submit click with an anti-bot gate: "enter the
+# security code we just emailed you". Until the code is typed the employer has
+# NOT received the application, so the executor stopped at ``no_confirmation``
+# and an approved submission never landed.
+#
+# The loop below closes that, under an absolute honesty floor:
+#   * the code is read ONLY from the user's OWN connected Gmail — it is never
+#     generated, never guessed, and no third-party OTP service is involved;
+#   * it must be FRESHER than this attempt's submit click, because each click
+#     invalidates the previous code;
+#   * no mailbox, no code, or a code we cannot type ⇒ an honest, actionable
+#     ``ManualStepRequired("verification_code_email")`` on the row;
+#   * the CONFIRMATION claim is unchanged — it still comes only from
+#     ``_confirmation_signal`` re-run after the code submit, so entering a code
+#     can never by itself be read as "the employer received this";
+#   * this loop is only ever reached AFTER CLI-SUB-005-R7's submission guard
+#     has cleared the click (see the call site in ``playwright_form_submitter``
+#     and ``_blocked_submission_on``'s docstring) — a guard-blocked click never
+#     reaches ``_detect_verification_gate`` at all — and the code-entry
+#     resubmit below is read back through that SAME guard, so a required field
+#     revealed at that instant refuses exactly like the first click would.
+# ---------------------------------------------------------------------------
+
+#: Text an ATS shows when it is holding the application for a code. Only ever
+#: evaluated AFTER the submit click, and only together with a real code field
+#: (below), so a page that merely mentions a code — or a confirmation page — is
+#: never mistaken for a gate.
+_VERIFICATION_GATE_TEXT = re.compile(
+    r"verification code|security code|confirmation code"
+    r"|one[- ]time (code|passcode)|code we (just )?emailed",
+    re.I,
+)
+
+#: The code field in every shape observed: the WCAG one-time-code input, a
+#: named/labelled single input, and the row of ``maxlength="1"`` boxes
+#: Greenhouse renders (eight of them, auto-advancing).
+_CODE_INPUT_SELECTOR = (
+    'input[autocomplete="one-time-code"], '
+    'input[name*="security" i], '
+    'input[id*="security" i], '
+    '[class*="security" i] input, '
+    'input[aria-label*="code" i], '
+    'input[maxlength="1"]'
+)
+
+#: Per-character typing delay (ms). The boxes auto-advance on each keystroke
+#: and drop characters typed faster than a human can produce them.
+_CODE_TYPE_DELAY_MS = 110
+
+#: Senders that carry an ATS's code mail. This is PLATFORM infrastructure, not
+#: an employer: Greenhouse is first-class because it is the shape proven against
+#: a real submission, and the tuple is where the next ATS is added. No employer
+#: name ever enters the query — the employer does not send this mail, their ATS
+#: does, so filtering on a company name would drop the very message being
+#: waited for.
+_CODE_EMAIL_SENDERS: tuple[str, ...] = (
+    "greenhouse-mail.io",
+    "ashbyhq.com",
+    "hire.lever.co",
+    "smartrecruiters.com",
+)
+
+#: Subject markers for that same mail from an ATS we have no sender for yet.
+_CODE_EMAIL_SUBJECTS: tuple[str, ...] = (
+    "security code",
+    "verification code",
+    "confirmation code",
+)
+
+#: Clock skew tolerated between the sender's mail server and this VM.
+_CODE_FRESHNESS_SKEW_SECONDS = 30.0
+
+#: Label-anchored ONLY. A code is 6–8 mixed-case alphanumerics and may contain
+#: no digits at all ("OzUAaXYB"), so an unanchored token match would return any
+#: word in the message. Each pattern names the label its ATS puts in front of
+#: the code; Greenhouse's is first, being the one proven live.
+_CODE_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"application:\s*([A-Za-z0-9]{8})\b"),
+    re.compile(r"code field[^:]*:?\s*([A-Za-z0-9]{8})\b", re.I),
+    re.compile(
+        r"(?:verification|security|confirmation)\s+code[^A-Za-z0-9]{0,24}([A-Za-z0-9]{6,8})\b",
+        re.I,
+    ),
+)
+
+#: An address the plan actually put in the form — that is where a code goes.
+_EMAIL_VALUE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+#: Why the code could not be used. Each is a real, distinct thing that happened.
+_VERIFICATION_CAUSES: dict[str, str] = {
+    "gmail_unavailable": (
+        "could not read your connected Gmail (it is not connected to Aether, "
+        "or the connection has expired)"
+    ),
+    "no_mailbox": "had no connected mailbox to read that code from",
+    "code_not_found": "did not find that code email in your connected Gmail in time",
+    "code_entry_failed": "could not type the code into the site's code field",
+}
+
+
+def _env_float(name: str, default: float) -> float:
+    try:
+        value = float(os.environ.get(name, "") or default)
+    except (TypeError, ValueError):
+        return default
+    return value if value > 0 else default
+
+
+def _build_verification_query() -> str:
+    """The Gmail search for a code mail — generic, with no employer literal.
+
+    ``newer_than`` accepts d/m/y units only, so it is used purely to keep the
+    result set small; the real freshness test is :func:`_is_fresh_code_email`
+    against THIS attempt's submit click.
+    """
+    senders = " OR ".join(f"from:{sender}" for sender in _CODE_EMAIL_SENDERS)
+    subjects = " OR ".join(f'subject:"{subject}"' for subject in _CODE_EMAIL_SUBJECTS)
+    return f"(({senders}) OR ({subjects})) newer_than:1d"
+
+
+def _is_fresh_code_email(header: dict[str, Any], since_epoch: float) -> bool:
+    """``True`` only for mail that arrived AFTER this attempt's submit click.
+
+    Every submit invalidates the previous code, so a message from an earlier
+    attempt is worse than useless: typing it would fail the gate while looking
+    like a genuine try. A date that cannot be parsed proves nothing about when
+    the mail arrived, so it is rejected rather than assumed fresh.
+    """
+    raw = str((header or {}).get("date") or "").strip()
+    if not raw:
+        return False
+    try:
+        received = parsedate_to_datetime(raw).timestamp()
+    except Exception:  # noqa: BLE001 — an unparseable date is simply not proof
+        return False
+    return received >= since_epoch - _CODE_FRESHNESS_SKEW_SECONDS
+
+
+def _received_epoch(header: dict[str, Any]) -> float:
+    try:
+        return parsedate_to_datetime(str((header or {}).get("date") or "")).timestamp()
+    except Exception:  # noqa: BLE001
+        return 0.0
+
+
+def _extract_code_from_body(body: dict[str, Any]) -> str | None:
+    """The code an ATS mailed the user, or ``None``.
+
+    Both body alternatives are searched: Greenhouse's text part is empty and the
+    code lives in the HTML one, where tags sit BETWEEN the label and the code —
+    so the tags are stripped (and entities decoded) before any pattern runs.
+    """
+    parts = [
+        str((body or {}).get("text") or ""),
+        str((body or {}).get("html") or ""),
+    ]
+    merged = " ".join(part for part in parts if part)
+    if not merged.strip():
+        return None
+    text = unescape(re.sub(r"<[^>]+>", " ", merged))
+    for pattern in _CODE_PATTERNS:
+        match = pattern.search(text)
+        if match:
+            return match.group(1)
+    return None
+
+
+def _planned_form_email(plan: dict[str, Any]) -> str | None:
+    """The address THIS application typed into the form — where a code goes."""
+    for field in (plan or {}).get("fields") or []:
+        value = field.get("value") if isinstance(field, dict) else None
+        if isinstance(value, str) and _EMAIL_VALUE.match(value.strip()):
+            return value.strip()
+    return None
+
+
+def _verification_manual_step(
+    cause: str, *, company: str | None = None, form_email: str | None = None
+) -> ManualStepRequired:
+    """The honest, actionable outcome when the code cannot be used.
+
+    It names the employer and the address the code was sent to, because those
+    are the two facts the user needs to finish the application themselves.
+    The code itself is never carried here — the user reads it in their own
+    inbox, and it has no business being persisted on the row.
+
+    No ``question`` is attached on purpose: there is no employer question to
+    answer here, and leaving it unset is what makes ``record_manual_step``
+    persist this whole explanation as the row's ``manualStepDetail`` — the text
+    the card and its tooltip actually show.
+    """
+    employer = (company or "").strip() or "This employer"
+    where = (form_email or "").strip() or "the email address on this application"
+    detail = _VERIFICATION_CAUSES.get(cause, _VERIFICATION_CAUSES["code_not_found"])
+    return ManualStepRequired(
+        "verification_code_email",
+        (
+            f"{employer} asked for a verification code before it would accept "
+            f"this application, and emailed the code to {where}. Aether "
+            f"{detail}, so the application was NOT accepted. Open the posting, "
+            "enter the code from that email and submit it there."
+        ),
+    )
+
+
+def _poll_verification_code(
+    user_id: str,
+    *,
+    since_epoch: float,
+    company: str | None = None,
+    form_email: str | None = None,
+    gmail_factory: Callable[[str], Any] | None = None,
+    sleeper: Callable[[float], None] | None = None,
+    monotonic: Callable[[], float] | None = None,
+    interval_seconds: float | None = None,
+    timeout_seconds: float | None = None,
+) -> dict[str, Any] | None:
+    """Wait for the user's OWN mailbox to receive the code. ``None`` on timeout.
+
+    Gmail's search index lags delivery by 10–60 seconds, so a single look is
+    always too early: this polls (5s, up to 5 minutes by default) and takes the
+    NEWEST message that both passes the freshness gate and actually contains a
+    label-anchored code. A transient Gmail failure is retried; a missing or
+    revoked Gmail grant is not something waiting can fix, so it becomes the
+    honest manual step immediately.
+
+    The returned mapping carries the code under ``"code"`` for the caller to
+    type — and nothing that goes into an audit record ever carries it onward.
+    """
+    from app.services.gmail_service import (
+        GmailAuthError,
+        GmailNotConnectedError,
+        GmailService,
+    )
+
+    factory: Callable[[str], Any] = gmail_factory or GmailService
+    sleep = sleeper or time.sleep
+    clock = monotonic or time.monotonic
+    interval = (
+        interval_seconds
+        if interval_seconds is not None
+        else _env_float("AETHER_APPLY_CODE_POLL_INTERVAL_SECONDS", 5.0)
+    )
+    timeout = (
+        timeout_seconds
+        if timeout_seconds is not None
+        else _env_float("AETHER_APPLY_CODE_POLL_TIMEOUT_SECONDS", 300.0)
+    )
+    query = _build_verification_query()
+    started = clock()
+    deadline = started + max(timeout, 0.0)
+    attempts = 0
+    while True:
+        attempts += 1
+        service: Any = None
+        headers: list[dict[str, Any]] = []
+        try:
+            service = factory(user_id)
+            headers = list(service.list_message_headers(query=query, max_results=10) or [])
+        except (GmailNotConnectedError, GmailAuthError) as exc:
+            raise _verification_manual_step(
+                "gmail_unavailable", company=company, form_email=form_email
+            ) from exc
+        except Exception as exc:  # noqa: BLE001 — a transient Gmail error is retried
+            logger.info(
+                "apply-executor: verification-code mailbox poll %d failed (%s) — retrying",
+                attempts,
+                type(exc).__name__,
+            )
+        for header in sorted(headers, key=_received_epoch, reverse=True):
+            if service is None or not _is_fresh_code_email(header, since_epoch):
+                continue
+            try:
+                body = service.get_message_bodies(str(header.get("id") or ""))
+            except Exception:  # noqa: BLE001 — try the next candidate message
+                continue
+            code = _extract_code_from_body(body)
+            if not code:
+                continue
+            return {
+                "code": code,
+                "messageId": str(header.get("id") or ""),
+                "from": str(header.get("from") or ""),
+                "subject": str(header.get("subject") or ""),
+                "receivedAt": str(header.get("date") or ""),
+                "pollAttempts": attempts,
+                "pollSeconds": round(clock() - started, 1),
+            }
+        if clock() >= deadline:
+            return None
+        sleep(interval)
+
+
+def _detect_verification_gate(page: Any) -> bool:
+    """Is the page holding this application for an emailed code?
+
+    Both halves are required — the wording AND a real code field — so neither a
+    confirmation page that happens to say "security code" nor a form that has a
+    code field it never asked us to fill can trip the loop.
+    """
+    try:
+        content = page.content() or ""
+    except Exception:  # noqa: BLE001 — an unreadable page is not a gate
+        return False
+    if not _VERIFICATION_GATE_TEXT.search(content):
+        return False
+    try:
+        return int(page.locator(_CODE_INPUT_SELECTOR).count()) > 0
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def _enter_code_into_form(page: Any, code: str) -> bool:
+    """Type the code the way a human does. ``False`` iff it did not go in.
+
+    Two real shapes: one input per character (Greenhouse renders eight, each
+    auto-advancing — click the first and let the keyboard walk the row), or a
+    single full-length input, which is cleared first so a retry cannot append.
+    Both are typed on the keyboard rather than filled, because the widgets
+    listen for key events and ignore a programmatic value set.
+    """
+    try:
+        boxes = page.locator(_CODE_INPUT_SELECTOR)
+        count = int(boxes.count())
+    except Exception:  # noqa: BLE001
+        return False
+    if count <= 0:
+        return False
+    try:
+        boxes.first.click(timeout=_ACTION_TIMEOUT_MS)
+        if count < len(code):
+            boxes.first.fill("", timeout=_ACTION_TIMEOUT_MS)
+        page.keyboard.type(code, delay=_CODE_TYPE_DELAY_MS)
+        page.wait_for_timeout(800)
+    except Exception:  # noqa: BLE001 — an un-typeable field is an honest failure
+        return False
+    return True
+
+
+def _resolve_verification_gate(
+    page: Any,
+    *,
+    application_id: str,
+    evidence_dir: str,
+    since_epoch: float,
+    user_id: str | None,
+    company: str | None = None,
+    form_email: str | None = None,
+    gmail_factory: Callable[[str], Any] | None = None,
+    sleeper: Callable[[float], None] | None = None,
+    interval_seconds: float | None = None,
+    timeout_seconds: float | None = None,
+) -> dict[str, Any]:
+    """Read the code from the user's mailbox, type it, submit again.
+
+    Returns the metadata for the evidence sidecar — which deliberately does NOT
+    include the code — or raises :class:`ManualStepRequired` with reason
+    ``verification_code_email`` (or, if the resubmit itself trips
+    CLI-SUB-005-R7's guard, the same guard reason a first-click block would
+    raise — see :func:`_blocked_submission_on`). Never returns a "resolved"
+    gate it did not actually resolve.
+    """
+    gate_shot = _evidence_path(evidence_dir, application_id, "code-gate.png")
+    _capture(page, gate_shot)
+    logger.info(
+        "apply-executor: application %s hit an email verification gate — "
+        "reading the code from the user's connected Gmail",
+        application_id,
+    )
+    if not user_id:
+        raise _verification_manual_step("no_mailbox", company=company, form_email=form_email)
+    found = _poll_verification_code(
+        user_id,
+        since_epoch=since_epoch,
+        company=company,
+        form_email=form_email,
+        gmail_factory=gmail_factory,
+        sleeper=sleeper,
+        interval_seconds=interval_seconds,
+        timeout_seconds=timeout_seconds,
+    )
+    if not found:
+        logger.warning(
+            "apply-executor: no verification code for application %s arrived in "
+            "the user's connected Gmail within the wait window",
+            application_id,
+        )
+        raise _verification_manual_step(
+            "code_not_found", company=company, form_email=form_email
+        )
+    code = str(found["code"])
+    logger.info(
+        "apply-executor: verification code for application %s retrieved from the "
+        "connected Gmail (%d characters, from %s) after %s attempt(s)",
+        application_id,
+        len(code),
+        found.get("from") or "unknown sender",
+        found.get("pollAttempts"),
+    )
+    if not _enter_code_into_form(page, code):
+        raise _verification_manual_step(
+            "code_entry_failed", company=company, form_email=form_email
+        )
+    entered_shot = _evidence_path(evidence_dir, application_id, "code-entered.png")
+    _capture(page, entered_shot)
+    # The URL the gate itself sits on: the confirmation check that follows must
+    # measure navigation caused by the CODE submit, never by the first click.
+    try:
+        gate_url = str(page.url)
+    except Exception:  # noqa: BLE001
+        gate_url = ""
+    resubmitted = _activate_submit(page)
+    page.wait_for_timeout(2500)
+    # CLI-SUB-005-R7 parity — see _blocked_submission_on's docstring: the
+    # code-entry click above is a submit click exactly like the form's own
+    # first one, and the SAME capture-phase guard (armed once, for the whole
+    # page lifetime) is still watching it. A required field it reveals at
+    # THIS instant must refuse exactly as the first click would, never a
+    # silent "resubmitted" success — this is what makes it structurally
+    # impossible for the verification-code loop to create a path around the
+    # guard.
+    blocked_submission = _blocked_submission_on(page)
+    if blocked_submission:
+        blocked_shot = _evidence_path(
+            evidence_dir, application_id, "code-resubmit-blocked.png"
+        )
+        _capture(page, blocked_shot)
+        raise _manual_step_for_blocked_submission(blocked_submission)
+    return {
+        "gateDetected": True,
+        "codeSource": "connected_gmail",
+        "codeLength": len(code),
+        "from": found.get("from"),
+        "subject": found.get("subject"),
+        "receivedAt": found.get("receivedAt"),
+        "pollAttempts": found.get("pollAttempts"),
+        "pollSeconds": found.get("pollSeconds"),
+        "codeEnteredAt": datetime.now(timezone.utc).isoformat(),
+        "resubmitted": resubmitted,
+        "beforeUrl": gate_url,
+        "screenshots": [gate_shot.name, entered_shot.name],
+    }
+
+
+def _capture(page: Any, path: Path) -> None:
+    """Best-effort evidence screenshot: a failed capture never fails a step."""
+    try:
+        page.screenshot(path=str(path), full_page=True)
+    except Exception:  # noqa: BLE001
+        logger.info("apply-executor: could not capture %s", path.name)
+
+
+# ---------------------------------------------------------------------------
 # The gated execution.
 # ---------------------------------------------------------------------------
 
@@ -3732,6 +4252,11 @@ def execute_site_application(
             # never a guess, and never silently unattempted.
             profile=profile,
             answer_bank=resolver,
+            # U5d-4: whose mailbox the employer's verification code may be
+            # read from, and whose name the manual step must carry if it
+            # cannot be.
+            user_id=user_id,
+            company=company,
         )
     except ManualStepRequired as exc:
         record_manual_step(
