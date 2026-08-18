@@ -45,11 +45,19 @@ const importGmailContactsMock = vi.fn();
 const importLinkedInConnectionsMock = vi.fn();
 const listContactsMock = vi.fn();
 const refreshContactsFromInboxMock = vi.fn();
+const createOutreachTaskMock = vi.fn();
+const deleteOutreachTaskMock = vi.fn();
+const runAgentMock = vi.fn();
 vi.mock("../../../../lib/api/networking", () => ({
   importGmailContacts: (...a: unknown[]) => importGmailContactsMock(...a),
   importLinkedInConnections: (...a: unknown[]) => importLinkedInConnectionsMock(...a),
   listContacts: (...a: unknown[]) => listContactsMock(...a),
   refreshContactsFromInbox: (...a: unknown[]) => refreshContactsFromInboxMock(...a),
+  createOutreachTask: (...a: unknown[]) => createOutreachTaskMock(...a),
+  deleteOutreachTask: (...a: unknown[]) => deleteOutreachTaskMock(...a),
+}));
+vi.mock("../../../../lib/api/agents", () => ({
+  runAgent: (...a: unknown[]) => runAgentMock(...a),
 }));
 
 vi.mock("../../../../lib/api/workspaces", async (importOriginal) => {
@@ -133,6 +141,11 @@ afterEach(() => {
   deleteNetworkingContactMock.mockReset();
   updateNetworkingContactMock.mockReset();
   refreshContactsFromInboxMock.mockReset();
+  createOutreachTaskMock.mockReset();
+  deleteOutreachTaskMock.mockReset();
+  runAgentMock.mockReset();
+  listContactsMock.mockReset();
+  window.history.replaceState({}, "", "/dashboard/networking");
 });
 
 describe("NetworkingPage — Add Contact wiring (MV-networking-001)", () => {
@@ -233,7 +246,7 @@ describe("NetworkingPage — Outreach Queue + Communication Log field mismatch (
     expect(queue.textContent).toContain("Mark K.");
     expect(queue.textContent).toContain("Canva");
     expect(queue.textContent).toContain("Follow Up — Canva");
-    expect(queue.textContent?.toLowerCase()).toContain("pending");
+    expect(queue.textContent).toMatch(/Pending/);
     expect(queue.textContent).not.toContain("undefined");
   });
 
@@ -603,5 +616,68 @@ describe("NetworkingPage — honesty and freshness (NET-HONEST)", () => {
     expect(refreshContactsFromInboxMock).toHaveBeenCalled();
     expect(screen.getByTestId("import-notice").textContent).toMatch(/3 contact/);
     expect(fetchNetworkingSummaryMock.mock.calls.length).toBeGreaterThan(before);
+  });
+
+  it("stage select shows New/Warm labels while persisting enum values", async () => {
+    fetchNetworkingSummaryMock.mockResolvedValue(summary());
+    fetchNetworkingContactMock.mockResolvedValue(CONTACT_RECORD);
+    render(<NetworkingPage />);
+    await waitFor(() => screen.getByTestId("networking-crm"));
+    fireEvent.click(screen.getAllByTestId("contact-card")[0]);
+    await waitFor(() => screen.getByTestId("contact-stage-select"));
+    const select = screen.getByTestId("contact-stage-select") as HTMLSelectElement;
+    const labels = Array.from(select.options).map((o) => o.textContent);
+    expect(labels).toEqual(["New", "Warm", "Active", "Scheduled", "Placed"]);
+    expect(Array.from(select.options).map((o) => o.value)).toEqual([
+      "identified",
+      "contacted",
+      "responded",
+      "meeting",
+      "referral",
+    ]);
+  });
+
+  it("page error offers Retry that clears the error and reloads", async () => {
+    fetchNetworkingSummaryMock.mockRejectedValueOnce(new Error("network down"));
+    fetchNetworkingSummaryMock.mockResolvedValueOnce(summary());
+    render(<NetworkingPage />);
+    await waitFor(() => screen.getByTestId("networking-page-error"));
+    fireEvent.click(screen.getByTestId("networking-retry-btn"));
+    await waitFor(() => screen.getByTestId("networking-crm"));
+    expect(screen.queryByTestId("networking-page-error")).toBeNull();
+  });
+
+  it("cancels a pending outreach task via DELETE", async () => {
+    fetchNetworkingSummaryMock.mockResolvedValue(summary());
+    deleteOutreachTaskMock.mockResolvedValue(undefined);
+    fetchNetworkingSummaryMock.mockResolvedValueOnce(summary());
+    render(<NetworkingPage />);
+    await waitFor(() => screen.getByTestId("cancel-outreach-ot-1"));
+    fireEvent.click(screen.getByTestId("cancel-outreach-ot-1"));
+    await waitFor(() => expect(deleteOutreachTaskMock).toHaveBeenCalledWith("ot-1"));
+  });
+
+  it("Draft outreach runs recruiterOutreach with contact_id", async () => {
+    fetchNetworkingSummaryMock.mockResolvedValue(summary());
+    fetchNetworkingContactMock.mockResolvedValue(CONTACT_RECORD);
+    runAgentMock.mockResolvedValue({ approvalId: "appr-1", message: "Draft queued" });
+    fetchNetworkingSummaryMock.mockResolvedValueOnce(summary());
+    render(<NetworkingPage />);
+    await waitFor(() => screen.getByTestId("networking-crm"));
+    fireEvent.click(screen.getAllByTestId("contact-card")[0]);
+    await waitFor(() => screen.getByTestId("draft-outreach-btn"));
+    fireEvent.click(screen.getByTestId("draft-outreach-btn"));
+    await waitFor(() => {
+      expect(runAgentMock).toHaveBeenCalledWith("recruiterOutreach", { contact_id: "c-1" });
+    });
+    await waitFor(() => screen.getByTestId("draft-outreach-notice"));
+  });
+
+  it("humanises outreach status chips", async () => {
+    fetchNetworkingSummaryMock.mockResolvedValue(summary());
+    render(<NetworkingPage />);
+    await waitFor(() => screen.getByTestId("outreach-queue"));
+    expect(screen.getByTestId("outreach-queue").textContent).toMatch(/Pending/);
+    expect(screen.getByTestId("outreach-queue").textContent).not.toMatch(/\bpending\b/);
   });
 });

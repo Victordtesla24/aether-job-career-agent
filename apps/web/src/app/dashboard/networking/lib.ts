@@ -13,10 +13,23 @@ import type { NetworkingContact, NetworkingSummary } from "../../../lib/api/work
 export const STAGE_ACCENT: Record<string, string> = {
   New: "bg-white/40",
   Warm: "bg-aether-amber",
-  Active: "bg-aether-coral",
-  Scheduled: "bg-aether-violet",
+  Active: "bg-aether-violet",
+  Scheduled: "bg-aether-indigo",
   Placed: "bg-aether-green",
 };
+
+/** DB enum → board label (ML-NETWORKING-003). */
+export const STAGE_LABELS: Record<string, string> = {
+  identified: "New",
+  contacted: "Warm",
+  responded: "Active",
+  meeting: "Scheduled",
+  referral: "Placed",
+};
+
+export const STAGE_OPTIONS = (
+  Object.entries(STAGE_LABELS) as Array<[string, string]>
+).map(([value, label]) => ({ value, label }));
 
 /** Two-letter avatar glyph for a contact card, e.g. "Sarah L." -> "SL". */
 export function initials(name: string): string {
@@ -68,6 +81,19 @@ export function formatOutreachKind(kind: string): string {
   const spaced = kind.replace(/_/g, " ").trim();
   if (!spaced) return "";
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+
+/** Humanize OutreachTask.status — never leak raw enums into chips. */
+export function formatOutreachStatus(status: string): string {
+  const key = (status || "").trim().toLowerCase();
+  const labels: Record<string, string> = {
+    pending: "Pending",
+    sent: "Sent",
+    accepted: "Accepted",
+    declined: "Declined",
+    bounced: "Bounced",
+  };
+  return labels[key] ?? formatOutreachKind(status);
 }
 
 /**

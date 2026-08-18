@@ -28,8 +28,11 @@ export interface LinkedInImportResult {
   contactsUpdated?: number;
   duplicates: number;
   suppressed: number;
-  /** Present when rows also became relationship-consented sales leads. */
+  /** Kept for older servers; CRM imports no longer create SalesLead rows. */
   leadsCreated?: number;
+  /** Server field is ``rows`` (parsed Connections.csv rows). */
+  rows?: number;
+  /** @deprecated alias — prefer ``rows``. */
   rowsParsed?: number;
 }
 
@@ -46,8 +49,29 @@ export interface ContactListRow {
 }
 
 /** The FULL contact list — the pipeline summary previews only 5 per column. */
-export const listContacts = (): Promise<ContactListRow[]> =>
-  apiRequest<ContactListRow[]>("/networking/contacts");
+export const listContacts = (company?: string): Promise<ContactListRow[]> => {
+  const q = company?.trim()
+    ? `?company=${encodeURIComponent(company.trim())}`
+    : "";
+  return apiRequest<ContactListRow[]>(`/networking/contacts${q}`);
+};
+
+export const createOutreachTask = (input: {
+  contactId: string;
+  type?: string;
+  message?: string;
+}): Promise<Record<string, unknown>> =>
+  apiRequest("/networking/outreach", {
+    method: "POST",
+    body: {
+      contact_id: input.contactId,
+      type: input.type ?? "message",
+      message: input.message,
+    },
+  });
+
+export const deleteOutreachTask = (outreachId: string): Promise<void> =>
+  apiRequest<void>(`/networking/outreach/${outreachId}`, { method: "DELETE" });
 
 export const importGmailContacts = (): Promise<GmailImportResult> =>
   apiRequest<GmailImportResult>("/networking/gmail/import-contacts", {

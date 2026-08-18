@@ -22,6 +22,7 @@
  * MV-networking-009 / -010: Cancel resets the Add Contact form; Escape closes
  * whichever modal is open regardless of DOM focus.
  */
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import {
@@ -33,19 +34,31 @@ import {
   type NetworkingContactRecord,
   type NetworkingSummary,
 } from "../../../lib/api/workspaces";
-import { STAGE_ACCENT, buildPipelineColumns, formatOutreachKind, formatWhen, initials, totalContacts } from "./lib";
+import {
+  STAGE_ACCENT,
+  STAGE_LABELS,
+  STAGE_OPTIONS,
+  buildPipelineColumns,
+  formatOutreachKind,
+  formatOutreachStatus,
+  formatWhen,
+  initials,
+  totalContacts,
+} from "./lib";
 import { useRealtimeResources } from "../../../hooks/useRealtime";
 import {
+  createOutreachTask,
+  deleteOutreachTask,
   importGmailContacts,
   importLinkedInConnections,
   listContacts,
   refreshContactsFromInbox,
   type ContactListRow,
 } from "../../../lib/api/networking";
+import { runAgent } from "../../../lib/api/agents";
 import PageHeader from "../../../components/shell/PageHeader";
 
 const EMPTY_FORM = { name: "", role: "", company: "", email: "", linkedinUrl: "" };
-const CONTACT_STAGES = ["identified", "contacted", "responded", "meeting", "referral"] as const;
 
 export default function NetworkingPage() {
   const [data, setData] = useState<NetworkingSummary | null>(null);
@@ -88,17 +101,37 @@ export default function NetworkingPage() {
   const [editCompany, setEditCompany] = useState("");
   const [editLinkedin, setEditLinkedin] = useState("");
   const [savingEdits, setSavingEdits] = useState(false);
+  const [outreachBusyId, setOutreachBusyId] = useState<string | null>(null);
+  const [draftBusy, setDraftBusy] = useState(false);
+  const [draftNotice, setDraftNotice] = useState<string | null>(null);
+  const [companyFilter, setCompanyFilter] = useState<string | null>(null);
 
-  // ?demo=empty → render the real empty-state branch (state variant preview).
+  // ?demo=empty → empty-state preview. ?company= deep-link from Jobs CRM.
   useEffect(() => {
-    if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("demo") === "empty") {
-      setDemoEmpty(true);
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("demo") === "empty") setDemoEmpty(true);
+    const company = params.get("company")?.trim();
+    if (company) {
+      setCompanyFilter(company);
+      setContactSearch(company);
+      setShowAllContacts(true);
+      setAllContactsError(null);
+      setAllContacts(null);
+      listContacts(company)
+        .then(setAllContacts)
+        .catch((e) =>
+          setAllContactsError(e instanceof Error ? e.message : "Could not load contacts."),
+        );
     }
   }, []);
 
   const loadSummary = useCallback(() => {
     fetchNetworkingSummary()
-      .then(setData)
+      .then((summary) => {
+        setData(summary);
+        setError(null);
+      })
       .catch((e: unknown) => setError(e instanceof Error ? e.message : "Failed to load networking data"));
   }, []);
 
@@ -240,8 +273,89 @@ export default function NetworkingPage() {
     }
   };
 
+  const openAllContacts = useCallback((company?: string | null) => {
+    setShowAllContacts(true);
+    setAllContactsError(null);
+    setAllContacts(null);
+    const q = company?.trim() || undefined;
+    if (q) setContactSearch(q);
+    listContacts(q)
+      .then(setAllContacts)
+      .catch((e) =>
+        setAllContactsError(e instanceof Error ? e.message : "Could not load contacts."),
+      );
+  }, []);
+
+  const cancelOutreach = async (outreachId: string) => {
+    setOutreachBusyId(outreachId);
+    try {
+      await deleteOutreachTask(outreachId);
+      setData(await fetchNetworkingSummary());
+    } catch (e) {
+      setImportError(e instanceof Error ? e.message : "Could not cancel outreach.");
+    } finally {
+      setOutreachBusyId(null);
+    }
+  };
+
+  const queueOutreachForContact = async (contactId: string) => {
+    setOutreachBusyId(contactId);
+    setImportError(null);
+    try {
+      await createOutreachTask({ contactId, type: "message" });
+      setData(await fetchNetworkingSummary());
+      setImportNotice("Outreach task queued as pending.");
+    } catch (e) {
+      setImportError(e instanceof Error ? e.message : "Could not queue outreach.");
+    } finally {
+      setOutreachBusyId(null);
+    }
+  };
+
+  const draftRecruiterOutreach = async (contactId: string) => {
+    setDraftBusy(true);
+    setDraftNotice(null);
+    setContactDetailError(null);
+    try {
+      const result = await runAgent("recruiterOutreach", { contact_id: contactId });
+      const approvalId =
+        typeof result.approvalId === "string"
+          ? result.approvalId
+          : typeof result.approval_id === "string"
+            ? result.approval_id
+            : null;
+      if (approvalId) {
+        setDraftNotice(`Draft queued for approval (${approvalId}).`);
+      } else if (typeof result.message === "string" && result.message.trim()) {
+        setDraftNotice(result.message);
+      } else {
+        setDraftNotice("Recruiter Outreach finished. Check Approvals for any pending draft.");
+      }
+      setData(await fetchNetworkingSummary());
+    } catch (e) {
+      setContactDetailError(e instanceof Error ? e.message : "Recruiter Outreach failed.");
+    } finally {
+      setDraftBusy(false);
+    }
+  };
+
   if (error) {
-    return <p className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">{error}</p>;
+    return (
+      <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4" data-testid="networking-page-error">
+        <p className="text-sm text-red-300">{error}</p>
+        <button
+          type="button"
+          data-testid="networking-retry-btn"
+          onClick={() => {
+            setError(null);
+            loadSummary();
+          }}
+          className="mt-3 rounded-lg border border-white/20 px-3 py-1.5 text-sm text-white hover:bg-white/10"
+        >
+          Retry
+        </button>
+      </div>
+    );
   }
 
   if (data === null) {
@@ -355,17 +469,7 @@ export default function NetworkingPage() {
           <button
             type="button"
             data-testid="view-all-contacts-btn"
-            onClick={() => {
-              setShowAllContacts(true);
-              setAllContactsError(null);
-              listContacts()
-                .then(setAllContacts)
-                .catch((e) =>
-                  setAllContactsError(
-                    e instanceof Error ? e.message : "Could not load contacts.",
-                  ),
-                );
-            }}
+            onClick={() => openAllContacts(companyFilter)}
             className="rounded-xl border border-white/15 px-3 py-2 text-sm font-semibold text-aether-muted hover:border-white/30 hover:text-white"
           >
             <i className="fa-solid fa-address-book mr-2" aria-hidden="true" />
@@ -387,6 +491,9 @@ export default function NetworkingPage() {
         <div
           className="fixed inset-0 z-50 flex items-start justify-center bg-black/60 p-4 pt-16"
           data-testid="all-contacts-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-label="All contacts"
           onClick={() => setShowAllContacts(false)}
         >
           <div
@@ -396,15 +503,20 @@ export default function NetworkingPage() {
             <div className="flex items-center justify-between gap-3 border-b border-white/10 p-4">
               <h2 className="text-sm font-semibold">
                 All contacts{allContacts ? ` (${allContacts.length})` : ""}
+                {companyFilter ? (
+                  <span className="ml-2 font-normal text-aether-muted" data-testid="company-filter-chip">
+                    filtered by {companyFilter}
+                  </span>
+                ) : null}
               </h2>
               <button
                 type="button"
                 data-testid="all-contacts-close"
                 onClick={() => setShowAllContacts(false)}
-                className="text-aether-muted hover:text-white"
-                aria-label="Close"
+                className="rounded-lg border border-white/15 px-2 py-1 text-xs text-aether-muted hover:text-white"
+                aria-label="Close all contacts"
               >
-                <i className="fa-solid fa-xmark" aria-hidden="true" />
+                Close
               </button>
             </div>
             <div className="p-4">
@@ -455,7 +567,7 @@ export default function NetworkingPage() {
                             ) : null}
                           </span>
                           <span className="shrink-0 text-[11px] uppercase tracking-wide text-aether-muted-dim">
-                            {c.stage}
+                            {STAGE_LABELS[c.stage] ?? c.stage}
                           </span>
                         </button>
                       </li>
@@ -468,13 +580,36 @@ export default function NetworkingPage() {
       ) : null}
 
       {importNotice ? (
-        <p data-testid="import-notice" className="text-sm text-aether-green">
+        <p
+          data-testid="import-notice"
+          className="text-sm text-aether-green"
+          role="status"
+          aria-live="polite"
+        >
           {importNotice}
         </p>
       ) : null}
       {importError ? (
-        <p data-testid="import-error" className="text-sm text-red-300">
+        <p
+          data-testid="import-error"
+          className="text-sm text-red-300"
+          role="alert"
+          aria-live="assertive"
+        >
           {importError}
+        </p>
+      ) : null}
+      {draftNotice ? (
+        <p
+          data-testid="draft-outreach-notice"
+          className="text-sm text-sapphire-light"
+          role="status"
+          aria-live="polite"
+        >
+          {draftNotice}{" "}
+          <Link href="/dashboard/approvals" className="underline hover:text-white">
+            Open Approvals
+          </Link>
         </p>
       ) : null}
 
@@ -483,7 +618,8 @@ export default function NetworkingPage() {
           <p className="text-lg font-semibold">No connections yet</p>
           <p className="mx-auto mt-1 max-w-md text-sm text-aether-muted">
             Import from Gmail or a LinkedIn Connections.csv export to keep this board current, or add a contact
-            manually to begin tracking outreach.
+            manually to begin tracking outreach. Recruiter Outreach can draft a first-touch once a contact has an email —
+            drafts stay in Approvals and never send on their own.
           </p>
           <button
             type="button"
@@ -500,7 +636,7 @@ export default function NetworkingPage() {
           {/* Stat tiles */}
           <section className="grid grid-cols-2 gap-4 md:grid-cols-4" data-testid="networking-stats">
             <Stat label="Contacts" value={String(contactCount)} />
-            <Stat label="Active conversations" value={String(data.stats.activeConversations)} accent="text-aether-coral" />
+            <Stat label="Active conversations" value={String(data.stats.activeConversations)} accent="text-sapphire-light" />
             <Stat label="Referrals in flight" value={String(data.stats.referralsInFlight)} accent="text-aether-violet" />
             <Stat
               label="Response rate"
@@ -515,10 +651,11 @@ export default function NetworkingPage() {
               <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-aether-muted">
                 Contact Pipeline
               </h2>
-              <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-5">
+              <div className="-mx-1 overflow-x-auto pb-2 md:mx-0 md:overflow-visible">
+                <div className="flex min-w-[44rem] gap-3 md:min-w-0 md:grid md:grid-cols-3 xl:grid-cols-5">
                 {columns.map((col) => {
                   return (
-                    <div key={col.stage} className="min-w-0" data-testid={`pipeline-${col.stage.toLowerCase()}`}>
+                    <div key={col.stage} className="min-w-[8.5rem] flex-1 md:min-w-0" data-testid={`pipeline-${col.stage.toLowerCase()}`}>
                       <div className="mb-2 flex items-center justify-between px-1">
                         <div className="flex items-center gap-1.5">
                           <span className={`h-2 w-2 rounded-full ${STAGE_ACCENT[col.stage] ?? "bg-white/40"}`} />
@@ -548,7 +685,7 @@ export default function NetworkingPage() {
                                   setSelectedContactId(c.id);
                                 }
                               }}
-                              className="bg-surface-1 cursor-pointer rounded-xl border border-white/10 p-3 transition hover:border-aether-coral/40"
+                              className="bg-surface-1 cursor-pointer rounded-xl border border-white/10 p-3 transition hover:border-sapphire/40"
                             >
                               <div className="flex items-center justify-between gap-2">
                                 <div className="flex min-w-0 items-center gap-2">
@@ -577,6 +714,7 @@ export default function NetworkingPage() {
                     </div>
                   );
                 })}
+                </div>
               </div>
             </section>
 
@@ -591,19 +729,30 @@ export default function NetworkingPage() {
                 ) : (
                   <div className="space-y-3">
                     {data.outreachQueue.map((o) => (
-                      <article key={o.id} className="rounded-xl border border-white/10 bg-white/5 p-3">
+                      <article key={o.id} className="rounded-xl border border-white/10 bg-white/5 p-3" data-testid={`outreach-item-${o.id}`}>
                         <p className="text-xs font-semibold">
                           {o.contactName || "Unknown contact"}
                           {o.company ? ` · ${o.company}` : ""}
                         </p>
-                        <p className="mt-0.5 text-xs text-aether-coral">{o.subject}</p>
+                        <p className="mt-0.5 text-xs text-white/85">{o.subject}</p>
                         <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
                           <span className="mono inline-block rounded bg-aether-violet/15 px-1.5 py-0.5 text-[10px] text-aether-violet">
                             {formatOutreachKind(o.kind)}
                           </span>
                           <span className="mono inline-block rounded bg-white/10 px-1.5 py-0.5 text-[10px] text-aether-muted">
-                            {o.status}
+                            {formatOutreachStatus(o.status)}
                           </span>
+                          {o.status === "pending" ? (
+                            <button
+                              type="button"
+                              data-testid={`cancel-outreach-${o.id}`}
+                              disabled={outreachBusyId === o.id}
+                              onClick={() => void cancelOutreach(o.id)}
+                              className="ml-auto rounded border border-white/15 px-2 py-0.5 text-[10px] text-aether-muted hover:border-red-400/40 hover:text-red-200 disabled:opacity-50"
+                            >
+                              {outreachBusyId === o.id ? "Removing…" : "Remove"}
+                            </button>
+                          ) : null}
                         </div>
                         {o.scheduledAt ? (
                           <p className="mt-1 text-[10px] text-aether-muted-dim">
@@ -654,8 +803,13 @@ export default function NetworkingPage() {
           <div className="w-full max-w-md rounded-[14px] border border-white/15 bg-surface-2 p-6" data-testid="add-contact-modal">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="text-lg font-semibold">Add Contact</h2>
-              <button type="button" onClick={closeAddModal} className="text-aether-muted-dim hover:text-white">
-                ✕
+              <button
+                type="button"
+                onClick={closeAddModal}
+                className="rounded-lg border border-white/15 px-2 py-1 text-xs text-aether-muted hover:text-white"
+                aria-label="Close add contact"
+              >
+                Close
               </button>
             </div>
             <div className="space-y-3">
@@ -704,10 +858,14 @@ export default function NetworkingPage() {
               <h2 className="text-lg font-semibold">Contact details</h2>
               <button
                 type="button"
-                onClick={() => setSelectedContactId(null)}
-                className="text-aether-muted-dim hover:text-white"
+                onClick={() => {
+                  setSelectedContactId(null);
+                  setDraftNotice(null);
+                }}
+                className="rounded-lg border border-white/15 px-2 py-1 text-xs text-aether-muted hover:text-white"
+                aria-label="Close contact details"
               >
-                ✕
+                Close
               </button>
             </div>
             {contactDetailLoading ? (
@@ -724,7 +882,7 @@ export default function NetworkingPage() {
                   <DetailRow label="Name" value={contactDetail.name} />
                   <DetailRow label="Role" value={contactDetail.title || "—"} />
                   <DetailRow label="Company" value={contactDetail.company || "—"} />
-                  <DetailRow label="Stage" value={contactDetail.stage} />
+                  <DetailRow label="Stage" value={STAGE_LABELS[contactDetail.stage] ?? contactDetail.stage} />
                   <DetailRow label="Email" value={contactDetail.email || "Not provided"} />
                   <DetailRow label="LinkedIn" value={contactDetail.linkedinUrl || "Not provided"} />
                 </dl>
@@ -738,9 +896,9 @@ export default function NetworkingPage() {
                     onChange={(e) => setEditStage(e.target.value)}
                     className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm outline-none focus:border-gold/50"
                   >
-                    {CONTACT_STAGES.map((stage) => (
-                      <option key={stage} value={stage} className="bg-black">
-                        {stage}
+                    {STAGE_OPTIONS.map(({ value, label }) => (
+                      <option key={value} value={value} className="bg-black">
+                        {label}
                       </option>
                     ))}
                   </select>
@@ -753,7 +911,33 @@ export default function NetworkingPage() {
               /* ML-networking-001: the backend DELETE endpoint existed with no
                  UI path. Two-click confirm, then refetch the summary so the
                  board reflects exactly what the server persisted. */
-              <div className="mt-4 flex justify-between gap-2">
+              <div className="mt-4 space-y-2">
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    data-testid="queue-outreach-btn"
+                    disabled={outreachBusyId === contactDetail.id || deleting || savingEdits}
+                    onClick={() => void queueOutreachForContact(contactDetail.id)}
+                    className="rounded-lg border border-white/15 px-3 py-2 text-sm text-aether-muted hover:border-white/30 hover:text-white disabled:opacity-60"
+                  >
+                    {outreachBusyId === contactDetail.id ? "Queuing…" : "Queue outreach"}
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="draft-outreach-btn"
+                    disabled={draftBusy || deleting || savingEdits || !contactDetail.email}
+                    title={
+                      contactDetail.email
+                        ? "Draft via Recruiter Outreach (approval-gated, never sends)"
+                        : "Add an email before drafting outreach"
+                    }
+                    onClick={() => void draftRecruiterOutreach(contactDetail.id)}
+                    className="rounded-lg border border-sapphire/40 px-3 py-2 text-sm text-sapphire-light hover:bg-sapphire/10 disabled:opacity-60"
+                  >
+                    {draftBusy ? "Drafting…" : "Draft outreach"}
+                  </button>
+                </div>
+                <div className="flex justify-between gap-2">
                 <button
                   type="button"
                   data-testid="save-contact-edits-btn"
@@ -798,6 +982,7 @@ export default function NetworkingPage() {
                       ? "Click again to confirm delete"
                       : "Delete contact"}
                 </button>
+                </div>
               </div>
             ) : null}
           </div>
@@ -835,7 +1020,7 @@ function Field({
         value={value}
         data-testid={testId}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm outline-none focus:border-aether-coral/50"
+        className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-sm outline-none focus:border-sapphire/50"
       />
     </label>
   );

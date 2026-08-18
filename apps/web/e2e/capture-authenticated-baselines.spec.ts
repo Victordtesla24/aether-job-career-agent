@@ -33,7 +33,7 @@ const SCREENS: ScreenSpec[] = [
   { id: 'approval-modal', route: '/approval-modal', viewport: { width: 1280, height: 720 } },
   { id: 'mobile-approval', route: '/approval-modal', viewport: { width: 390, height: 844 } },
   { id: 'interview-center', route: '/interview-center', viewport: { width: 1280, height: 720 } },
-  { id: 'networking', route: '/networking', viewport: { width: 1280, height: 720 } },
+  { id: 'networking', route: '/dashboard/networking', viewport: { width: 1280, height: 720 } },
   { id: 'email-center', route: '/email-center', viewport: { width: 1280, height: 720 } },
   { id: 'analytics', route: '/analytics', viewport: { width: 1280, height: 720 } },
   { id: 'offer-comparison', route: '/offer-comparison', viewport: { width: 1280, height: 720 } },

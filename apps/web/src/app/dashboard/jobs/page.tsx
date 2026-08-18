@@ -1868,7 +1868,7 @@ export default function JobsPage() {
                         </p>
                       ) : null}
                       <Link
-                        href="/dashboard/networking"
+                        href={`/dashboard/networking?company=${encodeURIComponent(selected.company || "")}`}
                         data-testid="crm-link"
                         className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-medium text-[#a5b4fc] transition hover:text-white"
                       >
