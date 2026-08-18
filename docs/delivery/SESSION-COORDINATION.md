@@ -996,6 +996,14 @@ Rules of engagement unchanged: locks (git/deploy/test), runbook deploys, append-
 **Do not touch:** SESSION EC-FIX / DS WIP in shared checkouts.
 **Sent-count:** must remain unchanged (nurture fenced).
 
+### Close-out — 2026-08-18T04:45Z
+
+**Landed on `origin/main`:** `ec5137e6` (honesty API + fence + refresh/analytics), `5e20067d` (import SENT/self + no SalesLead), `16d400f2` (UI honesty/a11y/CRM actions), `9d7d396b` (deploy claim).
+**Prod verify (×2) against Hostinger prod `https://aether.srv1356245.hstgr.cloud`:** `/api/health` 200; `/dashboard/networking` 200; networking/summary/analytics/refresh-from-inbox → 401 unauthenticated (routes live). Note: abacus URL `5cb5f0620.abacusai.cloud` is decommissioned per guardian manifest — do not use for prod probes.
+**PR #19:** CLOSED (2026-08-18T04:37Z). Remote `feat/networking-crm-honesty` / `feat/nw-adv-review` already absent. Local worktree `/root/dev/aether-wt-nw-adv` removed.
+**Sent-count:** `SalesOutreachLog` outcome=sent total **42**; **0** new sends since 2026-08-18 04:00Z; nurture-like “short product update” rows are all from 2026-08-17 14:40Z (pre-fence). Fence held.
+**Release:** SESSION NW-ADV complete; files free for other sessions.
+
 ---
 
 ## SESSION EC-FIX — 2026-08-18T03:20Z — Email Center + Email AI Agent (glm-5 JSON / 429 honesty)
