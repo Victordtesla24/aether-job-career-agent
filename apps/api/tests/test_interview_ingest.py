@@ -187,6 +187,207 @@ def test_ingest_inbound_for_user_promotes_from_calendar_list(
         assert cur.fetchone()[0] == "interview"
 
 
+def test_gmail_trail_uses_parsed_time_and_onsite_not_email_stamp(
+    db_session, test_user_id
+):
+    """John/Adan trail: face-to-face tomorrow 10am, not the Gmail receivedAt."""
+    from datetime import datetime as dt
+    from zoneinfo import ZoneInfo
+
+    from app.routers.interviews import _ensure_interview_tables
+    from app.services.interview_ingest import ingest_inbound_for_user
+
+    _ensure_interview_tables()
+    app_id = _seed_submitted_application(
+        db_session,
+        test_user_id,
+        company="Next Business Energy",
+        title="Project Manager — Retail Systems Transformation",
+    )
+    melbourne = ZoneInfo("Australia/Melbourne")
+    john_at = dt(2026, 8, 6, 14, 0, tzinfo=melbourne)
+    adan_at = dt(2026, 8, 18, 16, 0, tzinfo=melbourne)
+    thread = {
+        "id": "et-nbe-1",
+        "subject": "Next Business Energy — Project Manager interview",
+        "gmailThreadId": "gmail-nbe-1",
+        "lastMessageAt": adan_at,
+        "messages": [
+            {
+                "from": "John Black",
+                "fromEmail": "john.black@robertwalters.com.au",
+                "createdAt": john_at,
+                "body": (
+                    "I've spoken with Adan Micallef, Group Technical Lead at "
+                    "Next Business Energy. Initial phone interview tomorrow at "
+                    "10:00am. The role is Project Manager — Retail Systems "
+                    "Transformation. When did you finish with the ATO?"
+                ),
+            },
+            {
+                "from": "Adan Micallef",
+                "fromEmail": "adan@nextbusinessenergy.com.au",
+                "createdAt": adan_at,
+                "body": (
+                    "Confirming we will meet face to face tomorrow morning at "
+                    "10:00am at our Docklands office instead of a phone call."
+                ),
+            },
+        ],
+    }
+    ingest_inbound_for_user(test_user_id, [thread], force_calendar=False)
+    with db_session.cursor() as cur:
+        cur.execute(
+            'SELECT status FROM "Application" WHERE id = %s AND "userId" = %s',
+            (app_id, test_user_id),
+        )
+        assert cur.fetchone()[0] == "interview"
+        cur.execute(
+            'SELECT "type","scheduledAt","location","contactName","contactEmail"'
+            ' FROM "InterviewSchedule" WHERE "userId" = %s AND "applicationId" = %s',
+            (test_user_id, app_id),
+        )
+        row = cur.fetchone()
+    assert row is not None
+    assert row[0] == "onsite"
+    local = row[1].astimezone(melbourne)
+    assert local.date().isoformat() == "2026-08-19"
+    assert local.hour == 10
+    assert row[2] and "docklands" in row[2].lower()
+    assert row[3] and "adan" in row[3].lower()
+    assert row[4] == "adan@nextbusinessenergy.com.au"
+
+
+def test_ingest_updates_existing_row_when_trail_changes_format(
+    db_session, test_user_id
+):
+    """A later message that moves phone → onsite must update the same row."""
+    from datetime import datetime as dt
+    from zoneinfo import ZoneInfo
+
+    from app.routers.interviews import _ensure_interview_tables
+    from app.services.interview_ingest import ingest_inbound_for_user
+
+    _ensure_interview_tables()
+    app_id = _seed_submitted_application(
+        db_session,
+        test_user_id,
+        company="Next Business Energy",
+        title="Project Manager",
+    )
+    melbourne = ZoneInfo("Australia/Melbourne")
+    first = {
+        "id": "et-nbe-upd",
+        "subject": "Phone interview — Next Business Energy",
+        "gmailThreadId": "gmail-nbe-upd",
+        "lastMessageAt": dt(2026, 8, 6, 14, 0, tzinfo=melbourne),
+        "messages": [
+            {
+                "from": "John Black",
+                "fromEmail": "john.black@robertwalters.com.au",
+                "createdAt": dt(2026, 8, 6, 14, 0, tzinfo=melbourne),
+                "body": (
+                    "Phone interview tomorrow at 10:00am with Adan at "
+                    "Next Business Energy for the Project Manager role."
+                ),
+            }
+        ],
+    }
+    ingest_inbound_for_user(test_user_id, [first], force_calendar=False)
+    first["messages"].append(
+        {
+            "from": "Adan Micallef",
+            "fromEmail": "adan@nextbusinessenergy.com.au",
+            "createdAt": dt(2026, 8, 18, 16, 0, tzinfo=melbourne),
+            "body": (
+                "We will meet face to face tomorrow morning at 10:00am at our "
+                "Docklands office instead of a phone call."
+            ),
+        }
+    )
+    first["lastMessageAt"] = dt(2026, 8, 18, 16, 0, tzinfo=melbourne)
+    ingest_inbound_for_user(test_user_id, [first], force_calendar=False)
+    with db_session.cursor() as cur:
+        cur.execute(
+            'SELECT count(*), min("type"), max("type") FROM "InterviewSchedule"'
+            ' WHERE "userId" = %s AND "applicationId" = %s',
+            (test_user_id, app_id),
+        )
+        count, min_type, max_type = cur.fetchone()
+        cur.execute(
+            'SELECT "scheduledAt","location" FROM "InterviewSchedule"'
+            ' WHERE "userId" = %s AND "applicationId" = %s',
+            (test_user_id, app_id),
+        )
+        when, location = cur.fetchone()
+    assert count == 1
+    assert min_type == max_type == "onsite"
+    local = when.astimezone(melbourne)
+    assert local.date().isoformat() == "2026-08-19"
+    assert location and "docklands" in location.lower()
+
+
+def test_evidenced_invite_creates_job_and_application_when_none_exist(
+    db_session, test_user_id
+):
+    """Outside-app apply: company+title in the trail are enough to open a row."""
+    import json as json_lib
+    import uuid
+    from datetime import datetime as dt
+    from zoneinfo import ZoneInfo
+
+    from app.routers.interviews import _ensure_interview_tables
+    from app.services.interview_ingest import ingest_inbound_for_user
+
+    _ensure_interview_tables()
+    resume_id = uuid.uuid4().hex
+    with db_session.cursor() as cur:
+        cur.execute(
+            'INSERT INTO "Resume" ("id","userId","version","sections","formatHash",'
+            '"updatedAt") VALUES (%s,%s,1,%s,%s,NOW())',
+            (resume_id, test_user_id, json_lib.dumps({"summary": "PM"}), "hash-nbe"),
+        )
+    db_session.commit()
+    melbourne = ZoneInfo("Australia/Melbourne")
+    thread = {
+        "id": "et-nbe-new",
+        "subject": "Interview — Project Manager at Next Business Energy",
+        "gmailThreadId": "gmail-nbe-new",
+        "lastMessageAt": dt(2026, 8, 18, 16, 0, tzinfo=melbourne),
+        "messages": [
+            {
+                "from": "Adan Micallef",
+                "fromEmail": "adan@nextbusinessenergy.com.au",
+                "createdAt": dt(2026, 8, 18, 16, 0, tzinfo=melbourne),
+                "body": (
+                    "Face to face interview tomorrow at 10:00am at our Docklands "
+                    "office. The role is Project Manager — Retail Systems "
+                    "Transformation at Next Business Energy."
+                ),
+            }
+        ],
+    }
+    ingest_inbound_for_user(test_user_id, [thread], force_calendar=False)
+    with db_session.cursor() as cur:
+        cur.execute(
+            'SELECT j.company, j.title, a.status FROM "Application" a '
+            'JOIN "Job" j ON j.id = a."jobId" '
+            'WHERE a."userId" = %s',
+            (test_user_id,),
+        )
+        row = cur.fetchone()
+        cur.execute(
+            'SELECT "type" FROM "InterviewSchedule" WHERE "userId" = %s',
+            (test_user_id,),
+        )
+        itype = cur.fetchone()
+    assert row is not None
+    assert row[0] == "Next Business Energy"
+    assert "project manager" in row[1].lower()
+    assert row[2] == "interview"
+    assert itype[0] == "onsite"
+
+
 def test_career_calendar_event_is_detected():
     from app.services.interview_ingest import is_career_calendar_event
 

@@ -194,6 +194,9 @@ describe("Interview Center — real backend wiring (MV-interview-center-001/003)
 interface PrepFixtureOverrides {
   questions?: unknown[];
   questionsNote?: string | null;
+  briefing?: Record<string, unknown> | null;
+  pack?: Record<string, unknown> | null;
+  session?: Record<string, unknown>;
 }
 
 function makePrepFixture(overrides: PrepFixtureOverrides = {}) {
@@ -204,6 +207,9 @@ function makePrepFixture(overrides: PrepFixtureOverrides = {}) {
       round: "Active Interview",
       scheduledFor: null,
       format: "Check your calendar for details",
+      jobId: "job-1",
+      location: null,
+      ...(overrides.session ?? {}),
     },
     compliance: {
       message: "Live Assist is disabled by default during interviews.",
@@ -217,6 +223,8 @@ function makePrepFixture(overrides: PrepFixtureOverrides = {}) {
     },
     questions: overrides.questions ?? [],
     questionsNote: overrides.questionsNote ?? null,
+    briefing: overrides.briefing ?? null,
+    pack: overrides.pack ?? null,
     liveAssist: {
       enabled: false,
       fillerWordsPerMin: 0,
@@ -266,6 +274,39 @@ describe("Interview Prep panel (ML-W4B-OBS-1)", () => {
         if (path === "/applications") return applicationsFixture;
         if (path === "/interviews" && method === "GET") return [...interviews];
         if (path === "/workspaces/interviews/prep" && method === "GET") return prepFixture;
+        if (path.startsWith("/workspaces/interviews/pack") && method === "POST") {
+          prepFixture = makePrepFixture({
+            questions: prepFixture.questions,
+            briefing: {
+              logistics: ["Face to face at Docklands office"],
+              traps: [{ title: "Unanswered question", detail: "When did you finish with the ATO?" }],
+              questionsToAsk: ["Where has the tender actually got to?"],
+              guidelines: ["Arrive ten minutes early."],
+            },
+            pack: {
+              folder: "Interview pack — Acme Corp — Senior Product Owner",
+              files: [
+                {
+                  name: "01-interview-prep.pdf",
+                  kind: "interview_prep",
+                  branded: true,
+                  agent: "interviewPrep",
+                  note: "Aether-branded brief.",
+                },
+                {
+                  name: "02-interview-slides.pdf",
+                  kind: "slides",
+                  branded: true,
+                  agent: "interviewPrep",
+                  note: "Four landscape slides.",
+                },
+              ],
+              gaps: ["No job-tailored résumé for this role yet."],
+              plan: ["companyResearch", "interviewPrep", "tailor", "coverLetter"],
+            },
+          });
+          return { files: prepFixture.pack?.files ?? [], gaps: prepFixture.pack?.gaps ?? [] };
+        }
         if (path === "/agents/interviewPrep/run" && method === "POST") {
           prepFixture = makePrepFixture({ questions: [GROUNDED_QUESTION] });
           return {
@@ -379,5 +420,58 @@ describe("Interview Prep panel (ML-W4B-OBS-1)", () => {
       expect.objectContaining({ method: "POST" }),
     );
     expect(screen.queryByTestId("interview-prep-empty")).toBeNull();
+    expect(apiRequest).toHaveBeenCalledWith(
+      expect.stringMatching(/^\/workspaces\/interviews\/pack/),
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  it("renders the interview folder, traps and questions to ask from the orchestrator pack", async () => {
+    prepFixture = makePrepFixture({
+      session: { format: "Face to face", scheduledFor: "2026-08-19T00:00:00.000Z", location: "Docklands office" },
+      briefing: {
+        logistics: ["Face to face at Docklands office"],
+        traps: [{ title: "Unanswered question", detail: "When did you finish with the ATO?" }],
+        questionsToAsk: ["Where has the tender actually got to?"],
+        guidelines: ["Arrive ten minutes early."],
+      },
+      pack: {
+        folder: "Interview pack — Next Business Energy — Project Manager",
+        files: [
+          {
+            name: "01-interview-prep.pdf",
+            kind: "interview_prep",
+            branded: true,
+            agent: "interviewPrep",
+            note: "Aether-branded brief.",
+          },
+        ],
+        gaps: ["No cover letter for this application yet."],
+        plan: ["companyResearch", "interviewPrep", "tailor", "coverLetter"],
+      },
+    });
+
+    render(<InterviewCenterPage />);
+
+    const meta = await screen.findByTestId("interview-prep-session-meta");
+    expect(meta.textContent).toMatch(/Face to face/);
+    expect(screen.getByTestId("interview-pack-folder").textContent).toMatch(
+      /Interview pack — Next Business Energy/,
+    );
+    expect(screen.getByTestId("interview-pack-file").textContent).toMatch(/01-interview-prep\.pdf/);
+    expect(screen.getByTestId("interview-prep-briefing").textContent).toMatch(/ATO/);
+    expect(screen.getByTestId("interview-pack-gaps").textContent).toMatch(/cover letter/i);
+  });
+
+  it("Assemble folder POSTs the orchestrator pack endpoint", async () => {
+    render(<InterviewCenterPage />);
+    await screen.findByTestId("interview-pack-empty");
+    fireEvent.click(screen.getByTestId("interview-pack-assemble-btn"));
+    const folder = await screen.findByTestId("interview-pack-files");
+    expect(folder.textContent).toMatch(/01-interview-prep\.pdf/);
+    expect(apiRequest).toHaveBeenCalledWith(
+      expect.stringMatching(/^\/workspaces\/interviews\/pack/),
+      expect.objectContaining({ method: "POST" }),
+    );
   });
 });

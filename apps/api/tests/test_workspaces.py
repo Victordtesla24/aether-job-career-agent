@@ -150,6 +150,8 @@ def test_workspaces_endpoints_require_auth(client):
     """All workspaces endpoints require authentication."""
     endpoints = [
         ("/workspaces/interviews/prep", "GET"),
+        ("/workspaces/interviews/pack", "POST"),
+        ("/workspaces/interviews/pack/download", "GET"),
         ("/workspaces/networking/summary", "GET"),
         ("/workspaces/emails/inbox", "GET"),
         ("/workspaces/offers", "GET"),

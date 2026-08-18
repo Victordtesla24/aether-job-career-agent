@@ -162,6 +162,9 @@ def promote_application_to_interview(user_id: str, application_id: str) -> bool:
     return updated > 0
 
 
+_ALLOWED_TYPES = frozenset({"phone", "video", "onsite", "technical", "panel", "hr"})
+
+
 def ingest_interview_invite(
     user_id: str,
     *,
@@ -173,14 +176,41 @@ def ingest_interview_invite(
     calendar_event_id: str | None = None,
     meeting_link: str | None = None,
     duration_minutes: int = 60,
+    interview_type: str = "video",
+    location: str | None = None,
+    notes: str | None = None,
+    contact_name: str | None = None,
+    contact_email: str | None = None,
+    allow_create: bool = False,
 ) -> IngestResult:
-    """Create/reuse an InterviewSchedule and promote the matched application."""
+    """Create/reuse an InterviewSchedule and promote the matched application.
+
+    When ``calendar_event_id`` already exists the row is UPDATED with any
+    newly evidenced time/format/location — a trail that moves a phone screen
+    to a face-to-face meeting must not keep the first guess.
+    """
     from app.routers.interviews import _ensure_interview_tables
 
     _ensure_interview_tables()
+    itype = interview_type if interview_type in _ALLOWED_TYPES else "video"
+    who_name = (contact_name or sender_name or "").strip() or None
+    who_email = (contact_email or sender_email or "").strip() or None
+    note = (notes or subject or "").strip() or None
 
     existing = _existing_by_calendar_event(user_id, calendar_event_id or "")
     if existing:
+        _refresh_interview_row(
+            user_id,
+            existing["id"],
+            scheduled_at=scheduled_at,
+            interview_type=itype,
+            location=location,
+            meeting_link=meeting_link,
+            duration_minutes=duration_minutes,
+            notes=note,
+            contact_name=who_name,
+            contact_email=who_email,
+        )
         promote_application_to_interview(user_id, existing["applicationId"])
         return IngestResult(
             promoted=True,
@@ -196,6 +226,18 @@ def ingest_interview_invite(
         sender_name=sender_name,
         body=body,
     )
+    if matched is None and allow_create:
+        matched = _create_application_from_evidence(
+            user_id,
+            subject=subject,
+            body=body,
+            location=location,
+            source_url=(
+                f"gmail://thread/{calendar_event_id}"
+                if calendar_event_id
+                else None
+            ),
+        )
     if matched is None:
         return IngestResult(
             promoted=False,
@@ -211,12 +253,12 @@ def ingest_interview_invite(
                 """
                 INSERT INTO "InterviewSchedule" (
                     "id", "userId", "applicationId", "type", "status",
-                    "scheduledAt", "durationMinutes", "meetingLink",
+                    "scheduledAt", "durationMinutes", "location", "meetingLink",
                     "notes", "contactName", "contactEmail",
                     "calendarEventId", "calendarSyncStatus", "calendarSyncedAt"
                 ) VALUES (
-                    %s, %s, %s, 'video', 'scheduled',
-                    %s, %s, %s,
+                    %s, %s, %s, %s, 'scheduled',
+                    %s, %s, %s, %s,
                     %s, %s, %s,
                     %s, %s, now()
                 )
@@ -225,12 +267,14 @@ def ingest_interview_invite(
                     interview_id,
                     user_id,
                     app_id,
+                    itype,
                     when,
                     duration_minutes,
+                    location,
                     meeting_link,
-                    subject,
-                    sender_name or None,
-                    sender_email or None,
+                    note,
+                    who_name,
+                    who_email,
                     calendar_event_id,
                     "ingested" if calendar_event_id else None,
                 ),
@@ -248,28 +292,44 @@ def ingest_interview_invite(
     )
 
 
-def ingest_calendar_events(user_id: str, events: list[dict[str, Any]]) -> int:
-    """Ingest a batch of Google Calendar events. Returns rows newly created."""
-    created = 0
+def ingest_calendar_events(user_id: str, events: list[dict[str, Any]]) -> list[IngestResult]:
+    """Ingest a batch of Google Calendar events."""
+    results: list[IngestResult] = []
     for event in events:
         if not is_career_calendar_event(event):
             continue
         start = _event_start(event)
         organizer = event.get("organizer") or {}
+        description = str(event.get("description") or "")
+        from app.services.interview_thread_parser import parse_interview_thread
+
+        offer = parse_interview_thread(
+            [
+                {
+                    "from": str(organizer.get("displayName") or ""),
+                    "fromEmail": str(organizer.get("email") or ""),
+                    "body": description,
+                    "createdAt": start,
+                }
+            ],
+            subject=str(event.get("summary") or ""),
+        )
         result = ingest_interview_invite(
             user_id,
             subject=str(event.get("summary") or "Interview"),
             sender_name=str(organizer.get("displayName") or ""),
             sender_email=str(organizer.get("email") or ""),
-            body=str(event.get("description") or ""),
-            scheduled_at=start,
+            body=description,
+            scheduled_at=start or offer.scheduled_at,
             calendar_event_id=str(event.get("id") or "") or None,
             meeting_link=str(event.get("hangoutLink") or event.get("htmlLink") or "")
-            or None,
+            or offer.meeting_link,
+            interview_type=offer.interview_type if offer.is_interview else "video",
+            location=offer.location,
+            notes=str(event.get("summary") or "") or None,
         )
-        if result.interview_id and result.reason == "matched application":
-            created += 1
-    return created
+        results.append(result)
+    return results
 
 
 def ingest_inbound_for_user(
@@ -277,7 +337,7 @@ def ingest_inbound_for_user(
     threads: list[dict[str, Any]] | None = None,
     *,
     force_calendar: bool = False,
-) -> None:
+) -> list[IngestResult]:
     """Best-effort calendar + Gmail interview ingest. Never raises to callers.
 
     Calendar listing is the load-bearing path for meeting invites that Gmail's
@@ -292,6 +352,7 @@ def ingest_inbound_for_user(
         GoogleCalendarService,
     )
     from app.services.career_email_filter import classify_thread
+    from app.services.interview_thread_parser import parse_interview_thread
 
     now_mono = time.monotonic()
     with _cal_ingest_lock:
@@ -300,6 +361,7 @@ def ingest_inbound_for_user(
         if run_calendar:
             _cal_ingest_at[user_id] = now_mono
 
+    results: list[IngestResult] = []
     if run_calendar:
         try:
             now = datetime.now(timezone.utc)
@@ -307,7 +369,7 @@ def ingest_inbound_for_user(
                 time_min=now - timedelta(days=7),
                 time_max=now + timedelta(days=60),
             )
-            ingest_calendar_events(user_id, events)
+            results.extend(ingest_calendar_events(user_id, events))
         except (
             CalendarNotConnectedError,
             CalendarScopeNotGrantedError,
@@ -326,30 +388,51 @@ def ingest_inbound_for_user(
         if not isinstance(latest, dict):
             latest = {}
         verdict = classify_thread(t, latest)
-        if not verdict.is_interview_invite:
+        offer = parse_interview_thread(
+            msgs if isinstance(msgs, list) else [],
+            subject=str(t.get("subject") or ""),
+        )
+        if not verdict.is_interview_invite and not offer.is_interview:
             continue
-        stamp = t.get("lastMessageAt")
-        scheduled: datetime | None
-        if isinstance(stamp, datetime):
-            scheduled = stamp
-        else:
-            raw = latest.get("createdAt") or t.get("createdAt")
-            if isinstance(raw, datetime):
-                scheduled = raw
+        scheduled = offer.scheduled_at
+        if scheduled is None:
+            stamp = t.get("lastMessageAt")
+            if isinstance(stamp, datetime):
+                scheduled = stamp
             else:
-                scheduled = _event_start({"start": {"dateTime": raw}})
+                raw = latest.get("createdAt") or t.get("createdAt")
+                if isinstance(raw, datetime):
+                    scheduled = raw
+                else:
+                    scheduled = _event_start({"start": {"dateTime": raw}})
+        notes = "\n".join(
+            [*offer.logistics, *offer.unanswered_questions]
+        ) or str(t.get("subject") or "")
         try:
-            ingest_interview_invite(
+            result = ingest_interview_invite(
                 user_id,
                 subject=str(t.get("subject") or ""),
                 sender_name=str(latest.get("from") or ""),
                 sender_email=str(latest.get("fromEmail") or ""),
-                body=str(latest.get("body") or ""),
+                body=offer.haystack or str(latest.get("body") or ""),
                 scheduled_at=scheduled,
                 calendar_event_id=(
                     f"gmail:{t.get('gmailThreadId')}" if t.get("gmailThreadId") else None
                 ),
+                meeting_link=offer.meeting_link,
+                duration_minutes=offer.duration_minutes,
+                interview_type=offer.interview_type if offer.is_interview else "video",
+                location=offer.location,
+                notes=notes,
+                contact_name=offer.contact_name,
+                contact_email=offer.contact_email,
+                allow_create=True,
             )
+            results.append(result)
+            if result.application_id and t.get("id"):
+                _link_thread_application(
+                    user_id, str(t["id"]), result.application_id
+                )
         except Exception:  # noqa: BLE001
             logger.warning(
                 "interview ingest failed for thread=%s user=%s",
@@ -357,6 +440,134 @@ def ingest_inbound_for_user(
                 user_id,
                 exc_info=True,
             )
+    return results
+
+
+def _refresh_interview_row(
+    user_id: str,
+    interview_id: str,
+    *,
+    scheduled_at: datetime | None,
+    interview_type: str,
+    location: str | None,
+    meeting_link: str | None,
+    duration_minutes: int,
+    notes: str | None,
+    contact_name: str | None,
+    contact_email: str | None,
+) -> None:
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE "InterviewSchedule" SET
+                    "type" = %s,
+                    "scheduledAt" = COALESCE(%s, "scheduledAt"),
+                    "durationMinutes" = %s,
+                    "location" = COALESCE(%s, "location"),
+                    "meetingLink" = COALESCE(%s, "meetingLink"),
+                    "notes" = COALESCE(%s, "notes"),
+                    "contactName" = COALESCE(%s, "contactName"),
+                    "contactEmail" = COALESCE(%s, "contactEmail"),
+                    "updatedAt" = now()
+                WHERE id = %s AND "userId" = %s
+                """,
+                (
+                    interview_type,
+                    scheduled_at,
+                    duration_minutes,
+                    location,
+                    meeting_link,
+                    notes,
+                    contact_name,
+                    contact_email,
+                    interview_id,
+                    user_id,
+                ),
+            )
+        conn.commit()
+
+
+def _create_application_from_evidence(
+    user_id: str,
+    *,
+    subject: str,
+    body: str,
+    location: str | None,
+    source_url: str | None,
+) -> dict[str, Any] | None:
+    """Open a Job + interview-stage Application from evidenced trail facts.
+
+    Requires both a company and a role title in the trail, plus a real résumé
+    to attach. Never invents either field.
+    """
+    from app.repositories.job import JobRepository
+    from app.repositories.resume import ResumeRepository
+    from app.services.interview_thread_parser import parse_interview_thread
+
+    offer = parse_interview_thread(
+        [{"body": body, "from": "", "fromEmail": ""}],
+        subject=subject,
+    )
+    company = (offer.company or "").strip()
+    title = (offer.title or "").strip()
+    if len(company) < 3 or len(title) < 6:
+        return None
+    resumes = ResumeRepository().list_by_user(user_id)
+    if not resumes:
+        return None
+    resume_id = str(resumes[0]["id"])
+    job = JobRepository().create(
+        user_id,
+        {
+            "title": title,
+            "company": company,
+            "location": location or offer.location,
+            "remote": False,
+            "description": (body or subject)[:8000],
+            "requirements": [],
+            "source": "email",
+            "sourceUrl": source_url or f"email://{new_id()}",
+            "postedAt": None,
+        },
+    )
+    job_id = str(job["id"])
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT id, status FROM "Application" '
+                'WHERE "userId" = %s AND "jobId" = %s '
+                "ORDER BY \"updatedAt\" DESC LIMIT 1",
+                (user_id, job_id),
+            )
+            existing = rows_to_dicts(cur)
+        if existing:
+            return existing[0]
+        app_id = new_id()
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO "Application"
+                    ("id", "userId", "jobId", "resumeId", "status",
+                     "createdAt", "updatedAt")
+                VALUES (%s, %s, %s, %s, 'interview'::"ApplicationStatus",
+                        now(), now())
+                """,
+                (app_id, user_id, job_id, resume_id),
+            )
+        conn.commit()
+    return {"id": app_id, "status": "interview"}
+
+
+def _link_thread_application(user_id: str, thread_id: str, application_id: str) -> None:
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'UPDATE "EmailThread" SET "applicationId" = %s'
+                ' WHERE id = %s AND "userId" = %s',
+                (application_id, thread_id, user_id),
+            )
+        conn.commit()
 
 
 def _event_start(event: dict[str, Any]) -> datetime | None:

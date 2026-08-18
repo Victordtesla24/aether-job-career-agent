@@ -14,7 +14,16 @@
  */
 import { z } from "zod";
 
-import { apiRequest, type RequestOptions } from "./client";
+import {
+  ApiError,
+  apiBaseUrl,
+  apiRequest,
+  clearToken,
+  gatewayErrorMessage,
+  getToken,
+  isNonApiHtmlBody,
+  type RequestOptions,
+} from "./client";
 
 /** Valid InterviewSchedule.type values (mirrors the backend allow-list). */
 export const INTERVIEW_TYPES = [
@@ -186,6 +195,40 @@ export const InterviewPrepQuestionSchema = z.object({
 
 export type InterviewPrepQuestion = z.infer<typeof InterviewPrepQuestionSchema>;
 
+export const InterviewPrepPackFileSchema = z.object({
+  name: z.string(),
+  kind: z.string(),
+  branded: z.boolean(),
+  bytes_len: z.number().optional(),
+  agent: z.string().optional(),
+  note: z.string().optional(),
+});
+
+export const InterviewPrepPackSchema = z.object({
+  jobId: z.string().optional(),
+  assembledAt: z.string().nullish(),
+  folder: z.string().nullish(),
+  files: z.array(InterviewPrepPackFileSchema),
+  gaps: z.array(z.string()),
+  plan: z.array(z.string()).optional(),
+  message: z.string().optional(),
+  downloadPath: z.string().optional(),
+  zipBytes: z.number().nullish(),
+});
+
+export const InterviewPrepBriefingSchema = z.object({
+  logistics: z.array(z.string()).optional(),
+  traps: z
+    .array(z.object({ title: z.string(), detail: z.string() }))
+    .optional(),
+  companyNotes: z.array(z.string()).optional(),
+  interviewerNotes: z.array(z.string()).optional(),
+  questionsToAsk: z.array(z.string()).optional(),
+  guidelines: z.array(z.string()).optional(),
+  closing: z.array(z.string()).optional(),
+  documentMarkdown: z.string().optional(),
+});
+
 export const InterviewPrepBriefSchema = z.object({
   session: z
     .object({
@@ -194,6 +237,8 @@ export const InterviewPrepBriefSchema = z.object({
       round: z.string(),
       scheduledFor: z.string().nullable(),
       format: z.string(),
+      jobId: z.string().nullish(),
+      location: z.string().nullish(),
     })
     .nullable(),
   compliance: z.object({ message: z.string(), level: z.string() }),
@@ -207,6 +252,8 @@ export const InterviewPrepBriefSchema = z.object({
   // Non-null ONLY when a real prep brief exists but belongs to another job
   // (see the workspaces.py docstring) — never invented by the client.
   questionsNote: z.string().nullish(),
+  briefing: InterviewPrepBriefingSchema.nullish(),
+  pack: InterviewPrepPackSchema.nullish(),
   liveAssist: z.object({
     enabled: z.boolean(),
     fillerWordsPerMin: z.number(),
@@ -233,4 +280,80 @@ export async function fetchInterviewPrep(
   return InterviewPrepBriefSchema.parse(
     await apiRequest<unknown>("/workspaces/interviews/prep", options),
   );
+}
+
+export async function assembleInterviewPack(
+  options: RequestOptions & { jobId?: string; runMissing?: boolean } = {},
+): Promise<unknown> {
+  const params = new URLSearchParams();
+  if (options.jobId) params.set("job_id", options.jobId);
+  if (options.runMissing) params.set("run_missing", "true");
+  const q = params.toString();
+  return apiRequest<unknown>(`/workspaces/interviews/pack${q ? `?${q}` : ""}`, {
+    ...options,
+    method: "POST",
+  });
+}
+
+async function fetchInterviewPackBlob(
+  path: string,
+  options: RequestOptions = {},
+): Promise<Blob> {
+  const baseUrl = options.baseUrl ?? apiBaseUrl();
+  const fetchBlob = async (token: string): Promise<Response> =>
+    fetch(`${baseUrl}${path}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+  let token = options.token ?? (await getToken());
+  let res = await fetchBlob(token);
+  if (res.status === 401 && !options.token) {
+    clearToken();
+    token = await getToken();
+    res = await fetchBlob(token);
+  }
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    if (isNonApiHtmlBody(res.headers.get("Content-Type"), detail)) {
+      throw new ApiError(gatewayErrorMessage(res.status), res.status);
+    }
+    throw new ApiError(`GET ${path} failed (${res.status}): ${detail}`, res.status);
+  }
+  return res.blob();
+}
+
+function saveBlob(blob: Blob, filename: string): void {
+  if (typeof document === "undefined" || typeof URL === "undefined") return;
+  const url = URL.createObjectURL(blob);
+  try {
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+export async function downloadInterviewPack(
+  jobId: string,
+  options: RequestOptions = {},
+): Promise<void> {
+  const blob = await fetchInterviewPackBlob(
+    `/workspaces/interviews/pack/download?job_id=${encodeURIComponent(jobId)}`,
+    options,
+  );
+  saveBlob(blob, "interview-pack.zip");
+}
+
+export async function downloadInterviewPackFile(
+  jobId: string,
+  name: string,
+  options: RequestOptions = {},
+): Promise<void> {
+  const blob = await fetchInterviewPackBlob(
+    `/workspaces/interviews/pack/file?job_id=${encodeURIComponent(jobId)}&name=${encodeURIComponent(name)}`,
+    options,
+  );
+  saveBlob(blob, name.split("/").pop() || name);
 }

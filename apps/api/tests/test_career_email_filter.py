@@ -218,6 +218,43 @@ def test_auto_draft_skips_calendar_notification_and_github():
     ) is False
 
 
+def test_classify_thread_reads_earlier_messages_not_only_the_latest():
+    """A confirmation that drops the word 'interview' is still an invite.
+
+    Live trail: John arranged a phone interview; Adan later wrote only
+    'face to face tomorrow at Docklands'. Classifying the latest body alone
+    dropped the thread from ingest.
+    """
+    from app.services.career_email_filter import classify_thread
+
+    thread = {
+        "subject": "Next Business Energy — Project Manager",
+        "gmailThreadId": "nbe-1",
+        "messages": [
+            {
+                "from": "John Black",
+                "fromEmail": "john.black@robertwalters.com.au",
+                "body": (
+                    "Adan would like an initial phone interview tomorrow at "
+                    "10:00am for the Project Manager role at Next Business Energy."
+                ),
+            },
+            {
+                "from": "Adan Micallef",
+                "fromEmail": "adan@nextbusinessenergy.com.au",
+                "body": (
+                    "Confirming we will meet face to face tomorrow morning at "
+                    "10:00am at our Docklands office instead of a phone call."
+                ),
+            },
+        ],
+    }
+    verdict = classify_thread(thread)
+    assert verdict.keep is True
+    assert verdict.is_interview_invite is True
+    assert verdict.category == "priority"
+
+
 def test_career_gmail_query_omits_bare_application_and_opportunity():
     from app.services.career_email_filter import CAREER_GMAIL_QUERY
 
