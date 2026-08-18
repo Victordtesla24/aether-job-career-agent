@@ -77,4 +77,7 @@ jobs:
           bash /opt/aether-guardian/deploy_env.sh prod --rollback-on-failure
 
       - name: Guardian post-deploy sweep
+        # Escalations (e.g. unmerged branches) are reported to the orchestrator
+        # inbox, not treated as deploy failures. A genuine unremediated fault
+        # still exits non-zero and fails this step.
         run: python3 /opt/aether-guardian/guardian.py prod --apply
