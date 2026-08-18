@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 /**
  * Application Timeline — horizontal swimlanes (SESSION TL-VIZ).
  *
@@ -8,13 +9,20 @@
  * it never carries a fact this component does not already render.
  */
 import { motion, useReducedMotion } from "framer-motion";
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useRenderCapabilities } from "../../hooks/useRenderCapabilities";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   buildTimelineModel,
   type TimelinePayload,
 } from "./timeline-model";
 import type { FilterKey, SortKey } from "./tracker-lib";
+import type { TimelineGlNode } from "./ApplicationTimelineGL";
+
+const ApplicationTimelineGL = dynamic(() => import("./ApplicationTimelineGL"), {
+  ssr: false,
+  loading: () => null,
+});
 
 const LANE_H = 72;
 const LABEL_W = 200;
@@ -39,6 +47,10 @@ export default function ApplicationTimeline({
   pendingApprovalIds?: ReadonlySet<string>;
 }) {
   const reduceMotion = useReducedMotion();
+  const { allowGl } = useRenderCapabilities();
+  const [glSize, setGlSize] = useState({ w: 0, h: 0 });
+  const [hoverId, setHoverId] = useState<string | null>(null);
+  const trackRef = useRef<HTMLDivElement>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const [panX, setPanX] = useState(0);
   const dragRef = useRef<{ active: boolean; startX: number; origin: number }>({
@@ -56,6 +68,38 @@ export default function ApplicationTimeline({
     }
     return buildTimelineModel(payload, { filter, sort, pendingApprovalIds });
   }, [payload, filter, sort, pendingApprovalIds]);
+
+
+  useEffect(() => {
+    const el = trackRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver((entries) => {
+      const cr = entries[0]?.contentRect;
+      if (!cr) return;
+      setGlSize({ w: Math.round(cr.width), h: Math.round(cr.height) });
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [model.lanes.length, model.empty]);
+
+  const glNodes: TimelineGlNode[] = useMemo(() => {
+    if (!allowGl || glSize.w <= 0) return [];
+    const out: TimelineGlNode[] = [];
+    const labelW = LABEL_W;
+    model.lanes.forEach((lane, i) => {
+      const y = i * LANE_H + LANE_H / 2;
+      const trackW = Math.max(glSize.w - labelW, 1);
+      for (const n of lane.nodes) {
+        out.push({
+          id: n.id,
+          x: labelW + PAD_X + (trackW - PAD_X * 2) * n.x,
+          y,
+          highlighted: hoverId === n.id,
+        });
+      }
+    });
+    return out;
+  }, [allowGl, glSize, model.lanes, hoverId]);
 
   const onPointerDown = useCallback((e: React.PointerEvent) => {
     if (e.button !== 0) return;
@@ -173,6 +217,7 @@ export default function ApplicationTimeline({
           </div>
 
           <div
+            ref={trackRef}
             className="relative cursor-grab active:cursor-grabbing"
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
@@ -183,6 +228,13 @@ export default function ApplicationTimeline({
               minHeight: Math.min(model.lanes.length, 40) * LANE_H + 24,
             }}
           >
+            {allowGl ? (
+              <ApplicationTimelineGL
+                width={Math.max(glSize.w, 1)}
+                height={Math.max(glSize.h, model.lanes.length * LANE_H, 1)}
+                nodes={glNodes}
+              />
+            ) : null}
             {model.lanes.map((lane, i) => (
               <motion.div
                 key={lane.applicationId}
@@ -250,6 +302,10 @@ export default function ApplicationTimeline({
                           : node.label
                       }
                       onClick={() => onOpenDetail(lane.applicationId)}
+                      onMouseEnter={() => setHoverId(node.id)}
+                      onMouseLeave={() => setHoverId(null)}
+                      onFocus={() => setHoverId(node.id)}
+                      onBlur={() => setHoverId(null)}
                       onKeyDown={(e) => {
                         if (e.key === "Enter" || e.key === " ") {
                           e.preventDefault();
