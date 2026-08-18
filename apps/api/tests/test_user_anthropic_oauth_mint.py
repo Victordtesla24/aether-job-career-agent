@@ -11,10 +11,19 @@ manual paste of a token the customer had to mint themselves with
 
 This suite pins the per-user twin of that flow:
 
-    POST /agents/user/providers/anthropic/oauth/start
+    POST /agents/user/providers/anthropic/oauth/mint/start
         -> 200 {"authorizeUrl": str}. Any AUTHENTICATED user (no admin).
-    POST /agents/user/providers/anthropic/oauth/exchange  {"pastedCode": str}
+    POST /agents/user/providers/anthropic/oauth/mint/exchange  {"pastedCode": str}
         -> 200 {"token", "authMode", "secretHint", "expiresAt", "scope"}
+
+RUN-20260818T0223Z merge note (FEAT-PROVIDER deploy-merge): mounted under
+``.../oauth/mint/...`` (one extra path segment vs. the pre-merge
+``.../oauth/{start,exchange}``) because GAP-PROVIDER-OAUTH-1 independently
+claimed the literal ``/agents/user/providers/{provider}/oauth/{start,
+exchange}`` path for a different (auto-persist) contract for the same
+provider id, and FastAPI/Starlette can only route one handler per literal
+path. Every assertion below is unchanged from the pre-merge version of this
+file — only the two path constants moved.
 
 **Mint-and-fill, not store.** The exchange MINTS the caller's own subscription
 token and returns it ONCE to the caller who just authenticated, so the dialog
@@ -48,8 +57,8 @@ import pytest
 
 from app.services import credential_vault as vault
 
-START = "/agents/user/providers/anthropic/oauth/start"
-EXCHANGE = "/agents/user/providers/anthropic/oauth/exchange"
+START = "/agents/user/providers/anthropic/oauth/mint/start"
+EXCHANGE = "/agents/user/providers/anthropic/oauth/mint/exchange"
 
 #: Fake token material — NEVER a real secret. Shape mirrors the real
 #: ``claude setup-token`` output anchors (ADR-ML-2 ruling #4).

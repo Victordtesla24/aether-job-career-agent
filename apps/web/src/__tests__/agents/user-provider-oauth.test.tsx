@@ -44,6 +44,18 @@ const exchangeAnthropicOAuthMock = vi.fn();
 const refreshAnthropicOAuthMock = vi.fn();
 const startUserAnthropicOAuthMock = vi.fn();
 const exchangeUserAnthropicOAuthMock = vi.fn();
+// RUN-20260818T0223Z merge (FEAT-PROVIDER deploy-merge): the merged
+// ProviderConfigModal also renders GAP-PROVIDER-OAUTH-1's generic per-user
+// "Connect" panel alongside this file's UPO-1 mint panel (both are shown for
+// Anthropic in user scope — see docs/delivery/evidence/RUN-20260818T0223Z/
+// FEAT-PROVIDER/09-deploy-merge-resolution.md for why one entry point was
+// not possible without dropping either flow's own pinned test contract).
+// This suite pins UPO-1 only, so the additional exports are stubbed with no
+// exercised behaviour — none of the assertions below touch them.
+const supportsUserOAuthConnectMock = vi.fn();
+const startUserProviderOAuthMock = vi.fn();
+const exchangeUserProviderOAuthMock = vi.fn();
+const listUserCredentialsMock = vi.fn();
 
 vi.mock("../../components/agents/api", () => ({
   putProviderCredential: (...a: unknown[]) => putCredentialMock(...a),
@@ -60,6 +72,11 @@ vi.mock("../../components/agents/api", () => ({
   // control, not a module-resolution error.
   startUserAnthropicOAuth: (...a: unknown[]) => startUserAnthropicOAuthMock(...a),
   exchangeUserAnthropicOAuth: (...a: unknown[]) => exchangeUserAnthropicOAuthMock(...a),
+  // RUN-20260818T0223Z merge — see the comment above these mocks' declarations.
+  supportsUserOAuthConnect: (...a: unknown[]) => supportsUserOAuthConnectMock(...a),
+  startUserProviderOAuth: (...a: unknown[]) => startUserProviderOAuthMock(...a),
+  exchangeUserProviderOAuth: (...a: unknown[]) => exchangeUserProviderOAuthMock(...a),
+  listUserCredentials: (...a: unknown[]) => listUserCredentialsMock(...a),
 }));
 
 // eslint-disable-next-line import/first
@@ -127,6 +144,8 @@ beforeEach(() => {
     scope: "user:inference",
   });
   vi.spyOn(window, "open").mockReturnValue(null);
+  supportsUserOAuthConnectMock.mockReturnValue(true);
+  listUserCredentialsMock.mockResolvedValue([]);
 });
 
 afterEach(() => {
@@ -136,6 +155,8 @@ afterEach(() => {
     putCredentialMock, deleteCredentialMock, verifyMock,
     startAnthropicOAuthMock, exchangeAnthropicOAuthMock, refreshAnthropicOAuthMock,
     startUserAnthropicOAuthMock, exchangeUserAnthropicOAuthMock,
+    supportsUserOAuthConnectMock, startUserProviderOAuthMock,
+    exchangeUserProviderOAuthMock, listUserCredentialsMock,
   ].forEach((m) => m.mockReset());
   vi.restoreAllMocks();
 });

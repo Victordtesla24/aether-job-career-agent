@@ -26,11 +26,15 @@ import {
   deleteUserProviderCredential,
   exchangeAnthropicOAuth,
   exchangeUserAnthropicOAuth,
+  exchangeUserProviderOAuth,
+  listUserCredentials,
   putProviderCredential,
   putUserProviderCredential,
   refreshAnthropicOAuth,
   startAnthropicOAuth,
   startUserAnthropicOAuth,
+  startUserProviderOAuth,
+  supportsUserOAuthConnect,
   verifyProvider,
   verifyUserProvider,
   type Provider,
@@ -159,12 +163,23 @@ export default function ProviderConfigModal({
     "saving" | "removing" | "verifying" | "connecting" | null
   >(null);
   const [error, setError] = useState<string | null>(null);
-  // Connect-with-Anthropic (ML-agents-cred-002): "idle" until the operator
-  // clicks Connect, then "await_code" while they paste back the one-time
-  // code#state Anthropic showed them. Only the short-lived code lives in
-  // component state — never a token.
+  // Connect-with-Anthropic (ML-agents-cred-002 deployment scope; UPO-1 mint
+  // in user scope): "idle" until Connect is clicked, then "await_code" while
+  // the code#state Anthropic showed is pasted back. Only the short-lived
+  // code lives in component state — never a token.
   const [oauthStep, setOauthStep] = useState<"idle" | "await_code">("idle");
   const [oauthCode, setOauthCode] = useState("");
+  // GAP-PROVIDER-OAUTH-1's generic per-user Connect gets its OWN step/code
+  // state, deliberately separate from the mint flow's above (RUN-20260818T0223Z
+  // merge decision — see docs/delivery/evidence/RUN-20260818T0223Z/
+  // FEAT-PROVIDER/09-deploy-merge-resolution.md): both controls can be shown
+  // together for Anthropic in user scope (UPO-1's mint-then-Save vs.
+  // GAP-PROVIDER-OAUTH-1's single-click auto-persisted connect), and sharing
+  // one `oauthStep` would flip BOTH panels into their paste-back UI whichever
+  // one the customer actually clicked — a real, user-visible bug, not just a
+  // cosmetic one.
+  const [userOauthStep, setUserOauthStep] = useState<"idle" | "await_code">("idle");
+  const [userOauthCode, setUserOauthCode] = useState("");
 
   // Re-seed local state whenever a (different) provider is opened. The parent
   // only ever swaps in a new `provider` object reference when the user opens
@@ -183,6 +198,8 @@ export default function ProviderConfigModal({
     setBusy(null);
     setOauthStep("idle");
     setOauthCode("");
+    setUserOauthStep("idle");
+    setUserOauthCode("");
   }, [provider]);
 
   // Move focus into the dialog on open and restore it to the trigger on close.
@@ -208,6 +225,47 @@ export default function ProviderConfigModal({
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [open, onClose]);
+
+  // GAP-PROVIDER-OAUTH-1 (app_callback auto-return): the popup window opened
+  // by connectUserProviderOAuth lands on our own server's oauth/callback
+  // page, which posts {source:"aether-oauth", provider, connected} back to
+  // window.opener and closes itself — NEVER a token, only the honest
+  // connected/not-connected status. Origin-checked so no other tab/site can
+  // spoof a "connected" result into this modal.
+  useEffect(() => {
+    if (!open || !userScope) return undefined;
+    const onMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
+      const data = event.data as
+        | { source?: string; provider?: string; connected?: boolean }
+        | null
+        | undefined;
+      if (!data || data.source !== "aether-oauth") return;
+      if (!view || data.provider !== view.id) return;
+      setUserOauthStep("idle");
+      setBusy(null);
+      if (data.connected) {
+        onNotice({ kind: "success", text: `${view.name} connected.` });
+        void (async () => {
+          try {
+            const creds = await listUserCredentials();
+            const mine = creds.find((c) => c.provider === view.id);
+            if (mine) setView((v) => (v ? withUserCredential(v, mine) : v));
+          } catch {
+            /* best-effort refresh — onSaved() below still runs */
+          }
+          await onSaved();
+        })();
+      } else {
+        onNotice({
+          kind: "error",
+          text: `${view.name} connection did not complete. Try again.`,
+        });
+      }
+    };
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, [open, userScope, view, onNotice, onSaved]);
 
   const handleKey = useCallback(
     (e: React.KeyboardEvent) => {
@@ -395,6 +453,60 @@ export default function ProviderConfigModal({
     }
   };
 
+  // GAP-PROVIDER-OAUTH-1: begin THIS user's own OAuth connect. Opens a BLANK
+  // popup synchronously (same tick as the click, before any await) so the
+  // browser's popup blocker treats it as a direct result of the user's
+  // gesture, then navigates that same window once the real authorize URL
+  // comes back from the server — never opens a second, separately-blockable
+  // window after the async round-trip. code_relay providers use it only to
+  // avoid a jarring "nothing happened" click; app_callback providers keep it
+  // open and reuse it as the auto-return target.
+  const connectUserProviderOAuth = async () => {
+    if (busy) return;
+    setBusy("connecting");
+    setError(null);
+    const popup = window.open("", "aether-oauth-connect", "width=520,height=680");
+    onNotice({ kind: "info", text: `Opening ${view.name} sign-in…` });
+    await runConnect(async () => {
+      const { authorizeUrl, flow } = await startUserProviderOAuth(view.id);
+      if (flow === "code_relay") {
+        popup?.close();
+        window.open(authorizeUrl, "_blank", "noopener");
+        setUserOauthStep("await_code");
+        return;
+      }
+      if (popup) {
+        popup.location.href = authorizeUrl;
+      } else {
+        // Popup blocked despite the synchronous open (e.g. a strict
+        // extension) — fall back to a plain new tab.
+        window.open(authorizeUrl, "_blank", "noopener");
+      }
+      setUserOauthStep("idle");
+    });
+  };
+
+  // GAP-PROVIDER-OAUTH-1 code_relay fallback: exchange the pasted `code#state`
+  // for THIS user's own credential (never the deployment-wide store).
+  const completeUserProviderOAuth = async () => {
+    const code = userOauthCode.trim();
+    if (!code || busy) return;
+    setBusy("connecting");
+    setError(null);
+    onNotice({ kind: "info", text: `Connecting ${view.name}…` });
+    await runConnect(async () => {
+      const updated = await exchangeUserProviderOAuth(view.id, code);
+      setView((v) => (v ? withUserCredential(v, updated) : v));
+      setUserOauthCode("");
+      setUserOauthStep("idle");
+      onNotice({
+        kind: "success",
+        text: `${view.name} connected${updated.secretHint ? ` (${updated.secretHint})` : ""}.`,
+      });
+      await onSaved();
+    });
+  };
+
   const verify = async () => {
     if (busy) return;
     setBusy("verifying");
@@ -543,6 +655,78 @@ export default function ProviderConfigModal({
               </div>
             ) : null}
           </AnthropicOAuthPanel>
+        ) : null}
+
+        {/* GAP-PROVIDER-OAUTH-1: the per-user, provider-agnostic "Connect"
+            affordance — writes ONLY this user's own UserProviderCredential
+            row, never the deployment-wide store the block above owns. Shown
+            for every provider whose descriptor supports it (today:
+            anthropic, openrouter — see OAUTH_CONNECT_PROVIDERS in ./api). */}
+        {userScope && supportsUserOAuthConnect(view.id) ? (
+          <div className="mb-4 rounded-lg border border-aether-indigo/25 bg-aether-indigo/5 p-3">
+            <button
+              type="button"
+              data-testid="user-oauth-connect"
+              onClick={() => void connectUserProviderOAuth()}
+              disabled={busy !== null}
+              className="flex w-full items-center justify-center gap-2 rounded-lg bg-aether-indigo px-4 py-2.5 text-xs font-semibold text-white shadow-lg shadow-aether-indigo/25 transition hover:opacity-90 disabled:opacity-50"
+            >
+              <i className="fa-solid fa-arrow-up-right-from-square text-[10px]" aria-hidden="true" />
+              {busy === "connecting" && userOauthStep === "idle"
+                ? `Opening ${view.name}…`
+                : `Connect with ${view.name}`}
+            </button>
+            <p className="mt-2 text-[11px] leading-relaxed text-aether-muted">
+              {view.id === "anthropic" ? (
+                <>
+                  Connects <strong>your own</strong> Claude Pro/Max subscription — runs bill
+                  your subscription quota, never Aether&apos;s. Revoke access anytime at
+                  claude.ai.
+                </>
+              ) : (
+                <>
+                  Connects <strong>your own</strong> OpenRouter account — runs bill your
+                  OpenRouter balance, never Aether&apos;s. Revoke access anytime at
+                  openrouter.ai.
+                </>
+              )}
+            </p>
+            {userOauthStep === "await_code" ? (
+              <div className="mt-3">
+                <label
+                  htmlFor="user-oauth-code"
+                  className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-aether-muted-dim"
+                >
+                  Paste the code {view.name} showed you
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    id="user-oauth-code"
+                    data-testid="user-oauth-code-input"
+                    type="text"
+                    value={userOauthCode}
+                    onChange={(e) => setUserOauthCode(e.target.value)}
+                    placeholder="code#state"
+                    autoComplete="off"
+                    spellCheck={false}
+                    className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2.5 text-xs text-white outline-none focus:border-aether-indigo/50"
+                  />
+                  <button
+                    type="button"
+                    data-testid="user-oauth-complete"
+                    onClick={() => void completeUserProviderOAuth()}
+                    disabled={busy !== null || userOauthCode.trim() === ""}
+                    className="shrink-0 rounded-lg bg-aether-indigo px-3 py-2.5 text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+                  >
+                    {busy === "connecting" ? "Connecting…" : "Finish connecting"}
+                  </button>
+                </div>
+              </div>
+            ) : null}
+            <p className="mt-2 text-[10px] text-aether-muted-dim">
+              or paste a key manually below
+            </p>
+          </div>
         ) : null}
 
         {options.length > 1 ? (
