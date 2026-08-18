@@ -535,6 +535,7 @@ def _attempt_transmission(user_id: str, application_id: str, approval_id: str) -
         ManualStepRequired,
         execute_site_application,
         fetch_apply_page,
+        record_apply_url_resolution,
         record_manual_step,
     )
 
@@ -566,6 +567,37 @@ def _attempt_transmission(user_id: str, application_id: str, approval_id: str) -
         reason, message = no_channel_reason("unknown", application, "")
         record_manual_step(user_id, application_id, reason, message)
         raise ManualStepRequired(reason, message)
+    if channel == "greenhouse":
+        # SUB-006. The stored URL for a Greenhouse posting is usually the
+        # EMPLOYER's own `?gh_jid=` page, which hosts NO application form at
+        # all (live probe 2026-08-17: HTTP 200, 700,675 bytes, zero <form>
+        # elements — the form is mounted client-side into `div#grnhse_app`).
+        # Opening a browser there produces exactly one outcome,
+        # `submit_control_not_found`, after a full page render. Resolve to the
+        # canonical `embed/job_app` form FIRST — through a gate that fetches
+        # the candidate and requires a real form before trusting it — and
+        # refuse honestly when no candidate verifies, rather than navigating a
+        # page we already know cannot accept an application.
+        from app.services.apply_channel_resolver import resolve_greenhouse_apply_url
+
+        resolution = resolve_greenhouse_apply_url(apply_url)
+        if resolution["reason"]:
+            reason = str(resolution["reason"])
+            message = str(resolution["detail"])
+            record_manual_step(user_id, application_id, reason, message)
+            raise ManualStepRequired(reason, message)
+        resolved_url = str(resolution.get("resolvedUrl") or "")
+        if resolved_url and resolved_url != apply_url:
+            # DISCLOSED, not silent: the row records both URLs before anything
+            # is driven, so "we applied here, not where the posting pointed" is
+            # auditable from the application itself.
+            record_apply_url_resolution(
+                user_id,
+                application_id,
+                original_url=apply_url,
+                resolved_url=resolved_url,
+            )
+            apply_url = resolved_url
     answers = application.get("answers")
     profile = build_apply_profile(
         user_id,

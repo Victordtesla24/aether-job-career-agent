@@ -54,6 +54,110 @@ export async function fetchTrackerApplication(
   );
 }
 
+// ---- SUB-010: the answer pack ---------------------------------------------
+
+/**
+ * One profile field the employer's form will ask for — present with its
+ * source, or absent with the place to go and fix it. `absence` is a sentence,
+ * never a blank: a form field the user cannot fill is a fact worth stating.
+ */
+export const AnswerPackFieldSchema = z.object({
+  key: z.string(),
+  label: z.string(),
+  value: z.string().nullable(),
+  present: z.boolean(),
+  source: z.string().nullable(),
+  absence: z.string().nullable(),
+});
+
+/**
+ * One question with the user's OWN answer, or an honest blank.
+ *
+ * `wouldAutoSend` is reported, never acted on here: it is the Answer Bank's
+ * transmission gate ("may Aether send this unattended?"), which is a different
+ * question from "may the owner of this answer read it back" — the pack exists
+ * so the user can copy their own words into the form themselves.
+ */
+export const AnswerPackEntrySchema = z.object({
+  question: z.string(),
+  questionSource: z.string(),
+  sensitivity: z.string(),
+  answered: z.boolean(),
+  answer: z.string().nullable(),
+  answerSource: z.string().nullable(),
+  bankedQuestion: z.string().nullable(),
+  matchConfidence: z.number().nullable(),
+  matchMethod: z.string().nullable(),
+  wouldAutoSend: z.boolean(),
+  gateReason: z.string(),
+  absence: z.string().nullable(),
+});
+
+export const AnswerPackSchema = z.object({
+  applicationId: z.string(),
+  jobId: z.string(),
+  jobTitle: z.string(),
+  company: z.string(),
+  applyUrl: z.string().nullable(),
+  honesty: z.object({
+    transmitted: z.boolean(),
+    claim: z.string(),
+    statement: z.string(),
+    readOnly: z.boolean(),
+    note: z.string(),
+    evidenceRef: z.string().nullish(),
+    transmittedAt: z.string().nullish(),
+  }),
+  profile: z.object({
+    fields: z.array(AnswerPackFieldSchema),
+    presentCount: z.number(),
+    missingCount: z.number(),
+    otherResumeContactLines: z.array(z.string()),
+  }),
+  answers: z.object({
+    entries: z.array(AnswerPackEntrySchema),
+    answeredCount: z.number(),
+    unansweredCount: z.number(),
+    note: z.string(),
+  }),
+  resume: z.object({
+    present: z.boolean(),
+    resumeId: z.string().nullable(),
+    version: z.number().nullish(),
+    label: z.string().nullable(),
+    tailoredToThisJob: z.boolean(),
+    downloadPath: z.string().nullable(),
+    updatedAt: z.string().nullish(),
+    absence: z.string().nullable(),
+  }),
+  coverLetter: z.object({
+    present: z.boolean(),
+    text: z.string().nullable(),
+    characterCount: z.number(),
+    downloadPath: z.string().nullable(),
+    absence: z.string().nullable(),
+  }),
+});
+
+export type AnswerPack = z.infer<typeof AnswerPackSchema>;
+export type AnswerPackEntry = z.infer<typeof AnswerPackEntrySchema>;
+export type AnswerPackField = z.infer<typeof AnswerPackFieldSchema>;
+
+/**
+ * SUB-010 — the read-only pack for ONE application (GET, no body, no write).
+ *
+ * Nothing is submitted or transmitted by opening it; the server assembles the
+ * pack from rows it already holds and reports every missing piece as absent.
+ */
+export async function fetchAnswerPack(
+  applicationId: string,
+  options: RequestOptions = {},
+): Promise<AnswerPack> {
+  return AnswerPackSchema.parse(
+    await apiRequest<unknown>(`/applications/${applicationId}/answer-pack`, options),
+  );
+}
+
 /**
  * Re-confirm a submission whose approval aged out (U5 stale-approval guard).
  *

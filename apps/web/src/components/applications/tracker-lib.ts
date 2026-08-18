@@ -6,6 +6,7 @@
  * DOM (see __tests__/tracker-lib.test.ts).
  */
 import type { Job } from "../../lib/api/jobs";
+import { hasTransmissionProof } from "./submission-control-lib";
 import type { TrackerApplication } from "./tracker-api";
 
 /** Tracker metadata persisted in Application.answers (jsonb). */
@@ -284,6 +285,18 @@ const MANUAL_STEP_LABELS: Readonly<Record<string, string>> = {
   no_automatable_channel: "No automatic submission path exists for this posting yet",
   submit_control_not_found: "Aether filled the form but could not find its submit button",
   no_confirmation: "Aether submitted the form but the site did not confirm it",
+  // SUB-007: the two honest halves the single `no_confirmation` code used to
+  // hide. They lead the user to different actions, so they get different
+  // words — and neither of them ever reads as "applied".
+  submitted_unconfirmed: "Submitted — but the site never confirmed it received it",
+  form_rejected: "The site rejected the form — nothing was submitted",
+  // SUB-007 round 2: a submit button that is present but GREYED OUT is not a
+  // missing button. Saying "could not find its submit button" about a control
+  // the user can see on the page reads as a bug in Aether rather than as the
+  // form still holding something back — and sends them looking for the wrong
+  // thing.
+  submit_control_disabled: "The form's submit button was greyed out — nothing was submitted",
+  submit_click_failed: "Aether found the submit button but the click did not land",
   // ORCHESTRATOR RULING U5-F3: an ASSISTED channel is not a failure — the
   // artifacts are done and only the click is the user's.
   assisted_manual_submit: "Ready to submit — this platform needs your click",
@@ -542,6 +555,67 @@ export function automaticSubmissionDisclaimer(sweepEnabled: boolean): string {
   );
 }
 
+// ---- SUB-006 — prepared is not submitted -----------------------------------
+
+/**
+ * The honest word for "the artifacts are ready, nothing was transmitted, the
+ * click is still yours".
+ *
+ * GROUND TRUTH (production, 2026-08-16): all 5 `Application` rows carry
+ * `status = 'submitted'` and ZERO carry a `transmittedAt`. Every one of those
+ * cards sat under the word "Submitted" — five claims that a real job
+ * application had been sent, with nothing in the database able to support a
+ * single one of them.
+ */
+export const PREPARED_NOT_SENT_LABEL = "Prepared — needs your click";
+
+/** The facts the prepared-vs-submitted derivation reads — a structural subset
+ *  of `TrackerApplication`, so a bare row shape works without the full type. */
+export type PreparedFacts = {
+  status?: string | null;
+  transmittedAt?: string | null;
+};
+
+/**
+ * `true` when the row SAYS submitted but nothing proves a transmission.
+ *
+ * Two deliberate boundaries:
+ *
+ *  - Proof is `hasTransmissionProof`, IMPORTED rather than re-derived, so this
+ *    label and the per-card submit control can never disagree about what
+ *    counts as a send (the test pins the two against each other).
+ *  - Only `submitted` is reinterpreted. `screening`/`interview`/`offer` are the
+ *    USER telling us an application is already live somewhere — an employer
+ *    replied — so calling those "prepared" would be its own false claim, in
+ *    the opposite direction.
+ *
+ * The stored status is the user's own tracker history and is never rewritten;
+ * what this changes is only the CLAIM the UI makes about it.
+ */
+export function isPreparedNotTransmitted(app: PreparedFacts | null | undefined): boolean {
+  if (!app || app.status !== "submitted") return false;
+  return !hasTransmissionProof({ transmittedAt: app.transmittedAt ?? null });
+}
+
+/**
+ * The stage word a CARD is allowed to use, which is not always its column's.
+ *
+ * A column is a lane shared by many rows, so its header keeps the stage name;
+ * an individual card in the Submitted lane with no transmission proof says the
+ * true thing instead. Every other stage's word is returned untouched — this is
+ * a correction of one specific over-claim, not a relabelling pass.
+ */
+export function stageLabelForCard(
+  stage: StageKey,
+  app?: PreparedFacts | null,
+): string {
+  const label = STAGE_DEFS.find((d) => d.key === stage)?.label ?? stage;
+  if (stage === "submitted" && isPreparedNotTransmitted(app)) {
+    return PREPARED_NOT_SENT_LABEL;
+  }
+  return label;
+}
+
 function metaOf(app: TrackerApplication): TrackerMeta {
   return (app.answers ?? {}) as TrackerMeta;
 }
@@ -593,14 +667,31 @@ export function buildStages(apps: TrackerApplication[], jobs: Job[]): Stage[] {
 
 // ---- Filter / Sort (btn-filter-at06 / btn-sort-at07) -----------------------
 
-export type FilterKey = "all" | "high-fit" | "below-fit" | "needs-approval";
+export type FilterKey =
+  | "all"
+  | "high-fit"
+  | "below-fit"
+  | "needs-approval"
+  | "needs-your-click";
 export type SortKey = "recent" | "fit" | "company";
+
+/**
+ * SUB-010 — the filter label for the population whose last step is the user's
+ * own click: everything is prepared, nothing was transmitted.
+ *
+ * The wording is the SUB-006 wording minus the state half ("Prepared — needs
+ * your click"), because a filter names an action to take rather than a state
+ * to read. It says nothing about applying, submitting or sending, which is the
+ * whole point: these are exactly the rows where none of those happened.
+ */
+export const NEEDS_YOUR_CLICK_LABEL = "Needs your click";
 
 export const FILTER_OPTIONS: ReadonlyArray<{ key: FilterKey; label: string }> = [
   { key: "all", label: "All applications" },
   { key: "high-fit", label: "Match ≥ 85" },
   { key: "below-fit", label: "Match < 85" },
   { key: "needs-approval", label: "Needs approval" },
+  { key: "needs-your-click", label: NEEDS_YOUR_CLICK_LABEL },
 ] as const;
 
 export const SORT_OPTIONS: ReadonlyArray<{ key: SortKey; label: string }> = [
@@ -633,6 +724,13 @@ export function cardMatchesFilter(
       return card.fit != null && card.fit < 85;
     case "needs-approval":
       return card.app != null && pendingApprovalIds.has(card.app.id);
+    case "needs-your-click":
+      // SUB-010 clause 2. `isPreparedNotTransmitted` is the SUB-006 predicate
+      // ITSELF, not a copy of its rule: the filter and the card badge must
+      // never be able to disagree about which rows are still waiting on the
+      // user. A card with no application behind it (a discovered job) has
+      // nothing prepared, so it is never in this set.
+      return card.app != null && isPreparedNotTransmitted(card.app);
     default:
       return true;
   }

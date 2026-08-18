@@ -24,6 +24,7 @@ import PageHeader from "../../../components/shell/PageHeader";
 import SegmentedControl from "../../../components/ui/SegmentedControl";
 import { button, listCard, scrollBody } from "../../../components/ui/recipes";
 import SankeyFlow from "../../../components/applications/SankeyFlow";
+import AnswerPackPanel from "../../../components/applications/AnswerPack";
 import SubmissionControl from "../../../components/applications/SubmissionControl";
 import { useRealtimeResources } from "../../../hooks/useRealtime";
 import {
@@ -43,6 +44,7 @@ import {
 } from "../../../components/applications/tracker-api";
 import {
   FILTER_OPTIONS,
+  PREPARED_NOT_SENT_LABEL,
   SORT_OPTIONS,
   STAGE_DEFS,
   STAGE_TO_APP_STATUS,
@@ -51,11 +53,13 @@ import {
   describeTransmission,
   fitClass,
   initials,
+  isPreparedNotTransmitted,
   manualStepLabel,
   manualStepTooltip,
   moveTargetsFor,
   notTransmittedReason,
   shortDate,
+  stageLabelForCard,
   timeAgo,
   viewStages,
   type FilterKey,
@@ -433,6 +437,26 @@ function CardMeta({
       // two very different things actually happened.
       return (
         <>
+          {/* SUB-006: the lane's word is "Submitted"; this row's own word is
+              not, unless the row can prove it. All 5 production rows carry
+              status='submitted' with transmittedAt NULL, so this chip — the
+              state AND the next action — is what they honestly read as. The
+              SubmissionBadge below still says who did (not) send it, which is
+              a different fact and pinned separately by W-SUB. */}
+          {isPreparedNotTransmitted(card.app) ? (
+            <span
+              data-testid="prepared-not-sent-badge"
+              title={
+                "Aether prepared this application but has not transmitted it — " +
+                "nothing has been sent to the employer. " +
+                notTransmittedReason({ ...card.app, sweepEnabled })
+              }
+              className="mt-2 inline-flex items-center gap-1 rounded-md bg-gold/15 px-2 py-0.5 text-[10px] text-gold"
+            >
+              <i className="fa-solid fa-hand-pointer text-[9px]" aria-hidden="true" />
+              {PREPARED_NOT_SENT_LABEL}
+            </span>
+          ) : null}
           <SubmissionBadge app={card.app} sweepEnabled={sweepEnabled} />
           {meta.followUpSentAt ? (
             <div className="mt-2 flex items-center gap-1.5 text-[10px] text-aether-green">
@@ -520,6 +544,10 @@ export default function ApplicationsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [view, setView] = useState<ViewMode>("board");
   const [filter, setFilter] = useState<FilterKey>("all");
+  // SUB-010: which application's answer pack is open, if any. Holding the id
+  // (not the pack) keeps the panel the single reader of the endpoint, so the
+  // board never carries a stale copy of material the server owns.
+  const [answerPackId, setAnswerPackId] = useState<string | null>(null);
   const [sort, setSort] = useState<SortKey>("recent");
   const [sankey, setSankey] = useState<SankeyData | null>(null);
   const [sankeyError, setSankeyError] = useState<string | null>(null);
@@ -1300,8 +1328,14 @@ export default function ApplicationsPage() {
                                 ) : null}
                               </div>
                               <span
+                                data-testid="card-stage-badge"
                                 className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${stage.iconClass}`}
-                                title={stage.label}
+                                /* SUB-006: the card's OWN stage word, which
+                                   drops "Submitted" for a row with no
+                                   transmission proof. The column header keeps
+                                   the lane name — a lane is shared, a card is
+                                   one row's claim. */
+                                title={stageLabelForCard(stage.key, card.app)}
                               >
                                 <i
                                   className={`fa-solid ${stage.icon} text-[9px]`}
@@ -1365,6 +1399,33 @@ export default function ApplicationsPage() {
                                 // "needs a manual step" on screen.
                                 onAnswered={() => void load()}
                               />
+                            ) : null}
+                            {/* SUB-010 — the answer pack, offered on exactly
+                                the cards whose last step is the user's own
+                                click: a row Aether prepared but never
+                                transmitted (the `needs your click` filter's
+                                population), or one that stopped at a manual
+                                step on the employer's form. Read-only: it
+                                opens a GET and nothing else. */}
+                            {card.app &&
+                            (isPreparedNotTransmitted(card.app) ||
+                              card.app.manualStepReason) ? (
+                              <button
+                                type="button"
+                                data-testid="answer-pack-btn"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setAnswerPackId(card.app!.id);
+                                }}
+                                aria-label={`Open the answer pack for ${card.title} at ${card.company}`}
+                                className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-md border border-hairline bg-surface-2 px-2 py-1 text-[10px] text-aether-muted transition hover:border-hairline-strong hover:text-aether-text"
+                              >
+                                <i
+                                  className="fa-regular fa-clipboard text-[9px]"
+                                  aria-hidden="true"
+                                />
+                                Answer pack
+                              </button>
                             ) : null}
                             <CardLink stageKey={stage.key} />
                             <div className="mt-2 flex items-center justify-between gap-2">
@@ -1569,6 +1630,16 @@ export default function ApplicationsPage() {
           )}
         </section>
       )}
+
+      {/* SUB-010 — the fused answer pack for one prepared application. It is
+          a read-only reader of GET /applications/{id}/answer-pack: no submit
+          control, no write, no path from it to an employer. */}
+      {answerPackId ? (
+        <AnswerPackPanel
+          applicationId={answerPackId}
+          onClose={() => setAnswerPackId(null)}
+        />
+      ) : null}
 
       {/* Clear Pipeline confirmation gate — mirrors the bulk-apply gate
           pattern from the Jobs page (MV-job-discovery-002): irreversible

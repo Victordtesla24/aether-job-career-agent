@@ -392,6 +392,43 @@ describe("U5 manualStepLabel", () => {
     );
   });
 
+  // SUB-007: the executor now distinguishes "the site refused the form" from
+  // "the site took it and said nothing". Both are manual steps, neither is a
+  // transmission, and the card must say which one happened.
+  it("labels the two SUB-007 post-submit outcomes distinctly, and neither as applied", () => {
+    const unconfirmed = manualStepLabel("submitted_unconfirmed");
+    const rejected = manualStepLabel("form_rejected");
+    expect(unconfirmed).toBe("Submitted — but the site never confirmed it received it");
+    expect(rejected).toBe("The site rejected the form — nothing was submitted");
+    expect(unconfirmed).not.toBe(rejected);
+    expect(unconfirmed).not.toBe(manualStepLabel("no_confirmation"));
+    // Neither headline may read as a completed application.
+    for (const label of [unconfirmed, rejected]) {
+      expect(label.toLowerCase()).not.toMatch(/\b(applied|application sent|confirmed by)\b/);
+    }
+    expect(unconfirmed.toLowerCase()).toContain("never confirmed");
+    expect(rejected.toLowerCase()).toContain("nothing was submitted");
+  });
+
+  // SUB-007 round 2: a greyed-out submit button is a different fact from a
+  // missing one, and the card must not tell the user Aether could not find a
+  // button that is on their screen.
+  it("distinguishes a greyed-out submit button from a missing one", () => {
+    const disabled = manualStepLabel("submit_control_disabled");
+    const missing = manualStepLabel("submit_control_not_found");
+    const clickFailed = manualStepLabel("submit_click_failed");
+    expect(disabled).toBe(
+      "The form's submit button was greyed out — nothing was submitted",
+    );
+    expect(disabled).not.toBe(missing);
+    expect(clickFailed).not.toBe(missing);
+    expect(disabled.toLowerCase()).not.toContain("could not find");
+    // Neither may read as a completed application.
+    for (const label of [disabled, clickFailed]) {
+      expect(label.toLowerCase()).not.toMatch(/\b(applied|submitted to|sent)\b/);
+    }
+  });
+
   it("de-slugifies an unknown reason instead of hiding it behind a vague label", () => {
     expect(manualStepLabel("two_factor_challenge")).toBe("Two factor challenge");
   });
