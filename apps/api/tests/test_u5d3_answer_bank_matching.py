@@ -267,6 +267,7 @@ class TestSensitivity:
         "question",
         [
             "Are you legally authorised to work in Australia?",
+            "Do you have full working rights in Australia?",
             "What is your notice period?",
             "How many years of experience do you have with Python?",
             "Are you willing to relocate to Sydney?",
@@ -326,6 +327,43 @@ class TestFindMatch:
         assert match.confidence >= 0.86
         assert match.question_as_seen == "Do you have the right to work in Australia?"
         assert match.method == "concept"
+
+    @pytest.mark.parametrize(
+        "asked",
+        [
+            "Do you have full working rights in Australia?",
+            "Do you have Australian working rights?",
+            "Do you have unrestricted working rights?",
+        ],
+    )
+    def test_australian_working_rights_phrasing_matches_the_seeded_work_rights_answer(
+        self, asked
+    ):
+        """AU ATS forms say 'working rights', not 'right to work'.
+
+        The seed questionnaire banks the legally-entitled phrasing. If the
+        matcher requires a standalone 'work' token, every Ashby/Lever form
+        that asks 'full working rights' stops even though the user already
+        answered the same fact. That is a missed auto-answer, not a gate.
+        """
+        from app.services.answer_bank import find_match
+
+        bank = [_item()]
+        match = find_match(asked, bank)
+        assert match is not None, asked
+        assert match.answer == bank[0]["answer"]
+
+    def test_a_visa_sponsorship_question_is_never_answered_from_working_rights(self):
+        """The working-rights widening must not open the visa gate.
+
+        'Do you require visa sponsorship?' is sensitive. A banked 'yes I have
+        working rights' must never fill it — even after 'working rights' is
+        recognised as the same class as 'right to work'.
+        """
+        from app.services.answer_bank import find_match
+
+        assert find_match("Do you require visa sponsorship to work here?", [_item()]) is None
+        assert find_match("Do you now or in the future require visa sponsorship?", [_item()]) is None
 
     def test_the_banked_answer_is_returned_verbatim_never_reworded(self):
         from app.services.answer_bank import find_match

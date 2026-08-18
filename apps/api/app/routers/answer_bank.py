@@ -25,20 +25,27 @@ toggle did not move.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Response, status
 from pydantic import BaseModel, Field
 
+from app.db import (
+    ensure_application_manual_step_question_column,
+    get_connection,
+    rows_to_dicts,
+)
 from app.middleware.auth import CurrentUser
 from app.repositories.answer_bank import AnswerBankRepository
 from app.services.answer_bank import (
     AUTO_ANSWER_CONFIDENCE,
-    SENSITIVITY_FACTUAL,
     SENSITIVITY_SENSITIVE,
     concept_of,
     describe_gate,
+    effective_sensitivity,
+    item_auto_answers,
+    item_is_expired,
+    readiness_summary,
     seed_question_payload,
 )
 
@@ -73,17 +80,15 @@ class UpdateItemRequest(BaseModel):
 def _view(item: dict[str, Any], usage: list[dict[str, Any]]) -> dict[str, Any]:
     """One bank item as the UI reads it — facts plus the honest gate reason.
 
-    ``expired`` is computed from the stored expiry rather than stored as a
-    flag, so a row cannot drift into claiming it is live after its staleness
-    policy has run out.
+    ``expired``, ``sensitivity`` and ``autoAnswers`` all come from the
+    matcher's own helpers rather than being re-derived here, so a row cannot
+    drift into claiming it is live after its staleness policy has run out, and
+    the page can never promise an auto-answer the agent would in fact gate.
+    ``sensitivity`` is the EFFECTIVE class (the stronger of the stored column
+    and the question's own wording) for the same reason.
     """
-    expires_at = item.get("expiresAt")
-    expired = bool(
-        isinstance(expires_at, datetime)
-        and (expires_at if expires_at.tzinfo else expires_at.replace(tzinfo=timezone.utc))
-        <= datetime.now(timezone.utc)
-    )
-    sensitivity = str(item.get("sensitivity") or SENSITIVITY_FACTUAL)
+    expired = item_is_expired(item)
+    sensitivity = effective_sensitivity(item)
     return {
         "id": item["id"],
         "questionText": item["questionText"],
@@ -101,13 +106,7 @@ def _view(item: dict[str, Any], usage: list[dict[str, Any]]) -> dict[str, Any]:
         # Will Aether actually send this without asking? The one question a
         # user looking at this page most needs answered, so it is computed
         # here rather than left for the client to re-derive from three fields.
-        "autoAnswers": (
-            not expired
-            and (
-                sensitivity == SENSITIVITY_FACTUAL
-                or (sensitivity != SENSITIVITY_SENSITIVE and bool(item["autoAnswerOptIn"]))
-            )
-        ),
+        "autoAnswers": item_auto_answers(item),
         "canOptIn": sensitivity != SENSITIVITY_SENSITIVE,
         "gateReason": describe_gate(item["questionText"], item),
         "timesUsed": item["timesUsed"],
@@ -140,7 +139,7 @@ def get_questionnaire(current_user: CurrentUser) -> dict[str, Any]:
     answered = {
         concept_of(str(item["semanticKey"]))
         for item in items
-        if concept_of(str(item["semanticKey"]))
+        if concept_of(str(item["semanticKey"])) and not item_is_expired(item)
     }
     return {
         "questions": seed_question_payload(),
@@ -181,6 +180,43 @@ def submit_questionnaire(
             "you again for anything it has no answer for."
         ),
     }
+
+
+@router.get("/readiness")
+def get_readiness(current_user: CurrentUser) -> dict[str, Any]:
+    """Set-up state and the measured output of the learning loop.
+
+    This is what the Settings panel and the first-run prompt read to tell the
+    user how far their agent can already act on its own. Every field is a count
+    of rows that exist — see :func:`app.services.answer_bank.readiness_summary`
+    for why there is no single blended "autonomy score".
+
+    ``applicationsWaiting`` is the one figure not derived from the bank: the
+    number of this user's applications standing on an unanswered screening
+    question right now. It is the actionable half of the story — a user whose
+    bank is thin needs to know the agent is *currently* stopped, not just that
+    coverage is incomplete.
+
+    Registered ahead of no catch-all, but kept above ``GET ""``'s neighbours
+    for readability. ``/questionnaire`` and ``/readiness`` are both literal
+    segments, so neither can be swallowed by ``/{item_id}`` (which is only
+    reachable via PATCH/DELETE/expire).
+    """
+    items = AnswerBankRepository().list_for_user(current_user["id"])
+    summary = readiness_summary(items)
+    summary["autoAnswerThreshold"] = AUTO_ANSWER_CONFIDENCE
+
+    ensure_application_manual_step_question_column()
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT COUNT(*) AS cnt FROM "Application" '
+                'WHERE "userId" = %s AND "manualStepQuestions" IS NOT NULL',
+                (current_user["id"],),
+            )
+            rows = rows_to_dicts(cur)
+    summary["applicationsWaiting"] = int(rows[0]["cnt"]) if rows else 0
+    return summary
 
 
 @router.get("")

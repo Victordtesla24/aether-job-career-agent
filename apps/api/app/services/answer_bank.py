@@ -286,6 +286,8 @@ _CONCEPT_WORK_RIGHTS = Concept(
         ("eligible", "work"),
         ("permitted", "work"),
         ("work", "entitlement"),
+        ("working", "right"),
+        ("working", "rights"),
     ),
     # A question that mentions sponsorship or a visa subclass is a visa
     # SPECIFICS question (sensitive), not the stable yes/no work-rights one.
@@ -873,6 +875,49 @@ def _effective_sensitivity(asked: str, item: dict[str, Any]) -> str:
     return question_class
 
 
+def effective_sensitivity(item: dict[str, Any]) -> str:
+    """The class that actually governs a STORED row.
+
+    The public form of :func:`_effective_sensitivity`. Callers outside the
+    matcher must use this rather than reading the ``sensitivity`` column, so
+    that a row stored with a softer class than its own wording is reported —
+    and gated — as the stronger of the two, exactly as the agent treats it.
+    """
+    return _effective_sensitivity(str(item.get("questionText") or ""), item)
+
+
+def item_is_expired(item: dict[str, Any], *, now: datetime | None = None) -> bool:
+    """Has this banked answer passed its staleness policy?
+
+    The public form of the check :func:`find_match` applies internally, so a
+    caller outside the matcher (the bank page, the readiness figures) reads
+    expiry from the same rule the agent obeys instead of re-deriving it.
+    """
+    return _is_expired(item, now or datetime.now(timezone.utc))
+
+
+def item_auto_answers(item: dict[str, Any], *, now: datetime | None = None) -> bool:
+    """Will Aether send this answer WITHOUT asking the user first?
+
+    The single source of truth for the one fact a user looking at their bank
+    most needs, so a page, a progress figure and the agent can never tell three
+    different stories about the same row.
+
+    Note this reads :func:`effective_sensitivity` and not the stored column
+    alone. That matters for a row whose stored class is softer than its wording
+    (a legacy or hand-edited row): the matcher would gate it, so claiming it
+    auto-answers would be a promise the agent does not keep.
+    """
+    if item_is_expired(item, now=now):
+        return False
+    sensitivity = effective_sensitivity(item)
+    if sensitivity == SENSITIVITY_SENSITIVE:
+        return False
+    if sensitivity == SENSITIVITY_FACTUAL:
+        return True
+    return bool(item.get("autoAnswerOptIn"))
+
+
 def find_match(
     asked: str,
     items: Sequence[dict[str, Any]],
@@ -1178,6 +1223,88 @@ def seed_question_payload() -> list[dict[str, Any]]:
         }
         for question in SEED_QUESTIONS
     ]
+
+
+#: The seed concepts that actually unblock an unattended submission. A
+#: judgement or sensitive class is user-gated BY DESIGN, so counting it as
+#: outstanding set-up would draw a progress bar that can never reach the end.
+#: A subject-sensitive factual class (years of experience) is also excluded:
+#: a general "years in my field" answer does not cover a named-skill re-ask,
+#: so treating it as essential would claim the agent is ready while those
+#: forms still stop.
+_SUBJECT_SENSITIVE_CONCEPTS = frozenset(
+    concept.key for concept in CONCEPTS if concept.subject_sensitive
+)
+ESSENTIAL_SEED_CONCEPTS: tuple[str, ...] = tuple(
+    question.concept
+    for question in SEED_QUESTIONS
+    if question.sensitivity == SENSITIVITY_FACTUAL
+    and question.concept not in _SUBJECT_SENSITIVE_CONCEPTS
+)
+
+
+def readiness_summary(
+    items: Sequence[dict[str, Any]], *, now: datetime | None = None
+) -> dict[str, Any]:
+    """How much of the screening set the bank can answer — measured, not estimated.
+
+    Every figure here is either a count of rows that exist or coverage over the
+    fixed seed set. Nothing is projected or smoothed, and there is deliberately
+    no single blended "autonomy score": a percentage mixing occurrence counts
+    (how many times an answer was reused) with question counts (how many
+    distinct questions are known) is a number with no unit — a fabricated
+    metric in the honesty floor's sense even though every input to it is real.
+
+    A user who has answered nothing gets zeros and an empty covered set. That
+    is the honest state, and the UI renders it as "not set up yet" rather than
+    as a flattering fraction of something.
+    """
+    moment = now or datetime.now(timezone.utc)
+    live = [item for item in items if not item_is_expired(item, now=moment)]
+    covered = {
+        concept
+        for concept in (concept_of(str(item.get("semanticKey") or "")) for item in live)
+        if concept
+    }
+
+    essential_covered = [key for key in ESSENTIAL_SEED_CONCEPTS if key in covered]
+    return {
+        "seedTotal": len(SEED_QUESTIONS),
+        "seedCovered": len([q for q in SEED_QUESTIONS if q.concept in covered]),
+        "seedRemaining": [
+            {
+                "concept": question.concept,
+                "question": question.question,
+                "sensitivity": question.sensitivity,
+            }
+            for question in SEED_QUESTIONS
+            if question.concept not in covered
+        ],
+        # The subset that decides whether an application can go out unattended.
+        "essentialTotal": len(ESSENTIAL_SEED_CONCEPTS),
+        "essentialCovered": len(essential_covered),
+        "setupComplete": len(essential_covered) == len(ESSENTIAL_SEED_CONCEPTS),
+        "liveAnswers": len(live),
+        # An expired row is still the user's answer — it needs re-confirming,
+        # not deleting, so it is reported rather than quietly dropped.
+        "expiredAnswers": len(items) - len(live),
+        "autoAnswerable": len([i for i in live if item_auto_answers(i, now=moment)]),
+        "gatedAnswers": len([i for i in live if not item_auto_answers(i, now=moment)]),
+        # Recorded occurrences: every time the agent answered from the bank
+        # instead of stopping to ask. Read from the item counters that the usage
+        # audit advances in the same transaction as each recorded use.
+        "timesAnswered": sum(int(item.get("timesUsed") or 0) for item in items),
+        # The learning loop, as a count of its actual output: answers that
+        # entered the bank because a real application asked something new.
+        "learnedFromApplications": len(
+            [
+                item
+                for item in items
+                if str(item.get("provenance") or "") == PROVENANCE_USER_ANSWERED
+                and str(item.get("provenanceDetail") or "").strip()
+            ]
+        ),
+    }
 
 
 def describe_gate(asked: str, item: dict[str, Any] | None = None) -> str:

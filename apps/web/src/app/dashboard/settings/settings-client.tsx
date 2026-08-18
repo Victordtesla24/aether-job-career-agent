@@ -39,8 +39,13 @@
  * from the agent-run quota's own reset date, a different underlying field).
  */
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import ScreeningQuestionnaire from "../../../components/answer-bank/ScreeningQuestionnaire";
+import {
+  fetchAnswerBankReadiness,
+  type AnswerBankReadiness,
+} from "../../../lib/api/answer-bank";
 import { apiBaseUrl, ApiError, describeApiError, formatRetryAfter, getToken } from "../../../lib/api/client";
 import {
   fetchPlans,
@@ -135,7 +140,11 @@ export default function SettingsClient({
 }) {
   const [data, setData] = useState<SettingsPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [active, setActive] = useState<string>("profile");
+  const [active, setActive] = useState<string>(() => {
+    if (typeof window === "undefined") return "profile";
+    const section = new URLSearchParams(window.location.search).get("section");
+    return section && SECTIONS.some((entry) => entry.id === section) ? section : "profile";
+  });
   const [profile, setProfile] = useState({ fullName: "", email: "", targetRole: "", location: "" });
   const [agentConfig, setAgentConfig] = useState({
     autoApply: false,
@@ -180,6 +189,12 @@ export default function SettingsClient({
   const [careerSyncing, setCareerSyncing] = useState(false);
   const [careerError, setCareerError] = useState<string | null>(null);
   const [careerNotice, setCareerNotice] = useState<string | null>(null);
+
+  // SETUP-1 — the screening Answer Bank's measured state. `null` means "not
+  // checked yet or the check failed", which the panel reports as such rather
+  // than as zero answers.
+  const [readiness, setReadiness] = useState<AnswerBankReadiness | null>(null);
+  const [readinessError, setReadinessError] = useState<string | null>(null);
 
   // LinkedIn data-export upload (B7): compliant, upload-based ingestion of
   // LinkedIn's official "Download your data" export — a second input path
@@ -465,6 +480,25 @@ export default function SettingsClient({
       );
   }, []);
 
+  // SETUP-1: the measured state of the screening Answer Bank. A failure leaves
+  // `readiness` null and the panel says so — it never falls back to zeros,
+  // because "0 answers saved" and "we could not check" are different facts and
+  // the first one would wrongly tell a set-up user to start over.
+  const loadReadiness = useCallback(async () => {
+    try {
+      setReadiness(await fetchAnswerBankReadiness());
+      setReadinessError(null);
+    } catch (e) {
+      setReadinessError(
+        e instanceof Error ? e.message : "Your screening answers could not be checked.",
+      );
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadReadiness();
+  }, [loadReadiness]);
+
   const validation = useMemo(() => {
     const errors: Record<string, string> = {};
     if (!profile.fullName.trim()) errors.fullName = "Full name is required";
@@ -571,15 +605,21 @@ export default function SettingsClient({
               {savedNotice}
             </span>
           ) : null}
-          <button
-            type="button"
-            data-testid="save-settings-btn"
-            onClick={() => void save()}
-            disabled={saving}
-            className="rounded-xl bg-aether-coral px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
-          >
-            {saving ? "Saving…" : "Save Changes"}
-          </button>
+          {/* Screening drafts save via "Save my answers" on the questionnaire.
+              The header Save only writes profile + agentConfig, and on this
+              tab those fields are hidden — so the chrome must not claim it
+              banks screening answers. */}
+          {active === "screening" ? null : (
+            <button
+              type="button"
+              data-testid="save-settings-btn"
+              onClick={() => void save()}
+              disabled={saving}
+              className="rounded-xl bg-aether-coral px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+            >
+              {saving ? "Saving…" : "Save Changes"}
+            </button>
+          )}
         </div>
       </header>
 
@@ -1054,6 +1094,139 @@ export default function SettingsClient({
             </div>
           )}
 
+          {/* SETUP-1 — Screening Answers.
+              An application form asks things a résumé cannot answer: work
+              rights, notice period, salary expectation, relocation. The
+              Submission Agent will not invent any of them, so until they are
+              answered here an otherwise-ready application stops and waits for
+              the user. This panel sits directly after Résumé Management and
+              Career Data so a new subscriber supplies everything the agent
+              needs — document, links, and answers — in one sitting, and it is
+              also its own sub-nav entry for returning users.
+
+              The figures come from GET /answer-bank/readiness and are counts of
+              stored rows. There is no blended "autonomy %" here on purpose (see
+              answer_bank.readiness_summary). */}
+          {(active === "screening" || active === "profile") && (
+            <section
+              className="bg-surface-1 rounded-[14px] border border-white/10 p-5"
+              data-testid="settings-screening"
+              aria-labelledby="screening-heading"
+            >
+              <h2 id="screening-heading" className="mb-1 text-[15px] font-semibold">
+                Screening Answers
+              </h2>
+              <p className="mb-4 text-xs leading-relaxed text-aether-muted">
+                Application forms ask questions your résumé cannot answer. Aether sends only
+                what you have written here, word for word — it never invents an answer, and a
+                question it has no current answer for comes back to you on the application
+                card instead of being guessed.
+              </p>
+
+              {readinessError ? (
+                <p
+                  className="mb-4 break-words rounded-lg border border-state-warn/30 bg-state-warn/10 p-2.5 text-[11px] text-state-warn"
+                  data-testid="screening-readiness-error"
+                  role="status"
+                >
+                  {readinessError}
+                </p>
+              ) : readiness === null ? (
+                <p
+                  className="mb-4 text-[11px] text-aether-muted-dim"
+                  data-testid="screening-readiness-loading"
+                >
+                  Checking your saved answers…
+                </p>
+              ) : (
+                <div className="mb-4" data-testid="screening-readiness">
+                  <p className="text-[13px] text-aether-text" data-testid="screening-readiness-headline">
+                    {readiness.setupComplete
+                      ? "Every answer Aether can reuse on its own is saved. Applications will not stop for these questions."
+                      : `${readiness.essentialCovered} of ${readiness.essentialTotal} reusable answers saved. Until the rest are answered, an application that asks one will stop and wait for you.`}
+                  </p>
+                  <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    <ReadinessStat
+                      label="Saved answers"
+                      value={readiness.liveAnswers}
+                      testId="screening-stat-saved"
+                    />
+                    <ReadinessStat
+                      label="Sent without asking"
+                      value={readiness.autoAnswerable}
+                      tone="text-state-ok"
+                      testId="screening-stat-auto"
+                    />
+                    <ReadinessStat
+                      label="Times reused"
+                      value={readiness.timesAnswered}
+                      testId="screening-stat-reused"
+                    />
+                    <ReadinessStat
+                      label="Waiting on you"
+                      value={readiness.applicationsWaiting}
+                      tone={readiness.applicationsWaiting > 0 ? "text-state-warn" : undefined}
+                      testId="screening-stat-waiting"
+                    />
+                  </div>
+                  {readiness.learnedFromApplications > 0 ? (
+                    <p
+                      className="mt-2 text-[11px] leading-snug text-aether-muted-dim"
+                      data-testid="screening-learned"
+                    >
+                      {readiness.learnedFromApplications} of these were learned from questions
+                      real applications asked you — each one answered once, then reused.
+                    </p>
+                  ) : null}
+                  {readiness.expiredAnswers > 0 ? (
+                    <p
+                      className="mt-2 text-[11px] leading-snug text-state-warn"
+                      data-testid="screening-expired"
+                    >
+                      {readiness.expiredAnswers} saved answer
+                      {readiness.expiredAnswers === 1 ? "" : "s"} need re-confirming — a notice
+                      period or start date goes stale, so Aether asks you again rather than
+                      sending one that may no longer be true.
+                    </p>
+                  ) : null}
+                  {readiness.applicationsWaiting > 0 ? (
+                    <Link
+                      href="/dashboard/applications"
+                      className="mt-2 inline-block text-[11px] font-semibold text-aether-coral hover:underline"
+                      data-testid="screening-waiting-link"
+                    >
+                      Review the {readiness.applicationsWaiting} application
+                      {readiness.applicationsWaiting === 1 ? "" : "s"} waiting on an answer
+                    </Link>
+                  ) : null}
+                </div>
+              )}
+
+              <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
+                <ScreeningQuestionnaire
+                  defaultOpen={readiness !== null && !readiness.setupComplete}
+                  onSaved={() => void loadReadiness()}
+                  eyebrow="Answer once, reuse everywhere"
+                  heading="The questions employers ask most"
+                />
+              </div>
+
+              <p className="mt-3 text-[11px] text-aether-muted-dim">
+                Every saved answer — where it came from, whether Aether sends it without
+                asking, and every application it has been used on — is listed on the{" "}
+                <Link
+                  href="/dashboard/answer-bank"
+                  className="text-aether-coral hover:underline"
+                  data-testid="screening-bank-link"
+                >
+                  Answer Bank
+                </Link>
+                . Sensitive and legal questions (background checks, diversity disclosures, visa
+                specifics) are asked every single time, whatever is saved.
+              </p>
+            </section>
+          )}
+
           {(active === "agents" || active === "profile") && (
             <section className="bg-surface-1 rounded-[14px] border border-white/10 p-5" data-testid="settings-agents">
               <h2 className="mb-4 text-[15px] font-semibold">Agent Configuration</h2>
@@ -1459,6 +1632,30 @@ function SourceError({ source }: { source?: CareerDataSource }) {
     <p className={`mt-1 text-[10px] ${tone}`} data-testid={`career-${source.source}-detail`}>
       {source.error}
     </p>
+  );
+}
+
+/** SETUP-1 — one measured count. Always a real number; never a placeholder. */
+function ReadinessStat({
+  label,
+  value,
+  tone,
+  testId,
+}: {
+  label: string;
+  value: number;
+  tone?: string;
+  testId: string;
+}) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
+      <p className={`text-lg font-semibold leading-none ${tone ?? ""}`} data-testid={testId}>
+        {value}
+      </p>
+      <p className="mono mt-1 text-[10px] uppercase tracking-[0.08em] text-aether-muted-dim">
+        {label}
+      </p>
+    </div>
   );
 }
 
