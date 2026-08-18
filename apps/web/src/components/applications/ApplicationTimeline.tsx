@@ -18,7 +18,7 @@ import {
   STATUS_NODE_COLOR,
   type TimelinePayload,
 } from "./timeline-model";
-import { buildTimelineGlGeometry } from "./timeline-gl-geometry";
+import { buildTimelineGlGeometry, laneTrackWidth } from "./timeline-gl-geometry";
 import type { FilterKey, SortKey } from "./tracker-lib";
 
 const ApplicationTimelineGL = dynamic(() => import("./ApplicationTimelineGL"), {
@@ -29,6 +29,11 @@ const ApplicationTimelineGL = dynamic(() => import("./ApplicationTimelineGL"), {
 const LANE_H = 80;
 const LABEL_W = 220;
 const PAD_X = 28;
+// The DOM lane track never renders narrower than this. GL geometry shares
+// the exact same floor (via laneTrackWidth) so its overlay stays aligned
+// with the interactive dots when the timeline is narrower than
+// label + track (TL-VIZ-R4 / D2).
+const LANE_TRACK_MIN = 560;
 const VIEWPORT_H = "min(calc(100dvh - 300px), 1120px)";
 
 const LEGEND: Array<{ key: keyof typeof STATUS_NODE_COLOR; label: string }> = [
@@ -110,9 +115,14 @@ export default function ApplicationTimeline({
         laneH: LANE_H,
         hoverId: null,
         hoverAppId: null,
+        trackMinW: LANE_TRACK_MIN,
       }),
     [model, glSize.w],
   );
+
+  // Same formula, same inputs, as the DOM lane track's inline `minWidth`
+  // below — the one shared source of truth for D2 (TL-VIZ-R4).
+  const laneTrackWidthPx = laneTrackWidth(glSize.w, LABEL_W, LANE_TRACK_MIN);
 
   const focusNode = useMemo(() => {
     if (!hoverId) return null;
@@ -213,25 +223,29 @@ export default function ApplicationTimeline({
     (e: React.KeyboardEvent) => {
       if (e.key === "ArrowLeft") {
         e.preventDefault();
+        stopInertia();
         setPanX((x) => clampPan(x + 64));
       } else if (e.key === "ArrowRight") {
         e.preventDefault();
+        stopInertia();
         setPanX((x) => clampPan(x - 64));
       } else if (e.key === "Home") {
         e.preventDefault();
+        stopInertia();
         setPanX(0);
       }
     },
-    [clampPan],
+    [clampPan, stopInertia],
   );
 
   const onWheel = useCallback(
     (e: React.WheelEvent) => {
       if (!e.shiftKey) return;
       // Native non-passive listener attached below — React's synthetic wheel is passive.
+      stopInertia();
       setPanX((x) => clampPan(x - e.deltaY));
     },
-    [clampPan],
+    [clampPan, stopInertia],
   );
 
   return (
@@ -414,7 +428,7 @@ export default function ApplicationTimeline({
                     ) : null}
                   </div>
 
-                  <div className="relative min-w-0 flex-1" style={{ minWidth: "min(100%, 560px)" }}>
+                  <div className="relative min-w-0 flex-1" style={{ minWidth: laneTrackWidthPx }}>
                     <div
                       aria-hidden="true"
                       className="absolute left-7 right-7 top-1/2 h-px -translate-y-1/2 bg-white/[0.08]"

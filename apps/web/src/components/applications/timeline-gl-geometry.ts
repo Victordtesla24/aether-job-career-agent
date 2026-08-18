@@ -50,6 +50,13 @@ export type TimelineGlBuildOpts = {
   laneH: number;
   hoverId: string | null;
   hoverAppId: string | null;
+  /**
+   * Minimum lane-track width. The DOM lane track's inline `minWidth` is
+   * computed by this same {@link laneTrackWidth} function with the same
+   * floor, so the GL basis can never drift from what is actually rendered
+   * (TL-VIZ-R4 / D2 — GL/DOM x-misalignment).
+   */
+  trackMinW: number;
 };
 
 function laneAccent(status: string): string {
@@ -57,6 +64,22 @@ function laneAccent(status: string): string {
     return STATUS_NODE_COLOR[status as keyof typeof STATUS_NODE_COLOR];
   }
   return "#8C8A82";
+}
+
+/**
+ * Single source of truth for the lane-track width, shared by the DOM lane
+ * track's inline `minWidth` style and this module's GL geometry basis. Both
+ * call sites must feed this the same `rowWidth` (the measured full-row
+ * width), `labelW`, and `trackMinW` — never re-derive the formula locally —
+ * or the WebGL auras/ribbons drift off the interactive DOM dots on narrow
+ * viewports (TL-VIZ-R4 / D2).
+ */
+export function laneTrackWidth(
+  rowWidth: number,
+  labelW: number,
+  trackMinW: number,
+): number {
+  return Math.max(rowWidth - labelW, trackMinW);
 }
 
 /**
@@ -70,7 +93,7 @@ export function buildTimelineGlGeometry(
     return { nodes: [], edges: [], rails: [] };
   }
 
-  const trackW = Math.max(opts.width - opts.labelW, 1);
+  const trackW = laneTrackWidth(opts.width, opts.labelW, opts.trackMinW);
   const usable = Math.max(trackW - opts.padX * 2, 1);
   const nodes: TimelineGlNode[] = [];
   const edges: TimelineGlEdge[] = [];

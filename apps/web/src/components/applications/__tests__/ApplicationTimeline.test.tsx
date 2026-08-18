@@ -177,4 +177,77 @@ describe("ApplicationTimeline", () => {
     fireEvent.click(screen.getByTestId("timeline-node-e1"));
     expect(onOpen).toHaveBeenCalledWith("app-1");
   });
+
+  it("halts drag-release inertia before a keyboard pan takes over (adv D3)", () => {
+    render(<ApplicationTimeline payload={PAYLOAD} onOpenDetail={vi.fn()} />);
+    const track = screen.getByTestId("timeline-track");
+    const scroller = screen.getByTestId("timeline-scroller");
+
+    const dispatchPointer = (
+      type: "pointerdown" | "pointermove" | "pointerup",
+      clientX: number,
+    ) => {
+      const ev = new Event(type, { bubbles: true, cancelable: true }) as Event & {
+        button: number;
+        buttons: number;
+        clientX: number;
+        pointerId: number;
+      };
+      Object.assign(ev, {
+        button: 0,
+        buttons: type === "pointerup" ? 0 : 1,
+        clientX,
+        pointerId: 1,
+      });
+      fireEvent(track, ev);
+    };
+
+    // Fast release: builds enough velocity that pointerup's startInertia()
+    // schedules a coasting requestAnimationFrame loop (inertiaRaf.current
+    // becomes non-zero the instant startInertia() runs, synchronously).
+    dispatchPointer("pointerdown", 100);
+    dispatchPointer("pointermove", 260);
+    dispatchPointer("pointerup", 260);
+
+    const cafSpy = vi.spyOn(window, "cancelAnimationFrame");
+    fireEvent.keyDown(scroller, { key: "ArrowLeft" });
+    // stopInertia() only calls cancelAnimationFrame when a RAF id is live —
+    // this only passes if the keyboard handler actually halts the coast.
+    expect(cafSpy).toHaveBeenCalled();
+    cafSpy.mockRestore();
+  });
+
+  it("halts drag-release inertia before a wheel pan takes over (adv D3)", () => {
+    render(<ApplicationTimeline payload={PAYLOAD} onOpenDetail={vi.fn()} />);
+    const track = screen.getByTestId("timeline-track");
+    const scroller = screen.getByTestId("timeline-scroller");
+
+    const dispatchPointer = (
+      type: "pointerdown" | "pointermove" | "pointerup",
+      clientX: number,
+    ) => {
+      const ev = new Event(type, { bubbles: true, cancelable: true }) as Event & {
+        button: number;
+        buttons: number;
+        clientX: number;
+        pointerId: number;
+      };
+      Object.assign(ev, {
+        button: 0,
+        buttons: type === "pointerup" ? 0 : 1,
+        clientX,
+        pointerId: 1,
+      });
+      fireEvent(track, ev);
+    };
+
+    dispatchPointer("pointerdown", 100);
+    dispatchPointer("pointermove", 260);
+    dispatchPointer("pointerup", 260);
+
+    const cafSpy = vi.spyOn(window, "cancelAnimationFrame");
+    fireEvent.wheel(scroller, { shiftKey: true, deltaY: 40 });
+    expect(cafSpy).toHaveBeenCalled();
+    cafSpy.mockRestore();
+  });
 });
