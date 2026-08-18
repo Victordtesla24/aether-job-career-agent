@@ -1331,8 +1331,8 @@ def get_settings(current_user: CurrentUser) -> dict[str, Any]:
     # Inbox alert provenance (seek-alert, …) is never a board row.
     from app.repositories.job_source_status import JobSourceStatusRepository
     from app.services.discovery.adapter_registry import (
-        SOURCE_DISPLAY_NAMES,
         _ALL_ADAPTERS,
+        SOURCE_DISPLAY_NAMES,
         build_live_registry,
         source_availability,
     )

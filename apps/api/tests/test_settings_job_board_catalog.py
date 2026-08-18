@@ -10,12 +10,9 @@ a board row.
 """
 from __future__ import annotations
 
-import pytest
-
 from app.db import get_connection, new_id
 from app.repositories.billing import ensure_user_billing
 from app.services.discovery.adapter_registry import _ALL_ADAPTERS
-
 
 EXPECTED_SOURCES = frozenset(_ALL_ADAPTERS.keys())
 
