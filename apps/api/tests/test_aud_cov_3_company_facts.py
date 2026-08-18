@@ -119,6 +119,46 @@ class TestFeatureFlagDisabled:
         assert result is None
 
 
+class TestDefaultIsOff:
+    """§15 RELABEL (docs/delivery/evidence/RUN-20260818T0223Z/
+    05-decision-memos/SUB-005-and-COV-3-rulings.md): three adversarial
+    rounds each closed the prior disambiguation hole and surfaced a
+    narrower one. The honest close ships this OFF unless something
+    explicitly turns it on -- these tests unset the env var entirely
+    (rather than setting it to "0") so a regression that merely stops
+    reading the var, or reads it with an inverted default, is caught."""
+
+    def test_research_enabled_defaults_to_false_with_no_env_var_set(
+        self, monkeypatch
+    ):
+        monkeypatch.delenv("AETHER_COVER_LETTER_RESEARCH_ENABLED", raising=False)
+        from app.services.company_facts import research_enabled
+
+        assert research_enabled() is False
+
+    def test_fetch_company_facts_makes_no_network_call_with_default_env(
+        self, monkeypatch
+    ):
+        monkeypatch.delenv("AETHER_COVER_LETTER_RESEARCH_ENABLED", raising=False)
+        monkeypatch.setenv("ABACUS_API_KEY", "test-key-not-real")
+        monkeypatch.setenv("FIRECRAWL_API_URL", "https://firecrawl.test")
+        # A recording (not raising) transport double: raising inside the
+        # monkeypatched ``httpx.post`` would be swallowed by
+        # ``_scrape_company_facts``'s own ``except Exception`` and silently
+        # turn a real transport call into an honest-looking ``None`` --
+        # masking the exact regression this test exists to catch. Recording
+        # the call count instead is airtight either way.
+        calls = _install_post(
+            monkeypatch, lambda url, **kw: _search_ok("should never be reached")
+        )
+        result = fetch_company_facts(_company("defaultoff"))
+        assert result is None
+        assert calls == [], (
+            "no network call should have been attempted with the research "
+            f"flag left at its default, got calls={calls!r}"
+        )
+
+
 class TestMissingCredentials:
     def test_missing_credentials_returns_none_and_makes_no_network_call(
         self, monkeypatch
@@ -363,6 +403,73 @@ class TestAgentHonestFallback:
         assert "<company_facts>" not in llm.prompts[0], (
             "no researched fact was available -- the prompt must not carry a "
             "company_facts block for the model to (mis)cite"
+        )
+
+
+class TestAgentHonestFallbackWithDefaultEnv:
+    """§15 RELABEL: the SAME honest-fallback behaviour as
+    ``TestAgentHonestFallback`` above, but with the env var left COMPLETELY
+    UNSET (the actual production/default configuration going forward) rather
+    than explicitly set to "0". This is the test that would have caught
+    shipping the code with the flag still defaulting ON: it proves
+    ``fetch_company_facts`` -- and therefore the live transport -- is never
+    reached during letter generation absent an explicit opt-in, and the
+    letter still generates complete and JD-grounded."""
+
+    def test_default_env_makes_no_fetch_and_letter_still_generates(
+        self, client, auth_headers, monkeypatch
+    ):
+        monkeypatch.delenv("AETHER_COVER_LETTER_RESEARCH_ENABLED", raising=False)
+        # Real-looking credentials ARE present here (unlike a bare "no
+        # credentials configured" scenario) so this test actually exercises
+        # the flag-gating branch: if the flag regressed back to defaulting
+        # ON, this would reach the live transport for real. A recording (not
+        # raising) transport double -- see the note in TestDefaultIsOff --
+        # keeps the assertion airtight even though ``fetch_company_facts``
+        # swallows any exception the transport double might raise.
+        monkeypatch.setenv("ABACUS_API_KEY", "test-key-not-real")
+        monkeypatch.setenv("FIRECRAWL_API_URL", "https://firecrawl.test")
+        calls = _install_post(
+            monkeypatch, lambda url, **kw: _search_ok("should never be reached")
+        )
+
+        company = _company("defaultenvco")
+        seed_own_resume(client, auth_headers, raw_text=FIXTURE_LLM_RESUME_TEXT)
+        user_id, name = _real_user(client, auth_headers)
+        job_id = _seed_job(user_id, "default-env", company)
+
+        hook_reason = (
+            "This role's emphasis on owning sprint cadence and PI Planning "
+            "mirrors exactly how I already run delivery."
+        )
+        body = (
+            "I have directly owned sprint cadence and PI Planning for "
+            "multiple squads, and delivered analytics applications with "
+            "Next.js and Supabase that expose delivery metrics to "
+            "stakeholders.\n\n"
+            "I would welcome the opportunity to discuss this further in an "
+            "interview at your convenience."
+        )
+        llm = _RecordingStubLLM(hook_reason, body)
+        agent = CoverLetterAgent(
+            llm=llm, guard=FabricationGuard(), users=_UserRepoStub(name)
+        )
+        result = agent.run(user_id, job_id)
+
+        assert not result.cover_letter_unavailable, result.message
+        assert hook_reason in result.cover_letter, (
+            "the JD-grounded Part-A opener must ship unchanged with the "
+            f"research step dormant: {result.cover_letter!r}"
+        )
+        assert llm.prompts, "the stub LLM was never called"
+        assert "<company_facts>" not in llm.prompts[0], (
+            "with the flag left at its default, no company_facts block "
+            "should ever reach the model"
+        )
+        assert calls == [], (
+            "fetch_company_facts must never reach the live transport during "
+            f"letter generation with the research flag at its default, got "
+            f"calls={calls!r}"
         )
 
 

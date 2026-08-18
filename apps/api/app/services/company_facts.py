@@ -33,6 +33,20 @@ the response carries nothing usable — returns ``None``. The caller
 the letter simply falls back to the JD-grounded ``hook_reason`` opener the
 AUD-COV-1 fix already produces, with zero fabricated company claims. This
 module never raises past :func:`fetch_company_facts` for exactly that reason.
+
+STATUS (§15 relabel, docs/delivery/evidence/RUN-20260818T0223Z/
+05-decision-memos/SUB-005-and-COV-3-rulings.md): three adversarial rounds
+each closed the prior disambiguation hole and surfaced a narrower one —
+most recently ``_is_specific_location`` letting ordinary generic locations
+("USA", "Remote - US") back through the "specific location" cache-collision
+guard. That pattern — an unbounded class of narrower holes, not a bounded
+bug — is the signal for an honest §15 close rather than a fourth fix round.
+This module ships DORMANT: ``research_enabled()`` defaults to OFF (see
+``_ENABLED_ENV`` below), so ``fetch_company_facts`` returns ``None``
+unconditionally in production today, and every letter uses the honest
+JD-grounded opener with zero company-fact fetch. The code is kept, not
+deleted, for future hardening — flip the env var on once the
+disambiguation class above is closed.
 """
 from __future__ import annotations
 
@@ -45,10 +59,17 @@ from app.services.discovery.seek_adapter import _get_abacus_credentials
 
 logger = logging.getLogger(__name__)
 
-#: Feature flag. Default ON — the memo requires "default ON only if
-#: budget-safe", and the hard fetch timeout below (run entirely OUTSIDE the
-#: cover-letter LLM budget window) is what makes it budget-safe by
-#: construction, not by tuning. Set to "0"/"false"/"off" to disable.
+#: Feature flag. Default OFF (§15 relabel, RUN-20260818T0223Z —
+#: docs/delivery/evidence/RUN-20260818T0223Z/05-decision-memos/
+#: SUB-005-and-COV-3-rulings.md). Three adversarial fix rounds each closed
+#: the prior disambiguation hole (float-timeout-as-deadline; cache
+#: collisions; R4's ``_is_specific_location`` blocklist letting ordinary
+#: generic locations back through) and surfaced a narrower one — the honest
+#: close is to ship this OFF by default rather than land a fourth
+#: unbounded-tail fix. The code stays wired and dormant for future
+#: hardening; it is not deleted. Letters ship the JD-grounded
+#: ``hook_reason`` opener (AUD-COV-1, sound and unaffected) with zero
+#: company-fact fetch. Set to "1"/"true"/"on" to re-enable once hardened.
 _ENABLED_ENV = "AETHER_COVER_LETTER_RESEARCH_ENABLED"
 
 #: Hard wall-clock ceiling for the LIVE fetch (network round trip only). Kept
@@ -83,9 +104,13 @@ class CompanyFacts:
 
 
 def research_enabled() -> bool:
-    """Whether the bounded company-research fetch step is turned on at all."""
-    return os.environ.get(_ENABLED_ENV, "1").strip().lower() not in (
-        "0", "false", "off", "no",
+    """Whether the bounded company-research fetch step is turned on at all.
+
+    Default OFF per the §15 relabel — see ``_ENABLED_ENV`` above. Only an
+    explicit "1"/"true"/"on" in the environment turns it back on.
+    """
+    return os.environ.get(_ENABLED_ENV, "0").strip().lower() in (
+        "1", "true", "on", "yes",
     )
 
 
