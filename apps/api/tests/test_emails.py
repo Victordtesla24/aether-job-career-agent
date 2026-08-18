@@ -1,6 +1,36 @@
 """P3 — email draft and reply endpoints."""
 from __future__ import annotations
 
+import uuid
+
+
+def _seed_application(conn, user_id: str) -> str:
+    """Insert a minimal Job -> Resume -> Application chain; return the app id.
+
+    ``EmailThread.applicationId`` carries a real foreign key to
+    ``Application`` (``EmailThread_applicationId_fkey``), so any test that
+    links a draft to an application must seed a genuine row first.
+    """
+    job_id, resume_id, app_id = (uuid.uuid4().hex for _ in range(3))
+    with conn.cursor() as cur:
+        cur.execute(
+            'INSERT INTO "Job" ("id","userId","title","company","description",'
+            '"source","updatedAt") VALUES (%s,%s,%s,%s,%s,%s,now())',
+            (job_id, user_id, "Engineer", "Acme", "desc", "seed"),
+        )
+        cur.execute(
+            'INSERT INTO "Resume" ("id","userId","sections","formatHash",'
+            '"updatedAt") VALUES (%s,%s,%s,%s,now())',
+            (resume_id, user_id, "{}", "hash"),
+        )
+        cur.execute(
+            'INSERT INTO "Application" ("id","userId","jobId","resumeId",'
+            '"updatedAt") VALUES (%s,%s,%s,%s,now())',
+            (app_id, user_id, job_id, resume_id),
+        )
+    conn.commit()
+    return app_id
+
 
 def test_create_draft(client, auth_headers):
     """POST /emails/draft creates a new email thread."""
@@ -17,18 +47,19 @@ def test_create_draft(client, auth_headers):
     assert "updatedAt" in data
 
 
-def test_create_draft_with_optional_fields(client, auth_headers):
+def test_create_draft_with_optional_fields(client, auth_headers, db_session, test_user_id):
     """POST /emails/draft with application_id and classification."""
+    app_id = _seed_application(db_session, test_user_id)
     payload = {
         "subject": "Application inquiry",
         "body": "Regarding my application",
-        "application_id": "some-app-id",
+        "application_id": app_id,
         "classification": "inquiry",
     }
     response = client.post("/emails/draft", json=payload, headers=auth_headers)
     assert response.status_code == 201, response.text
     data = response.json()
-    assert data["applicationId"] == "some-app-id"
+    assert data["applicationId"] == app_id
     assert data["classification"] == "inquiry"
 
 
