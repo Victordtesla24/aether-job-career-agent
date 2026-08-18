@@ -302,3 +302,61 @@ def test_submission_agent_selects_submitted_not_transmitted(db_session, user_id)
         )
     assert result.submissionState == "awaiting_approval"
     assert result.approvalId
+
+
+#: Live Dovetail Ashby (2026-08-18T18:21Z) mounts an "Autofill from resume"
+#: ``<input type=file>`` with no id/name, outside every ``[data-field-path]``.
+#: The named Resume field is ``_systemfield_resume``. The census treated the
+#: autofill chrome as an unclassified question and refused
+#: ``unverifiable_form_surface`` before Submit. That widget is not a question.
+_ASHBY_AUTOFILL_AND_RESUME = """
+<title>Dovetail</title>
+<div class="_root_xd2v0_1 ashby-application-form-autofill-input-root">
+  <input type="file">
+</div>
+<form class="ashby-application-form" onsubmit="event.preventDefault();
+    document.body.innerHTML = '<h1>Thank you for applying</h1>';">
+  <div data-field-path="_systemfield_email">
+    <label class="_required_abc">Email</label>
+    <input id="_systemfield_email" name="_systemfield_email" type="email">
+  </div>
+  <div data-field-path="_systemfield_resume">
+    <label class="_required_abc">Resume</label>
+    <input id="_systemfield_resume" name="_systemfield_resume" type="file">
+  </div>
+  <button class="ashby-application-form-submit-button">Submit Application</button>
+</form>
+"""
+
+
+def test_ashby_autofill_file_input_is_not_an_unclassified_question() -> None:
+    """Ashby autofill chrome is not a required extra upload."""
+    from app.services.apply_executor import _unclassifiable_controls
+
+    findings = _unclassifiable_controls(_ASHBY_AUTOFILL_AND_RESUME, "ashby")
+    assert findings == []
+
+
+def test_nameless_file_input_outside_autofill_still_refuses() -> None:
+    """A nameless file control that is not Ashby autofill stays unknown."""
+    from app.services.apply_executor import _unclassifiable_controls
+
+    html = """
+    <form>
+      <div data-field-path="_systemfield_email">
+        <label>Email</label>
+        <input id="_systemfield_email" name="_systemfield_email" type="email">
+      </div>
+      <input type="file">
+    </form>
+    """
+    findings = _unclassifiable_controls(html, "ashby")
+    assert any("unclassified <input>" in item for item in findings)
+
+
+def test_ashby_autofill_chrome_does_not_block_census(open_page) -> None:
+    """The live Dovetail refuse ran this census; autofill chrome must pass it."""
+    from app.services.apply_executor import _verify_no_unverifiable_form_surface
+
+    page = open_page(_ASHBY_AUTOFILL_AND_RESUME)
+    _verify_no_unverifiable_form_surface(page, "ashby")

@@ -3146,6 +3146,29 @@ def _converge_presubmit_state(
             )
 
 
+def _is_ashby_autofill_file_input(control: Any) -> bool:
+    """True for Ashby's nameless Autofill-from-resume file input.
+
+    That widget sits above the application form, outside every
+    ``[data-field-path]``, and has no ``id`` or ``name``. Filling it is how
+    an applicant parses a résumé into the form — and it re-renders, wiping
+    typed answers. It is not a second required upload.
+    """
+    if str(control.get("type") or "").lower() != "file":
+        return False
+    if str(control.get("id") or "").strip() or str(control.get("name") or "").strip():
+        return False
+    node = control
+    for _ in range(5):
+        if node is None:
+            return False
+        classes = " ".join(node.get("class") or [])
+        if "ashby-application-form-autofill-input" in classes:
+            return True
+        node = getattr(node, "parent", None)
+    return False
+
+
 def _unclassifiable_controls(html: str, channel: str) -> list[str]:
     """Form-shaped controls in ``html`` that :func:`parse_form_schema`
     (``channel``'s own dialect) cannot turn into a field entry AT ALL — a
@@ -3208,6 +3231,13 @@ def _unclassifiable_controls(html: str, channel: str) -> list[str]:
         control_id = str(control.get("id") or "")
         control_name = str(control.get("name") or "")
         if control_name == "g-recaptcha-response" or control_id.startswith("iti-"):
+            continue
+        # Ashby mounts "Autofill from resume" as a nameless <input type=file>
+        # outside every [data-field-path] (live Dovetail, 2026-08-18). The
+        # real Resume question is _systemfield_resume. Uploading into the
+        # autofill box re-renders and wipes the form; it is chrome, not a
+        # question — same class as iti- phone internals.
+        if _is_ashby_autofill_file_input(control):
             continue
         if not _covered(control):
             _flag(control, f"unclassified <{control.name}> control")

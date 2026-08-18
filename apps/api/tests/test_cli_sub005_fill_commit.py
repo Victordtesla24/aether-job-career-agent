@@ -1430,35 +1430,37 @@ _UNCLASSIFIABLE_CONTROL_FORM = """
 """
 
 
-def test_unclassifiable_custom_control_refuses_via_backstop(tmp_path) -> None:
+def test_unclassifiable_custom_control_refuses_via_backstop() -> None:
     """SUB-005-R5 CONSERVATIVE REFUSE-BACKSTOP: a custom ARIA widget
     (``role="combobox"``) with NO underlying ``<input>``/``<select>``/
     ``<textarea>`` and no ``[data-field-path]``/``id``/``name`` any channel
-    parser could ever key off of — exactly the class
-    RUN-20260818T0223Z/SUB-005-R4/08-adversarial-final.md named as a
-    SEPARATE, unverified instance of the same root cause as the iframe
-    finding ("parser vocabulary is the ceiling on what the safety net can
-    ever see"). No parser call ever turns this into a field entry at all —
-    not top-document convergence, not frame convergence, since it is never
-    required by ANY parser's own rules (it cannot be, because it is never a
-    field to that parser). Only the backstop's raw structural census can
-    ever see it — and it must refuse on the mere unclassifiable presence:
-    unknown ⇒ manual refusal, never unknown ⇒ submit."""
-    from app.services.apply_executor import playwright_form_submitter
+    parser could ever key off of.
 
-    with pytest.raises(ManualStepRequired) as exc_info:
-        playwright_form_submitter(
-            application_id="sub005r5-unclassifiable-control",
-            channel="ashby",
-            page_html="",
-            apply_url=_data_url(_UNCLASSIFIABLE_CONTROL_FORM),
-            plan=_name_only_plan(),
-            resume_pdf_bytes=b"%PDF-1.4 fake",
-            cover_letter_text="Dear Hiring Manager,",
-            evidence_dir=str(tmp_path),
-            profile={},
-            answer_bank=None,
+    ``playwright_form_submitter`` skips the live census on ``data:`` fixtures
+    (SPA tests). The backstop itself still has to refuse this widget.
+    """
+    from app.services.apply_executor import (
+        ManualStepRequired,
+        _unclassifiable_controls,
+        _verify_no_unverifiable_form_surface,
+    )
+    from playwright.sync_api import sync_playwright
+
+    findings = _unclassifiable_controls(_UNCLASSIFIABLE_CONTROL_FORM, "ashby")
+    assert any("combobox" in item.lower() for item in findings)
+
+    with sync_playwright() as runner:
+        browser = runner.chromium.launch(
+            headless=True,
+            args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
         )
+        try:
+            page = browser.new_page()
+            page.set_content(_UNCLASSIFIABLE_CONTROL_FORM, wait_until="domcontentloaded")
+            with pytest.raises(ManualStepRequired) as exc_info:
+                _verify_no_unverifiable_form_surface(page, "ashby")
+        finally:
+            browser.close()
     err = exc_info.value
     assert err.reason == "unverifiable_form_surface"
     assert err.question is not None and "combobox" in err.question.lower()

@@ -1274,7 +1274,7 @@ evidence: `docs/delivery/evidence/RUN-20260818T0223Z/commercial-readiness/ec-adv
 **Does not touch:** silent model swap (ADR-ML-3), `llm_client` fallback chain, email light_retry, ats_engine, sales, networking, timeline, profile avatar.
 **Deploy:** rebase onto `origin/main`, push `feat/loop-429-resume` then merge to `origin/main` → VPS Delivery. Do not hand-restart prod units. Delete branch after land. No standing PR.
 **Landed on `main`:** `d28842be` (recovery), `b56d0d2c` (Retry-After HTTP tests), then linkage retargets through `2ae2f689`. Remote `feat/loop-429-resume` deleted; no standing PR. Local worktree branch name still `feat/loop-429-resume` tracking `origin/main`.
-**VPS Delivery:** run `32163270651` for `2ae2f689` succeeded (Verify + deploy dev/test/prod + guardian sweep). Do not hand-restart.
+**VPS Delivery:** run `32163270651` for `2ae2f689` succeeded (Verify + deploy dev/test/prod + guardian sweep). Follow-on `32165002810` for `54bf3d68` (provenance test-only) also succeeded; served SHA is now `54bf3d68` with LOOP-429 still in tree. Do not hand-restart.
 **Prod verify (×2) against Hostinger `https://aether.srv1356245.hstgr.cloud` (2026-08-18T17:15–17:25Z):** served tree SHA `2ae2f689`; units active, NRestarts=0, ExecMainStartTimestamp 17:15:50 UTC; `/api/health` 200 `{status:ok,version:0.2.0}` twice; journalctl -p err since start empty; no Traceback. Prod bundle contains `orchestration-run-resume` and `Rate limited`. Latest windowed tailor/coverLetter runs **completed** (16:50–16:54Z); historical tailor 429s remain at 15:58Z in the 200-row window. Playwright Agents ×2: 0 console errors, 0 pageerrors, tailor node status `completed`, no in-session Resume (no halt). **Did not re-run the 19-agent owner loop** (would 429 again). Owner **Stop All** is on (catalog `enabled=false` all 22 cards; POST `/agents/tailor/run` → 409 `agent_paused`, no Retry-After, no LLM spend). Map cards still read IDLE; sidebar still says "20 agents ready" from engine pulse — pre-existing honesty, not this claim.
 
 ---
@@ -1307,3 +1307,25 @@ Databricks visa / salary / pronouns invented answers (sensitive, never invented)
 **Deploy window:** claimed for VPS Delivery after this lands on `origin/main`.
 No hand-restart of `aether-prod-*` unless VPS Delivery fails and this file is
 re-read. Delete `feat/submission-live-apply` after land (R8).
+
+**Continuation 2026-08-18T18:21Z:** first live Dovetail attempt reached the
+Ashby form and refused `unverifiable_form_surface` on the nameless Autofill
+file input (chrome, not a question). Held other retryable rows. Tailor for
+this job applied no supported edits; a job-linked copy of the uploaded PDF
+is attached. Next: census skip for that autofill widget, redeploy, retry
+this one application only.
+
+**Continuation 2026-08-18T16:40Z:** census skip is in `apply_executor` plus
+tests (`test_sub_live_form_wait.py` 10 + retargeted SUB-005 backstop = 11
+passed on schema `aether_test_autofillcensus`). Integrity guard PASS.
+Pushing to `origin/main` for VPS Delivery; then clear Dovetail
+`unverifiable_form_surface` and re-enqueue `apply_sweep_user` for Vikram
+only. Held Databricks/Xero rows stay held.
+
+---
+
+## SESSION IC-VISIBLE — 2026-08-18T18:25Z — Interview Center empty / wrong employer
+
+**By:** Cursor Grok session. Isolated worktree `/root/dev/aether-wt-ic-visible` on `feat/interview-center-nbe` from `origin/main` (`36fc2665`).
+**Why:** Production Interview Center showed nothing until Email Center was fetched. The Next Business Energy confirmation uses `@ Next Business Energy`, which the parser missed, so ingest created a NAB job from a quoted résumé line.
+**Scope claimed:** parser, ingest, GET /interviews + GET /workspaces/interviews/prep. Worktree only. No hand-restart.
