@@ -1652,6 +1652,23 @@ def _execute_reserved_run(
         output["tokensIn"] = tokens_in
         output["tokensOut"] = tokens_out
         output["costUsd"] = cost
+        # AUD-LLM-1 (RUN-20260818T0223Z item (b)): the durable
+        # ``AgentRun.billingAuditJson`` record (written pre-execution, above,
+        # in ``_record_run`` -> ``_persist_billing_audit``) never got a
+        # SECOND write once the run's real token spend was known — it carried
+        # only pre-execution provenance (authMode/provider/quotaPath/
+        # credentialSource), so cost/failure claims had no ONE stable,
+        # per-agent-independent place to verify token spend from (the
+        # ephemeral ``output`` blob's shape varies per agent and per
+        # completion path). Additive: every existing audit key survives, this
+        # only ADDS the two token fields, beside ``costUsd`` the same way
+        # ``output`` already carries them. Scoped to THIS branch only — a
+        # deterministic/no-LLM-call run's audit stays exactly
+        # ``{"quotaPath": "none"}`` (or whatever pre-execution shape it had);
+        # nothing here fabricates a token figure for a run with no real spend.
+        audit["promptTokens"] = tokens_in
+        audit["completionTokens"] = tokens_out
+        _persist_billing_audit(runs, run_id, audit)
     # Backstop for a backend registered in ``_OPTIONAL_LLM_BY_BACKEND``: the
     # pre-execution predicate said this call WOULD reach the model, so a run was
     # reserved — but the agent then honestly reported it made no LLM call (e.g.

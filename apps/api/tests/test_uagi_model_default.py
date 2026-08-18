@@ -51,8 +51,17 @@ _ALL_MODEL_VARS = tuple(f"AETHER_MODEL_{t}" for t in _TIER_VARS) + (
 
 #: The scout-recommended tier -> id mapping (MODEL-DEFAULT-SCOUT D1): each id is
 #: in the app's static anthropic catalog and proven live on the subscription.
+#:
+#: AUD-ECON-2 (RUN-20260818T0223Z) SUPERSEDES the REASONING entry below,
+#: 2026-08-14's own value at the time this file was written. The provider
+#: rule this file pins (bare claude-*, never OpenRouter) is untouched; only
+#: the PRICE TIER moved, because measured prod reality showed every real
+#: tailor/coverLetter run being served by claude-haiku-4-5 (the fallback
+#: chain), never the configured claude-opus-4-8 — see the decision memo
+#: (docs/delivery/evidence/RUN-20260818T0223Z/05-decision-memos/
+#: AUD-ECON-2.md) and llm_client._DEFAULT_MODEL_BY_TIER's own comment.
 _EXPECTED_TIER_DEFAULT = {
-    "REASONING": "claude-opus-4-8",
+    "REASONING": "claude-haiku-4-5",
     "HEAVY": "claude-opus-4-8",
     "STRUCTURED": "claude-sonnet-4-6",
     "FAST": "claude-haiku-4-5",
