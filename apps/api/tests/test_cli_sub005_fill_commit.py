@@ -812,3 +812,258 @@ def test_live_submitter_refills_a_field_wiped_by_a_file_upload(tmp_path) -> None
     # time: the wiped field must have been REFILLED before the click — an
     # empty value here is exactly the flagship empty-application bug.
     assert outcome["confirmation"] and "thank you" in str(outcome["confirmation"]).lower()
+
+
+# ---------------------------------------------------------------------------
+# 8. CLI-SUB-005-R3 (adversarial review FAIL,
+#    RUN-20260818T0223Z/SUB-005-R2/08-adversarial-review-premerge.md): the
+#    R2 fix ran _resolve_unplanned_required_fields ONCE, then the
+#    pre-existing, unmodified _presubmit_required_commit_gate ONCE, in
+#    sequence. The gate's OWN one-shot refill of a wiped required field is a
+#    real fill/select_option Playwright action that can re-trigger the exact
+#    JS reveal machinery a conditional question depends on -- and nothing
+#    rescanned the DOM after that refill before Submit was clicked.
+#    Reproduced live against the unmodified R2 code: submitted:true,
+#    unplannedFilled:[] over a required 'explain' field that was never
+#    attempted, never verified, sitting empty and visible in the DOM.
+#
+#    Ported here EXACTLY from the reviewer's own
+#    adversarial/attack_gate_refill.py (same HTML, same plan, same résumé
+#    upload timing) -- this is that attack script's scenario, captured as a
+#    permanent regression test.
+# ---------------------------------------------------------------------------
+
+_GATE_REFILL_REVEALS_CONDITIONAL_FORM = """
+<title>gate-refill-hole</title>
+<form onsubmit="event.preventDefault();
+    if (document.getElementById('name').value === 'JordanBlake' &&
+        document.getElementById('sponsor').value === 'Yes') {
+      document.body.innerHTML = '<h1>Thank you for applying</h1>';
+    } else {
+      document.getElementById('err').textContent = 'Missing required field';
+    }">
+  <label for="name">Name*</label><input id="name" type="text">
+  <label for="sponsor">Sponsorship required?*</label>
+  <select id="sponsor" onchange="onSponsorChange()">
+    <option value="">--</option>
+    <option value="Yes">Yes</option>
+    <option value="No">No</option>
+  </select>
+  <div id="conditional"></div>
+  <label for="resume">Resume</label><input id="resume" type="file">
+  <button type="submit">Submit Application</button>
+</form>
+<div id="err"></div>
+<script>
+  function onSponsorChange() {
+    var box = document.getElementById('conditional');
+    if (document.getElementById('sponsor').value === 'Yes') {
+      box.innerHTML =
+        '<label for="explain">Explain*</label><input id="explain" type="text">';
+    } else {
+      box.innerHTML = '';
+    }
+  }
+  let wiped = false;
+  document.getElementById('resume').addEventListener('change', () => {
+    if (!wiped) { wiped = true;
+      setTimeout(() => {
+        document.getElementById('name').value = '';
+        document.getElementById('sponsor').value = '';
+        onSponsorChange();
+      }, 100); }
+  });
+</script>
+"""
+
+
+def _gate_refill_plan() -> dict[str, Any]:
+    from app.services.apply_executor import RESUME_DOCUMENT
+
+    return {
+        "fields": [
+            {"name": "name", "label": "Name", "kind": "text", "required": True,
+             "scope": "", "value": "JordanBlake", "options": []},
+            {"name": "sponsor", "label": "Sponsorship required?", "kind": "select",
+             "required": True, "scope": "", "value": "Yes", "options": ["Yes", "No"]},
+            {"name": "resume", "label": "Resume", "kind": "file", "required": True,
+             "scope": "", "value": RESUME_DOCUMENT, "options": []},
+        ]
+    }
+
+
+def test_live_submitter_never_submits_over_a_field_the_gate_refill_reveals(
+    tmp_path,
+) -> None:
+    """THE R2->R3 ADVERSARIAL-REVIEW BREAK, ported exactly from
+    adversarial/attack_gate_refill.py: the gate's own refill of a wiped
+    'sponsor' select re-reveals the required 'explain' field, and nothing
+    unanswerable may ever cross the submit boundary. On the unfixed R2 branch
+    this raised nothing and returned submitted:true, unplannedFilled:[] --
+    this is that exact break, captured as a permanent regression test."""
+    from app.services.apply_executor import playwright_form_submitter
+
+    with pytest.raises(ManualStepRequired) as exc_info:
+        playwright_form_submitter(
+            application_id="sub005r3-gatehole",
+            channel="generic",
+            page_html="",
+            apply_url=_data_url(_GATE_REFILL_REVEALS_CONDITIONAL_FORM),
+            plan=_gate_refill_plan(),
+            resume_pdf_bytes=b"%PDF-1.4 fake",
+            cover_letter_text="Dear Hiring Manager,",
+            evidence_dir=str(tmp_path),
+            profile={},  # no stored answer for "Explain" — must not be guessed
+            answer_bank=None,
+        )
+    err = exc_info.value
+    assert err.reason == "unplanned_required_field"
+    assert err.question is not None and "Explain" in err.question
+
+
+def test_live_submitter_converges_and_submits_when_gate_refill_reveal_is_answerable(
+    tmp_path,
+) -> None:
+    """Guard against over-refusal: the SAME gate-refill-revealed 'explain'
+    field, when it CAN be answered (here: the answer bank), is filled,
+    verified, and the submission proceeds — proving the fixed-point loop
+    converges (rescans again after the gate's own refill) instead of either
+    submitting blind or refusing a legitimately answerable form."""
+    from app.services.answer_bank import (
+        PROVENANCE_USER_ANSWERED,
+        SENSITIVITY_FACTUAL,
+        AnswerBankMatch,
+    )
+    from app.services.apply_executor import playwright_form_submitter
+
+    match = AnswerBankMatch(
+        item_id="bank-item-2",
+        answer="Sponsorship not required",
+        confidence=0.95,
+        method="test",
+        question_as_seen="Explain",
+        banked_question="Explain",
+        sensitivity=SENSITIVITY_FACTUAL,
+        provenance=PROVENANCE_USER_ANSWERED,
+        per_application=False,
+    )
+
+    def answer_bank(field: dict[str, Any]) -> Any:
+        return match if field["name"] == "explain" else None
+
+    outcome = playwright_form_submitter(
+        application_id="sub005r3-gatehole-answered",
+        channel="generic",
+        page_html="",
+        apply_url=_data_url(_GATE_REFILL_REVEALS_CONDITIONAL_FORM),
+        plan=_gate_refill_plan(),
+        resume_pdf_bytes=b"%PDF-1.4 fake",
+        cover_letter_text="Dear Hiring Manager,",
+        evidence_dir=str(tmp_path),
+        profile={},
+        answer_bank=answer_bank,
+    )
+    assert outcome["submitted"] is True
+    assert outcome["confirmation"] and "thank you" in str(outcome["confirmation"]).lower()
+    assert "explain" in outcome["filled"]
+    assert "explain" in outcome["unplannedFilled"]
+
+
+def test_converge_presubmit_state_bounds_an_endlessly_revealing_form() -> None:
+    """The merged rescan+gate fixed-point loop (CLI-SUB-005-R3) terminates
+    HONESTLY, not by looping forever: a synthetic DOM that reveals one more
+    answerable required field every single pass can never reach a
+    nothing-changed iteration, so the only thing that can stop it is the
+    convergence-pass bound itself — mirroring
+    test_resolve_unplanned_required_fields_bounds_an_endlessly_revealing_form
+    for the new merged loop."""
+    from app.services.apply_executor import (
+        _MAX_CONVERGENCE_PASSES,
+        ManualStepRequired,
+        _converge_presubmit_state,
+    )
+
+    calls = {"n": 0}
+
+    def growing_html() -> str:
+        calls["n"] += 1
+        fields = "".join(
+            f'<label for="field_{i}">Field {i}*</label>'
+            f'<input id="field_{i}" name="field_{i}">'
+            for i in range(calls["n"])
+        )
+        return f"<form>{fields}</form>"
+
+    total_fields = _MAX_CONVERGENCE_PASSES + 5
+    specs = {
+        f'[id="field_{i}"]': {"count": 1, "value": "answered"} for i in range(total_fields)
+    }
+    page = _Page(specs)
+    page.content = growing_html  # type: ignore[method-assign]
+    profile = {"customAnswers": {f"field_{i}": "answered" for i in range(total_fields)}}
+
+    with pytest.raises(ManualStepRequired) as exc_info:
+        _converge_presubmit_state(
+            page, "generic", [], {}, profile=profile, answer_bank=None,
+        )
+    assert exc_info.value.reason == "unplanned_required_field"
+    # BOUNDED: the merged loop ran a small, fixed number of top-level passes
+    # -- not once per newly-revealed field forever.
+    assert calls["n"] <= _MAX_CONVERGENCE_PASSES + 1, (
+        f"the convergence loop must be bounded, not unbounded (scanned {calls['n']} times)"
+    )
+
+
+def test_converge_presubmit_state_accepts_a_chain_that_terminates_exactly_at_the_bound() -> None:
+    """CLI-SUB-005-R2 secondary finding (08-adversarial-review-premerge.md
+    section 3): a legitimately-terminating conditional chain that needs every
+    discovery pass the OLD _MAX_RESCAN_PASSES (3) bound allowed must NOT be
+    refused just because it took that many passes to resolve — the old
+    _resolve_unplanned_required_fields raised unconditionally once its pass
+    budget ran out, even when the chain had just finished. Reproduced by the
+    reviewer's own adversarial/attack_offbyone.py against a 3-deep chain.
+    _MAX_CONVERGENCE_PASSES (4) is deliberately one pass larger than that for
+    exactly this reason: pass 4 exists ONLY to let a 3-deep chain prove it
+    ended, and this pins that it actually does."""
+    from app.services.apply_executor import (
+        _MAX_CONVERGENCE_PASSES,
+        _converge_presubmit_state,
+    )
+
+    # Reveals exactly 3 fields total (one per discovery pass — the same
+    # depth the old _MAX_RESCAN_PASSES bound allowed), then STOPS growing —
+    # the 4th (confirming) pass must see the chain has ended and accept it,
+    # not refuse it.
+    calls = {"n": 0}
+    total_fields = 3
+
+    def terminating_html() -> str:
+        calls["n"] += 1
+        n_fields = min(calls["n"], total_fields)
+        fields = "".join(
+            f'<label for="field_{i}">Field {i}*</label>'
+            f'<input id="field_{i}" name="field_{i}">'
+            for i in range(n_fields)
+        )
+        return f"<form>{fields}</form>"
+
+    specs = {
+        f'[id="field_{i}"]': {"count": 1, "value": "answered"}
+        for i in range(total_fields)
+    }
+    page = _Page(specs)
+    page.content = terminating_html  # type: ignore[method-assign]
+    profile = {
+        "customAnswers": {f"field_{i}": "answered" for i in range(total_fields)}
+    }
+
+    resolved = _converge_presubmit_state(
+        page, "generic", [], {}, profile=profile, answer_bank=None,
+    )
+    assert set(resolved) == {"field_0", "field_1", "field_2"}
+    # The chain needed the pass budget the old bound allowed (3 discovery
+    # passes, one per field) plus the one confirming in-loop pass that
+    # proves it ended (== _MAX_CONVERGENCE_PASSES total loop passes), plus
+    # exactly ONE further read-only rescan from the final verification step
+    # that always runs once the loop converges — never more than that.
+    assert calls["n"] == total_fields + 1 + 1 == _MAX_CONVERGENCE_PASSES + 1
