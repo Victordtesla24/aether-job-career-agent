@@ -73,7 +73,10 @@ def _no_real_transmission(monkeypatch):
 
 
 ASHBY_URL = "https://jobs.ashbyhq.com/example-co/00000000-0000-4000-8000-000000000001"
-LEVER_URL = "https://jobs.lever.co/example-co/00000000-0000-4000-8000-000000000002"
+#: SUB-011: Lever re-entered AUTOMATABLE_CHANNELS (dedicated parser + tests).
+#: The two tests below that pin "an ASSISTED channel's card" now use
+#: SmartRecruiters — still ASSISTED, no dedicated parser — instead.
+SMARTRECRUITERS_URL = "https://jobs.smartrecruiters.com/example-co/4000000001"
 
 
 def _seed_job(conn, user_id: str, *, source_url: str = ASHBY_URL,
@@ -166,7 +169,7 @@ class TestSubmissionControlBlock:
     def test_assisted_card_offers_the_direct_url_not_a_submit_button(
         self, db_session, user_id, client, auth_headers
     ):
-        job_id = _seed_job(db_session, user_id, source_url=LEVER_URL)
+        job_id = _seed_job(db_session, user_id, source_url=SMARTRECRUITERS_URL)
         resume_id = _seed_resume(db_session, user_id, source_job_id=job_id)
         app_id = _seed_application(db_session, user_id, job_id, resume_id)
 
@@ -176,7 +179,25 @@ class TestSubmissionControlBlock:
         assert control["state"] == "needs_your_click"
         assert control["action"] == "open_posting"
         assert control["label"] == "Ready to submit — open posting"
-        assert control["applyUrl"] == LEVER_URL
+        assert control["applyUrl"] == SMARTRECRUITERS_URL
+
+    def test_lever_card_now_offers_submit_not_the_direct_url(
+        self, db_session, user_id, client, auth_headers
+    ):
+        """SUB-011: Lever re-entered AUTOMATABLE_CHANNELS, so its card is now
+        the SAME "ready/submit" shape as Ashby/Greenhouse, not the ASSISTED
+        "needs your click" shape asserted above for SmartRecruiters."""
+        lever_url = "https://jobs.lever.co/example-co/00000000-0000-4000-8000-000000000002"
+        job_id = _seed_job(db_session, user_id, source_url=lever_url)
+        resume_id = _seed_resume(db_session, user_id, source_job_id=job_id)
+        app_id = _seed_application(db_session, user_id, job_id, resume_id)
+
+        body = client.get(f"/applications/{app_id}", headers=auth_headers).json()
+
+        control = body["submissionControl"]
+        assert control["state"] == "ready"
+        assert control["action"] == "submit"
+        assert control["channel"] == "lever"
 
     def test_email_channel_card_offers_send_application_email(
         self, db_session, user_id, client, auth_headers
@@ -361,7 +382,7 @@ class TestRequestSubmissionEndpoint:
     def test_assisted_channel_is_refused_not_silently_approved(
         self, db_session, user_id, client, auth_headers
     ):
-        job_id = _seed_job(db_session, user_id, source_url=LEVER_URL)
+        job_id = _seed_job(db_session, user_id, source_url=SMARTRECRUITERS_URL)
         resume_id = _seed_resume(db_session, user_id, source_job_id=job_id)
         app_id = _seed_application(db_session, user_id, job_id, resume_id)
 
@@ -370,7 +391,7 @@ class TestRequestSubmissionEndpoint:
         )
 
         assert response.status_code == 409, response.text
-        assert "lever" in response.text.lower() or "click" in response.text.lower()
+        assert "smartrecruiters" in response.text.lower() or "click" in response.text.lower()
 
     def test_missing_artifacts_are_refused_with_the_reason(
         self, db_session, user_id, client, auth_headers

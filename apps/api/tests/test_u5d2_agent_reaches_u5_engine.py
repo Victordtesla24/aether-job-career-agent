@@ -195,7 +195,14 @@ def _run(user_id: str, job_id: str | None = None):
 
 ASHBY_URL = "https://jobs.ashbyhq.com/example-co/00000000-0000-4000-8000-000000000001"
 GREENHOUSE_URL = "https://boards.greenhouse.io/examplecorp/jobs/4000001"
-LEVER_URL = "https://jobs.lever.co/example-co/00000000-0000-4000-8000-000000000002"
+#: SUB-011: re-admitted to AUTOMATABLE_CHANNELS — LEVER_URL already carries
+#: the derived ``/apply`` suffix so the payload/applyUrl assertions below
+#: compare against exactly what the resolver hands back (see
+#: TestLeverApplyUrlDerivation in test_u5a_apply_channel_resolver.py for the
+#: bare-posting-URL derivation contract itself).
+LEVER_URL = "https://jobs.lever.co/example-co/00000000-0000-4000-8000-000000000002/apply"
+#: SmartRecruiters has NO dedicated parser (unlike Lever) and stays ASSISTED.
+SMARTRECRUITERS_URL = "https://jobs.smartrecruiters.com/example-co/4000000001"
 SEEK_URL = "https://www.seek.com.au/job/00000001"
 GENERIC_URL = "https://careers.example.com/postings/finance-specialist"
 
@@ -256,6 +263,38 @@ class TestAgentReachesTheU5Engine:
         assert result.applyChannel == "greenhouse"
         assert result.submissionState == "awaiting_approval"
 
+    def test_lever_is_automatable_too(self, db_session, user_id):
+        """SUB-011 (Track-2 U5c): Lever re-entered AUTOMATABLE_CHANNELS once
+        its dedicated parser + fixture-backed tests existed — the agent must
+        now queue a REAL approval for it, exactly like Ashby/Greenhouse,
+        never the ASSISTED manual-step copy the pre-SUB-011 disposition
+        produced (see ``TestNonAutomatableChannelsAreHonest`` below, now pinned
+        against SmartRecruiters instead)."""
+        job_id = _seed_job(db_session, user_id, source_url=LEVER_URL)
+        resume_id = _seed_resume(db_session, user_id, source_job_id=job_id)
+        app_id = _seed_application(db_session, user_id, job_id, resume_id)
+
+        result = _run(user_id)
+
+        assert result.applyChannel == "lever"
+        assert result.submissionState == "awaiting_approval"
+        assert result.transmitted is False
+        assert result.counts["assisted"] == 1
+
+        approvals = _approvals(db_session, user_id)
+        assert len(approvals) == 1
+        approval = approvals[0]
+        assert approval["status"] == "pending"
+        assert approval["executedAt"] is None
+        payload = approval["payload"]
+        assert payload["channel"] == "lever"
+        assert payload["apply_url"] == LEVER_URL
+
+        row = _row(db_session, app_id)
+        assert row["transmittedAt"] is None
+        assert row["status"] == "draft"
+        assert row["applyChannel"] == "lever"
+
     def test_the_agent_no_longer_calls_submit_application_for_job(self):
         """Source-level invariant over the PARSED module (``test_u5_invariant_
         sweep`` style), so prose in a docstring can neither satisfy nor break
@@ -305,11 +344,13 @@ class TestNonAutomatableChannelsAreHonest:
     def test_assisted_channel_records_a_manual_step_with_the_direct_url(
         self, db_session, user_id
     ):
-        """ORCHESTRATOR RULING U5-F3: Lever has no dedicated parser, so Aether
-        does not click submit there. The honest outcome is a persisted,
-        actionable manual step that hands over the real link — never a
-        fabricated submission and never a silent no-op."""
-        job_id = _seed_job(db_session, user_id, source_url=LEVER_URL)
+        """ORCHESTRATOR RULING U5-F3: SmartRecruiters has no dedicated
+        parser, so Aether does not click submit there (Lever DID gain one at
+        SUB-011 and is exercised by ``test_lever_is_automatable_too`` above
+        instead). The honest outcome is a persisted, actionable manual step
+        that hands over the real link — never a fabricated submission and
+        never a silent no-op."""
+        job_id = _seed_job(db_session, user_id, source_url=SMARTRECRUITERS_URL)
         resume_id = _seed_resume(db_session, user_id, source_job_id=job_id)
         app_id = _seed_application(db_session, user_id, job_id, resume_id)
 
@@ -318,13 +359,13 @@ class TestNonAutomatableChannelsAreHonest:
         assert result.submissionState == "manual_step_required"
         assert result.transmitted is False
         assert result.reason == "assisted_manual_submit"
-        assert result.applyChannel == "lever"
-        assert LEVER_URL in (result.nextStep or "")
+        assert result.applyChannel == "smartrecruiters"
+        assert SMARTRECRUITERS_URL in (result.nextStep or "")
         assert result.counts["manualStep"] == 1
 
         row = _row(db_session, app_id)
         assert row["manualStepReason"] == "assisted_manual_submit"
-        assert LEVER_URL in (row["manualStepDetail"] or "")
+        assert SMARTRECRUITERS_URL in (row["manualStepDetail"] or "")
         assert row["transmittedAt"] is None
         assert row["status"] == "draft"
         # No approval may be raised for a channel we will never drive.
@@ -552,7 +593,7 @@ class TestAgentRuntimeContract:
         assert an approval card. A run that ended in a manual step created no
         approval, and saying otherwise is the same class of falsehood this
         workstream exists to remove."""
-        job_id = _seed_job(db_session, user_id, source_url=LEVER_URL)
+        job_id = _seed_job(db_session, user_id, source_url=SMARTRECRUITERS_URL)
         resume_id = _seed_resume(db_session, user_id, source_job_id=job_id)
         _seed_application(db_session, user_id, job_id, resume_id)
 

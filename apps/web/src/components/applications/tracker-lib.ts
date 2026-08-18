@@ -296,6 +296,13 @@ const MANUAL_STEP_LABELS: Readonly<Record<string, string>> = {
   // it — distinct from `form_fill_failed` (a PLANNED field that failed to
   // type), because the user needs to know a NEW question appeared.
   unplanned_required_field: "This form revealed a new required question Aether could not answer",
+  // SUB-011: every real Lever /apply page mounts hCaptcha, which (unlike the
+  // invisible Google reCAPTCHA v3 every Ashby/Greenhouse capture ALSO
+  // mounts) needs a genuine human interaction to mint a valid response
+  // token — distinct from `captcha` (a TRIGGERED challenge caught earlier,
+  // while the plan is built) because this is caught in the live browser
+  // right before the submit click, over a widget that is merely MOUNTED.
+  captcha_challenge: "An hCaptcha challenge blocked automatic submission",
 };
 
 /** Human headline for a manual-step reason code. Unknown codes de-slugify
@@ -398,16 +405,19 @@ export function describeTransmission(app: TransmissionFacts): TransmissionSummar
  *  (`test_the_frontend_mirror_of_the_allowlist_matches_the_backend`), which
  *  reads this file — so drift fails a test rather than silently changing what
  *  the UI promises. */
-const FE_AUTOMATABLE_CHANNELS: ReadonlySet<string> = new Set(["ashby", "greenhouse"]);
+const FE_AUTOMATABLE_CHANNELS: ReadonlySet<string> = new Set(["ashby", "greenhouse", "lever"]);
 
 /** Channels whose destination Aether resolved exactly and deliberately does
  *  NOT click through (ORCHESTRATOR RULING U5-F3): no dedicated form parser
  *  exists for them, and auto-submitting a real application on a best-effort
  *  schema is the worst failure this product can have. Aether still prepares
  *  the tailored résumé + cover letter; the user submits them. Pinned against
- *  the backend `ASSISTED_CHANNELS` by the same test. */
+ *  the backend `ASSISTED_CHANNELS` by the same test.
+ *
+ *  SUB-011 (Track-2 U5c): `lever` re-entered {@link FE_AUTOMATABLE_CHANNELS}
+ *  once its dedicated backend parser + fixture-backed tests existed —
+ *  `smartrecruiters`/`generic` still have none and stay here. */
 const FE_ASSISTED_CHANNELS: ReadonlySet<string> = new Set([
-  "lever",
   "smartrecruiters",
   "generic",
 ]);

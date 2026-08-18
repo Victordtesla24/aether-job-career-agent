@@ -18,9 +18,11 @@ Two rules are absolute here:
   ``*/job/`` by name. A Seek URL therefore resolves to ``seek-manual``, which
   is deliberately NOT in :data:`AUTOMATABLE_CHANNELS`.
 * **A platform with no dedicated parser is never auto-submitted.**
-  ORCHESTRATOR RULING U5-F3 (2026-08-14): ``lever``/``smartrecruiters``/
-  ``generic`` resolve exactly as before, but they are ASSISTED, not automated —
-  see :data:`AUTOMATABLE_CHANNELS` and :data:`ASSISTED_CHANNELS`.
+  ORCHESTRATOR RULING U5-F3 (2026-08-14): ``smartrecruiters``/``generic``
+  resolve exactly as before and are ASSISTED, not automated. ``lever``
+  re-entered :data:`AUTOMATABLE_CHANNELS` at SUB-011 (Track-2 U5c) once its
+  own dedicated parser + fixture-backed tests existed — see
+  :data:`AUTOMATABLE_CHANNELS` and :data:`ASSISTED_CHANNELS`.
 * **An unresolved redirector is "unknown", never a guess.** Adzuna/CloudFront
   rate-limited this VM's egress IP with ``429 Retry-After: 3600`` during the
   scout's probe. A resolver that answered "probably Ashby" on a 429 would be
@@ -31,6 +33,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import threading
 import time
 from typing import Any, Callable
@@ -57,16 +60,21 @@ CHANNELS = frozenset(
 #: Channels the apply-executor is allowed to drive a browser against.
 #:
 #: ORCHESTRATOR RULING U5-F3 (2026-08-14, binding, ``ORCHESTRATOR-RULING-U5-F3.md``):
-#: ``lever``, ``smartrecruiters`` and ``generic`` were REMOVED. Only ``ashby``
-#: and ``greenhouse`` have a dedicated dialect parser
-#: (``apply_executor._parse_ashby`` / ``_parse_greenhouse``) pinned against a
-#: captured real page; every other channel fell through to
-#: ``_parse_generic``'s best-effort schema — i.e. an untested parser deciding
-#: what to type into, and when to click submit on, a subscriber's REAL job
-#: application. That is the worst failure mode this product has, so those
-#: channels are ASSISTED instead (see :data:`ASSISTED_CHANNELS`). Dedicated
-#: parsers + tests land in Track-2 slice U5c, after which they re-enter here
-#: legitimately.
+#: ``lever``, ``smartrecruiters`` and ``generic`` were REMOVED because none of
+#: them had a dedicated dialect parser (only ``apply_executor._parse_ashby`` /
+#: ``_parse_greenhouse`` existed) pinned against a captured real page — every
+#: other channel fell through to ``_parse_generic``'s best-effort schema, i.e.
+#: an untested parser deciding what to type into, and when to click submit on,
+#: a subscriber's REAL job application. That is the worst failure mode this
+#: product has, so those channels went ASSISTED instead (see
+#: :data:`ASSISTED_CHANNELS`). The ruling named this Track-2 slice U5c:
+#: dedicated parsers + fixture-backed tests, after which a channel re-enters
+#: here legitimately. ``lever`` did that at SUB-011 —
+#: ``apply_executor._parse_lever`` pinned against two real captured
+#: ``jobs.lever.co`` ``/apply`` pages (``tests/fixtures/apply_pages/lever_
+#: application_real.html`` / ``lever_custom_question_real.html``) — and is
+#: back here. ``smartrecruiters``/``generic`` still have no dedicated parser
+#: and stay in :data:`ASSISTED_CHANNELS`.
 #:
 #: ``seek-manual`` is excluded BY RULING (ADR-SEEK-V3), ``email`` belongs to
 #: the existing W-SUB Gmail path, and ``unknown`` means we honestly do not know
@@ -76,13 +84,13 @@ CHANNELS = frozenset(
 #: ``tests/test_u5_invariant_sweep.py`` fails if any member of this set is
 #: parsed by the generic fallback or lacks a real-page fixture + executor
 #: tests. Adding a platform here without a parser is a failing test.
-AUTOMATABLE_CHANNELS = frozenset({"ashby", "greenhouse"})
+AUTOMATABLE_CHANNELS = frozenset({"ashby", "greenhouse", "lever"})
 
 #: Channels whose destination we resolved EXACTLY and deliberately do not click
 #: through: Aether prepares the tailored résumé + cover letter and hands the
 #: user the direct application URL ("ready to submit — this platform needs your
 #: click"). Honest and complete, rather than half-automated.
-ASSISTED_CHANNELS = frozenset({"lever", "smartrecruiters", "generic"})
+ASSISTED_CHANNELS = frozenset({"smartrecruiters", "generic"})
 
 #: Channels that submit nothing here BY DEFINITION: ``email`` is the existing
 #: W-SUB Gmail path's, ``seek-manual`` is refused by ADR-SEEK-V3, and
@@ -293,6 +301,37 @@ def classify_url(url: str) -> str:
     return "generic"
 
 
+#: A ``jobs.lever.co`` posting's own "Apply for this job" button (SUB-011
+#: scout evidence, confirmed against two live captures) points at exactly
+#: ``<posting>/apply`` — never anywhere else. Matched against the URL's PATH
+#: only (an optional trailing slash tolerated) so a ``sourceUrl`` that is
+#: ALREADY the apply page is recognised regardless of its query string.
+_LEVER_APPLY_SUFFIX = re.compile(r"/apply/?$")
+
+
+def _derive_apply_url(channel: str, url: str) -> str:
+    """The URL the automation actually opens, per channel quirks.
+
+    Lever's own bare posting page (``jobs.lever.co/<company>/<uuid>``, no
+    ``/apply`` suffix) carries NO ``<form>`` at all (SUB-011 scout evidence,
+    confirmed live: ``grep -o '<form[^>]*>' base.html`` -> no output) — it is
+    a description/marketing page only. A ``Job.sourceUrl`` that is the bare
+    posting URL is the COMMON case (that is what a job board or an employer
+    link normally points at), so handing it straight to the executor would
+    make :func:`app.services.apply_executor.parse_form_schema` read a page
+    with no form on it at all. Appended here, once, for every caller —
+    idempotent: a URL that already carries an ``/apply`` path segment (the
+    less common case — the sourceUrl already IS the apply page) is returned
+    unchanged, so a correct URL is never doubled up into
+    ``.../apply/apply``.
+    """
+    if channel != "lever" or not url:
+        return url
+    if _LEVER_APPLY_SUFFIX.search(urlparse(url).path or ""):
+        return url
+    return url.rstrip("/") + "/apply"
+
+
 def resolve_apply_channel(
     job: dict[str, Any], *, http_get: Callable[[str], dict[str, Any]] | None = None
 ) -> dict[str, Any]:
@@ -317,7 +356,8 @@ def resolve_apply_channel(
         return {"channel": "unknown", "applyUrl": None}
     if _is_adzuna_redirector(source_url):
         return _resolve_redirector(source_url, http_get=http_get)
-    return {"channel": classify_url(source_url), "applyUrl": source_url}
+    channel = classify_url(source_url)
+    return {"channel": channel, "applyUrl": _derive_apply_url(channel, source_url)}
 
 
 def _resolve_redirector(
@@ -337,7 +377,11 @@ def _resolve_redirector(
     ttl = resolver_cache_ttl_seconds()
     result: dict[str, Any]
     if status in (301, 302, 303, 307, 308) and location:
-        result = {"channel": classify_url(str(location)), "applyUrl": str(location)}
+        resolved_channel = classify_url(str(location))
+        result = {
+            "channel": resolved_channel,
+            "applyUrl": _derive_apply_url(resolved_channel, str(location)),
+        }
         _cache_put(url, result, ttl)
         return result
     # 429 / 5xx / a 200 that never redirected: we do NOT know where this

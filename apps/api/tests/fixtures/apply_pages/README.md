@@ -10,6 +10,8 @@ labeled when it isn't).
 |---|---|---|---|
 | `ashby_application_real.html` | `https://jobs.ashbyhq.com/xero/c4019fbe-2f6c-43c8-a310-26dcffdc94db/application` | 2026-08-13 | Playwright chromium headless, `page.content()` after `networkidle` |
 | `greenhouse_embed_application_real.html` | `https://boards.greenhouse.io/embed/job_app?for=databricks&token=8569564002` | 2026-08-13 | Playwright chromium headless, `page.content()` after `domcontentloaded` + 3s settle |
+| `lever_application_real.html` | `https://jobs.lever.co/whiterabbit/c4333d64-7fcf-4862-9cf0-c6b090ca8ca1/apply` | 2026-08-18 | Playwright chromium headless, `page.content()` after `networkidle` + 2s settle |
+| `lever_custom_question_real.html` | `https://jobs.lever.co/theex/80d6ce8b-7736-4433-8d8a-0e1a0d1a3fde/apply` | 2026-08-18 | Playwright chromium headless, `page.content()` after `networkidle` + 2s settle |
 
 Both URLs come from the `Application.sourceUrl` domain histogram produced by
 the submission-flow-automation-feasibility scout
@@ -36,6 +38,24 @@ Confirmed real field shapes present (useful for U5b test design):
   attributes (e.g. `question_36740801002` required, `question_36740798002`
   "LinkedIn Profile" optional), EEO `<select>` fields (gender, veteran
   status, disability status), and the same `g-recaptcha-response` widget.
+- Lever: one `li.application-question` block per question. `lever_
+  application_real.html` (whiterabbit posting) carries `resume` (file,
+  required — the ONLY requiredness signal is the label's `<span
+  class="required">✱</span>`, U+2731 HEAVY ASTERISK, not the ASCII `*`),
+  `name`/`email` (required, real `required` HTML attribute), `phone`/
+  `location`/`org`/`urls[LinkedIn]` (optional), a three-question demographic
+  survey keyed `surveysResponses[<surveyId>][responses][field<N>]` (all
+  optional on this posting) and a marketing-consent checkbox
+  (`consent[marketing]`, paired with an unchecked-by-default hidden decoy
+  input of the SAME name — Lever's own "unchecked = 0" pattern). `lever_
+  custom_question_real.html` (theex posting) additionally carries TWO
+  required employer-authored "card" questions,
+  `cards[<cardId>][field0]` (`<select required>`), to pin that distinct
+  name/required shape. Both pages mount an hCaptcha widget
+  (`#h-captcha` + a hidden `h-captcha-response` input) — present on every
+  real Lever `/apply` page captured so far, and NOT solved or bypassed by
+  the apply-executor (see `_hcaptcha_widget_mounted` /
+  `"captcha_challenge"` in `apply_executor.py`).
 
 ## Synthetic fixtures (explicitly NOT live captures)
 

@@ -170,7 +170,10 @@ class ManualStepRequired(Exception):
     """A human has to finish this one — and here is exactly why.
 
     ``reason`` is a machine code (``unknown_required_question``, ``captcha``,
-    ``login_wall``, ``no_automatable_channel``, …). ``question`` carries the
+    ``captcha_challenge`` — a MOUNTED hCaptcha widget the submitter refuses
+    to click past, distinct from ``captcha``'s TRIGGERED-challenge detection
+    in :func:`detect_blocking_state` — ``login_wall``,
+    ``no_automatable_channel``, …). ``question`` carries the
     employer's VERBATIM question text when the obstacle is an unanswerable
     required field, so the UI shows the user the real words rather than a
     paraphrase. This is an honest ACTIONABLE outcome, not a failure: it
@@ -280,8 +283,14 @@ def _text(node: Any) -> str:
 
 
 def _label_text(raw: str) -> str:
-    """A label without its required-marker asterisk."""
-    return re.sub(r"\s*\*\s*$", "", (raw or "").strip()).strip()
+    """A label without its required-marker asterisk.
+
+    Strips the ASCII ``*`` every other dialect here uses AND Lever's own
+    U+2731 HEAVY ASTERISK ``✱`` (confirmed on real captured Lever pages,
+    SUB-011 scout evidence) -- a plain ``\\s*\\*\\s*$`` regex leaves that
+    character on every required label a Lever manual step shows the user.
+    """
+    return re.sub(r"\s*[*✱]\s*$", "", (raw or "").strip()).strip()
 
 
 def _classes(node: Any) -> list[str]:
@@ -453,6 +462,103 @@ def _parse_greenhouse(soup: Any) -> list[dict[str, Any]]:
     return list(fields.values())
 
 
+def _lever_options(node: Any, primary: Any) -> list[str]:
+    """Option labels of a Lever radio/checkbox question (survey or consent).
+
+    Every option shares the question's control ``name`` (Lever's own DOM has
+    no other grouping marker); the human-readable text is each option's own
+    ``.application-answer-alternative`` span, falling back to the control's
+    raw ``value`` for a shape that omits one."""
+    control_type = str(primary.get("type") or "").lower()
+    if control_type not in {"radio", "checkbox"}:
+        return []
+    name = str(primary.get("name") or "")
+    if not name:
+        return []
+    options: list[str] = []
+    for control in node.find_all("input", attrs={"name": name}):
+        if str(control.get("type") or "").lower() not in {"radio", "checkbox"}:
+            continue
+        label_el = control.find_parent("label")
+        alt = label_el.find(class_="application-answer-alternative") if label_el is not None else None
+        text = _text(alt) if alt is not None else ""
+        if not text:
+            text = str(control.get("value") or "")
+        if text and text not in options:
+            options.append(text)
+    return options
+
+
+def _parse_lever(soup: Any) -> list[dict[str, Any]]:
+    """Lever renders one ``li.application-question`` block per question
+    (SUB-011 scout evidence, two real captured ``/apply`` pages).
+
+    System fields (``name``/``email``/``phone``/``location``/…) wrap a
+    single named control in a ``<label>``; radio/checkbox survey questions
+    (``surveysResponses[<surveyId>][responses][field<N>]``) and employer
+    custom "card" questions (``cards[<cardId>][field0]``) instead wrap a
+    plain ``<div>`` -- Lever's own DOM, not something worth normalising
+    away, so both shapes are read the same way: the block's own
+    ``.application-label`` (its nested ``.text`` div where present, so a
+    sibling ``.description`` paragraph — e.g. "Select all that apply" — is
+    never folded into the question text) names the question, and its
+    ``.application-field`` holds the control(s).
+
+    A block can hold MORE than one control for one visible question: the
+    structured-location autocomplete pairs a visible ``location`` text input
+    with a hidden ``selectedLocation`` one, and the marketing-consent
+    checkbox pairs a visible checkbox with an unchecked-by-default hidden
+    decoy input of the SAME name (Lever's own "unchecked = 0" pattern) --
+    the first VISIBLE control is always the one dedup keys on and answers
+    are typed into, matching what a human applicant actually sees.
+
+    Requiredness has NO single tell here: the ``name``/``email`` system
+    fields and the employer's own card questions all carry a real
+    ``required`` HTML attribute, but the résumé question -- confirmed
+    required on the real capture -- carries NONE; only its label's
+    ``<span class="required">✱</span>`` (see :func:`_label_text`) says so.
+    Both signals are therefore trusted, exactly like the Greenhouse parser
+    trusts ``aria-required`` alongside a trailing ``*``.
+    """
+    fields: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for node in soup.select("li.application-question"):
+        controls = [
+            control
+            for control in node.find_all(["input", "select", "textarea"])
+            if str(control.get("name") or "") != "g-recaptcha-response"
+        ]
+        if not controls:
+            continue
+        visible = [c for c in controls if str(c.get("type") or "").lower() != "hidden"]
+        primary = visible[0] if visible else controls[0]
+        name = str(primary.get("name") or "").strip()
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        label_el = node.find(class_="application-label")
+        text_el = label_el.find(class_="text") if label_el is not None else None
+        raw_label = _text(text_el if text_el is not None else label_el)
+        field_el = node.find(class_="application-field")
+        required = (
+            (label_el is not None and label_el.find("span", class_="required") is not None)
+            or any(control.has_attr("required") for control in controls)
+            or any(str(control.get("aria-required") or "").lower() == "true" for control in controls)
+            or (field_el is not None and "required-field" in _classes(field_el))
+        )
+        fields.append(
+            {
+                "name": name,
+                "label": _label_text(raw_label),
+                "kind": _kind_for(primary),
+                "required": required,
+                "options": _lever_options(node, primary),
+                "scope": None,
+            }
+        )
+    return fields
+
+
 def _parse_generic(soup: Any) -> list[dict[str, Any]]:
     """Best-effort schema for an employer's own form (incl. Google Forms).
 
@@ -508,10 +614,13 @@ def parse_form_schema(html: str, *, channel: str) -> list[dict[str, Any]]:
     The ``_parse_generic`` fallback below is NOT a submission path any more:
     ORCHESTRATOR RULING U5-F3 (2026-08-14) removed every channel that lacked a
     dedicated parser from
-    :data:`app.services.apply_channel_resolver.AUTOMATABLE_CHANNELS`, so the
-    sweep only ever calls this with ``ashby`` or ``greenhouse``. The fallback
-    stays because it is a legitimate schema READER (and the seam Track-2 slice
-    U5c builds the lever/smartrecruiters dialects against); it is
+    :data:`app.services.apply_channel_resolver.AUTOMATABLE_CHANNELS`. SUB-011
+    (Track-2 U5c) built the dedicated Lever dialect parser and its own
+    fixture-backed tests, so ``lever`` re-entered that set legitimately — the
+    sweep now calls this with ``ashby``, ``greenhouse`` or ``lever``.
+    ``smartrecruiters`` and ``generic`` still have none, so they still fall
+    through here; the fallback stays because it is a legitimate schema READER
+    (and the seam any future dedicated dialect is built against). It is
     ``AUTOMATABLE_CHANNELS`` — pinned by ``tests/test_u5_invariant_sweep.py`` —
     that decides what may be clicked, not this dispatch.
     """
@@ -520,6 +629,8 @@ def parse_form_schema(html: str, *, channel: str) -> list[dict[str, Any]]:
         return _parse_ashby(soup)
     if channel == "greenhouse":
         return _parse_greenhouse(soup)
+    if channel == "lever":
+        return _parse_lever(soup)
     return _parse_generic(soup)
 
 
@@ -3122,6 +3233,26 @@ def playwright_form_submitter(
                     # host that no longer answers.
                     page.route("**/*", lambda route: route.abort())
                     page.set_content(page_html or "", wait_until="domcontentloaded")
+                if _hcaptcha_widget_mounted(page):
+                    # SUB-011: an hCaptcha widget needs a REAL human to solve
+                    # it — nothing here does, or tries to, and there is no
+                    # point filling the rest of the form first: the outcome
+                    # is already decided. Screenshot the page as evidence
+                    # and refuse honestly, distinctly from a TRIGGERED
+                    # challenge (`detect_blocking_state`'s "captcha" reason,
+                    # checked earlier while the PLAN was built) — this is a
+                    # MOUNT, caught here because build_form_fill_plan's
+                    # static snapshot cannot see the live DOM's widget.
+                    page.screenshot(path=str(screenshot), full_page=True)
+                    raise ManualStepRequired(
+                        "captcha_challenge",
+                        (
+                            "This application is protected by an hCaptcha "
+                            "challenge Aether cannot solve or bypass, so "
+                            "nothing was submitted. Open the posting and "
+                            "finish it yourself."
+                        ),
+                    )
                 # CLI-SUB-005: live mode verifies every fill's committed DOM
                 # state (read-back + one retry); replay keeps the raw fills —
                 # a replayed page is a JS-dead capture no employer can
@@ -3421,6 +3552,50 @@ def _confirmation_signal(page: Any, before_url: str) -> str | None:
         except Exception:  # noqa: BLE001
             break
     return None
+
+
+def _hcaptcha_widget_mounted(page: Any) -> bool:
+    """An hCaptcha widget is present in the live DOM at the point of submit.
+
+    SUB-011 scout evidence: every real Lever ``/apply`` page captured so far
+    mounts hCaptcha (``#h-captcha`` widget div + a hidden
+    ``h-captcha-response`` input) — and unlike the invisible Google
+    reCAPTCHA v3 widget every real Ashby/Greenhouse capture ALSO mounts (see
+    :func:`detect_blocking_state`'s docstring), a mere MOUNT is not harmless
+    here: hCaptcha's checkbox widget requires a genuine human interaction to
+    mint a valid response token, so nothing short of a person solving it can
+    make the hidden ``h-captcha-response`` input non-empty. Clicking submit
+    anyway would not bypass it — it would just submit an application missing
+    the token the employer's own server checks for, which is indistinguishable
+    from "submitted" until the employer silently drops it. Detecting the
+    MOUNT and refusing here, honestly, is the only choice that is not either
+    an attempted bypass or a false "submitted" claim.
+
+    CLI-SUB-005-R7 fail-closed discipline (SUB-011-R2 rebase — see
+    :func:`_composed_live_census` / :func:`_install_submission_guard` for the
+    identical pattern this mirrors) applies here too: this check exists
+    BECAUSE a mount cannot be safely bypassed, so an exception while reading
+    a LIVE page's own DOM must not silently report "not mounted" and let the
+    fill/submit proceed — that would be exactly the fail-open shape R7's
+    ruling named ("an exception ... resolves to 'proceed as if nothing were
+    wrong,' not 'refuse'"), applied to a check whose whole job is to catch
+    the one case (a captcha widget on the page) that makes "proceed anyway"
+    genuinely unsafe. FAIL CLOSED: an unreadable LIVE page raises
+    :class:`ManualStepRequired` here, never a silent ``False``.
+    """
+    try:
+        return (
+            page.locator("#h-captcha, .h-captcha, iframe[src*='hcaptcha.com']").count() > 0
+        )
+    except Exception as exc:  # CLI-SUB-005-R7 pattern — FAIL CLOSED (was: return False)
+        raise ManualStepRequired(
+            "captcha_verification_failed",
+            (
+                "Aether could not verify whether this application is "
+                "protected by a captcha challenge, so nothing was "
+                "submitted. Open the posting and finish it yourself."
+            ),
+        ) from exc
 
 
 def _activate_submit(page: Any) -> bool:
