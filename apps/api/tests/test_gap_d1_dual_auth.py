@@ -133,6 +133,72 @@ def test_oauth_state_expired_is_not_consumable(client, auth_headers, test_user_i
 
 
 # ---------------------------------------------------------------------------
+# 4b. P3-1 (RUN-20260818T0223Z third-party adversarial review) — peek() is
+#     non-destructive, and consume() keyed on the wrong owner/provider must
+#     never delete the row (only a matching consume may).
+# ---------------------------------------------------------------------------
+
+
+def test_oauth_state_peek_does_not_consume(client, auth_headers, test_user_id):
+    import uuid
+
+    token = f"state-peek-{uuid.uuid4().hex}"
+    repo = AnthropicOAuthStateRepository()
+    repo.create(token, test_user_id, "verifier-peek", provider="anthropic")
+
+    # Any number of peeks must leave the row intact for the eventual consume.
+    for _ in range(3):
+        peeked = repo.peek(token)
+        assert peeked is not None
+        assert peeked["userId"] == test_user_id
+        assert peeked["provider"] == "anthropic"
+
+    row = repo.consume(token, user_id=test_user_id, provider="anthropic")
+    assert row is not None and row["codeVerifier"] == "verifier-peek"
+    assert repo.peek(token) is None, "consume must delete the row exactly once"
+
+
+def test_oauth_state_consume_keyed_on_wrong_owner_does_not_delete_the_row(
+    client, auth_headers, test_user_id,
+):
+    """A conditional consume() for the WRONG owner must not touch the row —
+    the legitimate owner must still be able to redeem it afterward."""
+    import uuid
+
+    token = f"state-wrongowner-{uuid.uuid4().hex}"
+    repo = AnthropicOAuthStateRepository()
+    repo.create(token, test_user_id, "verifier-owner", provider="anthropic")
+
+    attacker_attempt = repo.consume(token, user_id="not-the-real-owner", provider="anthropic")
+    assert attacker_attempt is None
+
+    # The state must still be intact and redeemable by its real owner.
+    legit = repo.consume(token, user_id=test_user_id, provider="anthropic")
+    assert legit is not None
+    assert legit["userId"] == test_user_id
+    assert legit["codeVerifier"] == "verifier-owner"
+
+
+def test_oauth_state_consume_keyed_on_wrong_provider_does_not_delete_the_row(
+    client, auth_headers, test_user_id,
+):
+    """A conditional consume() for the WRONG provider must not touch the row —
+    the correct provider's callback must still be able to redeem it."""
+    import uuid
+
+    token = f"state-wrongprovider-{uuid.uuid4().hex}"
+    repo = AnthropicOAuthStateRepository()
+    repo.create(token, test_user_id, "verifier-provider", provider="openrouter")
+
+    mismatched_attempt = repo.consume(token, provider="anthropic")
+    assert mismatched_attempt is None
+
+    legit = repo.consume(token, provider="openrouter")
+    assert legit is not None
+    assert legit["provider"] == "openrouter"
+
+
+# ---------------------------------------------------------------------------
 # 5. resolve_user_credential precedence + no cross-provider (GAP-E5)
 # ---------------------------------------------------------------------------
 

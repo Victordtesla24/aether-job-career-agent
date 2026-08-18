@@ -441,6 +441,42 @@ def test_user_exchange_rejects_a_state_started_by_another_user(
     assert FAKE_ACCESS not in resp.text
 
 
+def test_user_exchange_cross_user_attempt_does_not_burn_the_owners_state(
+    client, auth_headers, monkeypatch, _clean_oauth_tables
+):
+    """P3-1 (RUN-20260818T0223Z third-party adversarial review): user B's
+    rejected cross-user attempt — reproduced against the live prod route this
+    finding names first, ``/oauth/mint/exchange`` — must NOT delete user A's
+    state. A's own subsequent, legitimate retry with the SAME state must
+    still succeed. Before the fix, ``AnthropicOAuthStateRepository.consume``
+    deleted the row before the ownership check ran, so any observer of a live
+    ``state`` value could permanently burn the real owner's in-flight connect
+    attempt with one rejected request."""
+    sent = _patch_token_endpoint(monkeypatch, _fake_token_response())
+    state = _start_and_get_state(client, auth_headers)
+
+    other = _second_user_headers(client)
+    attack = client.post(EXCHANGE, headers=other, json={"pastedCode": f"code#{state}"})
+    assert attack.status_code == 403, attack.text
+
+    retry = client.post(
+        EXCHANGE, headers=auth_headers, json={"pastedCode": f"code#{state}"}
+    )
+    assert retry.status_code == 200, (
+        "user B's rejected cross-user attempt burned user A's still-pending "
+        f"mint state — A's own legitimate retry failed: {retry.text}"
+    )
+    assert retry.json()["token"] == FAKE_ACCESS
+    # Only the owner's own attempt ever reached the upstream token endpoint.
+    assert len(sent) == 1, sent
+
+    # Still genuinely single-use: a second legitimate redeem must now fail.
+    replay = client.post(
+        EXCHANGE, headers=auth_headers, json={"pastedCode": f"code#{state}"}
+    )
+    assert replay.status_code == 400, replay.text
+
+
 @pytest.mark.parametrize("pasted", ["", "   ", "codeonly", "#stateonly", "code#"])
 def test_user_exchange_422_on_malformed_paste(
     client, auth_headers, pasted, _clean_oauth_tables

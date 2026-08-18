@@ -456,6 +456,56 @@ def test_callback_provider_mismatch_is_honest_failure(
     assert ProviderCredentialRepository().get_secret("anthropic") is None
 
 
+def test_callback_provider_mismatch_leaves_state_intact_for_the_correct_provider(
+    client, auth_headers, test_user_id, monkeypatch, _clean_provider_oauth_state,
+):
+    """P3-1 (RUN-20260818T0223Z): an unauthenticated cross-provider replay of
+    a live ``state`` must NOT burn it — the state's own provider's callback
+    must still be able to complete the connect afterward. Before the fix, the
+    mismatched callback deleted the row unconditionally on first use, so this
+    legitimate follow-up call would 200 with ``connected: false`` (state
+    unknown/expired) instead of actually connecting."""
+    start = client.post("/agents/user/providers/openrouter/oauth/start", headers=auth_headers)
+    state = _state_from_start(start.json())
+
+    # An unauthenticated party who merely observed `state` replays it against
+    # the WRONG provider's callback first.
+    mismatch = client.get(
+        "/agents/user/providers/anthropic/oauth/callback",
+        params={"code": "x", "state": state},
+    )
+    assert mismatch.status_code == 200, mismatch.text
+    assert '"connected": false' in mismatch.text or '"connected":false' in mismatch.text
+
+    from app.services import openrouter_oauth
+
+    monkeypatch.setattr(
+        openrouter_oauth, "_post_exchange", lambda body: {"key": FAKE_OR_KEY}
+    )
+
+    # The legitimate owner's retry, against the CORRECT provider, must still
+    # succeed — the mismatched attempt above must not have consumed the state.
+    legit = client.get(
+        "/agents/user/providers/openrouter/oauth/callback",
+        params={"code": "FAKEOPENROUTERCODE", "state": state},
+    )
+    assert legit.status_code == 200, legit.text
+    assert '"connected": true' in legit.text or '"connected":true' in legit.text, (
+        "the cross-provider mismatch attempt burned the state — the "
+        f"legitimate owner's retry could not complete: {legit.text}"
+    )
+
+    from app.repositories.user_provider_credential import UserProviderCredentialRepository
+
+    mine = UserProviderCredentialRepository().get_secret(test_user_id, "openrouter")
+    assert mine is not None and mine["secret"] == FAKE_OR_KEY
+
+    # Still genuinely single-use: a second legitimate redeem must now fail.
+    from app.repositories.user_provider_credential import AnthropicOAuthStateRepository
+
+    assert AnthropicOAuthStateRepository().consume(state) is None, "state must be single-use"
+
+
 # ===========================================================================
 # 4. POST /agents/user/providers/{provider}/oauth/exchange — code_relay
 #    fallback (Anthropic's default flow). CRITICAL: only the per-user row.
@@ -548,6 +598,64 @@ def test_exchange_cross_user_state_rejected(
     from app.repositories.user_provider_credential import UserProviderCredentialRepository
 
     assert UserProviderCredentialRepository().get_secret(other_id, "anthropic") is None
+
+
+def test_exchange_cross_user_state_rejected_leaves_state_intact_for_the_owner(
+    client, auth_headers, test_user_id, monkeypatch, _clean_provider_oauth_state,
+):
+    """P3-1 (RUN-20260818T0223Z): user B's rejected cross-user attempt must
+    NOT burn user A's state — A's own subsequent, legitimate retry with the
+    SAME state must still succeed. Before the fix, ``consume`` deleted the
+    row unconditionally before the ownership check ran, so this genuine retry
+    would 400 'unknown, expired, or already used' even though A never
+    completed a real exchange."""
+    start = client.post("/agents/user/providers/anthropic/oauth/start", headers=auth_headers)
+    assert start.status_code == 200, start.text
+    state = _state_from_start(start.json())
+
+    other_headers, other_id = _register_second_user(client)
+    attack = client.post(
+        "/agents/user/providers/anthropic/oauth/exchange",
+        json={"pastedCode": f"SOMECODE#{state}"},
+        headers=other_headers,
+    )
+    assert attack.status_code == 403, attack.text
+
+    from app.services import anthropic_oauth
+
+    monkeypatch.setattr(
+        anthropic_oauth,
+        "_post_token",
+        lambda body: {
+            "access_token": FAKE_ANTHROPIC_ACCESS,
+            "refresh_token": FAKE_ANTHROPIC_REFRESH,
+            "expires_in": 31536000,
+        },
+    )
+
+    retry = client.post(
+        "/agents/user/providers/anthropic/oauth/exchange",
+        json={"pastedCode": f"REALCODE#{state}"},
+        headers=auth_headers,
+    )
+    assert retry.status_code == 200, (
+        "user B's rejected cross-user attempt burned user A's still-pending "
+        f"state — A's own legitimate retry failed: {retry.text}"
+    )
+
+    from app.repositories.user_provider_credential import UserProviderCredentialRepository
+
+    mine = UserProviderCredentialRepository().get_secret(test_user_id, "anthropic")
+    assert mine is not None and mine["secret"] == FAKE_ANTHROPIC_ACCESS
+    assert UserProviderCredentialRepository().get_secret(other_id, "anthropic") is None
+
+    # Still genuinely single-use: a second legitimate redeem must now fail.
+    replay = client.post(
+        "/agents/user/providers/anthropic/oauth/exchange",
+        json={"pastedCode": f"REALCODE#{state}"},
+        headers=auth_headers,
+    )
+    assert replay.status_code == 400, replay.text
 
 
 def test_exchange_provider_mismatch_400(client, auth_headers, _clean_provider_oauth_state):
@@ -768,3 +876,56 @@ def test_callback_openrouter_api_key_never_syncs_operator_env(
         "CLAUDE_CODE_OAUTH_TOKEN .env line"
     )
     assert FAKE_OR_KEY not in env_file.read_text()
+
+
+# ===========================================================================
+# 6. Informational finding (RUN-20260818T0223Z third-party adversarial
+#    review) — defense-in-depth: `provider` must never be able to break out
+#    of the <script> block `_oauth_popup_html` embeds it in, independent of
+#    whatever the routing layer currently allows through `{provider}`.
+# ===========================================================================
+
+
+def test_oauth_popup_html_escapes_script_breakout_in_provider_json_literal():
+    """A direct unit-level call (bypassing routing entirely, per the
+    finding's own note that routing currently blocks every path that could
+    deliver a literal '/' into `provider`) — this is the seam that keeps the
+    escaping a property of the function, not an accident of routing."""
+    import json
+    import re
+
+    from app.routers.agents import _oauth_popup_html
+
+    hostile_provider = "anthropic</script><script>alert(document.domain)</script>"
+    html_doc = _oauth_popup_html(provider=hostile_provider, connected=True)
+
+    match = re.search(r"var payload = (\{.*\});", html_doc)
+    assert match, html_doc
+    payload_literal = match.group(1)
+
+    # The attacker's own `</script>`/`<script>` sequences must never survive
+    # into the JSON literal verbatim — that is exactly what would let a
+    # browser's HTML parser terminate the real <script> block early and
+    # execute the attacker's injected markup as a sibling <script> tag.
+    assert "</script" not in payload_literal.lower()
+    assert "<script" not in payload_literal.lower()
+
+    # Defense-in-depth, not data corruption: a real browser's JS engine
+    # evaluates the unicode escape identically to a literal '<', so the
+    # provider value still round-trips losslessly once unescaped the same way.
+    parsed = json.loads(payload_literal.replace("\\u003c", "<"))
+    assert parsed == {
+        "source": "aether-oauth",
+        "provider": hostile_provider,
+        "connected": True,
+    }
+
+
+def test_oauth_popup_html_ordinary_provider_unaffected():
+    """Regression guard: escaping must not change behaviour for the normal
+    case (no '<' in the provider id)."""
+    from app.routers.agents import _oauth_popup_html
+
+    html_doc = _oauth_popup_html(provider="openrouter", connected=True)
+    assert '"provider": "openrouter"' in html_doc or '"provider":"openrouter"' in html_doc
+    assert "\\u003c" not in html_doc

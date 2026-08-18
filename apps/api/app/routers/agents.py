@@ -6690,12 +6690,23 @@ def _mint_anthropic_token(pasted_code: str, user_id: str) -> dict[str, Any]:
       * 502 a genuine network/gateway failure where no response arrived at all,
         including an unexpected 2xx shape — the defensive parse in
         ``anthropic_oauth._normalize_token_response`` never fakes success.
+
+    P3-1 (RUN-20260818T0223Z third-party adversarial review): ownership is
+    validated via a non-destructive ``peek`` BEFORE the state is consumed.
+    Consuming (deleting) first and validating after meant a wrong-user
+    request — one that can never succeed — still permanently burned the
+    state, denying the legitimate owner their own still-pending flow. The
+    final ``consume`` is conditioned on the same ``user_id`` so two
+    concurrent legitimate redemptions of the same state still cannot both
+    succeed (single-use is enforced by the atomic conditional ``DELETE``,
+    not by the earlier ``peek``).
     """
     from app.services import anthropic_oauth
 
     code, state = _parse_pasted_oauth_code(pasted_code)
     _oauth_vault_ready_or_503()
-    row = AnthropicOAuthStateRepository().consume(state)
+    repo = AnthropicOAuthStateRepository()
+    row = repo.peek(state)
     if row is None:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
@@ -6706,6 +6717,16 @@ def _mint_anthropic_token(pasted_code: str, user_id: str) -> dict[str, Any]:
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
             "This authorization was started by a different user.",
+        )
+    row = repo.consume(state, user_id=user_id)
+    if row is None:
+        # Lost a race with a concurrent legitimate redemption of this same
+        # state (or it expired between peek and consume) — honest 400, not a
+        # 403 (ownership was never the problem here).
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Authorization state is unknown, expired, or already used — restart "
+            "Connect with Anthropic.",
         )
     try:
         return anthropic_oauth.exchange_code(code, row["codeVerifier"], state)
@@ -6935,9 +6956,24 @@ def _oauth_popup_html(*, provider: str, connected: bool, error: str | None = Non
         if connected
         else f"Connection failed: {html.escape(error or 'unknown error')}"
     )
+    # Informational finding (RUN-20260818T0223Z third-party adversarial
+    # review): `provider` is a caller-supplied path segment interpolated
+    # into this JSON literal inside a <script> block. Routing currently
+    # rejects every path that could deliver a literal '/' into `provider`
+    # (Starlette's single-segment {provider} converter 404s on both an
+    # encoded and a literal slash), so `</script` cannot reach here today —
+    # but that safety is an accidental routing side effect, not a property
+    # of this function, and would silently reopen if `{provider}` were ever
+    # switched to a `path`-type converter or this template were reused with
+    # a value routing doesn't protect. Escaping the literal '<' character to
+    # its JSON/JS-safe unicode-escape form — the same technique Django's
+    # `json_script` uses — makes a `</script>`-breakout structurally
+    # impossible regardless of routing, with zero effect on the JSON
+    # `postMessage` payload the opener parses (`JSON.parse`/object-literal
+    # evaluation treat `<` and a literal `<` identically).
     payload = json.dumps(
         {"source": "aether-oauth", "provider": provider, "connected": connected}
-    )
+    ).replace("<", "\\u003c")
     return f"""<!doctype html>
 <html><head><meta charset="utf-8"><title>{safe_provider} — Aether</title></head>
 <body style="background:#08080A;color:#F5F1E6;font-family:system-ui,-apple-system,sans-serif;
@@ -6996,7 +7032,17 @@ def user_provider_oauth_callback(
         return HTMLResponse(
             _oauth_popup_html(provider=provider, connected=False, error="missing code or state")
         )
-    row = AnthropicOAuthStateRepository().consume(state)
+    # P3-1 (RUN-20260818T0223Z third-party adversarial review): validate the
+    # provider binding via a non-destructive ``peek`` BEFORE consuming. This
+    # route is unauthenticated by necessity, so provider binding is the only
+    # ownership check available here — but the state row still MUST NOT be
+    # deleted on a mismatched (wrong-provider) callback, or an unauthenticated
+    # party who merely observed the victim's `state` value (see the OAuth
+    # popup postMessage/URL — it is not treated as secret for CSRF purposes)
+    # could permanently burn the victim's in-flight connect attempt just by
+    # replaying it against the wrong provider's callback URL.
+    repo = AnthropicOAuthStateRepository()
+    row = repo.peek(state)
     if row is None:
         return HTMLResponse(
             _oauth_popup_html(
@@ -7007,6 +7053,16 @@ def user_provider_oauth_callback(
     if row.get("provider") != provider:
         return HTMLResponse(
             _oauth_popup_html(provider=provider, connected=False, error="provider mismatch")
+        )
+    row = repo.consume(state, provider=provider)
+    if row is None:
+        # Lost a race with a concurrent legitimate redemption of this same
+        # state (or it expired between peek and consume).
+        return HTMLResponse(
+            _oauth_popup_html(
+                provider=provider, connected=False,
+                error="authorization expired or already used",
+            )
         )
     user_id = row["userId"]
     redirect_uri = row.get("redirectUri") or descriptor.redirect_uri()
@@ -7091,7 +7147,18 @@ def user_provider_oauth_exchange(
         )
     code, state = _parse_pasted_oauth_code(body.pastedCode)
     _oauth_vault_ready_or_503()
-    row = AnthropicOAuthStateRepository().consume(state)
+    # P3-1 (RUN-20260818T0223Z third-party adversarial review): validate
+    # ownership AND provider binding via a non-destructive ``peek`` BEFORE
+    # consuming. The state row was previously deleted unconditionally on
+    # first use, then checked afterward — so a wrong-user or wrong-provider
+    # request (which can never succeed) still permanently burned the state,
+    # denying the legitimate owner their own still-pending flow. The final
+    # ``consume`` is conditioned on the same ``user_id``/``provider`` so two
+    # concurrent legitimate redemptions of the same state still cannot both
+    # succeed — single-use is enforced by the atomic conditional ``DELETE``,
+    # not by the earlier ``peek``.
+    repo = AnthropicOAuthStateRepository()
+    row = repo.peek(state)
     if row is None:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
@@ -7106,6 +7173,14 @@ def user_provider_oauth_exchange(
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
             "This authorization was started for a different provider.",
+        )
+    row = repo.consume(state, user_id=current_user["id"], provider=provider)
+    if row is None:
+        # Lost a race with a concurrent legitimate redemption of this same
+        # state (or it expired between peek and consume).
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Authorization state is unknown, expired, or already used — restart Connect.",
         )
     redirect_uri = row.get("redirectUri") or descriptor.redirect_uri()
     try:

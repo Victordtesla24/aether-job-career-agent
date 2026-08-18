@@ -388,24 +388,79 @@ class AnthropicOAuthStateRepository:
                 )
             conn.commit()
 
-    def consume(self, state_token: str) -> Optional[dict[str, Any]]:
-        """Atomically fetch-and-delete a NON-expired state row (single use).
+    def peek(self, state_token: str) -> Optional[dict[str, Any]]:
+        """Non-destructive lookup of a NON-expired state row.
 
-        Returns ``None`` when the token is unknown or already expired — the
-        caller then rejects the callback. Deleting in the same statement means a
-        state token can never be replayed. The returned dict additionally
-        carries ``provider``/``redirectUri`` (GAP-PROVIDER-OAUTH-1) — a
-        superset of the historical ``{userId, codeVerifier}`` shape, so every
-        existing caller that only reads those two keys is unaffected.
+        SECURITY (P3-1, RUN-20260818T0223Z third-party adversarial review):
+        callers MUST validate ownership (``userId``) and/or provider binding
+        against this row's fields *before* calling ``consume`` for it. A
+        mismatched request must never reach ``consume`` — that would delete
+        the row on a rejected attempt and strand the legitimate owner, since
+        ``AnthropicOAuthState`` rows are single-use. This method never
+        deletes, so an unlimited number of failed ownership/provider checks
+        can be retried without affecting the legitimate holder's ability to
+        redeem the state exactly once.
         """
         _ensure_user_agent_tables()
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    'DELETE FROM "AnthropicOAuthState" '
-                    'WHERE "stateToken" = %s AND "expiresAt" > now() '
-                    'RETURNING "userId", "codeVerifier", "provider", "redirectUri"',
+                    'SELECT "userId", "codeVerifier", "provider", "redirectUri" '
+                    'FROM "AnthropicOAuthState" '
+                    'WHERE "stateToken" = %s AND "expiresAt" > now()',
                     (state_token,),
+                )
+                rows = rows_to_dicts(cur)
+        return rows[0] if rows else None
+
+    def consume(
+        self,
+        state_token: str,
+        *,
+        user_id: str | None = None,
+        provider: str | None = None,
+    ) -> Optional[dict[str, Any]]:
+        """Atomically fetch-and-delete a NON-expired state row (single use).
+
+        Returns ``None`` when the token is unknown, already expired, or (when
+        ``user_id``/``provider`` are supplied) does not belong to that owner/
+        provider — the caller then rejects the request. Deleting in the same
+        statement means a state token can never be replayed, and conditioning
+        the ``DELETE`` on ``user_id``/``provider`` keeps that single-use
+        guarantee race-free even between two concurrent, independently
+        legitimate redemption attempts (only one ``DELETE`` can match).
+
+        Callers that need to distinguish "unknown/expired" from "wrong
+        owner/provider" (to answer with the correct honest status code
+        without destroying a state a legitimate party still needs) MUST call
+        ``peek`` first and only reach this method once ownership/provider are
+        already confirmed — see the callers in ``routers/agents.py``
+        (P3-1, RUN-20260818T0223Z). Passing no ``user_id``/``provider``
+        preserves the historical unconditional-consume behaviour for call
+        sites that own the row unconditionally (e.g. test assertions that a
+        state was consumed).
+
+        The returned dict additionally carries ``provider``/``redirectUri``
+        (GAP-PROVIDER-OAUTH-1) — a superset of the historical
+        ``{userId, codeVerifier}`` shape, so every existing caller that only
+        reads those two keys is unaffected.
+        """
+        _ensure_user_agent_tables()
+        conditions = ['"stateToken" = %s', '"expiresAt" > now()']
+        params: list[Any] = [state_token]
+        if user_id is not None:
+            conditions.append('"userId" = %s')
+            params.append(user_id)
+        if provider is not None:
+            conditions.append('"provider" = %s')
+            params.append(provider)
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    'DELETE FROM "AnthropicOAuthState" '
+                    f'WHERE {" AND ".join(conditions)} '
+                    'RETURNING "userId", "codeVerifier", "provider", "redirectUri"',
+                    tuple(params),
                 )
                 rows = rows_to_dicts(cur)
             conn.commit()
