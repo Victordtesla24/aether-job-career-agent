@@ -351,7 +351,16 @@ def test_resolve_verification_gate_resubmit_is_also_guard_checked(tmp_path) -> N
     """The code-entry resubmit inside _resolve_verification_gate is read back
     through the SAME guard as the form's own first click — not merely
     inherited by being unreachable, but actively re-checked after its own
-    click, exactly like CLI-SUB-005-R6/R7 demand for every submit attempt."""
+    click, exactly like CLI-SUB-005-R6/R7 demand for every submit attempt.
+
+    RUN-20260818T0223Z/SUB-011 adversarial review (P0,
+    06-u5d4-adversarial-review.md): the ORIGINAL version of this test
+    manually called _install_submission_guard(page) itself before invoking
+    _resolve_verification_gate, which masked the finding — production never
+    makes that call from anywhere except _resolve_verification_gate's own
+    (now-added) re-install at its top. This version deliberately does NOT
+    install the guard itself: the ONLY thing that can arm it here is
+    _resolve_verification_gate's own production code."""
     from playwright.sync_api import sync_playwright
 
     from app.services.apply_executor import _resolve_verification_gate
@@ -386,14 +395,8 @@ def test_resolve_verification_gate_resubmit_is_also_guard_checked(tmp_path) -> N
         try:
             page = browser.new_page()
             page.set_content(gate_with_resubmit_reveal, wait_until="domcontentloaded")
-            # Arm the SAME guard _install_submission_guard installs in
-            # playwright_form_submitter, so _blocked_submission_on has a real
-            # census to read back from. This mirrors production exactly: by
-            # the time _resolve_verification_gate ever runs, the guard is
-            # already armed on the page from before the FIRST submit click.
-            from app.services.apply_executor import _install_submission_guard
-
-            _install_submission_guard(page)
+            # Deliberately NO manual guard install here (see the docstring
+            # above) — _resolve_verification_gate must arm it itself.
             with pytest.raises(ManualStepRequired) as exc_info:
                 _resolve_verification_gate(
                     page,
@@ -415,3 +418,116 @@ def test_resolve_verification_gate_resubmit_is_also_guard_checked(tmp_path) -> N
             assert err.reason in ("unplanned_required_field", "unverifiable_form_surface")
         finally:
             browser.close()
+
+
+# ---------------------------------------------------------------------------
+# 5. RUN-20260818T0223Z/SUB-011 adversarial review, P0
+#    (06-u5d4-adversarial-review.md): _install_submission_guard arms the R6/
+#    R7 guard via a ONE-SHOT evaluate() call (event listeners on that
+#    document) — not page.add_init_script, which is what this file uses
+#    elsewhere specifically because it survives navigation
+#    (_CLOSED_SHADOW_MARKER_INIT_JS). A standard multi-page (non-SPA) ATS
+#    that reaches its verification-code gate via a REAL top-level navigation
+#    (window.location.href, not an in-place innerHTML swap) therefore lands
+#    on a document with NO guard armed at all — exactly the shape every
+#    other test in this file's section 4 does NOT cover, because all of them
+#    construct the gate via event.preventDefault() + innerHTML on the SAME
+#    document. This section reproduces the reviewer's own proof shape: two
+#    pages, the gate on page 2, a required field revealed via mousedown on
+#    page 2's OWN resubmit button — the identical CLI-SUB-005-R6/R7 attack,
+#    relocated across a real navigation.
+# ---------------------------------------------------------------------------
+
+# Page 2: the gate, reached by navigation rather than an innerHTML swap. Its
+# OWN resubmit button reveals a brand-new required field via mousedown —
+# nothing here differs from _MOUSEDOWN_REVEAL_GATE_FORM's mechanism except
+# that this document was never present when playwright_form_submitter armed
+# the guard on page 1.
+_NAV_GATE_PAGE2 = """
+<title>gate-page2</title>
+<p>We just emailed you a verification code.</p>
+<input id="code" maxlength="8" aria-label="code">
+<button id="resubmit-btn" type="submit" onclick="event.preventDefault();
+    document.body.innerHTML = '<h1>Thank you for applying</h1>';">Submit</button>
+<script>
+  document.getElementById('resubmit-btn').addEventListener('mousedown', function () {
+    if (document.getElementById('late_reveal')) { return; }
+    var input = document.createElement('input');
+    input.type = 'text';
+    input.id = 'late_reveal';
+    input.setAttribute('aria-required', 'true');
+    input.setAttribute('data-aether-live-field', 'true');
+    document.body.appendChild(input);
+  });
+</script>
+"""
+
+
+def _nav_trigger_page1(page2_url: str) -> str:
+    """Page 1: a well-behaved form whose submit performs a REAL top-level
+    navigation to ``page2_url`` (``window.location.href =``), never an
+    in-place DOM mutation on the same document — the exact distinction the
+    P0 finding turns on. ``event.preventDefault()`` stops the browser's own
+    default form-submit navigation so the ONLY navigation that happens is
+    the deliberate one below, keeping the test's own timing deterministic.
+    """
+    return (
+        "\n<title>nav-trigger</title>\n"
+        "<form onsubmit='event.preventDefault(); "
+        f'window.location.href = "{page2_url}";\'>\n'
+        '  <label for="name">Name</label><input id="name" type="text">\n'
+        '  <button type="submit">Submit Application</button>\n'
+        "</form>\n"
+    )
+
+
+def test_verification_gate_reached_via_real_navigation_resubmit_still_guarded(
+    tmp_path, monkeypatch
+) -> None:
+    """THE P0 REGRESSION, ported exactly from the adversarial reviewer's own
+    proof shape: a required field revealed at the instant of the code-entry
+    RESUBMIT, on a document reached by a REAL top-level navigation (not an
+    innerHTML swap), must still refuse via the R6/R7 guard's own reason —
+    never `no_confirmation` (guard silently absent, refusal only for an
+    unrelated later reason) and never a silent submitted:true success.
+
+    Real ``file://`` pages, not this file's usual ``_data_url`` — Chromium
+    refuses a script-initiated TOP-LEVEL navigation to a ``data:`` URL
+    outright (a security restriction, confirmed directly: ``window.location.
+    href = "data:..."`` from a ``data:`` page is a silent no-op, `page.url`
+    stays on page 1). ``file://`` has no such restriction and is the exact
+    scheme the adversarial reviewer's own reproduction used.
+    """
+    from app.services.apply_executor import ManualStepRequired, playwright_form_submitter
+
+    monkeypatch.setattr("app.services.gmail_service.GmailService", _FakeGmailService)
+
+    page2_path = tmp_path / "u5d4-nav-page2.html"
+    page2_path.write_text(_NAV_GATE_PAGE2)
+    page2_url = "file://" + str(page2_path)
+    page1_path = tmp_path / "u5d4-nav-page1.html"
+    page1_path.write_text(_nav_trigger_page1(page2_url))
+    page1_url = "file://" + str(page1_path)
+
+    with pytest.raises(ManualStepRequired) as exc_info:
+        playwright_form_submitter(
+            application_id="u5d4-nav-guard",
+            channel="generic",
+            page_html="",
+            apply_url=page1_url,
+            plan={"fields": [_name_plan_field()]},
+            resume_pdf_bytes=b"%PDF-1.4 fake",
+            cover_letter_text="Dear Hiring Manager,",
+            evidence_dir=str(tmp_path / "evidence"),
+            user_id="u5d4-test-user",
+            company="Acme Corp",
+        )
+    err = exc_info.value
+    # The R6/R7 guard's own reason for the field the mousedown handler
+    # revealed on page 2 — proof the guard was re-armed on the POST-
+    # navigation document and caught the resubmit. `no_confirmation` (the
+    # reviewer's reproduced failure mode: the resubmit went through
+    # completely unguarded and only failed later, for an unrelated reason)
+    # or any outcome reporting `submitted: True` would both be regressions.
+    assert err.reason in ("unplanned_required_field", "unverifiable_form_surface")
+    assert err.reason != "no_confirmation"

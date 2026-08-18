@@ -2449,7 +2449,7 @@ def _install_submission_guard(root: Any) -> None:
     if not hasattr(root, "evaluate"):
         return
     try:
-        root.evaluate(_SUBMIT_GUARD_INSTALL_JS)
+        installed = root.evaluate(_SUBMIT_GUARD_INSTALL_JS)
     except Exception as exc:  # CLI-SUB-005-R7 — FAIL CLOSED (was: pass)
         raise ManualStepRequired(
             "guard_install_failed",
@@ -2459,6 +2459,22 @@ def _install_submission_guard(root: Any) -> None:
                 "finish it yourself."
             ),
         ) from exc
+    if not installed:
+        # RUN-20260818T0223Z/SUB-011 adversarial review (P0,
+        # 06-u5d4-adversarial-review.md): a call that raised nothing is not
+        # proof the guard actually armed — ``_SUBMIT_GUARD_INSTALL_JS``
+        # always ``return true`` on every code path that does not throw, so
+        # anything else back is itself a signal something is wrong. FAIL
+        # CLOSED here too, exactly like the exception path above: an
+        # unverified install must never be treated as an armed one.
+        raise ManualStepRequired(
+            "guard_install_failed",
+            (
+                "Aether could not verify its own submission safety check was "
+                "armed on this page, so nothing was submitted. Open the "
+                "posting and finish it yourself."
+            ),
+        )
 
 
 def _read_blocked_submission(root: Any) -> list[dict[str, Any]] | None:
@@ -4047,7 +4063,29 @@ def _resolve_verification_gate(
     CLI-SUB-005-R7's guard, the same guard reason a first-click block would
     raise — see :func:`_blocked_submission_on`). Never returns a "resolved"
     gate it did not actually resolve.
+
+    RUN-20260818T0223Z/SUB-011 adversarial review (P0,
+    06-u5d4-adversarial-review.md): ``_install_submission_guard`` arms the R6/
+    R7 guard via a one-shot ``evaluate()`` call — event listeners on THAT
+    document — not ``page.add_init_script``, so it does NOT survive a real
+    top-level navigation. A standard multi-page (non-SPA) ATS reaching its
+    verification-code gate via exactly such a navigation would otherwise
+    leave this function's own resubmit click completely unguarded, reopening
+    every mousedown/focus-reveal race CLI-SUB-005 R2-R7 closed for the FIRST
+    click. Re-arm it here — on the (possibly new) document and every
+    reachable frame — as the very first thing this function does, strictly
+    before any code-entry or resubmit interaction below.
     """
+    # Idempotent (`if (window.__aetherSubmitGuardInstalled) { return true; }`
+    # inside `_SUBMIT_GUARD_INSTALL_JS`) — a safe no-op when no navigation
+    # intervened, and the ONLY thing that makes the guard armed at all when
+    # one did. Fails closed via `_install_submission_guard` itself: an
+    # exception, or a JS call that ran but did not verifiably arm the guard,
+    # raises `ManualStepRequired("guard_install_failed", ...)` — never a
+    # resubmit with the guard's state merely assumed.
+    _install_submission_guard(page)
+    for frame in _reachable_frames(page):
+        _install_submission_guard(frame)
     gate_shot = _evidence_path(evidence_dir, application_id, "code-gate.png")
     _capture(page, gate_shot)
     logger.info(
