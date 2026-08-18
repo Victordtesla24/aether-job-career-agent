@@ -50,13 +50,57 @@ KEEP = ("/.git", "/.env", "/node_modules", "/.venv", "/app/apps/web/.next/BUILD_
 
 def now() -> str: return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
-def run(cmd, cwd=None, timeout=180):
+def run(cmd, cwd=None, timeout=180, strip=True):
+    """Run a command and return (returncode, stdout, stderr).
+
+    ``strip`` MUST be False for any output whose leading whitespace is
+    significant.  ``git status --porcelain`` is the motivating case: its records
+    are ``XY <path>`` and an unstaged-only change begins with a space, so
+    stripping silently removes one character from the first path.
+    """
     try:
         p = subprocess.run(cmd, cwd=cwd, shell=isinstance(cmd, str), capture_output=True,
                            text=True, timeout=timeout)
-        return p.returncode, p.stdout.strip(), p.stderr.strip()
+        out = p.stdout.strip() if strip else p.stdout
+        return p.returncode, out, p.stderr.strip()
     except subprocess.TimeoutExpired:
         return 124, "", f"timeout after {timeout}s"
+
+
+def parse_porcelain_z(raw: str) -> list[str]:
+    """Parse ``git status --porcelain -z`` into the list of changed paths.
+
+    NUL-separated records are used instead of lines because they are immune to
+    both failure modes of line parsing: no record can be damaged by stripping
+    (every record is delimited explicitly), and paths containing spaces or
+    newlines are emitted verbatim rather than C-quoted.
+
+    Rename and copy records carry a second NUL-terminated field holding the
+    ORIGINAL path.  Both sides are returned: both differ from HEAD in the
+    worktree and both must be handed to ``git stash`` for the stash to be
+    complete.
+
+    Raises ValueError on any record that does not match the documented
+    ``XY <path>`` shape, so a format surprise escalates instead of silently
+    producing a mangled path.
+    """
+    paths: list[str] = []
+    records = raw.split("\0")
+    i = 0
+    while i < len(records):
+        rec = records[i]
+        i += 1
+        if not rec:
+            continue
+        if len(rec) < 4 or rec[2] != " ":
+            raise ValueError(f"unparseable git status record: {rec!r}")
+        xy, path = rec[:2], rec[3:]
+        paths.append(path)
+        if "R" in xy or "C" in xy:
+            if i < len(records) and records[i]:
+                paths.append(records[i])
+            i += 1
+    return paths
 
 class Guardian:
     def __init__(self, env: str, apply: bool):
@@ -140,10 +184,15 @@ class Guardian:
         repo = Path(self.cfg["repo"])
         if not (repo / ".git").exists():
             self.note("git", "warning", "no git checkout", repo=str(repo)); return
-        rc, dirty, _ = run(["git", "status", "--porcelain"], cwd=repo)
-        if not dirty:
+        rc, dirty, _ = run(["git", "status", "--porcelain", "-z"], cwd=repo, strip=False)
+        if not dirty.strip("\0"):
             self.note("git", "ok", "worktree clean"); return
-        allf = [l[3:] for l in dirty.splitlines()]
+        try:
+            allf = parse_porcelain_z(dirty)
+        except ValueError as exc:
+            self.note("git", "critical", "could not parse git status", detail=str(exc)[:300])
+            self.escalate("unparseable git status - worktree left untouched", repo=str(repo))
+            return
         # Environment files are untracked ON PURPOSE and are the source of a
         # deployed configuration. They are never stashed or archived away.
         protected = [f for f in allf if f.endswith(".env") or "/.env" in f or f.endswith(".env.production")]
@@ -157,11 +206,34 @@ class Guardian:
             # ARCHIVE, never destroy — the operator decides what to do with it.
             arc = STATE / f"dirty-{self.env}-{int(time.time())}.tgz"
             arc.parent.mkdir(parents=True, exist_ok=True)
-            rc, _, err = run(["tar", "-czf", str(arc)] + files, cwd=repo, timeout=300)
+            # Deleted paths and the source side of a rename are dirty but absent
+            # from disk; tar cannot archive them and would abort the whole
+            # archive, so only existing paths are archived.  Every dirty path,
+            # present or not, is still handed to git stash below - the stash is
+            # what actually preserves a deletion.
+            on_disk = [f for f in files if (repo / f).exists()]
+            absent = [f for f in files if f not in on_disk]
+            if absent:
+                self.note("git", "info",
+                          "paths dirty but absent from disk (deleted/renamed) - "
+                          "recorded by stash, not by archive", files=absent[:20])
+            if on_disk:
+                # "--" stops tar from reading a path beginning with '-' as a flag.
+                rc, _, err = run(["tar", "-czf", str(arc), "--"] + on_disk, cwd=repo, timeout=300)
+            else:
+                rc, err = 0, ""
             if rc == 0:
-                # Pathspec is mandatory: a bare `git stash -u` also sweeps untracked
-                # env files, which are a deployed environment's only configuration.
-                rc2, _, err2 = run(["git", "stash", "push", "-u", "-m", f"guardian-{now()}", "--"] + files, cwd=repo)
+                # A bare `git stash -u` also sweeps untracked env files, which are
+                # a deployed environment's only configuration, so the protected
+                # paths are excluded explicitly.  Excluding is used rather than
+                # enumerating the dirty paths because `git stash push` cannot
+                # take the source side of a staged rename as a pathspec
+                # ("did not match any files") and would abort the whole stash.
+                # ":(exclude,literal)" also stops a path containing a glob
+                # character from being read as a pattern.
+                pathspec = ["."] + [f":(exclude,literal){p}" for p in protected]
+                rc2, _, err2 = run(["git", "stash", "push", "-u", "-m", f"guardian-{now()}", "--"]
+                                   + pathspec, cwd=repo)
                 if rc2 == 0:
                     self.did("archived and stashed dirty worktree", archive=str(arc),
                              files=len(files), protected_left_in_place=len(protected))
