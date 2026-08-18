@@ -1211,6 +1211,35 @@ def _renice_browser_tree() -> None:
         logger.debug("could not renice browser tree: %s", exc)
 
 
+def _chromium_launch_kwargs(*, live: bool) -> dict[str, Any]:
+    """Playwright Chromium launch options.
+
+    Replay / data-URL fixtures keep Playwright's bundled Chromium so tests
+    do not need a system browser. Live employer pages use installed Google
+    Chrome when present and drop ``--enable-automation``: Ashby flagged a
+    Dovetail POST from bundled Chromium as possible spam (2026-08-18T18:57Z)
+    and told the applicant to try another browser. Timezone and locale are
+    left at the host default — forcing Melbourne on a non-AU egress IP is
+    itself a VPN fingerprint.
+    """
+    args = ["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"]
+    kwargs: dict[str, Any] = {"headless": True, "args": args}
+    if not live:
+        return kwargs
+    args.append("--disable-blink-features=AutomationControlled")
+    kwargs["ignore_default_args"] = ["--enable-automation"]
+    for binary in ("/usr/bin/google-chrome-stable", "/usr/bin/google-chrome"):
+        if Path(binary).exists():
+            kwargs["channel"] = "chrome"
+            break
+    return kwargs
+
+
+_HIDE_WEBDRIVER_INIT_JS = (
+    "Object.defineProperty(navigator, 'webdriver', { get: () => undefined });"
+)
+
+
 _SUBMIT_TEXT = re.compile(r"\b(submit|send)\b.*\b(application|apply)\b|\bsubmit\b", re.I)
 
 
@@ -3444,8 +3473,9 @@ def playwright_form_submitter(
     try:
         with sync_playwright() as runner:  # noqa: SIM117 — cleanup handled below
             browser = runner.chromium.launch(
-                headless=True,
-                args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
+                **_chromium_launch_kwargs(
+                    live=str(apply_url or "").startswith(("http://", "https://"))
+                )
             )
             _renice_browser_tree()
             try:
@@ -3456,6 +3486,8 @@ def playwright_form_submitter(
                 # module note above _CLOSED_SHADOW_MARKER_INIT_JS.
                 page.add_init_script(_CLOSED_SHADOW_MARKER_INIT_JS)
                 if apply_url:
+                    if str(apply_url).startswith(("http://", "https://")):
+                        page.add_init_script(_HIDE_WEBDRIVER_INIT_JS)
                     page.goto(apply_url, wait_until="domcontentloaded", timeout=45000)
                     wait_for_application_form(page, live=True)
                 else:
@@ -3785,13 +3817,11 @@ def fetch_apply_page(apply_url: str) -> str:
         ) from exc
     try:
         with sync_playwright() as runner:
-            browser = runner.chromium.launch(
-                headless=True,
-                args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
-            )
+            browser = runner.chromium.launch(**_chromium_launch_kwargs(live=True))
             _renice_browser_tree()
             try:
                 page = browser.new_page(viewport={"width": 1280, "height": 1600})
+                page.add_init_script(_HIDE_WEBDRIVER_INIT_JS)
                 page.goto(apply_url, wait_until="domcontentloaded", timeout=45000)
                 wait_for_application_form(page, live=True)
                 return str(page.content())

@@ -360,3 +360,27 @@ def test_ashby_autofill_chrome_does_not_block_census(open_page) -> None:
 
     page = open_page(_ASHBY_AUTOFILL_AND_RESUME)
     _verify_no_unverifiable_form_surface(page, "ashby")
+
+
+def test_live_chromium_launch_hides_the_automation_switch() -> None:
+    """Ashby flagged the Dovetail POST as spam (2026-08-18T18:57Z) from
+    Playwright's bundled Chromium with ``--enable-automation``. Live applies
+    use installed Chrome when present and drop that flag. Replay fixtures
+    stay on bundled Chromium so data-URL tests do not need a system browser.
+    """
+    from pathlib import Path
+
+    from app.services.apply_executor import _chromium_launch_kwargs
+
+    live = _chromium_launch_kwargs(live=True)
+    replay = _chromium_launch_kwargs(live=False)
+    assert "--disable-blink-features=AutomationControlled" in live["args"]
+    assert live.get("ignore_default_args") == ["--enable-automation"]
+    chrome = Path("/usr/bin/google-chrome-stable")
+    if not chrome.exists():
+        chrome = Path("/usr/bin/google-chrome")
+    if chrome.exists():
+        assert live.get("channel") == "chrome"
+    assert "channel" not in replay
+    assert "ignore_default_args" not in replay
+    assert "--disable-blink-features=AutomationControlled" not in replay["args"]

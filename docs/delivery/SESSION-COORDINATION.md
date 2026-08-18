@@ -1327,6 +1327,12 @@ only. Held Databricks/Xero rows stay held.
 vitest race as the prior catalog-pricing flake. Hardening that waitFor so
 deploy can proceed; not a production UI change.
 
+**Continuation 2026-08-18T18:57Z:** Dovetail live apply filled the Ashby form
+and Submit was pressed. Ashby responded `form_rejected` / possible spam.
+Confirmation screenshot saved. Egress is Hostinger Boston (`187.77.12.13`);
+candidate is Melbourne. Next: live Chrome channel without `--enable-automation`,
+then one retry of this same application only.
+
 ---
 
 ## SESSION IC-VISIBLE — 2026-08-18T18:25Z — Interview Center empty / wrong employer
