@@ -50,6 +50,12 @@ export type TimelineGlBuildOpts = {
   laneH: number;
   hoverId: string | null;
   hoverAppId: string | null;
+  /**
+   * Minimum lane-track width, mirroring the DOM lane's flex `min-width`. The
+   * DOM track never shrinks below this, so the GL basis must not either — or
+   * auras and ribbons drift off the interactive dots on narrow viewports.
+   */
+  trackMinW?: number;
 };
 
 function laneAccent(status: string): string {
@@ -70,7 +76,7 @@ export function buildTimelineGlGeometry(
     return { nodes: [], edges: [], rails: [] };
   }
 
-  const trackW = Math.max(opts.width - opts.labelW, 1);
+  const trackW = Math.max(opts.width - opts.labelW, opts.trackMinW ?? 1);
   const usable = Math.max(trackW - opts.padX * 2, 1);
   const nodes: TimelineGlNode[] = [];
   const edges: TimelineGlEdge[] = [];

@@ -125,6 +125,16 @@ export default function ApplicationTimelineGL({
   rails: TimelineGlRail[];
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
+  // The WebGL context lives on its own lifecycle (resize only), so a hover —
+  // which changes `nodes`/`edges`/`rails` — rebuilds the scene meshes without
+  // ever destroying and recreating the GPU context. Recreating it on every
+  // mouse enter/leave flickered and exhausted the browser's context cap during
+  // scrubbing; the sibling OrchestrationMapGL keeps its context alive the same
+  // way and only tears it down for a genuine resize.
+  const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
+  const sceneRef = useRef<THREE.Scene | null>(null);
+  const cameraRef = useRef<THREE.OrthographicCamera | null>(null);
+  const glowRef = useRef<THREE.Texture | null>(null);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -141,7 +151,6 @@ export default function ApplicationTimelineGL({
       return;
     }
 
-    const disposables: Array<{ dispose: () => void }> = [];
     const scene = new THREE.Scene();
     const camera = new THREE.OrthographicCamera(0, width, 0, height, -100, 100);
     camera.position.z = 10;
@@ -163,7 +172,47 @@ export default function ApplicationTimelineGL({
     host.appendChild(canvas);
 
     const glow = makeGlowTexture();
-    disposables.push(glow);
+
+    rendererRef.current = renderer;
+    sceneRef.current = scene;
+    cameraRef.current = camera;
+    glowRef.current = glow;
+
+    return () => {
+      glow.dispose();
+      scene.clear();
+      renderer.dispose();
+      // Release the GPU context immediately — browsers cap simultaneous WebGL
+      // contexts and this component remounts on every resize.
+      renderer.forceContextLoss();
+      if (canvas.parentNode === host) host.removeChild(canvas);
+      rendererRef.current = null;
+      sceneRef.current = null;
+      cameraRef.current = null;
+      glowRef.current = null;
+    };
+  }, [width, height]);
+
+  useEffect(() => {
+    const host = hostRef.current;
+    const renderer = rendererRef.current;
+    const scene = sceneRef.current;
+    const camera = cameraRef.current;
+    const glow = glowRef.current;
+    if (
+      !host ||
+      !renderer ||
+      !scene ||
+      !camera ||
+      !glow ||
+      width <= 0 ||
+      height <= 0
+    ) {
+      return;
+    }
+
+    const disposables: Array<{ dispose: () => void }> = [];
+    const objects: THREE.Object3D[] = [];
 
     {
       const geo = new THREE.PlaneGeometry(
@@ -181,6 +230,7 @@ export default function ApplicationTimelineGL({
       const wash = new THREE.Mesh(geo, mat);
       wash.position.set(width / 2, height / 2, -2);
       scene.add(wash);
+      objects.push(wash);
     }
 
     for (const rail of rails) {
@@ -197,6 +247,7 @@ export default function ApplicationTimelineGL({
       const mesh = new THREE.Mesh(geo, mat);
       mesh.position.set((rail.x0 + rail.x1) / 2, rail.y, -1);
       scene.add(mesh);
+      objects.push(mesh);
     }
 
     for (const edge of edges) {
@@ -223,6 +274,7 @@ export default function ApplicationTimelineGL({
       );
       for (const mesh of [halo, core]) {
         scene.add(mesh);
+        objects.push(mesh);
         disposables.push(mesh.geometry, mesh.material as THREE.Material);
       }
     }
@@ -247,6 +299,7 @@ export default function ApplicationTimelineGL({
       const scale = node.highlighted ? 48 : node.genesis ? 20 : 28;
       sprite.scale.set(scale, scale, 1);
       scene.add(sprite);
+      objects.push(sprite);
       auras.push({
         sprite,
         base: material.opacity,
@@ -267,6 +320,7 @@ export default function ApplicationTimelineGL({
         ring.position.set(node.x, node.y, 1);
         ring.scale.set(64, 64, 1);
         scene.add(ring);
+        objects.push(ring);
         auras.push({ sprite: ring, base: 0.28, highlighted: true });
       }
     }
@@ -331,11 +385,8 @@ export default function ApplicationTimelineGL({
       stop();
       document.removeEventListener("visibilitychange", onVisibility);
       io?.disconnect();
+      for (const o of objects) scene.remove(o);
       for (const d of disposables) d.dispose();
-      scene.clear();
-      renderer.dispose();
-      renderer.forceContextLoss();
-      if (canvas.parentNode === host) host.removeChild(canvas);
     };
   }, [width, height, nodes, edges, rails]);
 

@@ -29,6 +29,10 @@ const ApplicationTimelineGL = dynamic(() => import("./ApplicationTimelineGL"), {
 const LANE_H = 80;
 const LABEL_W = 220;
 const PAD_X = 28;
+// The DOM lane track is a flex column that never shrinks below this width.
+// GL geometry must share the same floor so its overlay stays aligned with the
+// interactive dots when the timeline is narrower than label + track.
+const LANE_TRACK_MIN = 560;
 const VIEWPORT_H = "min(calc(100dvh - 300px), 1120px)";
 
 const LEGEND: Array<{ key: keyof typeof STATUS_NODE_COLOR; label: string }> = [
@@ -106,6 +110,7 @@ export default function ApplicationTimeline({
         laneH: LANE_H,
         hoverId,
         hoverAppId,
+        trackMinW: LANE_TRACK_MIN,
       }),
     [model, glSize.w, hoverId, hoverAppId],
   );
@@ -174,24 +179,34 @@ export default function ApplicationTimeline({
     startInertia();
   }, [startInertia]);
 
-  const onKeyDownScroller = useCallback((e: React.KeyboardEvent) => {
-    if (e.key === "ArrowLeft") {
-      e.preventDefault();
-      setPanX((x) => x + 64);
-    } else if (e.key === "ArrowRight") {
-      e.preventDefault();
-      setPanX((x) => x - 64);
-    } else if (e.key === "Home") {
-      e.preventDefault();
-      setPanX(0);
-    }
-  }, []);
+  const onKeyDownScroller = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        stopInertia();
+        setPanX((x) => x + 64);
+      } else if (e.key === "ArrowRight") {
+        e.preventDefault();
+        stopInertia();
+        setPanX((x) => x - 64);
+      } else if (e.key === "Home") {
+        e.preventDefault();
+        stopInertia();
+        setPanX(0);
+      }
+    },
+    [stopInertia],
+  );
 
-  const onWheel = useCallback((e: React.WheelEvent) => {
-    if (!e.shiftKey) return;
-    e.preventDefault();
-    setPanX((x) => x - e.deltaY);
-  }, []);
+  const onWheel = useCallback(
+    (e: React.WheelEvent) => {
+      if (!e.shiftKey) return;
+      e.preventDefault();
+      stopInertia();
+      setPanX((x) => x - e.deltaY);
+    },
+    [stopInertia],
+  );
 
   return (
     <section
@@ -370,7 +385,7 @@ export default function ApplicationTimeline({
                     ) : null}
                   </div>
 
-                  <div className="relative flex-1" style={{ minWidth: 560 }}>
+                  <div className="relative flex-1" style={{ minWidth: LANE_TRACK_MIN }}>
                     <div
                       aria-hidden="true"
                       className="absolute left-7 right-7 top-1/2 h-px -translate-y-1/2 bg-white/[0.08]"
