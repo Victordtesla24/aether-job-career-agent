@@ -1325,29 +1325,36 @@ def get_settings(current_user: CurrentUser) -> dict[str, Any]:
     portfolio_row = CareerProfileRepository().get(uid, "portfolio")
     result = _build_settings(user, resume, base_resume, portfolio_row)
     result["resume"]["versions"] = version_count
-    # I4-FE-03: whether a source counts as "connected" is a backend fact —
-    # a source with historical Job rows (e.g. discovered before a compliance
-    # gate was added) must not be shown as active once that gate excludes it
-    # from the live registry. ``build_live_registry()`` re-reads the gate's
-    # env flag (AETHER_ENABLE_SEEK) on every call, so this stays correct
-    # both when the gate is off (default) and if it is ever enabled — no
-    # source name is hardcoded here.
-    from app.services.discovery.adapter_registry import build_live_registry
+    # Job Board Integrations = full adapter catalog for every account (paid
+    # and unpaid), with Job counts overlaid. Live sources are default-on;
+    # compliance-gated / fixture-only sources stay visible and honest.
+    # Inbox alert provenance (seek-alert, …) is never a board row.
+    from app.repositories.job_source_status import JobSourceStatusRepository
+    from app.services.discovery.adapter_registry import (
+        SOURCE_DISPLAY_NAMES,
+        _ALL_ADAPTERS,
+        build_live_registry,
+        source_availability,
+    )
+    from app.services.discovery.settings_integrations import (
+        build_integration_rows,
+        job_counts_from_source_rows,
+        merge_last_sync_from_status,
+    )
 
     live_sources = build_live_registry()
-    result["integrations"] = [
-        {
-            "name": row["source"].capitalize() if row["source"].islower() else row["source"],
-            "status": "connected" if row["source"] in live_sources else "not_configured",
-            "detail": (
-                f"{row['cnt']} jobs discovered · last sync "
-                f"{str(row['last_seen'])[:16]} UTC"
-            )
-            if row["source"] in live_sources
-            else "Not currently active",
-        }
-        for row in source_rows
-    ]
+    job_counts = job_counts_from_source_rows(
+        source_rows,
+        known_sources=frozenset(_ALL_ADAPTERS.keys()),
+    )
+    status_rows = JobSourceStatusRepository().list_by_user(uid)
+    merge_last_sync_from_status(job_counts, status_rows)
+    result["integrations"] = build_integration_rows(
+        availability=source_availability(),
+        live_sources=live_sources,
+        job_counts=job_counts,
+        display_names=SOURCE_DISPLAY_NAMES,
+    )
     # Connected accounts & API keys — the same env-derived truth the Agents
     # screen shows; never a fabricated connection.
     from app.routers.agents import PROVIDER_SEED, _provider_env_state

@@ -59,6 +59,23 @@ _ALL_ADAPTERS: dict[str, type[BaseAdapter]] = {
     IndeedAdapter.source: IndeedAdapter,
 }
 
+#: Human labels for Settings / Jobs UI. Never ``.capitalize()`` a source key
+#: (that yields "Remoteok" / "Smartrecruiters").
+SOURCE_DISPLAY_NAMES: dict[str, str] = {
+    "greenhouse": "Greenhouse",
+    "lever": "Lever",
+    "ashby": "Ashby",
+    "workable": "Workable",
+    "smartrecruiters": "SmartRecruiters",
+    "adzuna": "Adzuna",
+    "remotive": "Remotive",
+    "remoteok": "RemoteOK",
+    "wellfound": "Wellfound",
+    "seek": "Seek",
+    "linkedin": "LinkedIn",
+    "indeed": "Indeed",
+}
+
 #: The live registry, minus every compliance-gated source (Seek by default).
 _COMPLIANT_ADAPTERS: dict[str, type[BaseAdapter]] = {
     source: cls

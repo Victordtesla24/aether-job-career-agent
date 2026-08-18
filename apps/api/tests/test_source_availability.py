@@ -28,8 +28,8 @@ class TestSourceAvailabilityPrimitive:
         from app.services.discovery.adapter_registry import source_availability
 
         rows = {r["source"]: r for r in source_availability()}
-        for src in ("greenhouse", "lever", "ashby", "workable", "adzuna",
-                    "remotive", "remoteok", "wellfound"):
+        for src in ("greenhouse", "lever", "ashby", "workable", "smartrecruiters",
+                    "adzuna", "remotive", "remoteok", "wellfound"):
             assert rows[src]["available"] is True
             assert rows[src]["reason"] is None
 
