@@ -531,3 +531,113 @@ def test_verification_gate_reached_via_real_navigation_resubmit_still_guarded(
     # or any outcome reporting `submitted: True` would both be regressions.
     assert err.reason in ("unplanned_required_field", "unverifiable_form_surface")
     assert err.reason != "no_confirmation"
+
+
+# ---------------------------------------------------------------------------
+# 6. RUN-20260818T0223Z/BATCH-2 apply-stack reconcile, adversarial review
+#    (03-apply-reconcile-review.md, claim 3(d)/4 — the blocking finding): the
+#    fresh _submit_state_probe/SubmitActivation recapture inside
+#    _resolve_verification_gate (fed to classify_post_submit in place of the
+#    pre-first-click snapshot) had ZERO regression coverage. Reverting that
+#    recapture back to the stale pre-first-click probe/activation passed the
+#    entire 161-test required slice while producing a SILENT
+#    submitted:True/classification:'confirmed' outcome for a page whose
+#    confirmation-shaped text was already sitting there before the resubmit,
+#    never newly added by it — the exact SUB-007-honesty-floor bug the
+#    recapture exists to prevent. This test PINS that decision: it must FAIL
+#    on the stale-probe mutation and PASS on the real (fresh-probe) code.
+#
+#    Reached via a REAL top-level navigation (not an innerHTML swap) —
+#    deliberately, per the reviewer's own diagnosis: the stale-probe bug is
+#    INVISIBLE on the same-document (innerHTML-swap) gate shape, because the
+#    pre-first-click probe and the fresh-gate probe are the same page and see
+#    the identical `confirmationText`; only a real navigation to a NEW
+#    document (the P0 shape) makes the two probes diverge.
+# ---------------------------------------------------------------------------
+
+#: Page 2: the gate, reached by a REAL top-level navigation. Its body ALREADY
+#: carries a confirmation-shaped phrase ("Thank you for applying") BEFORE the
+#: resubmit — plausible real ATS copy pairing a thank-you header with a
+#: code-verification step. The resubmit handler adds NO new text at all: it
+#: only disables the button (a genuine "accepted, sending" shape) — so the
+#: only way this could ever read as CONFIRMED is if the classifier compares
+#: the after-state against a probe that never saw this page's own banner,
+#: i.e. exactly the stale pre-first-click probe the fresh-probe recapture
+#: exists to avoid using.
+#: Built by concatenation, not a multi-line triple-quoted block, on purpose:
+#: a literal source newline inside "verification code" survives into
+#: ``page.content()`` (raw HTML, never whitespace-normalised) and silently
+#: breaks ``_VERIFICATION_GATE_TEXT``'s literal-space match — the gate would
+#: never even be detected, and the whole recapture path this test exists to
+#: pin would never run at all, passing for the WRONG reason. (Caught live: an
+#: earlier draft using a triple-quoted string with the phrase wrapped across
+#: a line broke exactly this way — `_detect_verification_gate` returned
+#: False, the verification loop never ran, and the test failed identically
+#: on both the mutated AND the correct tree, which is what surfaced the
+#: fixture bug rather than a real finding.)
+_NAV_GATE_PAGE2_ALREADY_CONFIRMED = (
+    "\n<title>gate-page2-already-confirmed</title>\n"
+    '<p id="banner">Thank you for applying! We just emailed you a '
+    "verification code &mdash; enter it below to finish.</p>\n"
+    '<input id="code" maxlength="8" aria-label="code">\n'
+    '<button id="resubmit-btn" type="submit" onclick="event.preventDefault(); '
+    'this.disabled = true; this.textContent = \'Submitting...\';">'
+    "Submit</button>\n"
+)
+
+
+def test_verification_gate_with_preexisting_confirmation_text_is_never_upgraded(
+    tmp_path, monkeypatch
+) -> None:
+    """RUN-20260818T0223Z/BATCH-2 03-apply-reconcile-review.md claim 3(d):
+    pins the fresh-probe/SubmitActivation recapture inside
+    _resolve_verification_gate against the exact live attack the reviewer
+    proved. Text ALREADY on the gate page before the resubmit — a
+    confirmation-shaped phrase the resubmit's own handler never adds, never
+    changes — must NEVER be read as proof of receipt. The honest outcome is
+    ``submitted_unconfirmed`` (the site accepted the resubmit — the control
+    went from armed to disabled and no `<form>` remains a candidate — but
+    never said anything NEW that counts as a receipt), never
+    `POST_SUBMIT_CONFIRMED` / `submitted: True`.
+
+    If a future refactor reverts the recapture (feeds the STALE
+    pre-first-click probe/activation to classify_post_submit instead), this
+    page's already-present banner reads as brand new relative to that stale
+    snapshot (which never saw this document at all) and the outcome flips to
+    a silent `submitted: True, classification: 'confirmed'` — proven live by
+    the reviewer, reproduced here as a real regression test rather than left
+    as a described-but-unshipped proof.
+    """
+    from app.services.apply_executor import ManualStepRequired, playwright_form_submitter
+
+    monkeypatch.setattr("app.services.gmail_service.GmailService", _FakeGmailService)
+
+    page2_path = tmp_path / "u5d4-nav-page2-already-confirmed.html"
+    page2_path.write_text(_NAV_GATE_PAGE2_ALREADY_CONFIRMED)
+    page2_url = "file://" + str(page2_path)
+    page1_path = tmp_path / "u5d4-nav-page1-already-confirmed.html"
+    page1_path.write_text(_nav_trigger_page1(page2_url))
+    page1_url = "file://" + str(page1_path)
+
+    with pytest.raises(ManualStepRequired) as exc_info:
+        playwright_form_submitter(
+            application_id="u5d4-nav-stale-probe",
+            channel="generic",
+            page_html="",
+            apply_url=page1_url,
+            plan={"fields": [_name_plan_field()]},
+            resume_pdf_bytes=b"%PDF-1.4 fake",
+            cover_letter_text="Dear Hiring Manager,",
+            evidence_dir=str(tmp_path / "evidence"),
+            user_id="u5d4-test-user",
+            company="Acme Corp",
+        )
+    err = exc_info.value
+    # THE decisive assertion: never the guard's own reason (nothing here
+    # reveals a required field — that is a DIFFERENT invariant, pinned by the
+    # test above), and — the actual bar — never silently upgraded to a
+    # confirmed transmission. The correct (fresh-probe) code recognises
+    # "Thank you for applying" as already-seen furniture and reports the
+    # honest middle ground.
+    assert err.reason == "submitted_unconfirmed"
+    assert err.reason not in ("unplanned_required_field", "unverifiable_form_surface")
