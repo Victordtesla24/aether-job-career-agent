@@ -22,3 +22,10 @@ Live at https://5cb5f0620.abacusai.cloud. Deploy only via `docs/delivery/DEPLOYM
 ## Tests
 
 Backend: `scripts/run-tests.sh` (never against the production schema). Frontend: `pnpm --dir apps/web test`. Do not run Playwright against port 3000.
+
+## Non-negotiable constraints
+
+Before writing any code in this repository, read and obey
+`scripts/integrity/NON-NEGOTIABLE-CONSTRAINTS.md`. They are enforced by a
+pre-commit hook, a blocking CI gate, and a systemd start-up guard. Bypassing an
+enforcement point (e.g. `git commit --no-verify`) is itself a violation.

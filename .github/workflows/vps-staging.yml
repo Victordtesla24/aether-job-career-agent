@@ -30,6 +30,11 @@ jobs:
           corepack prepare pnpm@11.9.0 --activate
           echo "node $(node -v) | pnpm $(pnpm -v)"
 
+      - name: Integrity guard (blocking)
+        run: |
+          python3 scripts/integrity/integrity_guard.py
+          scripts/integrity/runtime_env_guard.sh /root/dev/aether-job-career-agent/.env
+
       - name: Install workspace
         run: pnpm install --frozen-lockfile
 

@@ -30,3 +30,10 @@ Carve-outs: candidate→employer application email and the printed résumé/cove
 - Session claims: `docs/delivery/SESSION-COORDINATION.md`
 - Pytest: `scripts/run-tests.sh` only. Never `source .env` then pytest.
 - Do not restart systemd units without a claimed deploy window. Foreign WIP in this tree must not ship.
+
+## Non-negotiable constraints
+
+Before writing any code in this repository, read and obey
+`scripts/integrity/NON-NEGOTIABLE-CONSTRAINTS.md`. They are enforced by a
+pre-commit hook, a blocking CI gate, and a systemd start-up guard. Bypassing an
+enforcement point (e.g. `git commit --no-verify`) is itself a violation.

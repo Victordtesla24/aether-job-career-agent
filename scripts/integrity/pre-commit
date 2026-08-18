@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Blocks a commit that introduces an integrity violation.
+set -uo pipefail
+REPO=$(git rev-parse --show-toplevel)
+python3 "$REPO/scripts/integrity/integrity_guard.py" || {
+  echo ""
+  echo "COMMIT BLOCKED by the integrity guard."
+  echo "Fix the violations, or add a justified waiver to scripts/integrity/waivers.txt."
+  echo "Bypassing with --no-verify is itself a policy violation."
+  exit 1
+}
