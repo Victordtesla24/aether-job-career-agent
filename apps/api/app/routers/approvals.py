@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
@@ -689,3 +690,193 @@ def _execute_email_send(
         "type": approval["type"],
         "gmailMessageId": sent.get("id"),
     }
+
+
+# ---------------------------------------------------------------------------
+# FEAT-EMAIL-BRAND phase 2 (RUN-20260818T0223Z) — strictly-scoped auto-send.
+#
+# Owner directive (verbatim intent): "sending automated email about my daily
+# job application summary on behalf of Aether Career Agent Web-App". The
+# runbook invariant this relaxes is that EVERY outbound email sits behind a
+# human's own Approve + Execute click; the relaxation is scoped to exactly
+# one case — see :func:`auto_execute_notification_digest` — and full
+# rationale/reversal-cost is recorded in
+# docs/delivery/evidence/RUN-20260818T0223Z/05-decision-memos/
+# FEAT-EMAIL-BRAND-autosend.md.
+# ---------------------------------------------------------------------------
+
+#: Env values (case-insensitive) that DISABLE the digest auto-send. Code
+#: default ON (the Owner directive is to make the digest arrive without a
+#: manual click); an operator sets this to fall back to the pre-directive
+#: pending-only behaviour without a redeploy.
+_DIGEST_AUTO_SEND_OFF = frozenset({"false", "0", "no", "off"})
+
+
+def digest_auto_send_enabled() -> bool:
+    """Kill-switch: ``AETHER_DIGEST_AUTO_SEND`` (default TRUE). Read fresh on
+    every call — same convention as every other feature flag in this
+    codebase (``subscription_gate_enabled``, ``sweep_enabled``, ...)."""
+    return os.environ.get(
+        "AETHER_DIGEST_AUTO_SEND", "true"
+    ).strip().lower() not in _DIGEST_AUTO_SEND_OFF
+
+
+def _self_mail_recipient(user_id: str, to: str) -> bool:
+    """Whether ``to`` PROVABLY belongs to ``user_id`` — matches (case-
+    insensitively) one of this user's OWN, currently-connected, OAuth-
+    verified Gmail addresses.
+
+    This is the strongest identity proof this product has: ``User.email`` is
+    a self-reported registration string with no verification flow anywhere in
+    this codebase (grepped for ``emailVerified``/``email_verified`` — neither
+    exists), whereas a ``GmailAccount`` row exists only because Google's own
+    OAuth consent screen already proved the user controls that mailbox. It is
+    also, by construction, exactly where the digest's ``to`` comes from
+    (``NotificationAgent.run`` -> ``GmailAccountRepository.public_view``), so
+    this RE-VERIFIES that fact at send time rather than trusting a payload
+    written whenever the approval was queued — the account may have been
+    disconnected, or a different one connected, since then.
+    """
+    target = (to or "").strip().lower()
+    if not target:
+        return False
+    from app.repositories.gmail_account import GmailAccountRepository
+
+    accounts = GmailAccountRepository().list_accounts(user_id)
+    return any(
+        (account.get("accountEmail") or "").strip().lower() == target
+        for account in accounts
+    )
+
+
+def auto_execute_notification_digest(
+    approval_id: str, user_id: str
+) -> dict[str, Any] | None:
+    """Owner-directive auto-send: automatically approve + execute a JUST-
+    QUEUED ``notification_digest`` email — but ONLY when every one of these
+    holds, checked fresh at send time:
+
+    * the kill-switch :func:`digest_auto_send_enabled` is on;
+    * the approval is genuinely ``type == "email_send"`` AND
+      ``payload["kind"] == "notification_digest"`` — enforced HERE, not just
+      trusted from the caller, so this function can never be made to
+      auto-send anything else no matter how it is invoked;
+    * the recipient PROVABLY belongs to this same user
+      (:func:`_self_mail_recipient`).
+
+    Any other case leaves the approval EXACTLY as it was before this
+    existed — PENDING, with an honest log line — never partially actioned,
+    never widened beyond this one case.
+
+    Reuses :func:`_execute_email_send` VERBATIM — the same function
+    ``POST /approvals/{id}/execute`` calls for a manual send — so there is no
+    second send path: the branded HTML (``email_branding.
+    build_notification_digest_bodies``) is byte-identical to a human clicking
+    Approve then Execute. The approve half reuses :class:`ApprovalService`
+    (the same state machine ``POST /approvals/{id}/approve`` drives); the
+    execute half reuses :class:`ApprovalRepository`'s claim/complete/release
+    trio (the same at-most-once guard the manual execute route uses), so a
+    crash mid-send leaves the row in the identical honest "approved,
+    unexecuted, retryable" state a killed manual execute would.
+
+    An additive JSONB marker (``payload.autoExecutedBy`` /
+    ``payload.autoExecutedAt``) is merged onto the row before approving —
+    mirroring ``_merge_decision_context``'s existing merge idiom — so the
+    attribution is readable on the row itself, independent of the
+    ``AdminAuditLog`` rows this also writes. No schema change: the existing
+    JSONB ``payload`` column already supports arbitrary additive keys.
+
+    Returns the send result dict on a genuine auto-send, or ``None`` on any
+    honest non-eligible outcome. Never raises for an ineligible case — a
+    background cron calling this for many users must not die because one
+    digest did not qualify.
+    """
+    if not digest_auto_send_enabled():
+        logger.info(
+            "digest auto-send %s: disabled (AETHER_DIGEST_AUTO_SEND=false) — "
+            "left pending for manual approval", approval_id,
+        )
+        return None
+    repo = ApprovalRepository()
+    approval = repo.get_by_id(approval_id, user_id)
+    if approval is None:
+        logger.warning("digest auto-send %s: approval not found", approval_id)
+        return None
+    payload = ApprovalRepository._payload_dict(approval)
+    if approval.get("type") != "email_send" or payload.get("kind") != "notification_digest":
+        logger.warning(
+            "digest auto-send %s: refused — not a notification_digest "
+            "email_send approval (type=%s kind=%s); left pending",
+            approval_id, approval.get("type"), payload.get("kind"),
+        )
+        return None
+    to = str(payload.get("to") or "")
+    if not _self_mail_recipient(user_id, to):
+        logger.info(
+            "digest auto-send %s: left pending — recipient does not provably "
+            "belong to user %s (self-mail check failed)",
+            approval_id, user_id,
+        )
+        return None
+
+    from datetime import datetime, timezone
+
+    marker = json.dumps(
+        {
+            "autoExecutedBy": "digest_cron",
+            "autoExecutedAt": datetime.now(timezone.utc).isoformat(),
+        }
+    )
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'UPDATE "ApprovalRequest" SET "payload" = "payload" || %s::jsonb '
+                'WHERE "id" = %s AND "userId" = %s '
+                'AND "status" = \'pending\'::"ApprovalStatus"',
+                (marker, approval_id, user_id),
+            )
+        conn.commit()
+
+    try:
+        resolved = ApprovalService(repo).resolve(approval_id, user_id, "approved")
+    except HTTPException as exc:
+        logger.info(
+            "digest auto-send %s: could not auto-approve (%s) — left as-is",
+            approval_id, exc.detail,
+        )
+        return None
+    write_audit(
+        user_id, "approval.auto_approve", target_type="approval",
+        target_id=approval_id,
+        detail={
+            "decision": "approved", "kind": "notification_digest",
+            "actor": "digest_cron",
+        },
+    )
+
+    if not repo.claim_execution(approval_id, user_id):
+        logger.warning(
+            "digest auto-send %s: could not claim execution (already claimed?)",
+            approval_id,
+        )
+        return None
+    try:
+        sent = _execute_email_send(resolved, {"id": user_id})
+    except Exception:
+        repo.release_execution(approval_id, user_id)
+        logger.exception(
+            "digest auto-send %s: send failed — claim released, approval "
+            "stays approved and retryable", approval_id,
+        )
+        return None
+    repo.complete_execution(approval_id, user_id)
+    write_audit(
+        user_id, "approval.auto_execute", target_type="approval",
+        target_id=approval_id,
+        detail={
+            "kind": "notification_digest", "actor": "digest_cron",
+            "gmailMessageId": sent.get("gmailMessageId"),
+        },
+    )
+    logger.info("digest auto-send %s: sent to %s", approval_id, to)
+    return sent
