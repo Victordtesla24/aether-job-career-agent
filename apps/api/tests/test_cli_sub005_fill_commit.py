@@ -969,14 +969,178 @@ def test_live_submitter_converges_and_submits_when_gate_refill_reveal_is_answera
     assert "explain" in outcome["unplannedFilled"]
 
 
+# ---------------------------------------------------------------------------
+# 9. CLI-SUB-005-R4 (adversarial re-review FAIL,
+#    RUN-20260818T0223Z/SUB-005-R3/08-adversarial-rereview.md, finding #1):
+#    R3's ledger only tracked a required field's NAME being new, or a
+#    PLANNED field's OWN frozen `required` flag going uncommitted — neither
+#    signal notices an already-known, already-OPTIONAL field turning
+#    required LIVE (no new node, same name, same plan entry, just a
+#    live DOM mutation the ledger never re-checks). Reproduced live against
+#    the unmodified R3 code: submitted:true, unplannedFilled:[] over a
+#    required 'explain' field that was already in the plan as optional and
+#    unanswered, and was never attempted, never verified, never raised as a
+#    manual step once it turned required.
+#
+#    Ported here from the reviewer's own
+#    adversarial/attack2_required_toggle_escapes_ledger.py (same HTML, same
+#    plan — 'explain' pre-seeded as an OPTIONAL, unanswered planned field,
+#    exactly what build_form_fill_plan would have produced for it in the
+#    original static snapshot) — this is that attack script's scenario,
+#    captured as a permanent regression test.
+# ---------------------------------------------------------------------------
+
+_REQUIRED_TOGGLE_ESCAPES_LEDGER_FORM = """
+<title>required-toggle-ledger-escape</title>
+<form onsubmit="event.preventDefault();
+    if (document.getElementById('name').value === 'JordanBlake' &&
+        document.getElementById('sponsor').value === 'Yes') {
+      document.body.innerHTML = '<h1>Thank you for applying</h1>';
+    } else {
+      document.getElementById('err').textContent = 'Missing required field';
+    }">
+  <label for="name">Name*</label><input id="name" type="text">
+  <label for="sponsor">Sponsorship required?*</label>
+  <select id="sponsor" onchange="onSponsorChange()">
+    <option value="">--</option>
+    <option value="Yes">Yes</option>
+    <option value="No">No</option>
+  </select>
+  <label id="explain_label" for="explain">Explain</label>
+  <input id="explain" type="text">
+  <button type="submit">Submit Application</button>
+</form>
+<div id="err"></div>
+<script>
+  function onSponsorChange() {
+    var el = document.getElementById('explain');
+    var lbl = document.getElementById('explain_label');
+    if (document.getElementById('sponsor').value === 'Yes') {
+      // aria-required (not the native `required` attribute) -- exactly
+      // what a React-driven ATS form uses for a custom-validated field, and
+      // deliberately does NOT trigger the browser's native constraint
+      // validation, so this isolates the app-level convergence logic
+      // instead of being caught by an unrelated browser backstop.
+      el.setAttribute('aria-required', 'true');
+      lbl.textContent = 'Explain*';
+    } else {
+      el.removeAttribute('aria-required');
+      lbl.textContent = 'Explain';
+    }
+  }
+</script>
+"""
+
+
+def _required_toggle_plan() -> dict[str, Any]:
+    # 'explain' is present in the DOM from page load, NOT required, and was
+    # already scanned into the plan (value=None, required=False) -- exactly
+    # what build_form_fill_plan would have produced for an optional,
+    # unanswered field it saw in the static snapshot. It is therefore
+    # already a KNOWN planned field before _converge_presubmit_state ever
+    # runs -- the precise precondition the R3 ledger was blind to.
+    return {
+        "fields": [
+            {"name": "name", "label": "Name", "kind": "text", "required": True,
+             "scope": "", "value": "JordanBlake", "options": []},
+            {"name": "sponsor", "label": "Sponsorship required?", "kind": "select",
+             "required": True, "scope": "", "value": "Yes", "options": ["Yes", "No"]},
+            {"name": "explain", "label": "Explain", "kind": "text",
+             "required": False, "scope": "", "value": None, "options": []},
+        ]
+    }
+
+
+def test_live_submitter_never_submits_over_a_known_field_that_turns_required_live(
+    tmp_path,
+) -> None:
+    """THE R3->R4 ADVERSARIAL-REVIEW BREAK, ported exactly from
+    adversarial/attack2_required_toggle_escapes_ledger.py: an already-KNOWN,
+    already-OPTIONAL planned field ('explain') turns required live via a
+    sibling field's onchange, and nothing unanswerable may ever cross the
+    submit boundary. On the unfixed R3 branch this raised nothing and
+    returned submitted:true, unplannedFilled:[] -- this is that exact break,
+    captured as a permanent regression test."""
+    from app.services.apply_executor import playwright_form_submitter
+
+    with pytest.raises(ManualStepRequired) as exc_info:
+        playwright_form_submitter(
+            application_id="sub005r4-toggleescape",
+            channel="generic",
+            page_html="",
+            apply_url=_data_url(_REQUIRED_TOGGLE_ESCAPES_LEDGER_FORM),
+            plan=_required_toggle_plan(),
+            resume_pdf_bytes=b"%PDF-1.4 fake",
+            cover_letter_text="Dear Hiring Manager,",
+            evidence_dir=str(tmp_path),
+            profile={},  # no stored answer for "Explain" — must not be guessed
+            answer_bank=None,
+        )
+    err = exc_info.value
+    assert err.reason == "unplanned_required_field"
+    assert err.question is not None and "Explain" in err.question
+
+
+def test_live_submitter_converges_and_submits_when_the_toggled_field_is_answerable(
+    tmp_path,
+) -> None:
+    """Guard against over-refusal: the SAME toggled-required 'explain'
+    field, when it CAN be answered (here: the answer bank), is filled,
+    verified, and the submission proceeds — proving the total-re-derivation
+    loop resolves a known-but-now-required field exactly like any other
+    newly discovered one, instead of either submitting blind or refusing a
+    legitimately answerable form."""
+    from app.services.answer_bank import (
+        PROVENANCE_USER_ANSWERED,
+        SENSITIVITY_FACTUAL,
+        AnswerBankMatch,
+    )
+    from app.services.apply_executor import playwright_form_submitter
+
+    match = AnswerBankMatch(
+        item_id="bank-item-3",
+        answer="Sponsorship not required",
+        confidence=0.95,
+        method="test",
+        question_as_seen="Explain",
+        banked_question="Explain",
+        sensitivity=SENSITIVITY_FACTUAL,
+        provenance=PROVENANCE_USER_ANSWERED,
+        per_application=False,
+    )
+
+    def answer_bank(field: dict[str, Any]) -> Any:
+        return match if field["name"] == "explain" else None
+
+    outcome = playwright_form_submitter(
+        application_id="sub005r4-toggleescape-answered",
+        channel="generic",
+        page_html="",
+        apply_url=_data_url(_REQUIRED_TOGGLE_ESCAPES_LEDGER_FORM),
+        plan=_required_toggle_plan(),
+        resume_pdf_bytes=b"%PDF-1.4 fake",
+        cover_letter_text="Dear Hiring Manager,",
+        evidence_dir=str(tmp_path),
+        profile={},
+        answer_bank=answer_bank,
+    )
+    assert outcome["submitted"] is True
+    assert outcome["confirmation"] and "thank you" in str(outcome["confirmation"]).lower()
+    assert "explain" in outcome["filled"]
+    assert "explain" in outcome["unplannedFilled"]
+
+
 def test_converge_presubmit_state_bounds_an_endlessly_revealing_form() -> None:
-    """The merged rescan+gate fixed-point loop (CLI-SUB-005-R3) terminates
-    HONESTLY, not by looping forever: a synthetic DOM that reveals one more
-    answerable required field every single pass can never reach a
-    nothing-changed iteration, so the only thing that can stop it is the
-    convergence-pass bound itself — mirroring
+    """The fixed-point loop terminates HONESTLY, not by looping forever: a
+    synthetic DOM that reveals one more answerable required field every
+    single pass can never reach a nothing-changed iteration, so the only
+    thing that can stop it is the resolving-pass bound itself — mirroring
     test_resolve_unplanned_required_fields_bounds_an_endlessly_revealing_form
-    for the new merged loop."""
+    for the merged loop. Imports :data:`_MAX_CONVERGENCE_PASSES` directly
+    rather than hard-coding it, so this ALSO proves CLI-SUB-005-R4's raised
+    bound (4 -> 6, RUN-20260818T0223Z/SUB-005-R3/08-adversarial-rereview.md)
+    is still a genuine, enforced cap — an unbounded/adversarial form is
+    refused honestly at the new bound too, never accepted."""
     from app.services.apply_executor import (
         _MAX_CONVERGENCE_PASSES,
         ManualStepRequired,
@@ -1014,28 +1178,14 @@ def test_converge_presubmit_state_bounds_an_endlessly_revealing_form() -> None:
     )
 
 
-def test_converge_presubmit_state_accepts_a_chain_that_terminates_exactly_at_the_bound() -> None:
-    """CLI-SUB-005-R2 secondary finding (08-adversarial-review-premerge.md
-    section 3): a legitimately-terminating conditional chain that needs every
-    discovery pass the OLD _MAX_RESCAN_PASSES (3) bound allowed must NOT be
-    refused just because it took that many passes to resolve — the old
-    _resolve_unplanned_required_fields raised unconditionally once its pass
-    budget ran out, even when the chain had just finished. Reproduced by the
-    reviewer's own adversarial/attack_offbyone.py against a 3-deep chain.
-    _MAX_CONVERGENCE_PASSES (4) is deliberately one pass larger than that for
-    exactly this reason: pass 4 exists ONLY to let a 3-deep chain prove it
-    ended, and this pins that it actually does."""
-    from app.services.apply_executor import (
-        _MAX_CONVERGENCE_PASSES,
-        _converge_presubmit_state,
-    )
+def _run_terminating_chain(total_fields: int) -> tuple[list[str], int]:
+    """Drive :func:`_converge_presubmit_state` against a synthetic DOM that
+    reveals exactly ``total_fields`` required fields, one newly-discoverable
+    field per ``page.content()`` call, then STOPS growing. Returns
+    ``(resolved_names, schema_call_count)``."""
+    from app.services.apply_executor import _converge_presubmit_state
 
-    # Reveals exactly 3 fields total (one per discovery pass — the same
-    # depth the old _MAX_RESCAN_PASSES bound allowed), then STOPS growing —
-    # the 4th (confirming) pass must see the chain has ended and accept it,
-    # not refuse it.
     calls = {"n": 0}
-    total_fields = 3
 
     def terminating_html() -> str:
         calls["n"] += 1
@@ -1060,10 +1210,56 @@ def test_converge_presubmit_state_accepts_a_chain_that_terminates_exactly_at_the
     resolved = _converge_presubmit_state(
         page, "generic", [], {}, profile=profile, answer_bank=None,
     )
-    assert set(resolved) == {"field_0", "field_1", "field_2"}
-    # The chain needed the pass budget the old bound allowed (3 discovery
-    # passes, one per field) plus the one confirming in-loop pass that
-    # proves it ended (== _MAX_CONVERGENCE_PASSES total loop passes), plus
-    # exactly ONE further read-only rescan from the final verification step
-    # that always runs once the loop converges — never more than that.
-    assert calls["n"] == total_fields + 1 + 1 == _MAX_CONVERGENCE_PASSES + 1
+    return resolved, calls["n"]
+
+
+def test_converge_presubmit_state_accepts_a_depth_four_chain() -> None:
+    """CLI-SUB-005-R4 (adversarial re-review FAIL,
+    RUN-20260818T0223Z/SUB-005-R3/08-adversarial-rereview.md, finding #2): a
+    4-deep legitimately-terminating chain was WRONGLY REFUSED on R3, because
+    R3's bound (also 4) counted the confirming "did anything change?" pass
+    INSIDE the same budget as the resolving passes, leaving no room for the
+    pass that proves a 4-deep chain is actually finished — the R2 off-by-one,
+    reproduced one bound deeper instead of eliminated
+    (``adversarial/attack4b_depth_sweep.py``: depth=4 REFUSED on R3). R4's
+    decoupled loop (the confirming re-derivation is never counted against the
+    resolving-pass bound) must accept this exact depth."""
+    resolved, calls = _run_terminating_chain(4)
+    assert set(resolved) == {"field_0", "field_1", "field_2", "field_3"}
+    # 4 resolving passes (one field discovered per pass) + exactly ONE free,
+    # uncounted confirming pass that sees the chain has stopped growing.
+    assert calls == 5
+
+
+def test_converge_presubmit_state_accepts_a_chain_that_terminates_exactly_at_the_bound() -> None:
+    """A legitimately-terminating conditional chain that needs every
+    resolving pass :data:`_MAX_CONVERGENCE_PASSES` (6, post-R4) allows must
+    NOT be refused just because it took that many passes to resolve — this is
+    the R4 bound's own version of the R2 off-by-one class
+    (08-adversarial-review-premerge.md section 3; re-broken one bound deeper
+    by R3, per RUN-20260818T0223Z/SUB-005-R3/08-adversarial-rereview.md
+    finding #2). R4's loop structure decouples resolving passes from the
+    confirming pass entirely (see :func:`_converge_presubmit_state`), so
+    raising the bound is no longer the only thing standing between a valid
+    depth-N chain and an off-by-one refusal — this pins that a chain exactly
+    as deep as the bound itself still converges cleanly."""
+    from app.services.apply_executor import _MAX_CONVERGENCE_PASSES
+
+    resolved, calls = _run_terminating_chain(_MAX_CONVERGENCE_PASSES)
+    assert set(resolved) == {f"field_{i}" for i in range(_MAX_CONVERGENCE_PASSES)}
+    # _MAX_CONVERGENCE_PASSES resolving passes (one field discovered per
+    # pass) + exactly ONE free, uncounted confirming pass — never refused for
+    # simply needing the full resolving budget.
+    assert calls == _MAX_CONVERGENCE_PASSES + 1
+
+
+def test_converge_presubmit_state_refuses_a_chain_one_deeper_than_the_bound() -> None:
+    """The bound is still a REAL bound after R4's decoupling — a chain one
+    resolving pass deeper than :data:`_MAX_CONVERGENCE_PASSES` can allow must
+    still be refused honestly, never accepted by an off-by-one in the OTHER
+    direction."""
+    from app.services.apply_executor import _MAX_CONVERGENCE_PASSES
+
+    with pytest.raises(ManualStepRequired) as exc_info:
+        _run_terminating_chain(_MAX_CONVERGENCE_PASSES + 1)
+    assert exc_info.value.reason == "unplanned_required_field"

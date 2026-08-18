@@ -1025,17 +1025,21 @@ _COMBOBOX_POPUP_POLLS = 10  # x 250ms — bounded wait for an async popup
 # not another loop iteration.
 _MAX_RESCAN_PASSES = 3
 
-# CLI-SUB-005-R3 (adversarial review FAIL,
-# RUN-20260818T0223Z/SUB-005-R2/08-adversarial-review-premerge.md): bound on
-# the MERGED rescan+refill fixed-point loop (:func:`_converge_presubmit_state`).
-# Each pass can itself trigger a further reveal (either the rescan resolving
-# a field whose fill reveals another conditional, or the stale-field refill
-# re-firing the same reveal machinery) — never unbounded, and always at least
-# one pass larger than :data:`_MAX_RESCAN_PASSES` alone would need, so a
-# chain that genuinely finishes exactly on schedule still gets the one
-# nothing-changed pass that PROVES it finished, instead of being refused on
-# the assumption that it hasn't.
-_MAX_CONVERGENCE_PASSES = 4
+# CLI-SUB-005-R4 (adversarial re-review FAIL,
+# RUN-20260818T0223Z/SUB-005-R3/08-adversarial-rereview.md, finding #2): R3's
+# loop counted its confirming "did anything change?" pass INSIDE the SAME
+# bounded counter as the resolving passes themselves, so a chain needing
+# exactly _MAX_CONVERGENCE_PASSES resolving passes had no budget left for the
+# pass that PROVES it is done — the R2 off-by-one moved from depth 3 to depth
+# 4 instead of being eliminated. R4 (:func:`_converge_presubmit_state`)
+# decouples the two counts structurally: the "did anything change?"
+# re-derivation always runs one extra, UNCOUNTED time after the last
+# resolving pass (it is what detects convergence, not a separate check spent
+# from the same budget), so this bound now means "resolving passes before
+# giving up honestly", never "total loop iterations including the proof that
+# it's done". Raised to 6 to give a legitimately deep conditional chain real
+# headroom without ever letting a genuinely unbounded one loop forever.
+_MAX_CONVERGENCE_PASSES = 6
 
 
 def _wait(page: Any, ms: int) -> None:
@@ -1774,40 +1778,155 @@ def _resolve_unplanned_required_fields(
     )
 
 
-def _resolve_new_required_fields_once(
+def _uncommitted_live_required_fields(
     page: Any,
     channel: str,
     plan_fields: list[dict[str, Any]],
     documents: dict[str, str],
-    known: set[str],
+) -> list[dict[str, Any]]:
+    """The COMPLETE set of fields the LIVE DOM marks required RIGHT NOW that
+    are not, right now, committed — a TOTAL re-derivation, never a delta
+    against a ledger of names or flags seen on some earlier pass.
+
+    CLI-SUB-005-R4 (adversarial re-review FAIL,
+    RUN-20260818T0223Z/SUB-005-R3/08-adversarial-rereview.md, finding #1):
+    R3's two convergence signals were both DELTAS against state captured at
+    plan-build time or on an earlier pass — a required field's NAME being new
+    to a ``known_names`` set, or a PLANNED field's own frozen ``required``
+    flag going uncommitted. Neither one re-checks whether a field that was
+    already known — present, but OPTIONAL, in the original snapshot — has
+    since turned required live in the DOM (a sibling ``<select>``'s
+    ``onchange`` marking an already-rendered, already-planned-but-optional
+    node ``aria-required="true"``: no new node, same name, exactly how a
+    React-driven ATS conditional would toggle an existing field's
+    requiredness). Reproduced
+    (``adversarial/attack2_required_toggle_escapes_ledger.py``):
+    ``_converge_presubmit_state`` converged on pass 1 because the toggled
+    field's name was already ``known`` and its PLAN entry still said
+    ``required=False, value=None`` — both delta signals are blind to a fact
+    only the LIVE DOM holds, and there was never anything to update them.
+
+    This function never asks "is this name new?" or "does the plan's OWN
+    stale copy say uncommitted?" as its ONLY test for requiredness. It
+    re-parses ``page.content()`` with the channel's own
+    :func:`parse_form_schema` FRESH on every single call, and treats a field
+    as required-right-now if EITHER source says so:
+
+    * the FRESH live parse marks it required (catches a toggle-to-required
+      the plan's frozen copy cannot see — the fix for finding #1), OR
+    * the PLAN's own ``required`` flag says so (preserves the pre-existing
+      invariant that a plan's own requiredness decision is always honoured
+      even if a re-render happens to strip the ``required``/``aria-required``
+      markup along with the value it wiped — a plan is never LESS trusted
+      than the live markup, only ever supplemented by it).
+
+    Every such field is then checked against the live DOM's actual committed
+    state via :func:`_commit_state`. A field's name being ``known`` from an
+    earlier pass, or its plan entry's own stale ``required`` flag being the
+    ONLY thing consulted, is never how requiredness is decided here — there
+    is no ledger for a live requiredness toggle to escape, by construction.
+
+    A field with no planned value yet (truly new to the plan, OR
+    known-but-was-optional-and-just-turned-required — the two are
+    indistinguishable from here, and both need the identical treatment:
+    resolve via a real answer, or refuse) is always reported uncommitted. A
+    field that already has a planned value is reported uncommitted only if
+    the live DOM does not currently hold that value (a re-render wipe).
+    """
+    try:
+        html = page.content()
+    except Exception:  # noqa: BLE001 — a page without a live DOM has nothing to check
+        html = None
+    live_fields: list[dict[str, Any]] = []
+    if html is not None:
+        try:
+            live_fields = parse_form_schema(html, channel=channel)
+        except Exception:  # noqa: BLE001 — a parse failure must not crash the gate
+            live_fields = []
+    live_required_names = {str(f["name"]) for f in live_fields if f.get("required")}
+
+    seen: set[str] = set()
+    uncommitted: list[dict[str, Any]] = []
+
+    # Every PLANNED field required either by the plan's own flag or by the
+    # fresh live parse — this is what catches a known-but-optional field
+    # turning required live (name already in the plan, plan's own flag still
+    # False, but now present in live_required_names) without ever trusting
+    # the plan's frozen flag as the SOLE signal.
+    for field in plan_fields:
+        name = str(field["name"])
+        if name in seen or not (field.get("required") or name in live_required_names):
+            continue
+        seen.add(name)
+        value = field.get("value")
+        if value is None:
+            uncommitted.append(field)
+            continue
+        committed, _observed = _commit_state(page, field, value, documents)
+        if not committed:
+            uncommitted.append(field)
+
+    # Every field the LIVE DOM marks required RIGHT NOW that the plan never
+    # saw at all — structurally new, not merely toggled (the loop above
+    # already covers a plan-known name via live_required_names).
+    for live_field in live_fields:
+        name = str(live_field["name"])
+        if name in seen or not live_field.get("required"):
+            continue
+        seen.add(name)
+        uncommitted.append(live_field)
+
+    return uncommitted
+
+
+def _resolve_uncommitted_live_required_once(
+    page: Any,
+    plan_fields: list[dict[str, Any]],
+    documents: dict[str, str],
+    uncommitted: list[dict[str, Any]],
     *,
     profile: dict[str, Any] | None,
     answer_bank: Callable[[dict[str, Any]], Any] | None,
-) -> tuple[list[str], bool]:
-    """ONE live-DOM rescan-and-resolve pass for :func:`_converge_presubmit_state`.
+) -> list[str]:
+    """Resolve every field ONE fresh :func:`_uncommitted_live_required_fields`
+    snapshot just reported. The caller's fixed-point loop controls the bound
+    and re-derives a brand-new, total snapshot on the NEXT pass rather than
+    trusting anything decided here — this function never marks a name as
+    "handled" for future passes to skip.
 
-    Identical resolution path to :func:`_resolve_unplanned_required_fields`
-    (the exact ``_answer_for``/answer-bank lookup, the exact verified
-    ``_fill_and_verify`` commit, the exact in-place append to ``plan_fields``,
-    the exact ``"unplanned_required_field"`` refusal the instant anything
-    discovered cannot be answered and verified) but scoped to a SINGLE pass,
-    so the caller's fixed-point loop controls the bound and can observe
-    whether this pass discovered anything at all.
+    Two cases, handled differently on purpose:
 
-    Returns ``(resolved_names, discovered)`` — ``discovered`` is ``True`` iff
-    the live DOM showed at least one required field ``known`` had not seen
-    yet, regardless of whether it was successfully resolved (an unresolved
-    discovery raises before returning, so ``discovered=False`` on return
-    always means the DOM is quiet this pass).
+    * A field that ALREADY has a planned value (a committed answer the live
+      DOM no longer shows — a re-render wipe) is simply REFILLED with that
+      SAME answer, and is never counted into the return value: it was
+      already planned and already accounted for in the caller's ``filled``.
+      A refill that does not stick this pass is left for the NEXT pass's
+      fresh, total re-derivation to see and retry — never an immediate
+      refusal here, exactly like the pre-existing gate's own wipe-refill
+      behaviour.
+    * A field with NO planned value (truly new, or known-but-was-optional-
+      and-just-turned-required-live) is resolved via the EXACT SAME
+      ``_answer_for``/answer-bank path :func:`build_form_fill_plan` itself
+      uses, never inventing an answer — an existing plan entry gets its
+      ``value``/``required`` updated in place; a genuinely new one is
+      appended. Anything that cannot be answered AND verified raises
+      ``ManualStepRequired("unplanned_required_field")`` immediately: this
+      NEVER submits past a live-required field with no honest answer.
+      Successfully resolved names ARE returned, for the caller's
+      ``unplannedFilled`` evidence — this is exactly the class of field that
+      needed this safety net at all, whether it was structurally invisible
+      to the original snapshot or merely optional in it at the time.
     """
-    unplanned = _live_required_fields_not_in(page, channel, known)
-    if not unplanned:
-        return [], False
+    plan_by_name = {str(field["name"]): field for field in plan_fields}
     resolved: list[str] = []
     unresolved_labels: list[str] = []
-    for field in unplanned:
+    for field in uncommitted:
         name = str(field["name"])
-        known.add(name)  # never re-attempt the same field name
+        existing = plan_by_name.get(name)
+        value = existing.get("value") if existing else None
+        if existing is not None and value is not None:
+            _fill_and_verify(page, existing, value, documents, verify=True)
+            continue
         answer = _answer_for(field, profile or {})
         if answer is None and answer_bank is not None:
             match = answer_bank(field)
@@ -1816,13 +1935,20 @@ def _resolve_new_required_fields_once(
         if answer is None:
             unresolved_labels.append(str(field.get("label") or name))
             continue
-        entry = dict(field)
-        entry["value"] = answer
-        if not _fill_and_verify(page, entry, answer, documents, verify=True):
-            unresolved_labels.append(str(field.get("label") or name))
-            continue
-        plan_fields.append(entry)
-        resolved.append(name)
+        if existing is not None:
+            existing["value"] = answer
+            existing["required"] = True
+            target = existing
+        else:
+            target = dict(field)
+            target["value"] = answer
+            target["required"] = True
+            plan_fields.append(target)
+            plan_by_name[name] = target
+        if _fill_and_verify(page, target, answer, documents, verify=True):
+            resolved.append(name)
+        else:
+            unresolved_labels.append(str(target.get("label") or name))
     if unresolved_labels:
         labels = "; ".join(unresolved_labels)
         raise ManualStepRequired(
@@ -1836,7 +1962,7 @@ def _resolve_new_required_fields_once(
             ),
             question=labels,
         )
-    return resolved, True
+    return resolved
 
 
 def _converge_presubmit_state(
@@ -1848,145 +1974,126 @@ def _converge_presubmit_state(
     profile: dict[str, Any] | None,
     answer_bank: Callable[[dict[str, Any]], Any] | None,
 ) -> list[str]:
-    """Fixed point over {live-DOM rescan; stale-field refill} — the ONLY thing
-    between the last fill and the submit click, and the last of those two is
-    NEVER a DOM mutation.
+    """Fixed point over a TOTAL re-derivation of live-required-field state —
+    the ONLY thing between the last fill and the submit click, and the last
+    thing it ever does is that SAME re-derivation, read-only, with zero
+    mutation after it.
 
-    CLI-SUB-005-R3 (adversarial review FAIL,
-    RUN-20260818T0223Z/SUB-005-R2/08-adversarial-review-premerge.md): R2 ran
-    :func:`_resolve_unplanned_required_fields` exactly ONCE, then the
-    pre-existing, unmodified :func:`_presubmit_required_commit_gate` exactly
-    ONCE, in that fixed sequence. The gate's OWN one-shot refill of a wiped
-    required field is a real ``fill``/``select_option`` Playwright action
-    against a live control, and that action can re-trigger the identical
-    conditional-reveal JS the rescan exists to catch — nothing then rescanned
-    the DOM for the field it just revealed before ``_activate_submit`` fired.
-    Reproduced against the real, unmocked ``playwright_form_submitter``
-    (``adversarial/attack_gate_refill.py``): a résumé upload wiped ``name``
-    and ``sponsor``; the rescan's one pass ran WHILE ``sponsor`` was still
-    blank (so the conditional ``explain`` field was hidden and honestly
-    invisible); the gate's refill then put ``sponsor`` back to ``"Yes"``,
-    which re-revealed ``explain`` — required, empty, visible — one Python
-    statement after the one function that knew how to resolve it had already
-    returned. Submit was clicked over it: ``submitted:true,
-    unplannedFilled:[]``.
+    CLI-SUB-005-R4 (adversarial re-review FAIL,
+    RUN-20260818T0223Z/SUB-005-R3/08-adversarial-rereview.md): R3 folded a
+    live-DOM rescan and a stale-planned-field refill into one bounded loop,
+    but its "has anything changed?" ledger tracked two DELTAS — a required
+    field's NAME being new to a ``known_names`` set, and a PLANNED field's
+    OWN frozen ``required`` flag going uncommitted — neither of which can see
+    an already-known, already-OPTIONAL field turning required LIVE via a
+    mutation the loop's own actions triggered (finding #1: a sibling
+    ``<select>``'s ``onchange`` marking an already-rendered, already-known,
+    already-optional node ``aria-required="true"``; no new node, no changed
+    plan flag, invisible to both deltas by construction). Separately,
+    counting the confirming "nothing changed" pass INSIDE the same bounded
+    counter as the resolving passes left a chain needing exactly
+    ``_MAX_CONVERGENCE_PASSES`` resolving passes with no budget left for the
+    pass that proves it is done — the R2 off-by-one, reproduced one bound
+    deeper instead of eliminated (finding #2).
 
-    The fix folds both halves into ONE bounded loop instead of two sequential
-    single-shot calls. Each pass:
+    R4 replaces both DELTA signals with ONE total enumeration
+    (:func:`_uncommitted_live_required_fields`): every pass, re-parse the
+    live DOM from scratch with the channel's own schema parser, and check
+    EVERY field it reports required RIGHT NOW against the live DOM's actual
+    committed state — never a name-ledger, never a plan's own stale copy of
+    its ``required`` flag. There is no ledger here for a live requiredness
+    toggle to escape, by construction: what matters is only ever what the DOM
+    says THIS INSTANT.
 
-    1. Rescans the live DOM for a required field ``plan_fields`` has never
-       seen (:func:`_resolve_new_required_fields_once` — the exact
-       ``_answer_for``/answer-bank resolution path, verified-committed via
-       ``_fill_and_verify``, appended to ``plan_fields`` in place). Anything
-       discovered that cannot be answered AND verified raises
-       ``ManualStepRequired("unplanned_required_field")`` immediately — this
-       never silently drops a discovery to try convergence anyway.
-    2. Refills any REQUIRED planned field the live DOM no longer shows
-       committed (:func:`_uncommitted_required_planned` — a re-render wipe,
-       exactly what the pre-existing gate caught, now folded into the SAME
-       loop that rescans for what a refill can reveal).
+    The loop and the "did it converge?" check are the SAME re-derivation, run
+    at the TOP of every pass, which is what decouples "prove it's done" from
+    "resolve one more thing" and eliminates the off-by-one structurally
+    rather than by picking a bigger number:
 
-    A pass that discovers nothing new in step 1 AND refills nothing in step 2
-    has reached a fixed point: neither action it just took (there were none)
-    could have changed the DOM, so nothing it has not already looked at can
-    have appeared. Only once a pass is a true no-op does the loop stop —
-    bounded at :data:`_MAX_CONVERGENCE_PASSES`, after which it refuses
-    honestly (an application whose form keeps changing under it faster than
-    Aether can keep up is exactly the case a manual step exists for).
+    * If this pass's total re-derivation reports nothing live-required and
+      uncommitted, the loop stops immediately — this IS the read-only,
+      zero-mutation confirming pass, and it is NEVER counted against the
+      resolving-pass bound, because it did not resolve anything. A chain
+      that finishes after exactly ``_MAX_CONVERGENCE_PASSES`` resolving
+      passes still gets this free, uncounted check on the very next
+      iteration — a legitimately-terminating chain of any depth up to the
+      bound is always given the pass that proves it is finished, because
+      that pass is never the thing being bounded.
+    * Otherwise a resolving pass runs
+      (:func:`_resolve_uncommitted_live_required_once` — refills a wiped
+      planned value, or answers and fills a never-answered one via the exact
+      ``_answer_for``/answer-bank path, raising immediately if anything
+      discovered cannot be answered AND verified) and the resolving-pass
+      counter increments. Only genuine resolving work counts toward
+      :data:`_MAX_CONVERGENCE_PASSES` — an application whose form keeps
+      changing under it, or keeps losing typed answers, faster than that
+      many resolving passes can keep up is exactly the case a manual step
+      exists for.
 
-    CLI-SUB-005-R2's own secondary correctness defect (same adversarial
-    review, section 3: a legitimately-terminating chain that happens to
-    finish exactly at the pass bound was refused as if it were still
-    growing) cannot recur here by construction — the loop's exit condition
-    IS "a pass changed nothing", never "the pass counter ran out while
-    something was still being resolved". A chain that finishes on pass *k*
-    still gets pass *k+1* to prove it is finished before anything is
-    concluded.
-
-    Once the loop converges, a FINAL READ-ONLY verification pass runs before
-    returning: :func:`_live_required_fields_not_in` and
-    :func:`_uncommitted_required_planned` again — both read-only (DOM reads
-    and cached-selector probes; no ``fill``/``select_option``/``click``) — to
-    confirm the fixed point just reached actually holds. This is the ONLY
-    check the caller may run between here and ``_activate_submit``: no
-    further Python-side DOM interaction of any kind is permitted after this
-    function returns, which is what makes "read-only" a real guarantee and
-    not just a naming convention — there is nothing left downstream that
-    could invalidate it.
-
-    Returns the names of every field resolved by step 1 across every pass
-    (the caller's ``unplannedFilled`` evidence-sidecar visibility) — never a
-    field that was only refilled by step 2, which was already planned and
-    already accounted for in ``filled``.
+    Returns the names of every field resolved because it had NO planned
+    value yet (truly new to the plan, or known-but-turned-required-live) —
+    never a field that was only refilled after a wipe, which was already
+    planned and already accounted for in the caller's ``filled``.
     """
-    known = {str(field["name"]) for field in plan_fields}
+    resolving_passes = 0
     resolved: list[str] = []
-    converged = False
-    for _pass in range(_MAX_CONVERGENCE_PASSES):
-        new_resolved, discovered = _resolve_new_required_fields_once(
-            page,
-            channel,
-            plan_fields,
-            documents,
-            known,
-            profile=profile,
-            answer_bank=answer_bank,
-        )
-        resolved.extend(new_resolved)
-
+    while True:
         _wait(page, _PRESUBMIT_SETTLE_MS)
-        stale = _uncommitted_required_planned(page, plan_fields, documents)
-        for field in stale:  # the pre-existing gate's own refill, now inline
-            _fill_and_verify(page, field, field.get("value"), documents, verify=True)
-
-        if not discovered and not stale:
-            converged = True
-            break
-
-    if not converged:
-        raise ManualStepRequired(
-            "unplanned_required_field",
-            (
-                "This application kept revealing new required questions, or "
-                "kept losing already-typed answers to a page re-render, "
-                "faster than Aether could keep resolving them, so it "
-                "stopped rather than guess how many more passes it might "
-                "take. Open the posting and finish it yourself."
-            ),
+        # TOTAL, read-only re-derivation — see _uncommitted_live_required_fields.
+        # An empty result here is, itself, the zero-mutation confirming pass:
+        # nothing below this branch runs, and the function returns.
+        uncommitted = _uncommitted_live_required_fields(
+            page, channel, plan_fields, documents
         )
+        if not uncommitted:
+            return resolved
 
-    # FINAL READ-ONLY VERIFICATION — everything below reads the DOM; nothing
-    # fills, selects, or clicks anything. This is the last thing that runs
-    # before the caller's own ``_activate_submit``, by construction: no
-    # Python-side DOM mutation happens after this point.
-    still_unplanned = _live_required_fields_not_in(page, channel, known)
-    if still_unplanned:
-        labels = "; ".join(str(f.get("label") or f["name"]) for f in still_unplanned)
-        raise ManualStepRequired(
-            "unplanned_required_field",
-            (
-                "This application revealed a required question after "
-                "Aether had already built its plan (a conditional "
-                "follow-up), and it could not be answered and verified, "
-                "so nothing was submitted. Open the posting and finish "
-                "it yourself: " + labels
-            ),
-            question=labels,
+        resolving_passes += 1
+        if resolving_passes > _MAX_CONVERGENCE_PASSES:
+            plan_by_name = {str(field["name"]): field for field in plan_fields}
+            still_unanswered = [
+                field
+                for field in uncommitted
+                if plan_by_name.get(str(field["name"])) is None
+                or plan_by_name[str(field["name"])].get("value") is None
+            ]
+            if still_unanswered:
+                raise ManualStepRequired(
+                    "unplanned_required_field",
+                    (
+                        "This application kept revealing new required "
+                        "questions — or kept turning already-visible fields "
+                        "required — faster than Aether could keep resolving "
+                        "them, so it stopped rather than guess how many "
+                        "more passes it might take. Open the posting and "
+                        "finish it yourself."
+                    ),
+                )
+            labels = "; ".join(
+                str(field.get("label") or field["name"]) for field in uncommitted
+            )
+            raise ManualStepRequired(
+                "form_fill_failed",
+                (
+                    "Aether typed the answers but this application form "
+                    "kept losing them (the page re-rendered or rejected the "
+                    "values) faster than it could keep refilling them, so "
+                    "it submitted nothing. Open the posting and apply "
+                    "yourself: " + labels
+                ),
+                question=labels,
+            )
+
+        resolved.extend(
+            _resolve_uncommitted_live_required_once(
+                page,
+                plan_fields,
+                documents,
+                uncommitted,
+                profile=profile,
+                answer_bank=answer_bank,
+            )
         )
-    still_stale = _uncommitted_required_planned(page, plan_fields, documents)
-    if still_stale:
-        labels = "; ".join(str(f.get("label") or f["name"]) for f in still_stale)
-        raise ManualStepRequired(
-            "form_fill_failed",
-            (
-                "Aether typed the answers but this application form did not "
-                "keep every required one (the page re-rendered or rejected "
-                "the values), so it submitted nothing. Open the posting and "
-                "apply yourself: " + labels
-            ),
-            question=labels,
-        )
-    return resolved
 
 
 def _resume_suffix(data: bytes) -> str:
