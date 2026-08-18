@@ -13,7 +13,7 @@ calls an LLM.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, Iterable
 from zoneinfo import ZoneInfo
@@ -388,7 +388,9 @@ def _resolve_when(text: str, stamp: datetime) -> datetime | None:
 
 
 def _detect_type(text: str) -> str | None:
-    if _ONSITE_SIGNAL.search(text) or _INSTEAD_OF_PHONE.search(text) and _ONSITE_SIGNAL.search(text):
+    if _ONSITE_SIGNAL.search(text) or (
+        _INSTEAD_OF_PHONE.search(text) and _ONSITE_SIGNAL.search(text)
+    ):
         return "onsite"
     if _INSTEAD_OF_PHONE.search(text) and re.search(r"face|in[\s-]*person|office", text, re.I):
         return "onsite"
