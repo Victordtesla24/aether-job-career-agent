@@ -1333,6 +1333,11 @@ Confirmation screenshot saved. Egress is Hostinger Boston (`187.77.12.13`);
 candidate is Melbourne. Next: live Chrome channel without `--enable-automation`,
 then one retry of this same application only.
 
+**Continuation 2026-08-18T19:30Z:** VPS Delivery `32175407714` failed verify
+because `mon020-async-sync.test.tsx` waitFor(8000) exceeded vitest's 5000ms
+test timeout. Raising those two cases to 15s so the Chrome-launch commit can
+deploy. Not a Jobs product change.
+
 ---
 
 ## SESSION IC-VISIBLE — 2026-08-18T18:25Z — Interview Center empty / wrong employer
