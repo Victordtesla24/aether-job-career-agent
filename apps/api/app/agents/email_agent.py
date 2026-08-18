@@ -474,7 +474,7 @@ class EmailAgent:
             # Gmail sync had already succeeded. ADR-ML-3 forbids swapping the
             # model. Persist the career-filter categories (no invented scores,
             # no auto-draft) and price the run at zero.
-            triaged, categories = self._persist_filter_classifications(
+            triaged, filter_categories = self._persist_filter_classifications(
                 user_id, threads
             )
             user_message = llm_failure_user_message(exc)
@@ -490,7 +490,7 @@ class EmailAgent:
                 llm_called=False,
                 synced=synced,
                 triaged=triaged,
-                categories=categories,
+                categories=filter_categories,
                 message=(
                     f"Sorted {triaged} career "
                     f"{'thread' if triaged == 1 else 'threads'} with the "
