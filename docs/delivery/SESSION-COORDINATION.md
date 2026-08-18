@@ -1077,3 +1077,42 @@ Rules of engagement unchanged: locks (git/deploy/test), runbook deploys, append-
 **Verification:** full Python battery (4914 tests) ran clean-except-8 pre-existing-conflict failures, all 8 resolved by `lane/w01-redfix` + 2 coordinator-authorized post-delta test fixes (see `docs/delivery/evidence/RUN-20260818T0223Z/DEPLOY-W01/` for every raw log); JS/TS gate green throughout (lint, type-check, vitest, build); `integrity_guard.py` + `verify_guard_detects.py` both green.
 
 **Deploy:** push `integration/wave-01` → `main` → VPS Delivery (verify → deploy-dev → deploy-test → deploy-prod). No hand-restart of prod units — the pipeline handles it. No leftover branch for this session; source branches are not deleted here (post-verification job owns that per NON-NEGOTIABLE-CONSTRAINTS.md 8b).
+
+---
+
+## SESSION PROFILE-PHOTO — 2026-08-18T08:34Z — Settings profile photo upload
+
+**By:** Cursor Grok session. Worktree `/root/dev/aether-wt-profile-photo` on `feat/settings-profile-photo` from `origin/main` @ `77231581`.
+**Scope claimed:**
+- `apps/api/app/db.py` — `ensure_user_avatar_columns` only
+- `apps/api/app/repositories/user.py` — avatar set/get/clear methods
+- `apps/api/app/routers/workspaces.py` — settings avatar POST/GET/DELETE + `_build_settings` profile avatar fields
+- `apps/api/migrations/0033_user_profile_avatar.sql` (new)
+- `apps/api/tests/test_profile_avatar.py` (new)
+- `packages/db/src/schema.prisma` — User avatarFile/avatarContentType
+- `apps/web/src/lib/api/workspaces.ts` — SettingsPayload profile avatar fields
+- `apps/web/src/components/settings/profile-avatar.ts`, `ProfileAvatar.tsx` (new)
+- `apps/web/src/app/dashboard/settings/settings-client.tsx` — Profile section wiring only
+- `apps/web/src/components/user-menu.tsx`, `shell/CommandBar.tsx` — photo chip
+- Settings vitest fixtures + `profile-avatar.test.tsx`
+**Does not touch:** résumés/PDF generation, apply_executor, networking, sales, admin, applications timeline WIP on other branches.
+**Deploy:** push to `main` → VPS Delivery. Delete `feat/settings-profile-photo` after land. No standing PR.
+
+
+---
+
+## SESSION TL-VIZ — 2026-08-18T08:22Z — Applications Timeline visualisation
+
+**By:** Cursor Grok session. Branch `feat/applications-timeline` from `origin/main` @ `77231581`.
+**Scope claimed:**
+- `apps/api/app/repositories/application_status_event.py` — `list_status_events_for_applications`
+- `apps/api/app/routers/applications.py` — `GET /applications/timeline` only
+- `apps/web/src/components/applications/timeline-model.ts`, `ApplicationTimeline.tsx`, `ApplicationTimelineGL.tsx`, `tracker-api.ts`
+- `apps/web/src/app/dashboard/applications/page.tsx` — Timeline tab wire-up only
+- Matching tests: `test_applications_timeline.py`, vitest for timeline model/component/page
+**Does not touch:** agents.py, oauth mint, networking, email, sales, ats_engine, Board/Sankey/Applied restyle, profile avatar (SESSION PROFILE-PHOTO).
+**Deploy:** API then web slices via push to `main` → VPS Delivery; merge/delete branch; no open PR left.
+
+### Deploy window — API slice — 2026-08-18T08:40Z
+
+**Claimed by:** SESSION TL-VIZ. Commit `d487363d` (+ session claim). Units: `aether-prod-api` via VPS Delivery after push to `main`. Do not hand-restart while PROFILE-PHOTO or ORCH batch holds a lock.
