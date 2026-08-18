@@ -75,10 +75,13 @@ describe("ApplicationTimeline", () => {
     const onOpen = vi.fn();
     render(<ApplicationTimeline payload={PAYLOAD} onOpenDetail={onOpen} />);
     expect(screen.getByTestId("timeline-view")).toBeTruthy();
+    expect(screen.getByTestId("timeline-legend")).toBeTruthy();
     expect(screen.getByText("Senior Product Owner")).toBeTruthy();
     expect(screen.getByText("Acme Corp")).toBeTruthy();
     expect(screen.getAllByText("Earlier transitions were not observed.").length).toBeGreaterThanOrEqual(1);
     const node = screen.getByTestId("timeline-node-e1");
+    fireEvent.mouseEnter(node);
+    expect(screen.getByTestId("timeline-focus").textContent).toMatch(/In review/);
     fireEvent.click(node);
     expect(onOpen).toHaveBeenCalledWith("app-1");
     fireEvent.keyDown(node, { key: "Enter" });

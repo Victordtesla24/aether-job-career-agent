@@ -41,6 +41,8 @@ const BASE_SETTINGS = {
     email: "jamie@example.com",
     targetRole: "Staff Engineer",
     location: "Sydney, AU",
+    hasAvatar: false,
+    avatarRevision: null,
   },
   resume: { activeFile: "resume.pdf", uploadedAt: "2026-07-01", versions: 3 },
   portfolio: { url: null, cadence: null, lastSynced: null },

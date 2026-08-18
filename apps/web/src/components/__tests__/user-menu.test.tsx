@@ -58,3 +58,16 @@ describe("UserMenu (MV-login-003 logout)", () => {
     expect(screen.getByText("VS")).toBeTruthy();
   });
 });
+
+  it("renders the photo when photoSrc is provided and keeps initials otherwise", () => {
+    const { rerender } = render(
+      <UserMenu initials="VS" name="Vikram S." role="TPM" photoSrc="blob:test-photo" />,
+    );
+    const photo = screen.getByTestId("user-menu-photo");
+    expect(photo).toBeTruthy();
+    expect(photo.getAttribute("alt")).toBe("Vikram S.");
+    expect(screen.queryByText("VS")).toBeNull();
+    rerender(<UserMenu initials="VS" name="Vikram S." role="TPM" />);
+    expect(screen.queryByTestId("user-menu-photo")).toBeNull();
+    expect(screen.getByText("VS")).toBeTruthy();
+  });

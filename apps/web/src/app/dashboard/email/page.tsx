@@ -12,6 +12,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   createEmailDraft,
   emailAgentErrorMessage,
+  emailAgentRateLimited,
   emailIntelligenceView,
   emailReplySentNotice,
   emailScoreBadge,
@@ -319,11 +320,14 @@ export default function EmailCenterPage() {
   // Run the REAL emailAgent triage over the inbox (one batch LLM call) so the
   // list scores + Priority/Follow-Up/Auto tabs populate. User-initiated — never
   // auto-fired on load (MV-email-center-001/003).
-  const runTriage = useCallback(async () => {
+  const runTriage = useCallback(async (lightRetry = false) => {
     setTriageBusy(true);
     setTriageNotice(null);
     try {
-      const res = await runAgent("email", { mode: "triage" });
+      const res = await runAgent(
+        "email",
+        lightRetry ? { mode: "triage", light_retry: true } : { mode: "triage" },
+      );
       const data = await fetchEmailInbox();
       applyInbox(data);
       setTriageNotice(emailTriageNotice(res));
@@ -345,7 +349,11 @@ export default function EmailCenterPage() {
       const res = await runAgent("email", { mode: "insights", thread_id: threadId });
       const intel = parseEmailInsights(res);
       if (!intel) {
-        setIntelError("The AI returned no usable score for this thread — please try again.");
+        setIntelError(
+          typeof res.message === "string" && res.message.trim()
+            ? res.message.trim()
+            : "The AI returned no usable score for this thread — please try again.",
+        );
         return;
       }
       setComputedIntel((prev) => ({ ...prev, [threadId]: intel }));
@@ -365,7 +373,11 @@ export default function EmailCenterPage() {
       const res = await runAgent("email", { mode: "draft_reply", thread_id: threadId });
       const text = parseEmailDraft(res);
       if (!text) {
-        setDraftError("The AI returned an empty draft — please try again.");
+        setDraftError(
+          typeof res.message === "string" && res.message.trim()
+            ? res.message.trim()
+            : "The AI returned an empty draft — please try again.",
+        );
         return;
       }
       setDrafts((prev) => ({ ...prev, [threadId]: text }));
@@ -705,7 +717,7 @@ export default function EmailCenterPage() {
             onClick={() => void runTriage()}
             disabled={triageBusy}
             title="Score and sort your inbox with the AI email agent"
-            className="rounded-xl border border-aether-violet/40 bg-aether-violet/10 px-4 py-2 text-sm font-semibold text-aether-violet hover:bg-aether-violet/20 disabled:opacity-50"
+            className="rounded-xl border border-aether-indigo/40 bg-aether-indigo/10 px-4 py-2 text-sm font-semibold text-aether-indigo hover:bg-aether-indigo/20 disabled:opacity-50"
           >
             <i className="fa-solid fa-wand-magic-sparkles mr-2" aria-hidden="true" />
             {triageBusy ? "Triaging…" : "Run AI Triage"}
@@ -897,18 +909,29 @@ export default function EmailCenterPage() {
       ) : null}
 
       {triageNotice ? (
-        <p
+        <div
           data-testid="triage-notice"
           role={triageNotice.kind === "success" ? "status" : "alert"}
           className={`rounded-xl border p-3 text-sm ${triageNotice.kind === "error"
               ? "border-red-500/30 bg-red-500/10 text-red-300"
               : triageNotice.kind === "warn"
                 ? "border-state-warn/30 bg-state-warn/10 text-state-warn"
-                : "border-aether-violet/30 bg-aether-violet/10 text-aether-violet"
+                : "border-aether-indigo/30 bg-aether-indigo/10 text-aether-indigo"
             }`}
         >
-          {triageNotice.message}
-        </p>
+          <p>{triageNotice.message}</p>
+          {emailAgentRateLimited(triageNotice.message) ? (
+            <button
+              type="button"
+              data-testid="triage-retry-light-btn"
+              onClick={() => void runTriage(true)}
+              disabled={triageBusy}
+              className="mt-2 rounded-lg border border-aether-indigo/40 bg-aether-indigo/10 px-3 py-1.5 text-xs font-semibold text-aether-indigo hover:bg-aether-indigo/20 disabled:opacity-50"
+            >
+              Retry with a lighter model
+            </button>
+          ) : null}
+        </div>
       ) : null}
 
       {/* ---------------------------------------------------------------- */}

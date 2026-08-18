@@ -16,6 +16,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   emailAgentErrorMessage,
+  emailAgentRateLimited,
   emailReplySentNotice,
   emailScoreBadge,
   emailTriageNotice,
@@ -221,5 +222,18 @@ describe("emailAgentErrorMessage", () => {
       "The selected model did not return a usable result. Try a different model in Agent Settings, or try again shortly.",
     );
     expect(emailAgentErrorMessage(err, "Could not run AI triage.")).toBe(err.message);
+  });
+});
+
+describe("emailAgentRateLimited", () => {
+  it("is true only for the honest provider rate-limit sentence", () => {
+    expect(
+      emailAgentRateLimited(
+        "Sorted 2 career threads with the career filter (no AI scores this run). The AI provider rate-limited this run. Wait a minute and try again, or pick a lighter model in Agent Settings.",
+      ),
+    ).toBe(true);
+    expect(emailAgentRateLimited("Gmail sync failed — reconnect your account.")).toBe(
+      false,
+    );
   });
 });

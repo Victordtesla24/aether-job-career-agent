@@ -1082,7 +1082,7 @@ Rules of engagement unchanged: locks (git/deploy/test), runbook deploys, append-
 
 ## SESSION PROFILE-PHOTO — 2026-08-18T08:34Z — Settings profile photo upload
 
-**By:** Cursor Grok session. Worktree `/root/dev/aether-wt-profile-photo` on `feat/settings-profile-photo` from `origin/main` @ `77231581`.
+**By:** Cursor Grok session. Worktree `/root/dev/aether-wt-profile-photo` on `feat/settings-profile-photo` from `origin/main` @ `fbfc3b4c`.
 **Scope claimed:**
 - `apps/api/app/db.py` — `ensure_user_avatar_columns` only
 - `apps/api/app/repositories/user.py` — avatar set/get/clear methods
@@ -1095,9 +1095,10 @@ Rules of engagement unchanged: locks (git/deploy/test), runbook deploys, append-
 - `apps/web/src/app/dashboard/settings/settings-client.tsx` — Profile section wiring only
 - `apps/web/src/components/user-menu.tsx`, `shell/CommandBar.tsx` — photo chip
 - Settings vitest fixtures + `profile-avatar.test.tsx`
+- `apps/web/src/components/agents/workflow-linkage.ts` — retarget StoryEntry dedup citation after db.py insert
 **Does not touch:** résumés/PDF generation, apply_executor, networking, sales, admin, applications timeline WIP on other branches.
 **Deploy:** push to `main` → VPS Delivery. Delete `feat/settings-profile-photo` after land. No standing PR.
-
+**Status:** GATED green — avatar pytest 11 + DEF-B 2; settings vitests; type-check; lint; integrity_guard. Pushing.
 
 ---
 
@@ -1133,13 +1134,47 @@ Rules of engagement unchanged: locks (git/deploy/test), runbook deploys, append-
 
 ---
 
+## SESSION EC-RETRY — 2026-08-18T09:40Z — Email Center explicit light retry + LLM honesty
+
+**By:** Cursor Grok session. Isolated worktree `/root/dev/aether-wt-ec-retry` on `feat/ec-retry-light` from `origin/main`. Does not take SESSION TL-VIZ, PROFILE-PHOTO, NW-ADV, ADM, or unpushed `feat/ec-adv`.
+**Why:** EC-ADV (`42b6d800`) is on `origin/main` but **not in production** — VPS Delivery deploy-dev failed on a foreign dirty `ScreeningQuestionnaire.tsx` in the shared checkout (`32119387469`). Prod (SHA `77231581`) still 503s Triage on Claude HTTP 429 (job `ca91c2b8bd0e39f7ba4dba365`, 2026-08-18T06:02:34Z). ADR-ML-3 forbids a silent Haiku swap; the user needs an **explicit** in-page retry. Insights/draft still 503 on the same 429 class. Gmail `accessNotConfigured` must not be messaged as “reconnect”.
+**Scope claimed:**
+- `apps/api/app/agents/email_agent.py` — `_json_model` / pass params into `_triage`; catch `LLMUnavailableError` on insights + draft (honest degrade, no invented score/draft); Gmail API-not-enabled copy
+- `apps/api/app/routers/agents.py` — `EmailAgentRequest.light_retry: bool = False` only
+- `apps/web/src/app/dashboard/email/page.tsx` + `apps/web/src/lib/api/workspaces.ts` — rate-limit helper + `triage-retry-light-btn`
+- `ops/guardian/deploy_env.sh` — staging REPO `/root/dev/aether-staging` so deploy-dev never `git reset --hard`s the agent workspace
+- Tests: `test_email_agent.py`, `email-center-wiring.test.ts`, `triage-light-retry.test.tsx`
+**Does not touch:** `llm_client.py`, `_model_chain` / silent fallback, networking, sales/admin, applications timeline, profile avatar, `feat/ec-adv`.
+**Deploy:** rebase onto `origin/main`, push onto `origin/main`; delete `feat/ec-retry-light` after land. No PR.
+
+### Deploy window — Email Center light-retry — 2026-08-18T09:45Z
+
+**Claimed by:** SESSION EC-RETRY. Units: `aether-prod-api` + `aether-prod-web` via VPS Delivery after push to `main`. No hand-restart of prod units.
+
+---
+
 ## SESSION UPO-1 — 2026-08-18T09:35Z — per-user provider subscription OAuth mint
 
-**By:** Cursor Grok session. Isolated worktree `/root/dev/aether-wt-provider-oauth` on `feat/provider-subscription-oauth` from `origin/main` @ `8243a35c`.
+**By:** Cursor Grok session. Isolated worktree `/root/dev/aether-wt-provider-oauth` on `feat/provider-subscription-oauth` from `origin/main` @ `8243a35c`, merged `7adac89e`.
 **Why:** Add Provider in Manage Agents (customer scope) only offered a manual paste of `claude setup-token`. Customers need in-app Anthropic subscription sign-in that fills the OAuth token field, then Save.
 **Scope claimed:**
-- `apps/api/app/routers/agents.py` — `POST /agents/user/providers/anthropic/oauth/start|exchange` (CurrentUser; mint-and-return; no deployment write)
+- `apps/api/app/routers/agents.py` — `POST /agents/user/providers/anthropic/oauth/start|exchange` (CurrentUser; mint-and-return; no deployment write). Also stop per-user Save from syncing `CLAUDE_CODE_OAUTH_TOKEN` into the operator `.env`.
 - `apps/web/src/components/agents/ProviderConfigModal.tsx`, `AnthropicOAuthPanel.tsx`, `api.ts`
 - Tests: `test_user_anthropic_oauth_mint.py`, `user-provider-oauth.test.tsx`, f01 guard update
 **Does not touch:** `llm_client.py`, applications timeline, email, networking, sales, ats_engine, profile avatar.
 **Deploy:** push → CI → merge `main` → `aether-autodeploy.timer`. Claimed deploy window starts on `origin/main` land. Delete `feat/provider-subscription-oauth` after verify. No standing PR.
+
+---
+
+## SESSION TL-VIZ-R2 — 2026-08-18T09:20Z — Timeline Three.js depth (continuation)
+
+**By:** Cursor Grok session. Continues SESSION TL-VIZ on `feat/applications-timeline` (already claimed). Does not reopen foreign PRs.
+**Why:** First GL pass was node auras only; product bar requires a posh interactive horizontal timeline (ribbons, status colour, hover bloom, pan polish) with DOM remaining source of truth. HyperFrames is an HTML→MP4 seekable renderer — not used for live dashboard interactivity.
+**Scope claimed (additive on TL-VIZ files only):**
+- `apps/web/src/components/applications/timeline-gl-geometry.ts` (new)
+- `apps/web/src/components/applications/ApplicationTimelineGL.tsx`
+- `apps/web/src/components/applications/ApplicationTimeline.tsx`
+- Matching vitest under `apps/web/src/components/applications/__tests__/`
+**Does not touch:** Board/Sankey restyle, agents map, profile avatar, email, networking, sales.
+**Deploy:** push → merge `main` → VPS Delivery; delete branch; no standing PR.
+

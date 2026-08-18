@@ -597,6 +597,50 @@ def ensure_user_profile_columns() -> None:
     _user_profile_columns_ready = True
 
 
+#: Guard so the additive profile-avatar columns are only ensured once per worker
+#: process (see ``ensure_user_avatar_columns``). Kept SEPARATE from
+#: ``ensure_user_profile_columns`` because that helper's fast path asserts
+#: exactly four profile columns (targetRole/location/agentConfig/username).
+_user_avatar_columns_ready = False
+
+_USER_AVATAR_MANAGED_COLUMNS = ("avatarFile", "avatarContentType")
+
+
+def ensure_user_avatar_columns() -> None:
+    """Idempotently add ``User.avatarFile`` / ``avatarContentType`` on first use.
+
+    Settings → Profile photo upload (wireframe ``btn-avatar-st08``). Bytes live
+    in ``avatarFile`` (bytea); the sniffed media type in ``avatarContentType``;
+    the existing Prisma ``image`` text column holds the SHA-256 hex of the
+    bytes as a cache-busting revision — never a data URL. Both new columns are
+    nullable with no default so pre-existing rows honestly read as "no photo".
+    Documentary mirror: ``migrations/0033_user_profile_avatar.sql``.
+    """
+    global _user_avatar_columns_ready
+    if _user_avatar_columns_ready:
+        return
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT count(*) FROM information_schema.columns"
+                " WHERE table_name = 'User'"
+                " AND table_schema = ANY(current_schemas(false))"
+                " AND column_name = ANY(%s)",
+                (list(_USER_AVATAR_MANAGED_COLUMNS),),
+            )
+            row = cur.fetchone()
+            if row and row[0] == len(_USER_AVATAR_MANAGED_COLUMNS):
+                _user_avatar_columns_ready = True
+                return
+            cur.execute("SELECT pg_advisory_xact_lock(%s)", (7420240733,))
+            cur.execute('ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "avatarFile" bytea')
+            cur.execute(
+                'ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "avatarContentType" text'
+            )
+        conn.commit()
+    _user_avatar_columns_ready = True
+
+
 #: Guard so the additive admin/security columns are only ensured once per worker
 #: process (see ``ensure_admin_user_columns``).
 _admin_user_columns_ready = False

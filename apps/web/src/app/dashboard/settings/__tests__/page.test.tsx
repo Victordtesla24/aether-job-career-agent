@@ -89,7 +89,7 @@ import { DEFAULT_MATCH_THRESHOLD } from "../settings-client";
 import { SubscriptionGate } from "../../../../components/subscription-gate";
 
 const SETTINGS = {
-  profile: { fullName: "Jamie Rivera", email: "jamie@example.com", targetRole: "Staff Engineer", location: "Sydney, AU" },
+  profile: { fullName: "Jamie Rivera", email: "jamie@example.com", targetRole: "Staff Engineer", location: "Sydney, AU" , hasAvatar: false, avatarRevision: null },
   resume: { activeFile: "resume.pdf", uploadedAt: "2026-07-01", versions: 3 },
   portfolio: { url: null, cadence: null, lastSynced: null },
   agentConfig: { autoApply: false, approvalGate: true, matchThreshold: 80 },
