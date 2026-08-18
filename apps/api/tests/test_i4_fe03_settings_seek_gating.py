@@ -1,23 +1,14 @@
 """I4-FE-03 — ``GET /workspaces/settings``'s ``integrations`` list must reflect
 the SAME ``AETHER_ENABLE_SEEK`` compliance-gate truth
-``app.services.discovery.adapter_registry.build_live_registry()`` computes,
-not a client-side ``/seek/i`` name substring.
+``app.services.discovery.adapter_registry.build_live_registry()`` /
+``source_availability()`` compute, not a client-side ``/seek/i`` name
+substring.
 
-Before this fix, ``workspaces.py`` hardcoded every source with at least one
-historical ``Job`` row to ``"status": "connected"``, and the frontend
-(``settings-client.tsx``) papered over the one known case (Seek) with a
-client-side ``isSeek = /seek/i.test(i.name)`` override that always rendered
-"Not active" regardless of the real ``AETHER_ENABLE_SEEK`` value — so
-enabling Seek server-side could never be reflected on this screen, and any
-future integration whose name merely contains "seek" would be silently
-mislabelled too.
-
-This test seeds a historical ``Job`` row with ``source='seek'`` (exactly the
-scenario the finding describes — jobs discovered before the compliance gate
-existed, or lingering after it was toggled) and asserts the BACKEND now
-reports the gated truth directly, both with the gate off (default) and
-flipped on at call time (no process restart required — mirrors
-``test_source_availability.py::test_seek_env_gate_flips_availability_at_call_time``).
+Seek is always present in the catalog (default-on catalog). When the gate
+is off it is ``not_configured`` with an honest reason and no fabricated
+"jobs discovered" detail — even when a historical ``Job`` row with
+``source='seek'`` exists. When the gate flips on at call time, Seek is
+``connected`` without requiring a process restart.
 """
 from __future__ import annotations
 
@@ -41,6 +32,10 @@ def _seed_seek_job(user_id: str) -> None:
         conn.commit()
 
 
+def _by_source(payload: dict) -> dict[str, dict]:
+    return {i["source"]: i for i in payload["integrations"]}
+
+
 @pytest.fixture()
 def user_id(auth_headers) -> str:
     from app.security import decode_access_token
@@ -57,9 +52,9 @@ def test_seek_integration_not_shown_connected_when_gate_is_off(
 
     resp = client.get("/workspaces/settings", headers=auth_headers)
     assert resp.status_code == 200, resp.text
-    integrations = {i["name"].lower(): i for i in resp.json()["integrations"]}
+    integrations = _by_source(resp.json())
 
-    assert "seek" in integrations, "seeded Job.source='seek' row must still surface a row"
+    assert "seek" in integrations, "Seek must always appear in the catalog"
     seek = integrations["seek"]
     assert seek["status"] != "connected", (
         f"Seek must not read as connected while AETHER_ENABLE_SEEK is off — got {seek!r}"
@@ -79,7 +74,7 @@ def test_seek_integration_shows_connected_when_gate_flips_on_at_call_time(
 
     resp = client.get("/workspaces/settings", headers=auth_headers)
     assert resp.status_code == 200, resp.text
-    integrations = {i["name"].lower(): i for i in resp.json()["integrations"]}
+    integrations = _by_source(resp.json())
 
     seek = integrations["seek"]
     assert seek["status"] == "connected"
@@ -105,6 +100,6 @@ def test_non_gated_source_is_unaffected(client, auth_headers, user_id, monkeypat
 
     resp = client.get("/workspaces/settings", headers=auth_headers)
     assert resp.status_code == 200, resp.text
-    integrations = {i["name"].lower(): i for i in resp.json()["integrations"]}
+    integrations = _by_source(resp.json())
     assert integrations["adzuna"]["status"] == "connected"
     assert "jobs discovered" in integrations["adzuna"]["detail"]

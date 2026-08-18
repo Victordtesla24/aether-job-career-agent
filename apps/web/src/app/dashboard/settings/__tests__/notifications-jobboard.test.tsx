@@ -83,14 +83,38 @@ import SettingsPage from "../page";
 
 const SETTINGS = {
   profile: { fullName: "Jamie Rivera", email: "jamie@example.com", targetRole: "Staff Engineer", location: "Sydney, AU" , hasAvatar: false, avatarRevision: null },
-  resume: { activeFile: "resume.pdf", uploadedAt: "2026-07-01", versions: 3 },
+  resume: { activeFile: "resume.pdf", uploadedAt: "2026-07-01", versions: 3, originalStored: true },
   portfolio: { url: null, cadence: null, lastSynced: null },
   agentConfig: { autoApply: false, approvalGate: true, matchThreshold: 80 },
   integrations: [
-    { name: "Greenhouse", status: "connected", detail: "12 jobs discovered · last sync 2026-07-17T10:00 UTC" },
-    { name: "Ashby", status: "connected", detail: "8 jobs discovered · last sync 2026-07-16T09:00 UTC" },
+    { source: "greenhouse", name: "Greenhouse", status: "connected", detail: "12 jobs discovered · last sync 2026-07-17T10:00 UTC" },
+    { source: "ashby", name: "Ashby", status: "connected", detail: "8 jobs discovered · last sync 2026-07-16T09:00 UTC" },
   ],
   connectedAccounts: [],
+};
+
+/** Full default-on catalog the backend now returns for every account. */
+const FULL_CATALOG_SETTINGS = {
+  ...SETTINGS,
+  integrations: [
+    { source: "adzuna", name: "Adzuna", status: "connected", detail: "Default on · 0 jobs discovered" },
+    { source: "ashby", name: "Ashby", status: "connected", detail: "Default on · 0 jobs discovered" },
+    { source: "greenhouse", name: "Greenhouse", status: "connected", detail: "Default on · 0 jobs discovered" },
+    { source: "indeed", name: "Indeed", status: "not_configured", detail: "no live discovery implementation (fixture-only legacy adapter)" },
+    { source: "lever", name: "Lever", status: "connected", detail: "Default on · 0 jobs discovered" },
+    { source: "linkedin", name: "LinkedIn", status: "not_configured", detail: "no live discovery implementation (fixture-only legacy adapter)" },
+    { source: "remoteok", name: "RemoteOK", status: "connected", detail: "Default on · 0 jobs discovered" },
+    { source: "remotive", name: "Remotive", status: "connected", detail: "Default on · 0 jobs discovered" },
+    { source: "seek", name: "Seek", status: "not_configured", detail: "compliance-gated (ADR-P6-SEEK): ToS-prohibited scraping; enable only via AETHER_ENABLE_SEEK" },
+    { source: "smartrecruiters", name: "SmartRecruiters", status: "connected", detail: "Default on · 0 jobs discovered" },
+    { source: "wellfound", name: "Wellfound", status: "connected", detail: "Default on · 0 jobs discovered" },
+    { source: "workable", name: "Workable", status: "connected", detail: "Default on · 0 jobs discovered" },
+  ],
+};
+
+const EMPTY_INTEGRATIONS_SETTINGS = {
+  ...SETTINGS,
+  integrations: [] as Array<{ source: string; name: string; status: string; detail: string }>,
 };
 
 const SETTINGS_MISSING_PROFILE = {
@@ -276,5 +300,56 @@ describe("SettingsPage — Job Board Sync is real, not a fake setTimeout (MV-set
 
     fireEvent.click(syncAllBtn);
     expect(runScoutAgentMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("SettingsPage — Job Board Integrations default-on catalog", () => {
+  it("renders every catalog board row keyed by source id", async () => {
+    fetchSettingsMock.mockResolvedValue(FULL_CATALOG_SETTINGS);
+    fetchCareerDataMock.mockResolvedValue(CAREER_DATA);
+    fetchSubscriptionMock.mockResolvedValue(SUBSCRIPTION);
+
+    await renderOnIntegrations();
+
+    for (const row of FULL_CATALOG_SETTINGS.integrations) {
+      expect(screen.getByTestId(`jobboard-row-${row.source}`)).toBeTruthy();
+    }
+  });
+
+  it("shows default-on zero-job detail for a connected live board", async () => {
+    fetchSettingsMock.mockResolvedValue(FULL_CATALOG_SETTINGS);
+    fetchCareerDataMock.mockResolvedValue(CAREER_DATA);
+    fetchSubscriptionMock.mockResolvedValue(SUBSCRIPTION);
+
+    await renderOnIntegrations();
+
+    const greenhouse = screen.getByTestId("jobboard-row-greenhouse");
+    expect(greenhouse.textContent ?? "").toMatch(/Default on · 0 jobs discovered/);
+    expect(greenhouse.textContent ?? "").toMatch(/connected/i);
+  });
+
+  it("shows Seek as not configured with the backend honesty detail", async () => {
+    fetchSettingsMock.mockResolvedValue(FULL_CATALOG_SETTINGS);
+    fetchCareerDataMock.mockResolvedValue(CAREER_DATA);
+    fetchSubscriptionMock.mockResolvedValue(SUBSCRIPTION);
+
+    await renderOnIntegrations();
+
+    const seek = screen.getByTestId("jobboard-row-seek");
+    expect(seek.textContent ?? "").toMatch(/not configured/i);
+    expect(seek.textContent ?? "").toMatch(/AETHER_ENABLE_SEEK|compliance/i);
+    expect(seek.textContent ?? "").not.toMatch(/jobs discovered/i);
+  });
+
+  it("renders an honest empty sentence when integrations is an empty array", async () => {
+    fetchSettingsMock.mockResolvedValue(EMPTY_INTEGRATIONS_SETTINGS);
+    fetchCareerDataMock.mockResolvedValue(CAREER_DATA);
+    fetchSubscriptionMock.mockResolvedValue(SUBSCRIPTION);
+
+    await renderOnIntegrations();
+
+    const empty = screen.getByTestId("jobboard-empty");
+    expect(empty.textContent ?? "").toMatch(/no job board/i);
+    expect(screen.queryByTestId("jobboard-row-greenhouse")).toBeNull();
   });
 });

@@ -573,7 +573,7 @@ export interface SettingsPayload {
   };
   portfolio: { url: string | null; cadence: string | null; lastSynced: string | null; status?: string };
   agentConfig: { autoApply: boolean; approvalGate: boolean; matchThreshold: number };
-  integrations: Array<{ name: string; status: string; detail: string }>;
+  integrations: Array<{ source: string; name: string; status: string; detail: string }>;
   connectedAccounts: Array<{ name: string; detail: string; status: string }>;
 }
 
