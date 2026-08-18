@@ -589,3 +589,68 @@ export async function refreshAnthropicOAuth(o: RequestOptions = {}): Promise<Pro
       }),
     ) as Provider;
 }
+
+/**
+ * Providers with a per-user OAuth "Connect" affordance (GAP-PROVIDER-OAUTH-1),
+ * mirroring the backend's ``provider_oauth_registry`` — kept as an explicit,
+ * honest list rather than inferred from `auth` copy so the button never
+ * appears for a provider the server would 404 on.
+ */
+export const OAUTH_CONNECT_PROVIDERS = ["anthropic", "openrouter"] as const;
+export type OAuthConnectProvider = (typeof OAUTH_CONNECT_PROVIDERS)[number];
+
+export function supportsUserOAuthConnect(providerId: string): providerId is OAuthConnectProvider {
+  return (OAUTH_CONNECT_PROVIDERS as readonly string[]).includes(providerId);
+}
+
+/** Result of POST /agents/user/providers/{provider}/oauth/start. */
+const UserProviderOAuthStartSchema = z.object({
+  authorizeUrl: z.string(),
+  // "app_callback": zero-paste — the provider redirects straight back to our
+  // own server, which auto-populates this modal via postMessage. "code_relay":
+  // the provider shows a one-time code the caller pastes back below.
+  flow: z.enum(["app_callback", "code_relay"]),
+  provider: z.string(),
+});
+export type UserProviderOAuthStart = z.infer<typeof UserProviderOAuthStartSchema>;
+
+/**
+ * Begin THIS user's OAuth connect for `provider` (GAP-PROVIDER-OAUTH-1) — the
+ * per-user, multi-provider twin of {@link startAnthropicOAuth}. The server
+ * decides which flow applies (a live config fact, not a client guess) and
+ * this always writes ONLY the caller's own credential — never the
+ * deployment-wide store.
+ */
+export async function startUserProviderOAuth(
+  provider: string,
+  o: RequestOptions = {},
+): Promise<UserProviderOAuthStart> {
+  return UserProviderOAuthStartSchema.parse(
+    await apiRequest<unknown>(`/agents/user/providers/${provider}/oauth/start`, {
+      ...o,
+      method: "POST",
+    }),
+  );
+}
+
+/**
+ * Complete the code_relay fallback: POST the pasted `code#state` to
+ * /agents/user/providers/{provider}/oauth/exchange. Per-user twin of
+ * {@link exchangeAnthropicOAuth} — the exchanged credential lands in THIS
+ * user's own store, never the deployment-wide one.
+ */
+export async function exchangeUserProviderOAuth(
+  provider: string,
+  pastedCode: string,
+  o: RequestOptions = {},
+): Promise<UserCredential> {
+  return UserCredentialSchema.partial()
+    .passthrough()
+    .parse(
+      await apiRequest<unknown>(`/agents/user/providers/${provider}/oauth/exchange`, {
+        ...o,
+        method: "POST",
+        body: { pastedCode },
+      }),
+    ) as UserCredential;
+}

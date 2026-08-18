@@ -21,7 +21,7 @@ from typing import Any, Callable
 
 from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import StreamingResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from app.agents.cover_letter_agent import (
@@ -6664,6 +6664,295 @@ def anthropic_oauth_refresh(current_user: AdminUser) -> dict[str, Any]:
     except credential_vault.CredentialVaultError as exc:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
     return _provider_status_object("anthropic", current_user["id"])
+
+
+# ---------------------------------------------------------------------------
+# Per-user, provider-agnostic OAuth connect (GAP-PROVIDER-OAUTH-1) — a
+# SEAMLESS "Connect" button for every provider whose descriptor supports it
+# (today: anthropic, openrouter — see provider_oauth_registry.py), additive
+# alongside the admin-only deployment-wide family above and the manual
+# per-user credential-paste routes below. These write ONLY the caller's own
+# UserProviderCredential row — the deployment-wide ProviderCredential store
+# is never touched from here (asserted by
+# test_provider_oauth_connect.py::test_callback_never_writes_deployment_row).
+#
+# Two flows, chosen per-provider by provider_oauth_registry.get_oauth_
+# descriptor(...).flow:
+#   - "app_callback": the provider redirects the browser straight back to
+#     OUR server (GET .../oauth/callback below); zero paste. Requires the
+#     provider's OAuth client to accept our app-hosted redirect_uri —
+#     OpenRouter always does (no client registration exists to reject it);
+#     Anthropic's public CLI client does not, so it only activates once an
+#     operator sets ANTHROPIC_OAUTH_CLIENT_ID to a client that does.
+#   - "code_relay": the provider's OWN hosted page displays a one-time code
+#     the user pastes back to /oauth/exchange below — Anthropic's default,
+#     using the SAME anthropic_oauth.py mechanics the admin flow above uses.
+# ---------------------------------------------------------------------------
+
+
+@router.post("/user/providers/{provider}/oauth/start")
+def user_provider_oauth_start(provider: str, current_user: CurrentUser) -> dict[str, Any]:
+    """Begin this user's OAuth connect for ``provider``.
+
+    404 for a provider with no OAuth descriptor (API-key-only providers, or
+    an unrecognised id) — never a control that can only fail. 503 when the
+    vault key is absent (the callback could not store the result honestly).
+    Persists a per-user PKCE state row (reusing AnthropicOAuthStateRepository
+    — GAP-PROVIDER-OAUTH-1) and returns the provider's own authorize URL plus
+    which flow it resolved to, so the frontend can render the right UI
+    (popup + auto-return vs. popup + paste-back) without guessing.
+    """
+    from app.services import anthropic_oauth
+    from app.services import provider_oauth_registry as registry
+
+    descriptor = registry.get_oauth_descriptor(provider)
+    if descriptor is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            f"Provider '{provider}' does not support OAuth connect.",
+        )
+    _oauth_vault_ready_or_503()
+    verifier, challenge = anthropic_oauth.generate_pkce()
+    state = anthropic_oauth.generate_state()
+    redirect_uri = descriptor.redirect_uri()
+    AnthropicOAuthStateRepository().create(
+        state, current_user["id"], verifier, provider=provider, redirect_uri=redirect_uri,
+    )
+    authorize_url = descriptor.build_authorize_url(challenge, state, redirect_uri)
+    return {"authorizeUrl": authorize_url, "flow": descriptor.flow, "provider": provider}
+
+
+def _oauth_popup_html(*, provider: str, connected: bool, error: str | None = None) -> str:
+    """A tiny self-closing page for the popup window ``oauth/callback``
+    (app_callback) lands in. It NEVER carries a token — only
+    ``{provider, connected}`` — via ``window.opener.postMessage``, origin-
+    scoped to this same server so no other tab/site can read or spoof it.
+    Falls back to a plain readable status line when there is no opener
+    (e.g. the link was opened directly, not through our popup)."""
+    import html
+
+    safe_provider = html.escape(provider)
+    message = (
+        "Connected — you can close this window."
+        if connected
+        else f"Connection failed: {html.escape(error or 'unknown error')}"
+    )
+    payload = json.dumps(
+        {"source": "aether-oauth", "provider": provider, "connected": connected}
+    )
+    return f"""<!doctype html>
+<html><head><meta charset="utf-8"><title>{safe_provider} — Aether</title></head>
+<body style="background:#08080A;color:#F5F1E6;font-family:system-ui,-apple-system,sans-serif;
+display:flex;align-items:center;justify-content:center;height:100vh;margin:0;">
+<p id="aether-oauth-status">{message}</p>
+<script>
+(function () {{
+  var payload = {payload};
+  if (window.opener) {{
+    window.opener.postMessage(payload, window.location.origin);
+    setTimeout(function () {{ window.close(); }}, 250);
+  }}
+}})();
+</script>
+</body></html>"""
+
+
+@router.get("/user/providers/{provider}/oauth/callback")
+def user_provider_oauth_callback(
+    provider: str,
+    code: str | None = None,
+    state: str | None = None,
+    error: str | None = None,
+) -> HTMLResponse:
+    """The APP-HOSTED OAuth callback (GAP-PROVIDER-OAUTH-1, app_callback flow).
+
+    Unauthenticated by necessity — the provider's redirect carries no app
+    Bearer JWT (same reason ``google_oauth.google_callback`` is
+    unauthenticated). The signed-in user is recovered from the per-user
+    ``AnthropicOAuthState`` row the ``/oauth/start`` call created, keyed by
+    the opaque, single-use ``state`` value — never trusted from the request
+    itself, and rejected outright if it names a different provider (a state
+    minted for one provider can never complete another's exchange).
+
+    On a genuine exchange this writes ONLY the caller's own
+    ``UserProviderCredential`` row (never ``ProviderCredential``, the
+    deployment-wide store the admin flow above owns), then runs a REAL
+    verify round-trip against the just-stored credential (best-effort — a
+    verify outage does not fail the connect; the badge simply stays
+    unverified until the user re-tests).
+
+    Always returns 200 with the tiny postMessage+close page — a redirect
+    landing on a raw 4xx/5xx would strand the popup with nothing to tell the
+    opener, and the payload never carries a token in either branch.
+    """
+    from app.services import provider_oauth_registry as registry
+
+    descriptor = registry.get_oauth_descriptor(provider)
+    if descriptor is None:
+        return HTMLResponse(
+            _oauth_popup_html(provider=provider, connected=False, error="unsupported provider")
+        )
+    if error:
+        return HTMLResponse(_oauth_popup_html(provider=provider, connected=False, error=error))
+    if not code or not state:
+        return HTMLResponse(
+            _oauth_popup_html(provider=provider, connected=False, error="missing code or state")
+        )
+    row = AnthropicOAuthStateRepository().consume(state)
+    if row is None:
+        return HTMLResponse(
+            _oauth_popup_html(
+                provider=provider, connected=False,
+                error="authorization expired or already used",
+            )
+        )
+    if row.get("provider") != provider:
+        return HTMLResponse(
+            _oauth_popup_html(provider=provider, connected=False, error="provider mismatch")
+        )
+    user_id = row["userId"]
+    redirect_uri = row.get("redirectUri") or descriptor.redirect_uri()
+    try:
+        tok = descriptor.exchange_code(code, row["codeVerifier"], state, redirect_uri)
+    except Exception as exc:  # noqa: BLE001 — never leak upstream detail/secret to the popup
+        logger.warning(
+            "user oauth exchange failed provider=%s error=%s", provider, type(exc).__name__
+        )
+        return HTMLResponse(
+            _oauth_popup_html(
+                provider=provider, connected=False,
+                error="the provider rejected the authorization",
+            )
+        )
+    if not credential_vault.key_present():
+        return HTMLResponse(
+            _oauth_popup_html(
+                provider=provider, connected=False, error="credential storage unavailable",
+            )
+        )
+    try:
+        UserProviderCredentialRepository().upsert(
+            user_id, provider, auth_mode=descriptor.token_auth_mode, secret=tok["access_token"],
+            oauth_scopes=tok.get("scope"), expires_at=tok.get("expires_at"),
+        )
+    except credential_vault.CredentialVaultError:
+        return HTMLResponse(
+            _oauth_popup_html(
+                provider=provider, connected=False, error="credential storage unavailable",
+            )
+        )
+    if descriptor.token_auth_mode == "oauth_token":
+        # Sync CLAUDE_CODE_OAUTH_TOKEN to the repo-root .env (GAP-P7-DEF-A
+        # §3.3), matching put_user_credential's existing behaviour for a
+        # manually-pasted oauth_token. Best-effort — the DB row is the
+        # source of truth, and the token is never logged.
+        from app.services import env_file_writer
+
+        env_file_writer.sync_oauth_token_env(tok["access_token"])
+    try:
+        ok, status_token, _detail = verify_user_credential(provider, user_id)
+        UserProviderCredentialRepository().mark_verified(
+            user_id, provider, "ok" if ok else "failed"
+        )
+    except Exception:  # noqa: BLE001 — a verify outage must not fail the connect
+        pass
+    return HTMLResponse(_oauth_popup_html(provider=provider, connected=True))
+
+
+class UserProviderOAuthExchangeBody(BaseModel):
+    pastedCode: str
+
+
+@router.post("/user/providers/{provider}/oauth/exchange")
+def user_provider_oauth_exchange(
+    provider: str, body: UserProviderOAuthExchangeBody, current_user: CurrentUser
+) -> dict[str, Any]:
+    """Complete this user's OAuth connect via the code_relay fallback.
+
+    The per-user twin of the admin-only ``/providers/anthropic/oauth/
+    exchange`` above, for providers/configurations whose descriptor resolves
+    to ``flow == "code_relay"`` (today: Anthropic by default — the public CLI
+    client cannot accept our app-hosted redirect). Reuses the exact same
+    ``code#state`` paste-back mechanics; the only difference is WHERE the
+    result lands — this user's own ``UserProviderCredential`` row, never the
+    deployment-wide ``ProviderCredential`` store.
+
+    Same honest-failure contract as the admin route: 422 malformed paste,
+    400 unknown/expired/replayed/cross-user state, 502 a genuine upstream
+    exchange failure (never a fake success).
+    """
+    from app.services import provider_oauth_registry as registry
+
+    descriptor = registry.get_oauth_descriptor(provider)
+    if descriptor is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            f"Provider '{provider}' does not support OAuth connect.",
+        )
+    code, state = _parse_pasted_oauth_code(body.pastedCode)
+    _oauth_vault_ready_or_503()
+    row = AnthropicOAuthStateRepository().consume(state)
+    if row is None:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Authorization state is unknown, expired, or already used — restart Connect.",
+        )
+    if row.get("userId") != current_user["id"]:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "This authorization was started by a different user.",
+        )
+    if row.get("provider") != provider:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "This authorization was started for a different provider.",
+        )
+    redirect_uri = row.get("redirectUri") or descriptor.redirect_uri()
+    try:
+        tok = descriptor.exchange_code(code, row["codeVerifier"], state, redirect_uri)
+    except (anthropic_oauth_exchange_error_types()) as exc:
+        upstream_status = getattr(exc, "upstream_status", None)
+        if upstream_status is not None:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                "The provider rejected the authorization code — restart Connect.",
+            ) from exc
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            "The provider rejected the authorization code — restart Connect.",
+        ) from exc
+    user_id = current_user["id"]
+    try:
+        UserProviderCredentialRepository().upsert(
+            user_id, provider, auth_mode=descriptor.token_auth_mode, secret=tok["access_token"],
+            oauth_scopes=tok.get("scope"), expires_at=tok.get("expires_at"),
+        )
+    except credential_vault.CredentialVaultError as exc:
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
+    if descriptor.token_auth_mode == "oauth_token":
+        from app.services import env_file_writer
+
+        env_file_writer.sync_oauth_token_env(tok["access_token"])
+    try:
+        ok, _status_token, _detail = verify_user_credential(provider, user_id)
+        UserProviderCredentialRepository().mark_verified(
+            user_id, provider, "ok" if ok else "failed"
+        )
+    except Exception:  # noqa: BLE001 — a verify outage must not fail the connect
+        pass
+    return _user_credential_masked(user_id, provider)
+
+
+def anthropic_oauth_exchange_error_types() -> tuple[type[Exception], ...]:
+    """Every provider's ``OAuthExchangeError`` subclass, so the code_relay
+    exchange route above catches a genuine upstream rejection regardless of
+    which descriptor served it (each provider module defines its own class —
+    see ``anthropic_oauth.OAuthExchangeError`` / ``openrouter_oauth.
+    OAuthExchangeError`` — rather than sharing one, so each stays free to
+    carry provider-specific detail)."""
+    from app.services import anthropic_oauth, openrouter_oauth
+
+    return (anthropic_oauth.OAuthExchangeError, openrouter_oauth.OAuthExchangeError)
 
 
 @router.get("/stats")
