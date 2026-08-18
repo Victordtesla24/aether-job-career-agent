@@ -373,7 +373,21 @@ export default function NetworkingPage() {
 
   const contactCount = totalContacts(data.stats, []);
   const isEmpty = contactCount === 0 || demoEmpty;
-  const columns = buildPipelineColumns(data.pipeline);
+  // ?demo=empty must preview a true empty CRM shell without leaking real contacts.
+  const EMPTY_PIPELINE: NetworkingSummary["pipeline"] = [
+    { stage: "New", count: 0, contacts: [] },
+    { stage: "Warm", count: 0, contacts: [] },
+    { stage: "Active", count: 0, contacts: [] },
+    { stage: "Scheduled", count: 0, contacts: [] },
+    { stage: "Placed", count: 0, contacts: [] },
+  ];
+  const boardStats = demoEmpty
+    ? { contacts: 0, activeConversations: 0, referralsInFlight: 0, responseRate: null as number | null }
+    : data.stats;
+  const boardContactCount = demoEmpty ? 0 : contactCount;
+  const columns = buildPipelineColumns(demoEmpty ? EMPTY_PIPELINE : data.pipeline);
+  const outreachQueue = demoEmpty ? [] : data.outreachQueue;
+  const communicationLog = demoEmpty ? [] : data.communicationLog;
 
   return (
     <div className="space-y-6" data-testid="networking-crm">
@@ -633,194 +647,213 @@ export default function NetworkingPage() {
       ) : null}
 
       {isEmpty ? (
-        <div className="bg-surface-1 rounded-[14px] border border-white/10 p-12 text-center" data-testid="networking-empty-state">
-          <p className="text-lg font-semibold">No connections yet</p>
-          <p className="mx-auto mt-1 max-w-md text-sm text-aether-muted">
-            Import from Gmail or a LinkedIn Connections.csv export to keep this board current, or add a contact
-            manually to begin tracking outreach. Recruiter Outreach can draft a first-touch once a contact has an email —
-            drafts stay in Approvals and never send on their own.
-          </p>
-          <button
-            type="button"
-            data-testid="empty-state-add-contact-btn"
-            onClick={() => setShowAdd(true)}
-            className="mt-4 rounded-xl border border-aether-violet/40 px-4 py-2 text-sm font-semibold text-aether-violet hover:bg-aether-violet/10"
-          >
-            <i className="fa-solid fa-user-plus mr-2" aria-hidden="true" />
-            Add contact manually
-          </button>
+        <div
+          className="bg-surface-1 rounded-[14px] border border-white/10 px-4 py-4 md:px-5"
+          data-testid="networking-empty-state"
+        >
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-white">No connections yet — the CRM shell below is real</p>
+              <p className="mt-1 max-w-2xl text-sm text-aether-muted">
+                Import from Gmail or a LinkedIn Connections.csv export, or add someone manually. Stats stay
+                honest (response rate is not measured until outreach exists). Recruiter Outreach drafts go to
+                Approvals and never send on their own.
+              </p>
+            </div>
+            <button
+              type="button"
+              data-testid="empty-state-add-contact-btn"
+              onClick={() => setShowAdd(true)}
+              className="shrink-0 rounded-xl border border-aether-violet/40 px-4 py-2 text-sm font-semibold text-aether-violet hover:bg-aether-violet/10"
+            >
+              <i className="fa-solid fa-user-plus mr-2" aria-hidden="true" />
+              Add contact manually
+            </button>
+          </div>
         </div>
-      ) : (
-        <>
-          {/* Stat tiles */}
-          <section className="grid grid-cols-2 gap-4 md:grid-cols-4" data-testid="networking-stats">
-            <Stat label="Contacts" value={String(contactCount)} />
-            <Stat label="Active conversations" value={String(data.stats.activeConversations)} accent="text-sapphire-light" />
-            <Stat label="Referrals in flight" value={String(data.stats.referralsInFlight)} accent="text-aether-violet" />
-              <Stat
-              label="Response rate"
-              value={data.stats.responseRate === null ? "not measured" : `${data.stats.responseRate}%`}
-              accent={data.stats.responseRate === null ? "text-state-neutral" : "text-aether-green"}
-            />
-          </section>
+      ) : null}
 
-          <p className="text-xs text-aether-muted-dim" data-testid="pipeline-legend">
-            Pipeline stages: <span className="text-aether-muted">New</span> identified ·{" "}
-            <span className="text-aether-muted">Warm</span> first contact ·{" "}
-            <span className="text-aether-muted">Active</span> in conversation ·{" "}
-            <span className="text-aether-muted">Scheduled</span> meeting set ·{" "}
-            <span className="text-aether-muted">Placed</span> referral or outcome. Open a card to change
-            stage.
-          </p>
+      {/* Stat tiles — always visible so an empty account still sees the CRM, not a help page. */}
+      <section className="grid grid-cols-2 gap-4 md:grid-cols-4" data-testid="networking-stats">
+        <Stat label="Contacts" value={String(boardContactCount)} />
+        <Stat
+          label="Active conversations"
+          value={String(boardStats.activeConversations)}
+          accent="text-sapphire-light"
+        />
+        <Stat
+          label="Referrals in flight"
+          value={String(boardStats.referralsInFlight)}
+          accent="text-aether-violet"
+        />
+        <Stat
+          label="Response rate"
+          value={boardStats.responseRate === null ? "not measured" : `${boardStats.responseRate}%`}
+          accent={boardStats.responseRate === null ? "text-state-neutral" : "text-aether-green"}
+        />
+      </section>
 
-          <div className="grid gap-6 xl:grid-cols-3">
-            {/* Contact pipeline */}
-            <section className="min-w-0 xl:col-span-2" data-testid="contact-pipeline">
-              <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-aether-muted">
-                Contact Pipeline
-              </h2>
-              <div className="-mx-1 overflow-x-auto pb-2 md:mx-0 md:overflow-visible">
-                <div className="flex min-w-[44rem] gap-3 md:min-w-0 md:grid md:grid-cols-3 xl:grid-cols-5">
-                {columns.map((col) => {
-                  return (
-                    <div key={col.stage} className="min-w-[8.5rem] flex-1 md:min-w-0" data-testid={`pipeline-${col.stage.toLowerCase()}`}>
-                      <div className="mb-2 flex items-center justify-between px-1">
-                        <div className="flex items-center gap-1.5">
-                          <span className={`h-2 w-2 rounded-full ${STAGE_ACCENT[col.stage] ?? "bg-white/40"}`} />
-                          <span className="text-xs font-semibold">{col.stage}</span>
-                        </div>
-                        <span className="mono text-[11px] text-aether-muted-dim">{col.count}</span>
+      <p className="text-xs text-aether-muted-dim" data-testid="pipeline-legend">
+        Pipeline stages: <span className="text-aether-muted">New</span> identified ·{" "}
+        <span className="text-aether-muted">Warm</span> first contact ·{" "}
+        <span className="text-aether-muted">Active</span> in conversation ·{" "}
+        <span className="text-aether-muted">Scheduled</span> meeting set ·{" "}
+        <span className="text-aether-muted">Placed</span> referral or outcome. Open a card to change stage.
+      </p>
+
+      <div className="grid gap-6 xl:grid-cols-3">
+        {/* Contact pipeline */}
+        <section className="min-w-0 xl:col-span-2" data-testid="contact-pipeline">
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-aether-muted">
+            Contact Pipeline
+          </h2>
+          <div className="-mx-1 overflow-x-auto pb-2 md:mx-0 md:overflow-visible">
+            <div className="flex min-w-[44rem] gap-3 md:min-w-0 md:grid md:grid-cols-3 xl:grid-cols-5">
+              {columns.map((col) => {
+                return (
+                  <div
+                    key={col.stage}
+                    className="min-w-[8.5rem] flex-1 md:min-w-0"
+                    data-testid={`pipeline-${col.stage.toLowerCase()}`}
+                  >
+                    <div className="mb-2 flex items-center justify-between px-1">
+                      <div className="flex items-center gap-1.5">
+                        <span className={`h-2 w-2 rounded-full ${STAGE_ACCENT[col.stage] ?? "bg-white/40"}`} />
+                        <span className="text-xs font-semibold">{col.stage}</span>
                       </div>
-                      {col.contacts.length === 0 ? (
-                        <div
-                          className="rounded-xl border border-dashed border-white/10 px-2 py-3 text-center text-[10px] text-aether-muted-dim"
-                          data-testid={`pipeline-${col.stage.toLowerCase()}-empty`}
-                        >
-                          No contacts yet
-                        </div>
-                      ) : (
-                        <div className="space-y-2">
-                          {col.contacts.map((c) => (
-                            <article
-                              key={c.id ?? `${c.name}-${c.company}`}
-                              data-testid="contact-card"
-                              role="button"
-                              tabIndex={0}
-                              onClick={() => c.id && setSelectedContactId(c.id)}
-                              onKeyDown={(e) => {
-                                if ((e.key === "Enter" || e.key === " ") && c.id) {
-                                  e.preventDefault();
-                                  setSelectedContactId(c.id);
-                                }
-                              }}
-                              className="bg-surface-1 cursor-pointer rounded-xl border border-white/10 p-3 transition hover:border-sapphire/40"
-                            >
-                              <div className="flex items-center justify-between gap-2">
-                                <div className="flex min-w-0 items-center gap-2">
-                                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/10 text-[10px] font-bold">
-                                    {initials(c.name)}
-                                  </span>
-                                  <div className="min-w-0">
-                                    <p className="truncate text-xs font-semibold">{c.name}</p>
-                                    <p className="truncate text-[10px] text-aether-muted-dim">
-                                      {c.role} · {c.company}
-                                    </p>
-                                  </div>
-                                </div>
-                                {/* MV-networking-006: honest stage badge on each card. */}
-                                <span
-                                  className={`mono shrink-0 rounded px-1.5 py-0.5 text-[9px] ${STAGE_ACCENT[col.stage] ?? "bg-white/40"} bg-opacity-20 text-white/80`}
-                                  data-testid="contact-stage-badge"
-                                >
-                                  {col.stage}
-                                </span>
-                              </div>
-                            </article>
-                          ))}
-                        </div>
-                      )}
+                      <span className="mono text-[11px] text-aether-muted-dim">{col.count}</span>
                     </div>
-                  );
-                })}
-                </div>
-              </div>
-            </section>
-
-            {/* Right column */}
-            <div className="min-w-0 space-y-6">
-              <section className="bg-surface-1 rounded-[14px] border border-white/10 p-5" data-testid="outreach-queue">
-                <h2 className="mb-3 text-[15px] font-semibold">Outreach Queue</h2>
-                {data.outreachQueue.length === 0 ? (
-                  <p className="text-xs text-aether-muted-dim" data-testid="outreach-queue-empty">
-                    No outreach queued yet. Open a contact with an email and use{" "}
-                    <span className="text-aether-muted">Draft outreach</span> to create an
-                    approval-gated first-touch — nothing sends from this screen.
-                  </p>
-                ) : (
-                  <div className="space-y-3">
-                    {data.outreachQueue.map((o) => (
-                      <article key={o.id} className="rounded-xl border border-white/10 bg-white/5 p-3" data-testid={`outreach-item-${o.id}`}>
-                        <p className="text-xs font-semibold">
-                          {o.contactName || "Unknown contact"}
-                          {o.company ? ` · ${o.company}` : ""}
-                        </p>
-                        <p className="mt-0.5 text-xs text-white/85">{o.subject}</p>
-                        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                          <span className="mono inline-block rounded bg-aether-violet/15 px-1.5 py-0.5 text-[10px] text-aether-violet">
-                            {formatOutreachKind(o.kind)}
-                          </span>
-                          <span className="mono inline-block rounded bg-white/10 px-1.5 py-0.5 text-[10px] text-aether-muted">
-                            {formatOutreachStatus(o.status)}
-                          </span>
-                          {o.status === "pending" ? (
-                            <button
-                              type="button"
-                              data-testid={`cancel-outreach-${o.id}`}
-                              disabled={outreachBusyId === o.id}
-                              onClick={() => void cancelOutreach(o.id)}
-                              className="ml-auto rounded border border-white/15 px-2 py-0.5 text-[10px] text-aether-muted hover:border-red-400/40 hover:text-red-200 disabled:opacity-50"
-                            >
-                              {outreachBusyId === o.id ? "Removing…" : "Remove"}
-                            </button>
-                          ) : null}
-                        </div>
-                        {o.scheduledAt ? (
-                          <p className="mt-1 text-[10px] text-aether-muted-dim">
-                            Scheduled: {formatWhen(o.scheduledAt)}
-                          </p>
-                        ) : null}
-                      </article>
-                    ))}
-                  </div>
-                )}
-              </section>
-
-              <section className="bg-surface-1 rounded-[14px] border border-white/10 p-5" data-testid="communication-log">
-                <h2 className="mb-3 text-[15px] font-semibold">Communication Log</h2>
-                {data.communicationLog.length === 0 ? (
-                  <p className="text-xs text-aether-muted-dim" data-testid="communication-log-empty">
-                    No communications logged yet.
-                  </p>
-                ) : (
-                  <div className="space-y-3">
-                    {data.communicationLog.map((l) => (
-                      <div key={l.id} className="border-l-2 border-white/10 pl-3">
-                        <p className="mono text-[10px] text-aether-muted-dim">
-                          {formatWhen(l.sentAt)} · {formatOutreachKind(l.kind)}
-                        </p>
-                        <p className="text-xs">
-                          <span className="font-semibold">{l.contactName || "Unknown contact"}</span>{" "}
-                          <span className="text-aether-muted">— {l.subject}</span>
-                        </p>
+                    {col.contacts.length === 0 ? (
+                      <div
+                        className="rounded-xl border border-dashed border-white/10 px-2 py-3 text-center text-[10px] text-aether-muted-dim"
+                        data-testid={`pipeline-${col.stage.toLowerCase()}-empty`}
+                      >
+                        No contacts yet
                       </div>
-                    ))}
+                    ) : (
+                      <div className="space-y-2">
+                        {col.contacts.map((c) => (
+                          <article
+                            key={c.id ?? `${c.name}-${c.company}`}
+                            data-testid="contact-card"
+                            role="button"
+                            tabIndex={0}
+                            onClick={() => c.id && setSelectedContactId(c.id)}
+                            onKeyDown={(e) => {
+                              if ((e.key === "Enter" || e.key === " ") && c.id) {
+                                e.preventDefault();
+                                setSelectedContactId(c.id);
+                              }
+                            }}
+                            className="bg-surface-1 cursor-pointer rounded-xl border border-white/10 p-3 transition hover:border-sapphire/40"
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex min-w-0 items-center gap-2">
+                                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white/10 text-[10px] font-bold">
+                                  {initials(c.name)}
+                                </span>
+                                <div className="min-w-0">
+                                  <p className="truncate text-xs font-semibold">{c.name}</p>
+                                  <p className="truncate text-[10px] text-aether-muted-dim">
+                                    {c.role} · {c.company}
+                                  </p>
+                                </div>
+                              </div>
+                              <span
+                                className={`mono shrink-0 rounded px-1.5 py-0.5 text-[9px] ${STAGE_ACCENT[col.stage] ?? "bg-white/40"} bg-opacity-20 text-white/80`}
+                                data-testid="contact-stage-badge"
+                              >
+                                {col.stage}
+                              </span>
+                            </div>
+                          </article>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                )}
-              </section>
+                );
+              })}
             </div>
           </div>
-        </>
-      )}
+        </section>
+
+        {/* Right column */}
+        <div className="min-w-0 space-y-6">
+          <section className="bg-surface-1 rounded-[14px] border border-white/10 p-5" data-testid="outreach-queue">
+            <h2 className="mb-3 text-[15px] font-semibold">Outreach Queue</h2>
+            {outreachQueue.length === 0 ? (
+              <p className="text-xs text-aether-muted-dim" data-testid="outreach-queue-empty">
+                No outreach queued yet. Open a contact with an email and use{" "}
+                <span className="text-aether-muted">Draft outreach</span> to create an approval-gated
+                first-touch — nothing sends from this screen.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {outreachQueue.map((o) => (
+                  <article
+                    key={o.id}
+                    className="rounded-xl border border-white/10 bg-white/5 p-3"
+                    data-testid={`outreach-item-${o.id}`}
+                  >
+                    <p className="text-xs font-semibold">
+                      {o.contactName || "Unknown contact"}
+                      {o.company ? ` · ${o.company}` : ""}
+                    </p>
+                    <p className="mt-0.5 text-xs text-white/85">{o.subject}</p>
+                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                      <span className="mono inline-block rounded bg-aether-violet/15 px-1.5 py-0.5 text-[10px] text-aether-violet">
+                        {formatOutreachKind(o.kind)}
+                      </span>
+                      <span className="mono inline-block rounded bg-white/10 px-1.5 py-0.5 text-[10px] text-aether-muted">
+                        {formatOutreachStatus(o.status)}
+                      </span>
+                      {o.status === "pending" ? (
+                        <button
+                          type="button"
+                          data-testid={`cancel-outreach-${o.id}`}
+                          disabled={outreachBusyId === o.id}
+                          onClick={() => void cancelOutreach(o.id)}
+                          className="ml-auto rounded border border-white/15 px-2 py-0.5 text-[10px] text-aether-muted hover:border-red-400/40 hover:text-red-200 disabled:opacity-50"
+                        >
+                          {outreachBusyId === o.id ? "Removing…" : "Remove"}
+                        </button>
+                      ) : null}
+                    </div>
+                    {o.scheduledAt ? (
+                      <p className="mt-1 text-[10px] text-aether-muted-dim">
+                        Scheduled: {formatWhen(o.scheduledAt)}
+                      </p>
+                    ) : null}
+                  </article>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section className="bg-surface-1 rounded-[14px] border border-white/10 p-5" data-testid="communication-log">
+            <h2 className="mb-3 text-[15px] font-semibold">Communication Log</h2>
+            {communicationLog.length === 0 ? (
+              <p className="text-xs text-aether-muted-dim" data-testid="communication-log-empty">
+                No communications logged yet.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {communicationLog.map((l) => (
+                  <div key={l.id} className="border-l-2 border-white/10 pl-3">
+                    <p className="mono text-[10px] text-aether-muted-dim">
+                      {formatWhen(l.sentAt)} · {formatOutreachKind(l.kind)}
+                    </p>
+                    <p className="text-xs">
+                      <span className="font-semibold">{l.contactName || "Unknown contact"}</span>{" "}
+                      <span className="text-aether-muted">— {l.subject}</span>
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        </div>
+      </div>
 
       {/* Add Contact modal */}
       {showAdd ? (

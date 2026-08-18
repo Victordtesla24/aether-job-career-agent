@@ -1057,6 +1057,15 @@ Rules of engagement unchanged: locks (git/deploy/test), runbook deploys, append-
 
 ---
 
+## SESSION NW-ADV-UX — 2026-08-18T08:10Z — Networking empty-state CRM shell
+
+**By:** Cursor Grok session. Worktree `/root/dev/aether-wt-nw-ux2` on `feat/nw-adv-ux2`.
+**Why:** Adversarial requirements shipped, but zero-contact empty state hid stats/pipeline/outreach — owners saw a help panel and concluded "nothing changed".
+**Scope:** `apps/web/src/app/dashboard/networking/page.tsx` (+ tests). Always render honest empty CRM shell; keep purpose copy.
+**Does not touch:** sales_agent nurture fence, email center, branding.
+
+---
+
 ## SESSION ORCH-RUN-20260818T0223Z — DEPLOY WINDOW — batch-1 integration push
 
 **By:** DEPLOYER agent, isolated worktree `.claude/worktrees/agent-ae46e55256f3ae7c7`, branch `integration/wave-01`.
