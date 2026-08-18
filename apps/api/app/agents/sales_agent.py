@@ -75,7 +75,10 @@ from app.services.llm_client import (
     _STATIC_MODEL_CATALOG,
     LLMClient,
     LLMUnavailableError,
+    get_last_served_model,
     get_model,
+    resolve_provider,
+    served_model_capture,
 )
 from app.services.sales_branding import (
     render_sales_outreach_html,
@@ -1862,32 +1865,55 @@ class SalesAgent:
             "linkedinDrafts": 0,
             "errors": [],
         }
-        try:
-            ensure_agent_config(admin_id)
-            model, model_source = resolve_model()
-            result["model"] = model
-            result["modelSource"] = model_source
-            from app.services.networking_insights import network_snapshot_for_prompt
+        # D5/AUD-ECON-1: open the SAME observation scope the canonical
+        # dispatch path opens (``_record_run``, agents.py:1265) around every
+        # LLM-calling span of this run, so ``get_last_served_model()`` below
+        # reflects a real provider observation instead of always reading
+        # ``None`` from an outer, never-opened scope. Gated strictly on the
+        # observation — a run that made no successful live call discloses
+        # nothing (never fabricated).
+        with served_model_capture():
+            try:
+                ensure_agent_config(admin_id)
+                model, model_source = resolve_model()
+                result["model"] = model
+                result["modelSource"] = model_source
+                from app.services.networking_insights import network_snapshot_for_prompt
 
-            facts = f"{grounded_facts()}\n\n{network_snapshot_for_prompt(admin_id)}"
-            self._generate_campaigns(model=model, result=result, facts=facts)
-            self._generate_promo(result=result)
-            self._generate_linkedin_drafts(model=model, result=result, count=3, facts=facts)
-        except Exception as exc:  # noqa: BLE001 — the run row must go terminal
-            logger.exception("sales agent content generation failed")
-            result["errors"].append(str(exc))
-            runs.finish(run_row["id"], "failed", output=result, error=str(exc))
+                facts = f"{grounded_facts()}\n\n{network_snapshot_for_prompt(admin_id)}"
+                self._generate_campaigns(model=model, result=result, facts=facts)
+                self._generate_promo(result=result)
+                self._generate_linkedin_drafts(model=model, result=result, count=3, facts=facts)
+            except Exception as exc:  # noqa: BLE001 — the run row must go terminal
+                logger.exception("sales agent content generation failed")
+                result["errors"].append(str(exc))
+                # Mirrors agents.py:1451-1452's degrade-path disclosure: the
+                # observation is read INSIDE the still-open
+                # ``served_model_capture()`` scope, the instant the exception
+                # is caught, before its ``finally`` resets it on unwind.
+                _degraded_served_model = get_last_served_model()
+                if _degraded_served_model:
+                    result["servedModel"] = _degraded_served_model
+                    result["servedProvider"] = resolve_provider(_degraded_served_model)
+                runs.finish(run_row["id"], "failed", output=result, error=str(exc))
+                return result
+            status = "failed" if (
+                not result["campaignsCreated"]
+                and not result["campaignsSkipped"]
+                and not result["promosCreated"]
+                and not result["promosSkipped"]
+                and result["linkedinDrafts"] == 0
+            ) else "completed"
+            # Mirrors agents.py:1604-1606's happy-path disclosure: gated on
+            # the provider-published observation itself, never on a
+            # config-derived intent.
+            _served_model = get_last_served_model()
+            if _served_model:
+                result["servedModel"] = _served_model
+                result["servedProvider"] = resolve_provider(_served_model)
+            runs.finish(run_row["id"], status, output=result)
+            result["agentRunId"] = run_row["id"]
             return result
-        status = "failed" if (
-            not result["campaignsCreated"]
-            and not result["campaignsSkipped"]
-            and not result["promosCreated"]
-            and not result["promosSkipped"]
-            and result["linkedinDrafts"] == 0
-        ) else "completed"
-        runs.finish(run_row["id"], status, output=result)
-        result["agentRunId"] = run_row["id"]
-        return result
 
     def _grounding_guard(self, text: str) -> str | None:
         """Anti-fabrication check on generated copy. Returns a rejection
@@ -2116,49 +2142,70 @@ class SalesAgent:
             "explanation": "",
             "errors": [],
         }
-        try:
-            self.repo.seed_default_campaigns()
-            ensure_agent_config(admin_id)
-            model, model_source = resolve_model()
-            result["model"] = model
-            result["modelSource"] = model_source
-            accounts = self.repo.sales_sending_accounts(admin_id)
-            # Housekeeping: a disconnected Gmail account used to leave its
-            # watermark in AdminSetting forever. Pruned every run, idempotently,
-            # and never for an account this run is about to poll.
+        # D5/AUD-ECON-1: same observation scope as generate_marketing_content
+        # above and the canonical dispatch path (agents.py:1265) — wraps every
+        # LLM-calling span this pipeline can reach (inbound classification,
+        # reply personalization, lifecycle nudges, LinkedIn drafts) so the
+        # disclosure below reflects a real provider observation, never the
+        # config-derived intent alone.
+        with served_model_capture():
             try:
-                result["watermarksPruned"] = self.repo.prune_orphan_watermarks(
-                    tuple(str(a["id"]) for a in accounts)
-                )
-            except Exception as exc:  # noqa: BLE001 — housekeeping must not fail a run
-                logger.warning("sales agent: watermark prune failed: %s", exc)
-                result["errors"].append(f"watermark prune failed: {exc}")
-            if not accounts:
-                result["noSendingAccount"] = True
-                logger.info(
-                    "sales agent: no Gmail account is flagged usedForSalesAgent — "
-                    "inbound polling and live sending honestly skipped"
-                )
-            for account in accounts:
-                self._poll_account(
-                    admin_id, account, dry_run=dry_run, model=model, result=result
-                )
-            if live_scope == "all":
-                self._run_lifecycle(admin_id, accounts, dry_run=dry_run, result=result)
-            else:
-                logger.info("sales agent: lifecycle skipped; live scope is inbound-only")
-            self._run_linkedin_draft(model=model, result=result, admin_id=admin_id)
-            self._run_digest(admin_id, accounts, dry_run=dry_run, result=result)
-            self._run_network_nurture(admin_id, accounts, dry_run=dry_run, result=result)
-        except Exception as exc:  # noqa: BLE001 — the run row must go terminal
-            logger.exception("sales agent run failed")
-            result["errors"].append(str(exc))
+                self.repo.seed_default_campaigns()
+                ensure_agent_config(admin_id)
+                model, model_source = resolve_model()
+                result["model"] = model
+                result["modelSource"] = model_source
+                accounts = self.repo.sales_sending_accounts(admin_id)
+                # Housekeeping: a disconnected Gmail account used to leave its
+                # watermark in AdminSetting forever. Pruned every run, idempotently,
+                # and never for an account this run is about to poll.
+                try:
+                    result["watermarksPruned"] = self.repo.prune_orphan_watermarks(
+                        tuple(str(a["id"]) for a in accounts)
+                    )
+                except Exception as exc:  # noqa: BLE001 — housekeeping must not fail a run
+                    logger.warning("sales agent: watermark prune failed: %s", exc)
+                    result["errors"].append(f"watermark prune failed: {exc}")
+                if not accounts:
+                    result["noSendingAccount"] = True
+                    logger.info(
+                        "sales agent: no Gmail account is flagged usedForSalesAgent — "
+                        "inbound polling and live sending honestly skipped"
+                    )
+                for account in accounts:
+                    self._poll_account(
+                        admin_id, account, dry_run=dry_run, model=model, result=result
+                    )
+                if live_scope == "all":
+                    self._run_lifecycle(admin_id, accounts, dry_run=dry_run, result=result)
+                else:
+                    logger.info("sales agent: lifecycle skipped; live scope is inbound-only")
+                self._run_linkedin_draft(model=model, result=result, admin_id=admin_id)
+                self._run_digest(admin_id, accounts, dry_run=dry_run, result=result)
+                self._run_network_nurture(admin_id, accounts, dry_run=dry_run, result=result)
+            except Exception as exc:  # noqa: BLE001 — the run row must go terminal
+                logger.exception("sales agent run failed")
+                result["errors"].append(str(exc))
+                result["explanation"] = build_run_explanation(result)
+                # Mirrors agents.py:1451-1452's degrade-path disclosure: read
+                # INSIDE the still-open scope, the instant the exception is
+                # caught, before its ``finally`` resets it on unwind.
+                _degraded_served_model = get_last_served_model()
+                if _degraded_served_model:
+                    result["servedModel"] = _degraded_served_model
+                    result["servedProvider"] = resolve_provider(_degraded_served_model)
+                runs.finish(run_row["id"], "failed", output=result, error=str(exc))
+                return result
             result["explanation"] = build_run_explanation(result)
-            runs.finish(run_row["id"], "failed", output=result, error=str(exc))
+            # Mirrors agents.py:1604-1606's happy-path disclosure: gated on
+            # the provider-published observation itself, never fabricated
+            # when no successful live call was made.
+            _served_model = get_last_served_model()
+            if _served_model:
+                result["servedModel"] = _served_model
+                result["servedProvider"] = resolve_provider(_served_model)
+            runs.finish(run_row["id"], "completed", output=result)
             return result
-        result["explanation"] = build_run_explanation(result)
-        runs.finish(run_row["id"], "completed", output=result)
-        return result
 
 
 def build_run_explanation(result: dict[str, Any]) -> str:
