@@ -279,7 +279,7 @@ const HOP = {
     // `[story_evidence] if story_evidence else []` / `claim_evidence = " ".join(`
     // literals this hop used to cite were the asymmetry E3 closed — they no
     // longer exist here by construction, not by drift.
-    evidence: "apps/api/app/agents/cover_letter_agent.py:1740,1789,1793",
+    evidence: "apps/api/app/agents/cover_letter_agent.py:1802,1851,1856",
     discoveryEvidence: "apps/api/app/agents/cover_letter_agent.py:1557,1558-1563",
     anchors: [
       "story_evidence = build_story_evidence(",
@@ -370,7 +370,8 @@ const HOP = {
       "triage mode: UPDATE EmailThread SET classification, aiScore (NULL when the model gave no real score)",
     // EC-ADV 429-degrade inserted `_persist_filter_classifications` above the
     // scored UPDATE and shifted these lines — re-resolved against the live tree.
-    evidence: "apps/api/app/agents/email_agent.py:540-541",
+    // RUN-20260818T0223Z: batch-2 merge shifted this further; re-resolved again.
+    evidence: "apps/api/app/agents/email_agent.py:593-594",
     discoveryEvidence: "apps/api/app/agents/email_agent.py:365-382",
     anchors: ['UPDATE "EmailThread" SET "classification" = %s,'],
     status: "live",
@@ -407,8 +408,10 @@ const HOP = {
     // plan-driven `for step_name in writing:` loop together with this tree's
     // AUD-COV-2 fit-gate (woven into the loop's coverLetter branch,
     // preserving both) shifted these lines again -- re-resolved against the
-    // actually-merged tree, not copied from either parent.
-    evidence: "apps/api/app/routers/agents.py:4017,4060",
+    // actually-merged tree, not copied from either parent. batch-2's later
+    // merge into lane/integration-wave-02 shifted them again; re-resolved once
+    // more against the actually-merged tree.
+    evidence: "apps/api/app/routers/agents.py:4093,4136",
     discoveryEvidence: "apps/api/app/routers/agents.py:3380",
     anchors: [
       "def _pipeline_core(",
@@ -425,8 +428,10 @@ const HOP = {
     // The upsert the mechanism describes is not in the agent at all — the agent
     // calls it, the repository implements it. Both ends are cited so the claim
     // can be read end to end.
+    // RUN-20260818T0223Z: batch-2 merge shifted both files; re-resolved
+    // against the live tree.
     evidence:
-      "apps/api/app/agents/scout_agent.py:256; upsert apps/api/app/repositories/job.py:312,417,428-430",
+      "apps/api/app/agents/scout_agent.py:271; upsert apps/api/app/repositories/job.py:314,431,451-453",
     discoveryEvidence: "apps/api/app/agents/scout_agent.py:23,98",
     anchors: [
       "row = self._repository.create(user_id, job)",
@@ -444,7 +449,8 @@ const HOP = {
       "job_alerts mode: detect_alert_platform -> parse_job_alert -> JobRepository.create(posting.to_job_raw()) through the SAME upsert path as a board adapter; counts jobsCreated vs jobsUpdated from wasInserted",
     // EC-ADV 429-degrade + light-retry shifted `_job_alerts` — re-resolved
     // against HEAD so provenance CI stays honest (PROFILE-PHOTO Delivery unblock).
-    evidence: "apps/api/app/agents/email_agent.py:648,728,743,757,767",
+    // RUN-20260818T0223Z: batch-2 merge shifted it again; re-resolved once more.
+    evidence: "apps/api/app/agents/email_agent.py:701,781,796,810,820",
     discoveryEvidence: "apps/api/app/agents/email_agent.py:410-420,505-518",
     anchors: [
       "def _job_alerts(",
@@ -474,7 +480,8 @@ const HOP = {
     to: "agent.salaryIntelligence",
     kind: "reads",
     mechanism: "aggregates only the pay the user's OWN postings disclosed",
-    evidence: "apps/api/app/agents/salary_intelligence_agent.py:70,167",
+    // RUN-20260818T0223Z: batch-2 merge shifted this file; re-resolved.
+    evidence: "apps/api/app/agents/salary_intelligence_agent.py:71,202",
     discoveryEvidence: "apps/api/app/agents/salary_intelligence_agent.py:70",
     anchors: [
       "from app.repositories.job import JobRepository",
@@ -491,8 +498,10 @@ const HOP = {
     // ML-STOPALL-001 shifted the agents.py line numbers below (the
     // honest-refusal check + its helper were inserted earlier in the file) —
     // re-verified against HEAD, same anchors, new line numbers.
+    // RUN-20260818T0223Z: batch-2 merge shifted routers/agents.py again;
+    // re-resolved against the live tree.
     evidence:
-      "apps/api/app/agents/company_research_agent.py:53,183; narrative opt-in at apps/api/app/routers/agents.py:1897,2510",
+      "apps/api/app/agents/company_research_agent.py:53,183; narrative opt-in at apps/api/app/routers/agents.py:1914,2535",
     discoveryEvidence:
       "apps/api/app/agents/company_research_agent.py:53; narrative opt-in at apps/api/app/routers/agents.py:2020-2027",
     anchors: [
