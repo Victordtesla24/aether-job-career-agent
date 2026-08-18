@@ -15,10 +15,15 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  emailAgentErrorMessage,
+  emailReplySentNotice,
   emailScoreBadge,
+  gmailConnectedSuccessNotice,
   linkedInSearchUrl,
   parseEmailDraft,
   parseEmailInsights,
+  sortEmailInboxMessages,
+  type EmailMessage,
 } from "../../lib/api/workspaces";
 
 describe("emailScoreBadge (MV-001 honest no-score)", () => {
@@ -91,5 +96,102 @@ describe("linkedInSearchUrl (MV-007 honest search, not fake profile)", () => {
   it("returns null when there is no real sender name", () => {
     expect(linkedInSearchUrl("", "Acme")).toBeNull();
     expect(linkedInSearchUrl("Unknown", "")).toBeNull();
+  });
+});
+
+function msg(overrides: Partial<EmailMessage>): EmailMessage {
+  return {
+    id: "t",
+    from: "Recruiter",
+    fromEmail: "r@example.com",
+    company: "Acme",
+    subject: "Role",
+    preview: "Hi",
+    category: "priority",
+    score: null,
+    receivedAt: "2026-01-01T00:00:00Z",
+    account: "me@gmail.com",
+    body: "Hi",
+    bodyTruncated: false,
+    intelligence: null,
+    draftReply: "",
+    ...overrides,
+  };
+}
+
+describe("sortEmailInboxMessages", () => {
+  const olderHigh = msg({
+    id: "high",
+    score: 90,
+    receivedAt: "2026-01-01T00:00:00Z",
+    category: "priority",
+  });
+  const mid = msg({
+    id: "mid",
+    score: 50,
+    receivedAt: "2026-06-01T00:00:00Z",
+    category: "priority",
+  });
+  const newestUnscored = msg({
+    id: "new",
+    score: null,
+    receivedAt: "2026-08-18T00:00:00Z",
+    category: "priority",
+  });
+
+  it("priority: score descending, null last, then recency", () => {
+    const sorted = sortEmailInboxMessages(
+      [newestUnscored, mid, olderHigh],
+      "priority",
+    );
+    expect(sorted.map((m) => m.id)).toEqual(["high", "mid", "new"]);
+  });
+
+  it("followup: same score-first order", () => {
+    const sorted = sortEmailInboxMessages(
+      [newestUnscored, olderHigh],
+      "followup",
+    );
+    expect(sorted.map((m) => m.id)).toEqual(["high", "new"]);
+  });
+
+  it("all: recency only — does not bury new unscored mail", () => {
+    const sorted = sortEmailInboxMessages(
+      [olderHigh, mid, newestUnscored],
+      "all",
+    );
+    expect(sorted.map((m) => m.id)).toEqual(["new", "mid", "high"]);
+  });
+});
+
+describe("Email Center copy (no emoji / checkmarks)", () => {
+  it("Gmail connected notice has no checkmark", () => {
+    const text = gmailConnectedSuccessNotice();
+    expect(text).toMatch(/Gmail connected/);
+    expect(text).not.toMatch(/[✓✔✅]/);
+  });
+
+  it("sent notice names the recipient and has no checkmark", () => {
+    const text = emailReplySentNotice("Pat Lee");
+    expect(text).toContain("Pat Lee");
+    expect(text).not.toMatch(/[✓✔✅]/);
+  });
+});
+
+describe("emailAgentErrorMessage", () => {
+  it("lifts the FastAPI string detail out of an apiRequest 503 wrapper", () => {
+    const err = new Error(
+      'POST /agents/email/run failed (503): {"detail":"The AI provider rate-limited this run. Wait a minute and try again, or pick a lighter model in Agent Settings."}',
+    );
+    expect(emailAgentErrorMessage(err, "Could not run AI triage.")).toBe(
+      "The AI provider rate-limited this run. Wait a minute and try again, or pick a lighter model in Agent Settings.",
+    );
+  });
+
+  it("passes through a job-poll error that is already the honest sentence", () => {
+    const err = new Error(
+      "The selected model did not return a usable result. Try a different model in Agent Settings, or try again shortly.",
+    );
+    expect(emailAgentErrorMessage(err, "Could not run AI triage.")).toBe(err.message);
   });
 });

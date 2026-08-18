@@ -11,16 +11,20 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   createEmailDraft,
+  emailAgentErrorMessage,
   emailIntelligenceView,
+  emailReplySentNotice,
   emailScoreBadge,
   emailSendErrorMessage,
   fetchEmailInbox,
   fetchEmailThreadBody,
+  gmailConnectedSuccessNotice,
   linkedInSearchUrl,
   parseEmailDraft,
   parseEmailDraftFlags,
   parseEmailInsights,
   sendEmailReply,
+  sortEmailInboxMessages,
   type EmailInbox,
   type EmailIntelligence,
   type EmailMessage,
@@ -46,11 +50,6 @@ const CATEGORIES = [
 ] as const;
 
 const EMAIL_POLL_MS = 30_000;
-
-function receivedAtMs(value: string): number {
-  const parsed = Date.parse(value);
-  return Number.isNaN(parsed) ? 0 : parsed;
-}
 
 /** Keep date-only `YYYY-MM-DD` strings (tests + legacy rows) unchanged. */
 function formatReceivedAt(value: string): string {
@@ -216,7 +215,7 @@ export default function EmailCenterPage() {
     const result = gmailConnectResultFromParams(new URLSearchParams(window.location.search));
     if (!result) return;
     if (result.kind === "success") {
-      setConnectNotice({ kind: "success", message: "Gmail connected ✓ — syncing your inbox…" });
+      setConnectNotice({ kind: "success", message: gmailConnectedSuccessNotice() });
       fetchEmailInbox()
         .then((data) => applyInbox(data))
         .catch(() => { });
@@ -338,7 +337,7 @@ export default function EmailCenterPage() {
     } catch (e) {
       setTriageNotice({
         kind: "error",
-        message: e instanceof Error ? e.message : "Could not run AI triage.",
+        message: emailAgentErrorMessage(e, "Could not run AI triage."),
       });
     } finally {
       setTriageBusy(false);
@@ -358,7 +357,7 @@ export default function EmailCenterPage() {
       }
       setComputedIntel((prev) => ({ ...prev, [threadId]: intel }));
     } catch (e) {
-      setIntelError(e instanceof Error ? e.message : "Could not analyze this thread.");
+      setIntelError(emailAgentErrorMessage(e, "Could not analyze this thread."));
     } finally {
       setIntelBusy(false);
     }
@@ -380,7 +379,7 @@ export default function EmailCenterPage() {
       setDraftFlags((prev) => ({ ...prev, [threadId]: parseEmailDraftFlags(res) }));
       setDraft(text);
     } catch (e) {
-      setDraftError(e instanceof Error ? e.message : "Could not generate a draft reply.");
+      setDraftError(emailAgentErrorMessage(e, "Could not generate a draft reply."));
     } finally {
       setDraftBusy(false);
     }
@@ -541,7 +540,7 @@ export default function EmailCenterPage() {
       refreshInbox();
     } catch (e) {
       setAlertsError(
-        e instanceof Error ? e.message : "Could not run the job-alert scan.",
+        emailAgentErrorMessage(e, "Could not run the job-alert scan."),
       );
     } finally {
       setAlertsBusy(false);
@@ -566,7 +565,7 @@ export default function EmailCenterPage() {
   const visibleMessages = useMemo(() => {
     if (!inbox) return [];
     const q = searchQuery.trim().toLowerCase();
-    return inbox.messages
+    const filtered = inbox.messages
       .filter((m) => m.category !== "personal")
       .filter((m) => {
         const inCategory = category === "all" ? m.category !== "trashed" : m.category === category;
@@ -575,9 +574,8 @@ export default function EmailCenterPage() {
         if (!q) return true;
         const hay = `${m.from} ${m.fromEmail} ${m.subject} ${m.preview} ${m.company}`.toLowerCase();
         return hay.includes(q);
-      })
-      .slice()
-      .sort((a, b) => receivedAtMs(b.receivedAt) - receivedAtMs(a.receivedAt));
+      });
+    return sortEmailInboxMessages(filtered, category);
   }, [inbox, category, accountFilter, searchQuery]);
 
   const selectMessage = (m: EmailMessage) => {
@@ -645,7 +643,7 @@ export default function EmailCenterPage() {
     setSendError(null);
     try {
       await sendEmailReply(selected.id, draft);
-      setSentNotice(`Reply to ${selected.from} sent ✓ — logged to the communication trail.`);
+      setSentNotice(emailReplySentNotice(selected.from));
       setGateOpen(false);
     } catch (e) {
       // Honest failure surface (GAP-P4-042 / ADR D-0029): no provider is

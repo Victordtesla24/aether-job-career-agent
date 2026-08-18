@@ -341,20 +341,20 @@ export const sendEmailReply = (messageId: string, body: string, options: Request
   });
 
 /**
- * Turn a failed send into an honest, human-facing message (GAP-P4-042).
- * The API returns `409 {"detail": {"error": ..., "message": ...}}` when no
- * email provider is connected; `ApiError.message` embeds that JSON, so we lift
- * out the `detail.message` when present and fall back to the raw error text.
+ * Lift FastAPI's JSON ``detail`` out of an ``apiRequest`` error message
+ * (``POST /path failed (503): {"detail":"..."}``). A 409 send-gate body
+ * carries ``detail.message`` (GAP-P4-042). A job-poll failure already
+ * carries the honest sentence with no wrapper — that passes through unchanged.
  */
-export function emailSendErrorMessage(error: unknown): string {
-  const fallback = error instanceof Error ? error.message : "Send failed";
+export function workspaceApiErrorMessage(error: unknown, fallback: string): string {
+  const raw = error instanceof Error && error.message.trim() ? error.message : fallback;
   if (!(error instanceof Error)) return fallback;
   const match = error.message.match(/\{[\s\S]*\}$/);
-  if (!match) return fallback;
+  if (!match) return raw;
   try {
     const parsed = JSON.parse(match[0]) as { detail?: unknown };
     const detail = parsed.detail;
-    if (typeof detail === "string") return detail;
+    if (typeof detail === "string" && detail.trim()) return detail;
     if (detail && typeof detail === "object" && "message" in detail) {
       const message = (detail as { message?: unknown }).message;
       if (typeof message === "string" && message.trim()) return message;
@@ -362,7 +362,54 @@ export function emailSendErrorMessage(error: unknown): string {
   } catch {
     // Not JSON — surface the raw error text.
   }
-  return fallback;
+  return raw;
+}
+
+export function emailSendErrorMessage(error: unknown): string {
+  return workspaceApiErrorMessage(error, "Send failed");
+}
+
+export function emailAgentErrorMessage(error: unknown, fallback: string): string {
+  return workspaceApiErrorMessage(error, fallback);
+}
+
+export function gmailConnectedSuccessNotice(): string {
+  return "Gmail connected — syncing your inbox.";
+}
+
+export function emailReplySentNotice(from: string): string {
+  return `Reply to ${from} sent — logged to the communication trail.`;
+}
+
+function receivedAtMs(value: string): number {
+  const parsed = Date.parse(value);
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+/**
+ * Inbox list order. Priority and Follow-Up tabs lead with the real triage
+ * score (null last) so the most actionable recruiter mail is at the top.
+ * The All Recruiter tab stays recency-only so a brand-new unscored thread is
+ * not buried under older scored mail.
+ */
+export function sortEmailInboxMessages(
+  messages: EmailMessage[],
+  category: EmailMessage["category"] | "all",
+): EmailMessage[] {
+  const copy = messages.slice();
+  const scoreFirst = category === "priority" || category === "followup";
+  copy.sort((a, b) => {
+    if (scoreFirst) {
+      const aHas = typeof a.score === "number";
+      const bHas = typeof b.score === "number";
+      if (aHas && bHas && a.score !== b.score) {
+        return (b.score as number) - (a.score as number);
+      }
+      if (aHas !== bHas) return aHas ? -1 : 1;
+    }
+    return receivedAtMs(b.receivedAt) - receivedAtMs(a.receivedAt);
+  });
+  return copy;
 }
 
 interface DraftPayload {

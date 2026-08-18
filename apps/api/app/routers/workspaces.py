@@ -562,7 +562,11 @@ def email_inbox(
                         _GMAIL_SYNC_BACKOFF_SECONDS,
                     )
             except Exception:  # noqa: BLE001 — a non-Gmail hiccup must not 500 the inbox
-                pass
+                logger.exception(
+                    "email_inbox_sync_failed user_id=%s account_id=%s",
+                    uid,
+                    acc_id,
+                )
             else:
                 # A successful sync proves the credential is good again —
                 # clear any backoff this user was previously in.

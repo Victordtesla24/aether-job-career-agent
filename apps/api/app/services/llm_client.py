@@ -473,6 +473,14 @@ LLM_AUTH_FAILED_USER_MESSAGE = (
     "failed). Automated runs are paused until the API key is corrected in "
     "Agent Settings — retrying now will not help."
 )
+LLM_RATE_LIMITED_USER_MESSAGE = (
+    "The AI provider rate-limited this run. Wait a minute and try again, "
+    "or pick a lighter model in Agent Settings."
+)
+LLM_UNUSABLE_OUTPUT_USER_MESSAGE = (
+    "The selected model did not return a usable result. Try a different "
+    "model in Agent Settings, or try again shortly."
+)
 
 _LLM_FAILURE_USER_MESSAGES = {
     LLM_FAILURE_INSUFFICIENT_CREDITS: LLM_INSUFFICIENT_CREDITS_USER_MESSAGE,
@@ -554,6 +562,30 @@ def classify_llm_failure(exc: BaseException | None) -> str:
     return LLM_FAILURE_RETRYABLE
 
 
+def _is_unusable_output_failure(exc: BaseException | None) -> bool:
+    """Whether ``exc`` is a live call that returned non-JSON / empty JSON.
+
+    Production 2026-08-18: ``z-ai/glm-5`` email_triage dumped chain-of-thought
+    into ``content`` and ``json.loads`` failed with ``Expecting value: line 1
+    column 1``. That is not an outage — the selected model did not honour the
+    JSON contract. Detected from the exception text / cause chain only, never
+    from prompt names.
+    """
+    if exc is None:
+        return False
+    text = str(exc).lower()
+    if "malformed json" in text or "expecting value" in text:
+        return True
+    cause: BaseException | None = exc
+    for _ in range(8):
+        if cause is None:
+            break
+        if isinstance(cause, json.JSONDecodeError):
+            return True
+        cause = cause.__cause__ or cause.__context__
+    return False
+
+
 def llm_failure_user_message(exc: BaseException | None) -> str:
     """The honest, secret-free user message for an LLM failure.
 
@@ -562,9 +594,14 @@ def llm_failure_user_message(exc: BaseException | None) -> str:
     the ``AgentRun.error`` audit column so the owner-visible record and the
     HTTP response can never disagree.
     """
-    return _LLM_FAILURE_USER_MESSAGES.get(
-        classify_llm_failure(exc), LLM_UNAVAILABLE_USER_MESSAGE
-    )
+    mapped = _LLM_FAILURE_USER_MESSAGES.get(classify_llm_failure(exc))
+    if mapped:
+        return mapped
+    if exc is not None and _exc_is_http_429(exc):
+        return LLM_RATE_LIMITED_USER_MESSAGE
+    if _is_unusable_output_failure(exc):
+        return LLM_UNUSABLE_OUTPUT_USER_MESSAGE
+    return LLM_UNAVAILABLE_USER_MESSAGE
 
 
 class InsufficientCreditsError(RuntimeError):
@@ -2008,6 +2045,7 @@ def _build_openrouter_request(
             {"role": "user", "content": user},
         ],
     }
+    json_complete = bool(_json_complete_context.get())
     if free_chain:
         body["max_tokens"] = get_admin_free_fallback_max_tokens()
         body["reasoning"] = {"enabled": False}
@@ -2030,6 +2068,12 @@ def _build_openrouter_request(
             remaining_credit_usd=remaining_credit,
             completion_price_per_m=completion_price,
         )
+        # JSON-complete only (not ordinary prose ``complete()`` — U1X-a pin).
+        # Reasoning models dump chain-of-thought into ``content`` unless
+        # generation is actually disabled; ``complete_json`` then cannot parse
+        # the payload (production 2026-08-18: ``z-ai/glm-5`` email_triage).
+        if json_complete:
+            body["reasoning"] = {"enabled": False}
     return {
         "url": f"{base}/chat/completions",
         "json": body,
@@ -2225,6 +2269,9 @@ _MAX_TOKENS_BY_CALL_CLASS: dict[str, int] = {
     "tailor": 8192,
     "cover_letter": 8192,
     "story_extraction": 4096,
+    "email_triage": 4096,
+    "email_reply": 4096,
+    "email_insights": 4096,
 }
 
 #: Ceiling for a call class we have no measured figure for. Deliberately well
@@ -2300,6 +2347,15 @@ def plan_attempt_count(
 #: call site byte-identical). Set once in :meth:`LLMClient.complete`.
 _prompt_name_context: contextvars.ContextVar[str | None] = contextvars.ContextVar(
     "aether_llm_prompt_name", default=None
+)
+
+#: True while :meth:`LLMClient.complete_json` is in flight. OpenRouter JSON
+#: completes disable reasoning generation (same lever as the admin free-chain)
+#: so a user-chosen reasoning model can still honour the JSON contract.
+#: Ordinary :meth:`LLMClient.complete` leaves this false — U1X-a forbids
+#: sneaking ``reasoning`` onto prose bodies.
+_json_complete_context: contextvars.ContextVar[bool] = contextvars.ContextVar(
+    "aether_llm_json_complete", default=False
 )
 
 
@@ -2784,6 +2840,64 @@ def catalog_freshness(provider: str) -> tuple[str, bool]:
     return fetched_at.isoformat(), elapsed >= _MODEL_CATALOG_TTL
 
 
+def extract_json_document(raw: str) -> str:
+    """Return the first JSON object or array embedded in ``raw``.
+
+    Reasoning models (production 2026-08-18: ``z-ai/glm-5`` email_triage) often
+    emit chain-of-thought prose and *then* the JSON the prompt asked for.
+    ``json.loads`` of the whole string fails with ``Expecting value: line 1
+    column 1``. This extracts a real document; it never invents structure.
+    Truncated or empty payloads still raise ``JSONDecodeError``.
+
+    Control characters inside JSON strings are accepted (RT-001 / ``strict=False``).
+    """
+    text = (raw or "").strip()
+    if not text:
+        raise json.JSONDecodeError("Expecting value", text, 0)
+
+    def _unfence(block: str) -> str:
+        t = block.strip()
+        if t.startswith("```"):
+            t = t.split("\n", 1)[1] if "\n" in t else t
+            t = t.rsplit("```", 1)[0]
+        return t.strip()
+
+    candidates: list[str] = [_unfence(text)]
+    for match in re.finditer(
+        r"```(?:json)?\s*\n(.*?)```", text, flags=re.DOTALL | re.IGNORECASE
+    ):
+        fenced = match.group(1).strip()
+        if fenced:
+            candidates.append(fenced)
+
+    decoder = json.JSONDecoder(strict=False)
+    last_err: json.JSONDecodeError | None = None
+    seen: set[str] = set()
+    for candidate in candidates:
+        if candidate in seen:
+            continue
+        seen.add(candidate)
+        try:
+            decoder.decode(candidate)
+            return candidate
+        except json.JSONDecodeError as exc:
+            last_err = exc
+        for i, ch in enumerate(candidate):
+            if ch not in "{[":
+                continue
+            try:
+                _obj, end = decoder.raw_decode(candidate, i)
+            except json.JSONDecodeError as exc:
+                last_err = exc
+                continue
+            extracted = candidate[i:end].strip()
+            if extracted:
+                return extracted
+    if last_err is not None:
+        raise last_err
+    raise json.JSONDecodeError("Expecting value", text, 0)
+
+
 class LLMClient:
     """Minimal chat-completion client with record/replay/auto support."""
 
@@ -2871,26 +2985,27 @@ class LLMClient:
                 # That content is genuinely usable; rejecting it made every
                 # same-model re-draft fail identically and 503'd the run.
                 # Truncated/structurally-malformed JSON still fails the parse.
-                json.loads(self._strip_fences(content), strict=False)
+                json.loads(extract_json_document(content), strict=False)
 
-        raw = self.complete(prompt_name, system, user, validate=validate, **kwargs)
+        json_token = _json_complete_context.set(True)
         try:
-            return json.loads(self._strip_fences(raw), strict=False)
-        except json.JSONDecodeError as exc:
-            if self.mode != "auto":
-                raise
-            # Auto mode: ``_auto`` already validated + retried and would have
-            # raised ``LLMUnavailableError`` on all-malformed, so a parse error
-            # here is not expected — still surface it honestly, never raw.
-            logger.warning(
-                "LLM returned malformed JSON for prompt '%s' in auto mode; "
-                "raising honest error (no fixture fallback on failure)",
-                prompt_name,
-            )
-            raise LLMUnavailableError(
-                f"LLM backend unavailable: live call for '{prompt_name}' returned "
-                "malformed JSON"
-            ) from exc
+            raw = self.complete(prompt_name, system, user, validate=validate, **kwargs)
+            try:
+                return json.loads(extract_json_document(raw), strict=False)
+            except json.JSONDecodeError as exc:
+                if self.mode != "auto":
+                    raise
+                logger.warning(
+                    "LLM returned malformed JSON for prompt '%s' in auto mode; "
+                    "raising honest error (no fixture fallback on failure)",
+                    prompt_name,
+                )
+                raise LLMUnavailableError(
+                    f"LLM backend unavailable: live call for '{prompt_name}' returned "
+                    "malformed JSON"
+                ) from exc
+        finally:
+            _json_complete_context.reset(json_token)
 
     @staticmethod
     def _strip_fences(raw: str) -> str:
@@ -3484,7 +3599,7 @@ class LLMClient:
         #: a re-send below strips a key from THIS, never from the original, so
         #: each parameter is dropped at most once per attempt.
         sent = req
-        if free_chain and resp.status_code == 400 and "reasoning" in req["json"]:
+        if (free_chain or bool(_json_complete_context.get())) and resp.status_code == 400 and "reasoning" in req["json"]:
             # The rescue list is env-overridable against a CHURNING free catalog,
             # so an operator can legitimately point it at a model that rejects
             # the reasoning parameter. A 400 on a body WE shaped is a
@@ -3498,7 +3613,7 @@ class LLMClient:
             )
             if remaining is None or remaining >= 1.0:
                 logger.warning(
-                    "free-chain model %s rejected the reasoning parameter "
+                    "model %s rejected the reasoning parameter "
                     "(HTTP 400: %s); re-sending once without it",
                     model_id, resp.text[:150],
                 )
@@ -3607,9 +3722,16 @@ class LLMClient:
             return content
         if "error" in body:
             raise RuntimeError(f"LLM provider error: {body['error']}")
-        content = body["choices"][0]["message"]["content"]
+        message = body["choices"][0]["message"]
+        content = message.get("content")
         if not isinstance(content, str) or not content.strip():
-            raise RuntimeError("LLM returned empty content")
+            for key in ("reasoning_content", "reasoning"):
+                alt = message.get(key)
+                if isinstance(alt, str) and alt.strip():
+                    content = alt
+                    break
+            else:
+                raise RuntimeError("LLM returned empty content")
         _publish_served_model(body, model_id)
         _accumulate_usage(len(system) + len(user), len(content))
         return content

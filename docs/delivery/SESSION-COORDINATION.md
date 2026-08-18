@@ -995,3 +995,18 @@ Rules of engagement unchanged: locks (git/deploy/test), runbook deploys, append-
 **Units:** `aether-prod-api` → `aether-prod-web` → `aether-prod-worker` via CD (`vps-delivery.yml`) and/or claimed flock deploy.
 **Do not touch:** SESSION EC-FIX / DS WIP in shared checkouts.
 **Sent-count:** must remain unchanged (nurture fenced).
+
+---
+
+## SESSION EC-FIX — 2026-08-18T03:20Z — Email Center + Email AI Agent (glm-5 JSON / 429 honesty)
+
+**By:** Cursor Grok session. Lands on `origin/main` after NW-ADV. Does not take SESSION NW-ADV files.
+**Scope claimed:**
+- `apps/api/app/services/llm_client.py` (`complete_json` extract, JSON-complete `reasoning: {enabled: False}`, honest 429 / unusable-output user copy)
+- `apps/api/app/routers/workspaces.py` **only** `email_inbox()` non-Gmail except (log, do not 500) — not `networking_summary()`
+- `apps/web/src/app/dashboard/email/page.tsx`, `apps/web/src/lib/api/workspaces.ts` email helpers only (score-sort, no checkmarks, agent error detail)
+- Tests: `apps/api/tests/test_email_llm_json_and_unavailable.py`, `apps/web/src/__tests__/email/email-center-wiring.test.ts`
+**Hook unblock (already on main):** `b405c40e` R5 git-ignore, `0ccf78e5` skip `.claude/worktrees`.
+**Does not touch:** networking CRM, sales/branding/admin, PR #19 close-out.
+**Deploy:** push onto `origin/main`; delete `fix/email-center-llm` after land. No PR.
+
