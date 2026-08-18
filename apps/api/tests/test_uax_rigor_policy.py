@@ -338,7 +338,15 @@ class TestTailorPolicyKnobsReachTheLoop:
             },
         )()
         agent.ensure_base_resume = lambda user_id: {  # noqa: ARG005
-            "sections": {"raw_text": "Experienced engineer.", "bullets": []}
+            # RT-002 raises ResumeBulletsUnavailableError before the loop is
+            # ever constructed when there is nothing to rewrite — irrelevant
+            # to this test (which pins the resolved policy knobs reaching the
+            # loop, not résumé content), so a real, non-empty bullet list is
+            # required just to reach ``TailoringLoop(...)``.
+            "sections": {
+                "raw_text": "Experienced engineer.",
+                "bullets": ["Led backend platform migrations serving 2M users."],
+            }
         }
 
         with pytest.raises(RuntimeError, match="stop-before-llm"):

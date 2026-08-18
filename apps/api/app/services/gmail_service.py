@@ -59,7 +59,7 @@ _FALLBACK_EXPIRY_MINUTES = 55
 #: PER connected account, so re-running it on every page load put ~11s of Gmail
 #: I/O inline in the request path (W-6). Within this window the stored
 #: ``EmailThread`` copy is served as-is — no Gmail call at all.
-_DEFAULT_SYNC_TTL_SECONDS = 30
+_DEFAULT_SYNC_TTL_SECONDS = 120
 
 #: Bounded fan-out for the per-thread detail fetch. Small on purpose: Gmail
 #: per-user rate limits are shared across the whole account, and each worker
