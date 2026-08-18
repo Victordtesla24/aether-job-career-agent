@@ -122,6 +122,17 @@ model Job {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
+  // SUB-009 — additive, lazy-DDL (app.db.ensure_job_resolved_apply_url_columns).
+  // Adzuna's live API has no direct-employer-URL field, only its own
+  // click-tracking `redirect_url`, which is what `sourceUrl` stores for an
+  // Adzuna posting. These columns record the scout's ingest-time, once-only
+  // redirect-follow of that URL to its real destination -- never a guess,
+  // never written over `sourceUrl` itself. NULL means "never resolved, or
+  // the one attempt did not land on a real destination (429/timeout)".
+  resolvedApplyUrl       String?
+  resolvedApplyUrlSource String?
+  resolvedAt             DateTime?
+
   user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   embedding       JobEmbedding?
   applications    Application[]

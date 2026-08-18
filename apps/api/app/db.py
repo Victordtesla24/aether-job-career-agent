@@ -2112,3 +2112,84 @@ def ensure_user_signup_source_column() -> None:
             )
         conn.commit()
     _user_signup_source_ready = True
+
+
+#: Guard so the additive ``Job`` resolved-apply-URL columns are only ensured
+#: once per worker process (see ``ensure_job_resolved_apply_url_columns``).
+_job_resolved_apply_url_columns_ready = False
+
+
+def ensure_job_resolved_apply_url_columns() -> None:
+    """Idempotently add the additive ``Job`` resolved-apply-URL columns (SUB-009).
+
+    Adzuna's live API returns NO direct-employer-URL field — every result
+    carries only ``redirect_url``, Adzuna's own click-tracking link (verified
+    live, ``docs/delivery/evidence/RUN-20260818T0223Z/SUB-009/
+    adzuna_live_call.json``: 27,445 live results, every one missing a ``url``
+    field). ``adzuna_adapter._parse`` has always stored that redirector
+    verbatim as ``Job.sourceUrl`` — there was no resolution anywhere in
+    ingest, so the redirector (429-prone under Adzuna/CloudFront rate
+    limiting) was the ONLY URL ever handed to the apply path.
+
+    * ``resolvedApplyUrl`` (text) — the real destination the scout's
+      ingest-time redirect-follow (``apply_channel_resolver.
+      resolve_ingest_redirect``, called from ``ScoutAgent.run``) actually
+      observed. NULL means "never resolved, or the one attempt did not land
+      on a real destination" — the honest state for a job whose resolution
+      429'd, timed out, or has not been (re-)ingested since this landed.
+      Never guessed, never backfilled from an assumption.
+    * ``resolvedApplyUrlSource`` (text) — provenance, e.g.
+      ``"adzuna_redirect_follow"``. NULL exactly when ``resolvedApplyUrl`` is
+      NULL, so the two columns can never disagree about whether a real
+      resolution happened.
+    * ``resolvedAt`` (timestamptz) — when that resolution was recorded. NULL
+      for every pre-existing row and for any row still unresolved.
+
+    Disclosure, never disguise: a resolution is recorded on the row as
+    exactly that — a resolution, with its own source and timestamp — it is
+    never written over ``sourceUrl`` and never presented as the original
+    posting URL. ``apply_channel_resolver.resolve_apply_channel`` gives a
+    populated ``resolvedApplyUrl`` precedence over a fresh live hop: once a
+    redirector has been followed honestly, the apply path never has to pay
+    its rate limit again for the same posting.
+
+    Additive only — no DROP, no ALTER TYPE, no DEFAULT rewrite, no backfill
+    UPDATE (a metadata-only ``ADD COLUMN`` already gives every pre-existing
+    row its true value: unresolved). A transaction-scoped advisory lock
+    serializes concurrent first-hit callers so the DDL cannot race;
+    ``TRUNCATE`` never drops columns, so the process-wide latch survives test
+    teardown. Lazy DDL per ADR-TR-1 (there is no migration runner in this
+    repo).
+
+    MUST be called by EVERY path that reads or writes these columns, before
+    the statement that names them.
+    """
+    global _job_resolved_apply_url_columns_ready
+    if _job_resolved_apply_url_columns_ready:
+        return
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT count(*) FROM information_schema.columns"
+                " WHERE table_name = 'Job'"
+                " AND table_schema = ANY(current_schemas(false))"
+                " AND column_name IN ('resolvedApplyUrl', 'resolvedApplyUrlSource',"
+                " 'resolvedAt')"
+            )
+            row = cur.fetchone()
+            if row and row[0] == 3:
+                _job_resolved_apply_url_columns_ready = True
+                return
+            cur.execute("SELECT pg_advisory_xact_lock(%s)", (7420260811,))
+            cur.execute(
+                'ALTER TABLE "Job" ADD COLUMN IF NOT EXISTS "resolvedApplyUrl" text'
+            )
+            cur.execute(
+                'ALTER TABLE "Job" '
+                'ADD COLUMN IF NOT EXISTS "resolvedApplyUrlSource" text'
+            )
+            cur.execute(
+                'ALTER TABLE "Job" ADD COLUMN IF NOT EXISTS "resolvedAt" timestamptz'
+            )
+        conn.commit()
+    _job_resolved_apply_url_columns_ready = True

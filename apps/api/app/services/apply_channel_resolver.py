@@ -643,26 +643,81 @@ def resolve_greenhouse_apply_url(
     return result
 
 
+def resolve_ingest_redirect(
+    url: str, *, http_get: Callable[[str], dict[str, Any]] | None = None
+) -> dict[str, Any] | None:
+    """Ingest-time redirect-follow for a raw Adzuna redirector URL (SUB-009).
+
+    Adzuna's live API has NO direct-employer-URL field — every result carries
+    only ``redirect_url``, Adzuna's own click-tracking link (verified live,
+    ``docs/delivery/evidence/RUN-20260818T0223Z/SUB-009/adzuna_live_call.json``:
+    27,445 live results, every one missing a ``url`` field). Until now
+    ``adzuna_adapter._parse`` had no choice but to store that redirector
+    verbatim as ``Job.sourceUrl`` — there was no resolution anywhere in
+    ingest, so the 429-prone redirector was the ONLY URL ever handed to the
+    apply path.
+
+    This is the scout's ingest-time entry point into resolution. It reuses
+    THIS module's cache and rate-limiting (:func:`_resolve_redirector`) —
+    there is deliberately no second cache, no second resolver, no second
+    rate limit to keep in sync with this one.
+
+    Returns ``None`` for a URL that is not an Adzuna redirector shape (nothing
+    to do) OR whose resolution attempt did not land on a real destination —
+    429, timeout, or a response that never redirected. The caller MUST NOT
+    invent a fallback value in that case (NON-NEGOTIABLE-CONSTRAINTS rule 1):
+    the job is ingested with its honest, unresolved ``sourceUrl`` and no
+    resolution columns are written. On a genuine resolution it returns
+    ``{"resolvedApplyUrl": str, "resolvedApplyUrlSource":
+    "adzuna_redirect_follow"}``, ready to merge onto the ``JobRaw`` before it
+    is persisted — never onto ``sourceUrl`` itself, so the original posting
+    link is never overwritten by its own resolution.
+    """
+    if not _is_adzuna_redirector(url):
+        return None
+    outcome = _resolve_redirector(url, http_get=http_get)
+    resolved_url = outcome.get("applyUrl")
+    if outcome.get("channel") == "unknown" or not resolved_url:
+        return None
+    return {
+        "resolvedApplyUrl": str(resolved_url),
+        "resolvedApplyUrlSource": "adzuna_redirect_follow",
+    }
+
+
 def resolve_apply_channel(
     job: dict[str, Any], *, http_get: Callable[[str], dict[str, Any]] | None = None
 ) -> dict[str, Any]:
     """``{"channel": …, "applyUrl": …}`` for one Job-row-shaped dict.
 
-    Channel precedence (U-PLAN "U5 MANDATE SHARPENED" rule 2):
+    Channel precedence (U-PLAN "U5 MANDATE SHARPENED" rule 2, extended by
+    SUB-009 rule 2 below):
 
     1. ``job["applyEmail"]`` — the employer published an address, so the
        EXISTING W-SUB email path owns this application and this resolver does
        not re-derive anything.
-    2. the stored ``sourceUrl``, classified by host; an Adzuna redirector is
-       followed exactly ONCE (cached, rate-limited) and the destination is
-       classified by the same rules.
-    3. no URL and no address — ``unknown``. Honest, and actionable: the UI can
+    2. ``job["resolvedApplyUrl"]`` — an ingest-time resolution already
+       recorded on the row (:func:`resolve_ingest_redirect`, called from the
+       scout's ingest loop). Classified directly, with NO live hop: the whole
+       point of resolving a redirector once at ingest is that the apply path
+       — the moment a real submission is being prepared — never has to pay
+       that redirector's rate limit again for a posting already resolved.
+    3. the stored ``sourceUrl``, classified by host; an Adzuna redirector that
+       was NOT already resolved at ingest is followed exactly ONCE here
+       (cached, rate-limited) and the destination is classified by the same
+       rules.
+    4. no URL and no address — ``unknown``. Honest, and actionable: the UI can
        tell the user this posting gives Aether nothing to submit to.
     """
     apply_email = (job.get("applyEmail") or "").strip() if job.get("applyEmail") else ""
     source_url = (job.get("sourceUrl") or "").strip() if job.get("sourceUrl") else ""
+    resolved_url = (
+        (job.get("resolvedApplyUrl") or "").strip() if job.get("resolvedApplyUrl") else ""
+    )
     if apply_email:
         return {"channel": "email", "applyUrl": source_url or None}
+    if resolved_url:
+        return {"channel": classify_url(resolved_url), "applyUrl": resolved_url}
     if not source_url:
         return {"channel": "unknown", "applyUrl": None}
     if _is_adzuna_redirector(source_url):

@@ -85,6 +85,12 @@ class JobRaw(TypedDict):
     salaryMin: NotRequired[int | None]
     salaryMax: NotRequired[int | None]
     currency: NotRequired[str | None]
+    #: SUB-009 — set by the scout's ingest loop (never by an adapter) when
+    #: ``sourceUrl`` is an Adzuna click-tracking redirector that has been
+    #: followed once to its real destination. See
+    #: ``app.services.apply_channel_resolver.resolve_ingest_redirect``.
+    resolvedApplyUrl: NotRequired[str | None]
+    resolvedApplyUrlSource: NotRequired[str | None]
 
 
 class BaseAdapter(abc.ABC):

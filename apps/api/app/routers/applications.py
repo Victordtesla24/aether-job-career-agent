@@ -19,6 +19,7 @@ from app.db import (
     ensure_application_transmission_columns,
     ensure_application_unique_active_index,
     ensure_job_apply_contact_columns,
+    ensure_job_resolved_apply_url_columns,
     get_connection,
     rows_to_dicts,
 )
@@ -57,7 +58,7 @@ _STATUSES = frozenset(
 _COLUMNS = (
     'a."id", a."userId", a."jobId", a."resumeId", a."status", a."coverLetter", '
     'a."answers", a."createdAt", a."updatedAt", j."title" AS "jobTitle", '
-    'j."company", j."sourceUrl" AS "applyUrl", j."fitScore", '
+    'j."company", j."sourceUrl" AS "applyUrl", j."resolvedApplyUrl", j."fitScore", '
     'a."transmittedAt", a."transmittedTo", a."transmissionChannel", '
     'a."transmissionRef", j."applyEmail", j."applyEmailSource", '
     'a."applyChannel", a."manualStepReason", a."manualStepDetail", '
@@ -88,6 +89,7 @@ def _ensure_read_columns() -> None:
     """
     ensure_application_transmission_columns()
     ensure_job_apply_contact_columns()
+    ensure_job_resolved_apply_url_columns()
     ensure_application_apply_channel_column()
     ensure_application_submission_truth_columns()
     ensure_application_manual_step_columns()
@@ -902,7 +904,11 @@ def request_submission(application_id: str, current_user: CurrentUser) -> dict[s
     resolved = resolve_and_persist_apply_channel(
         user_id,
         application_id,
-        {"sourceUrl": row.get("applyUrl"), "applyEmail": row.get("applyEmail")},
+        {
+            "sourceUrl": row.get("applyUrl"),
+            "applyEmail": row.get("applyEmail"),
+            "resolvedApplyUrl": row.get("resolvedApplyUrl"),
+        },
     )
     channel = str(resolved["channel"])
     apply_url = str(resolved.get("applyUrl") or row.get("applyUrl") or "")

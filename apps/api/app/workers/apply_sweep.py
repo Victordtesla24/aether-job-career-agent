@@ -83,6 +83,7 @@ from app.db import (
     ensure_application_apply_channel_column,
     ensure_application_manual_step_columns,
     ensure_application_transmission_columns,
+    ensure_job_resolved_apply_url_columns,
     ensure_user_profile_columns,
     get_connection,
     rows_to_dicts,
@@ -298,11 +299,13 @@ def users_with_pending_transmissions(limit: int | None = None) -> list[str]:
 
 def _load_application(user_id: str, application_id: str) -> dict[str, Any] | None:
     ensure_application_apply_channel_column()
+    ensure_job_resolved_apply_url_columns()
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 'SELECT a."id", a."jobId", a."resumeId", a."coverLetter", a."applyChannel", '
-                'a."answers", j."sourceUrl", j."applyEmail", j."title", j."company" '
+                'a."answers", j."sourceUrl", j."applyEmail", j."resolvedApplyUrl", '
+                'j."title", j."company" '
                 'FROM "Application" a JOIN "Job" j ON j."id" = a."jobId" '
                 'WHERE a."id" = %s AND a."userId" = %s',
                 (application_id, user_id),
@@ -548,6 +551,7 @@ def _attempt_transmission(user_id: str, application_id: str, approval_id: str) -
     job_row = {
         "sourceUrl": application.get("sourceUrl"),
         "applyEmail": application.get("applyEmail"),
+        "resolvedApplyUrl": application.get("resolvedApplyUrl"),
     }
     resolved = resolve_and_persist_apply_channel(user_id, application_id, job_row)
     channel = str(resolved["channel"])

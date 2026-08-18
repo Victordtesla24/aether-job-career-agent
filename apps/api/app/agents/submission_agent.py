@@ -517,26 +517,35 @@ class SubmissionAgent:
 
     @staticmethod
     def _apply_destination(user_id: str, job_id: str) -> dict[str, Any]:
-        """``{"sourceUrl": …, "applyEmail": …}`` — the two columns the channel
-        resolver reads, straight off the owner's own Job row.
+        """``{"sourceUrl": …, "applyEmail": …, "resolvedApplyUrl": …}`` — the
+        columns the channel resolver reads, straight off the owner's own Job
+        row.
 
         ``applyEmail`` is an additive W-SUB column that ``JobRepository``'s
         read projection does not carry, so it must be read here; resolving a
         channel from a projection that always says ``applyEmail = None`` would
         route every email posting into the "no automatable channel" branch.
+        ``resolvedApplyUrl`` is the SUB-009 ingest-time Adzuna redirect
+        resolution — reading it here is what lets ``resolve_apply_channel``
+        give it precedence over a fresh live hop at submission time.
         """
-        from app.db import ensure_job_apply_contact_columns
+        from app.db import ensure_job_apply_contact_columns, ensure_job_resolved_apply_url_columns
 
         ensure_job_apply_contact_columns()
+        ensure_job_resolved_apply_url_columns()
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    'SELECT "sourceUrl", "applyEmail" FROM "Job" '
+                    'SELECT "sourceUrl", "applyEmail", "resolvedApplyUrl" FROM "Job" '
                     'WHERE "id" = %s AND "userId" = %s',
                     (job_id, user_id),
                 )
                 rows = rows_to_dicts(cur)
-        return rows[0] if rows else {"sourceUrl": None, "applyEmail": None}
+        return (
+            rows[0]
+            if rows
+            else {"sourceUrl": None, "applyEmail": None, "resolvedApplyUrl": None}
+        )
 
     @staticmethod
     def _active_application_for_job(user_id: str, job_id: str) -> str | None:
