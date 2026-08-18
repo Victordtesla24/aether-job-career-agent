@@ -30,7 +30,12 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta, timezone
 from typing import Any, Optional
 
-from app.db import ensure_user_lifecycle_columns, get_connection, rows_to_dicts
+from app.db import (
+    ensure_application_transmission_columns,
+    ensure_user_lifecycle_columns,
+    get_connection,
+    rows_to_dicts,
+)
 from app.repositories.admin_billing import BILLABLE_STATUSES, billing_summary
 from app.repositories.billing import _ensure_billing_tables
 from app.repositories.sales_agents import (
@@ -154,10 +159,26 @@ _FUNNEL_DEFINITIONS = {
         "excluded)."
     ),
     "firstRun": "Of those accounts, the ones with at least one AgentRun row.",
+    # AUD-META-1 (RUN-20260818T0223Z, r2): this stage's LABEL used to read
+    # "Submitted an application", which claims a transmission the underlying
+    # query cannot support — "status <> 'draft'" is the user's own tracker
+    # state, set the instant an application leaves draft, whether or not
+    # anything was ever sent to an employer. Relabelled to "Prepared an
+    # application", matching the "Prepared" vocabulary already shipped for
+    # this exact population on the cohorts/Sankey/market-pulse surfaces
+    # (fix 4688c29a). See "firstTransmission" for the verified-send count.
     "firstSubmission": (
         "Of those accounts, the ones with at least one Application that left "
-        "'draft'. This is the user's own tracker state — it asserts a "
-        "submission, not a verified transmission."
+        "'draft'. This is the user's own tracker state — it records "
+        "preparation, not a verified transmission (see 'firstTransmission')."
+    ),
+    # AUD-META-1 (r2): additive — the DISTINCT subset of the same accounts
+    # with a real send behind them (`transmittedAt` is stamped only by the
+    # actual submission path, never by a bare status change).
+    "firstTransmission": (
+        "Of those accounts, the ones with at least one Application Aether "
+        "verifiably transmitted ('transmittedAt' IS NOT NULL) — the real "
+        "send path, not merely a status that left 'draft'."
     ),
     "paid": (
         "Of those accounts, the ones on a non-free plan in a billable status "
@@ -173,6 +194,11 @@ _FUNNEL_DEFINITIONS = {
 
 
 def _funnel(cur: Any) -> dict[str, Any]:
+    # AUD-META-1 (r2): the "firstTransmission" sub-select below reads the lazy
+    # additive "transmittedAt" column — callers of this function MUST have
+    # already called ensure_application_transmission_columns() (see
+    # executive_metrics(), which does so before the read connection is
+    # taken, per this module's own "Lazy DDL … never inside it" rule).
     cur.execute(
         'WITH base AS ('
         '  SELECT u."id" FROM "User" u'
@@ -185,6 +211,14 @@ def _funnel(cur: Any) -> dict[str, Any]:
         '   (SELECT count(DISTINCT a."userId") FROM "Application" a'
         '      JOIN base b ON b."id" = a."userId"'
         "      WHERE a.\"status\" <> 'draft') AS first_submission,"
+        # AUD-META-1 (r2): the same population's verified-send subset —
+        # "transmittedAt" is stamped only by the real send path
+        # (app.agents.submission_agent), never by a bare status change. Same
+        # query shape as the sub-select above (additive, cheap: one more
+        # DISTINCT-userId scan of "Application" joined to the same base CTE).
+        '   (SELECT count(DISTINCT a."userId") FROM "Application" a'
+        '      JOIN base b ON b."id" = a."userId"'
+        '      WHERE a."transmittedAt" IS NOT NULL) AS first_transmission,'
         '   (SELECT count(DISTINCT s."userId") FROM "Subscription" s'
         '      JOIN base b ON b."id" = s."userId"'
         '      WHERE s."stripeSubscriptionId" IS NOT NULL'
@@ -198,7 +232,11 @@ def _funnel(cur: Any) -> dict[str, Any]:
     for key, label, count in (
         ("signup", "Signed up", signups),
         ("firstRun", "Ran an agent", int(row["first_run"])),
-        ("firstSubmission", "Submitted an application", int(row["first_submission"])),
+        # AUD-META-1 (r2): "status <> 'draft'" is preparation, not a verified
+        # send — the label must not claim "submitted"/"applied"/"sent" (see
+        # the "firstTransmission" stage immediately below for that claim).
+        ("firstSubmission", "Prepared an application", int(row["first_submission"])),
+        ("firstTransmission", "Sent an application", int(row["first_transmission"])),
         ("paid", "Paid", int(row["paid"])),
     ):
         stages.append(
@@ -421,6 +459,9 @@ def executive_metrics(window_days: Optional[int] = None) -> dict[str, Any]:
 
     # Lazy DDL happens BEFORE the read connection is taken, never inside it.
     ensure_user_lifecycle_columns()
+    # AUD-META-1 (r2): _funnel()'s "firstTransmission" stage reads
+    # Application."transmittedAt" — the lazy additive column this call adds.
+    ensure_application_transmission_columns()
     ensure_sales_agent_schema()
     _ensure_billing_tables()
     revenue = billing_summary()

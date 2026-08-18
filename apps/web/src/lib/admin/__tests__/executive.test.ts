@@ -110,7 +110,11 @@ function fullMetrics(): AdminExecutiveMetrics {
       stages: [
         { key: "signup", label: "Signed up", count: 40, shareOfSignups: 1 },
         { key: "firstRun", label: "Ran an agent", count: 24, shareOfSignups: 0.6 },
-        { key: "firstSubmission", label: "Submitted an application", count: 12, shareOfSignups: 0.3 },
+        // AUD-META-1 (r2): "status <> 'draft'" is preparation, not proof of a
+        // send — never labelled "submitted"/"applied". The distinct verified
+        // send count is its own stage, "firstTransmission".
+        { key: "firstSubmission", label: "Prepared an application", count: 12, shareOfSignups: 0.3 },
+        { key: "firstTransmission", label: "Sent an application", count: 8, shareOfSignups: 0.2 },
         { key: "paid", label: "Paid", count: 6, shareOfSignups: 0.15 },
       ],
       definitions: { _shape: "Stages are INDEPENDENT milestone counts, not nested subsets." },
@@ -176,7 +180,11 @@ function tinyRealMetrics(): AdminExecutiveMetrics {
   funnel.stages = [
     { key: "signup", label: "Signed up", count: 10, shareOfSignups: 1 },
     { key: "firstRun", label: "Ran an agent", count: 4, shareOfSignups: 0.4 },
-    { key: "firstSubmission", label: "Submitted an application", count: 1, shareOfSignups: 0.1 },
+    { key: "firstSubmission", label: "Prepared an application", count: 1, shareOfSignups: 0.1 },
+    // Production TODAY: 1 account left an application non-draft, 0 with a
+    // verified send behind it — the exact "prepared, never sent" gap
+    // AUD-META-1 exists to stop the dashboard from hiding.
+    { key: "firstTransmission", label: "Sent an application", count: 0, shareOfSignups: 0 },
     { key: "paid", label: "Paid", count: 0, shareOfSignups: 0 },
   ];
   funnel.sampleSize = 10;
@@ -277,12 +285,13 @@ describe("buildFunnelSteps — shares of ONE population, not step-to-step drop-o
     expect(out.steps.map((s) => s.label)).toEqual([
       "Signed up",
       "Ran an agent",
-      "Submitted an application",
+      "Prepared an application",
+      "Sent an application",
       "Paid",
     ]);
     expect(out.steps[0].sharePct).toBeCloseTo(100, 5);
     expect(out.steps[1].sharePct).toBeCloseTo(60, 5);
-    expect(out.steps[3].sharePct).toBeCloseTo(15, 5);
+    expect(out.steps[4].sharePct).toBeCloseTo(15, 5);
   });
 
   it("reports the stage-to-stage figure in percentage POINTS, not as a rate", () => {
@@ -291,7 +300,9 @@ describe("buildFunnelSteps — shares of ONE population, not step-to-step drop-o
     // 100 → 60 is a fall of 40 POINTS (it is NOT "40% of the previous step").
     expect(out.steps[1].shareDeltaPoints).toBeCloseTo(-40, 5);
     expect(out.steps[2].shareDeltaPoints).toBeCloseTo(-30, 5);
-    expect(out.steps[3].shareDeltaPoints).toBeCloseTo(-15, 5);
+    // 30% prepared → 20% verifiably sent is a further fall of 10 POINTS.
+    expect(out.steps[3].shareDeltaPoints).toBeCloseTo(-10, 5);
+    expect(out.steps[4].shareDeltaPoints).toBeCloseTo(-5, 5);
   });
 
   it("carries the API's own 'stages are independent' caveat verbatim", () => {
@@ -302,7 +313,7 @@ describe("buildFunnelSteps — shares of ONE population, not step-to-step drop-o
     const out = buildFunnelSteps(tinyRealMetrics());
     // Counts survive — six real accounts is a real fact.
     expect(out.measured).toBe(true);
-    expect(out.steps.map((s) => s.count)).toEqual([10, 4, 1, 0]);
+    expect(out.steps.map((s) => s.count)).toEqual([10, 4, 1, 0, 0]);
     // The rate reading does not.
     expect(out.rate.readable).toBe(false);
     expect(out.rate.reason).toContain("10");

@@ -23,7 +23,7 @@ from __future__ import annotations
 import json
 import uuid
 
-from app.db import get_connection, new_id
+from app.db import ensure_application_transmission_columns, get_connection, new_id
 from app.repositories.admin import _ensure_admin_schema
 from app.repositories.billing import _ensure_billing_tables
 
@@ -110,6 +110,42 @@ def _seed_submitted_application(user_id: str) -> None:
                 INSERT INTO "Application" ("id","userId","jobId","resumeId","status",
                     "createdAt","updatedAt")
                 VALUES (%s,%s,%s,%s,'submitted'::"ApplicationStatus", NOW(), NOW())
+                ''',
+                (new_id(), user_id, job_id, resume_id),
+            )
+        conn.commit()
+
+
+def _seed_transmitted_application(user_id: str) -> None:
+    """A verified send — ``transmittedAt`` is stamped only by the real send
+    path (AUD-META-1), never by a bare status change. Distinct from, and a
+    strict subset of, ``_seed_submitted_application``'s population."""
+    ensure_application_transmission_columns()
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            job_id = new_id()
+            cur.execute(
+                '''
+                INSERT INTO "Job" ("id","userId","title","company","description",
+                    "source","sourceUrl","createdAt","updatedAt")
+                VALUES (%s,%s,'Job','Acme','desc','seek',%s, NOW(), NOW())
+                ''',
+                (job_id, user_id, f"https://example.com/{job_id}"),
+            )
+            cur.execute(
+                '''
+                INSERT INTO "Resume" ("id","userId","sections","formatHash","updatedAt")
+                VALUES (%s,%s,'{}','seedhash', NOW()) RETURNING "id"
+                ''',
+                (new_id(), user_id),
+            )
+            resume_id = cur.fetchone()[0]
+            cur.execute(
+                '''
+                INSERT INTO "Application" ("id","userId","jobId","resumeId","status",
+                    "transmittedAt","transmissionChannel","createdAt","updatedAt")
+                VALUES (%s,%s,%s,%s,'submitted'::"ApplicationStatus",
+                        NOW(), 'gmail', NOW(), NOW())
                 ''',
                 (new_id(), user_id, job_id, resume_id),
             )
@@ -339,7 +375,9 @@ def test_funnel_stages_are_ordered_bounded_and_self_describing(client):
     headers, _ = _admin(client)
     funnel = _metrics(client, headers)["funnel"]
     keys = [stage["key"] for stage in funnel["stages"]]
-    assert keys == ["signup", "firstRun", "firstSubmission", "paid"]
+    assert keys == [
+        "signup", "firstRun", "firstSubmission", "firstTransmission", "paid",
+    ]
 
     signups = funnel["stages"][0]["count"]
     for stage in funnel["stages"]:
@@ -348,6 +386,31 @@ def test_funnel_stages_are_ordered_bounded_and_self_describing(client):
     for key in keys:
         assert funnel["definitions"][key]
     assert funnel["definitions"]["_shape"]
+
+
+def test_funnel_labels_do_not_overclaim_transmission(client):
+    """AUD-META-1 residual (RUN-20260818T0223Z, r2): ``status <> 'draft'`` is
+    the user's own tracker state — preparation, not proof anything was sent to
+    an employer. The stage that counts it must not say "submitted"/"applied",
+    and the verified-transmission population must be its own, honestly
+    labelled, distinct stage — mirroring the vocabulary already shipped for
+    the cohorts/Sankey/market-pulse surfaces ("Prepared" vs a verified send).
+    """
+    headers, _ = _admin(client)
+    funnel = _metrics(client, headers)["funnel"]
+    labels = {stage["key"]: stage["label"] for stage in funnel["stages"]}
+
+    # Exact honest wording — mirrors the "Prepared" vocabulary already shipped
+    # for the cohorts/Sankey/market-pulse surfaces (fix 4688c29a): leaving
+    # 'draft' is preparation, never called "submitted"/"applied"/"sent".
+    assert labels["firstSubmission"] == "Prepared an application"
+    assert labels["firstTransmission"] == "Sent an application"
+    assert "submit" not in labels["firstSubmission"].lower()
+    assert "submit" not in labels["firstTransmission"].lower()
+
+    definitions = funnel["definitions"]
+    assert "verified" in definitions["firstSubmission"].lower()
+    assert "transmit" in definitions["firstTransmission"].lower()
 
 
 def test_one_user_walking_the_whole_funnel_moves_every_stage_by_one(client):
@@ -372,11 +435,39 @@ def test_one_user_walking_the_whole_funnel_moves_every_stage_by_one(client):
     _seed_submitted_application(uid)
     after_submit = _counts()
     assert after_submit["firstSubmission"] == before["firstSubmission"] + 1
+    # AUD-META-1: leaving 'draft' is preparation, never proof of a send — an
+    # application with no ``transmittedAt`` must not move the transmission
+    # stage.
+    assert after_submit["firstTransmission"] == before["firstTransmission"]
     assert after_submit["paid"] == before["paid"]
 
     _seed_paid_subscription(uid, f"cus_{uuid.uuid4().hex[:16]}")
     after_paid = _counts()
     assert after_paid["paid"] == before["paid"] + 1
+
+
+def test_first_transmission_stage_counts_only_verified_sends(client):
+    """AUD-META-1 residual (r2): the transmission stage is sourced from
+    ``Application."transmittedAt" IS NOT NULL`` — a distinct, additive
+    population from ``firstSubmission`` (left draft), never inflated by an
+    application that was merely tracked as non-draft.
+    """
+    headers, _ = _admin(client)
+
+    def _counts() -> dict[str, int]:
+        return {
+            s["key"]: s["count"] for s in _metrics(client, headers)["funnel"]["stages"]
+        }
+
+    before = _counts()
+    _t, uid = _register(client, f"sent-{uuid.uuid4().hex[:8]}@example.com")
+    _seed_transmitted_application(uid)
+    after = _counts()
+
+    assert after["firstTransmission"] == before["firstTransmission"] + 1
+    # A verified send also leaves the application non-draft, so preparation
+    # moves too — both are real, distinct facts about the same account.
+    assert after["firstSubmission"] == before["firstSubmission"] + 1
 
 
 def test_a_second_run_by_the_same_user_does_not_double_count_the_funnel(client):
