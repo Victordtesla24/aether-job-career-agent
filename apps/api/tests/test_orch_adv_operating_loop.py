@@ -14,7 +14,7 @@ from __future__ import annotations
 import inspect
 import re
 
-from app.routers.agents import AGENT_CATALOG, _ORCHESTRATION_MAPS, _pipeline_core
+from app.routers.agents import _ORCHESTRATION_MAPS, AGENT_CATALOG, _pipeline_core
 
 
 def _flatten(maps: list[dict]) -> list[dict]:

@@ -1031,3 +1031,5 @@ Rules of engagement unchanged: locks (git/deploy/test), runbook deploys, append-
 **Does not touch:** `email_agent.py`, `llm_client.py`, Email Center, `sales_agent.py`, networking CRM, `ats_engine.py`, `apply_sweep.py`, PR #19
 **Deploy:** push this branch then merge to `origin/main`; delete `feat/agent-team-workflow-map` after land. Do not close foreign PR #19.
 
+**Continuation 2026-08-18T04:47Z — CI green follow-up.** Squash `702cdc5d` made Zod team fields required on fixture types and tripped ruff I001 on the two new pytest files. `fix/orch-adv-ci-green` makes team fields optional on the client schema (popover already treats absence as "—") and sorts the new test imports. Same scope; no other session files.
+
