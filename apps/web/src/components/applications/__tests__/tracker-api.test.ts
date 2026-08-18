@@ -41,3 +41,23 @@ describe("fetchAgentConfig", () => {
     expect(config).toEqual(SETTINGS_FIXTURE.agentConfig);
   });
 });
+
+describe("fetchTimeline", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("calls GET /applications/timeline and parses the payload", async () => {
+    const { fetchTimeline } = await import("../tracker-api");
+    const body = {
+      items: [],
+      range: { start: null, end: null },
+    };
+    const fetchMock = mockFetchOnce(body);
+    vi.stubGlobal("fetch", fetchMock);
+    const data = await fetchTimeline({ token: "test-token" });
+    expect(data).toEqual(body);
+    const [url] = fetchMock.mock.calls[0]!;
+    expect(String(url)).toContain("/applications/timeline");
+  });
+});

@@ -297,3 +297,38 @@ export async function fetchAgentConfig(
   );
   return AgentConfigSchema.parse(settings.agentConfig);
 }
+
+// ---- Application Timeline (SESSION TL-VIZ) ---------------------------------
+
+const TimelineEventSchema = z.object({
+  id: z.string(),
+  applicationId: z.string(),
+  fromStatus: z.string().nullable(),
+  toStatus: z.string(),
+  at: z.string(),
+  source: z.string(),
+});
+
+export const TimelinePayloadSchema = z.object({
+  items: z.array(
+    z.object({
+      application: TrackerApplicationSchema,
+      events: z.array(TimelineEventSchema),
+    }),
+  ),
+  range: z.object({
+    start: z.string().nullable(),
+    end: z.string().nullable(),
+  }),
+});
+
+export type TimelinePayload = z.infer<typeof TimelinePayloadSchema>;
+
+export async function fetchTimeline(
+  options: RequestOptions = {},
+): Promise<TimelinePayload> {
+  return TimelinePayloadSchema.parse(
+    await apiRequest<unknown>("/applications/timeline", options),
+  );
+}
+

@@ -85,6 +85,9 @@ function defaultMock(extra: Record<string, unknown> = {}) {
       return { agentConfig: { autoApply: false, approvalGate: true, matchThreshold: 85 } };
     }
     if (path === "/applications/funnel/sankey") return SANKEY_FIXTURE;
+    if (path === "/applications/timeline") {
+      return { items: [], range: { start: null, end: null } };
+    }
     if (path === "/applications/pipeline/clear") {
       return { archived: 2, jobIds: ["pipeline-job-0", "pipeline-job-1"] };
     }
@@ -108,6 +111,26 @@ describe("Application Tracker view toggles (GAP-P6-WIRE-001)", () => {
         return { agentConfig: { autoApply: false, approvalGate: true, matchThreshold: 85 } };
       }
       if (path === "/applications/funnel/sankey") return SANKEY_FIXTURE;
+      if (path === "/applications/timeline") {
+        return {
+          items: [
+            {
+              application: APP_FIXTURE,
+              events: [
+                {
+                  id: "e0",
+                  applicationId: APP_FIXTURE.id,
+                  fromStatus: null,
+                  toStatus: "submitted",
+                  at: APP_FIXTURE.createdAt,
+                  source: "backfill:current-status",
+                },
+              ],
+            },
+          ],
+          range: { start: APP_FIXTURE.createdAt, end: APP_FIXTURE.updatedAt },
+        };
+      }
       throw new Error(`unexpected apiRequest(${path})`);
     });
 
@@ -133,6 +156,7 @@ describe("Application Tracker view toggles (GAP-P6-WIRE-001)", () => {
     fireEvent.click(screen.getByTestId("view-timeline"));
     expect(screen.getByTestId("view-timeline").getAttribute("aria-selected")).toBe("true");
     expect(screen.queryByTestId("sankey-svg")).toBeNull();
+    await screen.findByText("Senior Product Owner");
     const timeline = await screen.findByTestId("timeline-view");
     expect(timeline.textContent).toContain("Senior Product Owner");
 

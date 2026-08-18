@@ -24,6 +24,7 @@ import PageHeader from "../../../components/shell/PageHeader";
 import SegmentedControl from "../../../components/ui/SegmentedControl";
 import { button, listCard, scrollBody } from "../../../components/ui/recipes";
 import SankeyFlow from "../../../components/applications/SankeyFlow";
+import ApplicationTimeline from "../../../components/applications/ApplicationTimeline";
 import AnswerPackPanel from "../../../components/applications/AnswerPack";
 import SubmissionControl from "../../../components/applications/SubmissionControl";
 import { useRealtimeResources } from "../../../hooks/useRealtime";
@@ -32,6 +33,7 @@ import {
   fetchAgentConfig,
   fetchAppliedApplications,
   fetchSankey,
+  fetchTimeline,
   fetchTrackerApplication,
   fetchTrackerApplications,
   moveApplication,
@@ -40,6 +42,7 @@ import {
   type AgentConfig,
   type ClearPipelineResult,
   type SankeyData,
+  type TimelinePayload,
   type TrackerApplication,
 } from "../../../components/applications/tracker-api";
 import {
@@ -551,6 +554,9 @@ export default function ApplicationsPage() {
   const [sort, setSort] = useState<SortKey>("recent");
   const [sankey, setSankey] = useState<SankeyData | null>(null);
   const [sankeyError, setSankeyError] = useState<string | null>(null);
+  const [timelinePayload, setTimelinePayload] = useState<TimelinePayload | null>(null);
+  const [timelineError, setTimelineError] = useState<string | null>(null);
+  const [timelineLoaded, setTimelineLoaded] = useState(false);
   const [agentConfig, setAgentConfig] = useState<AgentConfig | null>(null);
   // SHOULD-FIX 6 (round-3 re-review): live read of the operator's apply-sweep
   // kill-switch, threaded into notTransmittedReason so the "not enabled on
@@ -654,6 +660,24 @@ export default function ApplicationsPage() {
         setSankeyError(e instanceof Error ? e.message : "Failed to load sankey data");
       });
   }, [view, sankey]);
+
+
+  // Timeline — lazily loaded on first open (SESSION TL-VIZ).
+  useEffect(() => {
+    if (view !== "timeline" || timelineLoaded) return;
+    fetchTimeline()
+      .then((d) => {
+        setTimelinePayload(d);
+        setTimelineError(null);
+        setTimelineLoaded(true);
+      })
+      .catch((e) => {
+        setTimelineError(
+          e instanceof Error ? e.message : "Couldn't load the timeline — request failed.",
+        );
+        setTimelineLoaded(true);
+      });
+  }, [view, timelineLoaded]);
 
   // Applied jobs — lazily loaded on first view (phase4).
   useEffect(() => {
@@ -1602,33 +1626,27 @@ export default function ApplicationsPage() {
           )}
         </section>
       ) : (
-        <section className="elev-1 rounded-[14px] p-5" data-testid="timeline-view">
-          <h2 className="mb-4 text-[15px] font-semibold">Timeline</h2>
-          {(apps ?? []).length === 0 ? (
-            <p className="text-sm text-aether-muted-dim">No applications yet.</p>
-          ) : (
-            <ol className="space-y-3 border-l border-white/10 pl-4">
-              {[...(apps ?? [])]
-                .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
-                .map((a) => (
-                  <li key={a.id} className="relative">
-                    <span className="absolute -left-[21px] top-1.5 h-2.5 w-2.5 rounded-full bg-aether-coral" />
-                    <button
-                      type="button"
-                      onClick={() => void openDetail(a.id)}
-                      className="rounded text-left text-sm transition hover:text-aether-coral"
-                    >
-                      <span className="font-semibold">{a.jobTitle}</span>{" "}
-                      <span className="text-aether-muted">@ {a.company}</span>
-                    </button>
-                    <p className="mono text-[11px] text-aether-muted-dim">
-                      {a.status} · {timeAgo(a.updatedAt)}
-                    </p>
-                  </li>
-                ))}
-            </ol>
-          )}
-        </section>
+        !timelineLoaded && !timelineError ? (
+          <div
+            className="elev-1 h-72 animate-pulse rounded-[14px]"
+            aria-busy="true"
+            data-testid="timeline-view"
+          />
+        ) : (
+          <ApplicationTimeline
+            payload={timelinePayload}
+            error={timelineError}
+            filter={filter}
+            sort={sort}
+            pendingApprovalIds={pendingApprovalIds}
+            onOpenDetail={(id) => void openDetail(id)}
+            onRetry={() => {
+              setTimelineError(null);
+              setTimelineLoaded(false);
+              setTimelinePayload(null);
+            }}
+          />
+        )
       )}
 
       {/* SUB-010 — the fused answer pack for one prepared application. It is
