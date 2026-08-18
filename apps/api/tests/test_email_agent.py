@@ -209,14 +209,11 @@ def test_triage_rate_limit_degrades_with_filter_categories_no_scores(monkeypatch
     assert any(params[0] == "priority" and params[1] == "t-int" for params in written)
 
 
-def test_triage_light_retry_calls_fallback_model_not_user_chosen(monkeypatch):
-    """ADR-ML-3: only an explicit light_retry flag may select Haiku.
-
-    The client must not pass an arbitrary model id. Production 429s were
-    user-pinned Sonnet/Opus; the in-page retry posts light_retry=true.
-    """
-    from app.agents.email_agent import gmail_sync_failure_message
-    from app.services.llm_client import LLMUnavailableError, get_fallback_model, get_model
+def _light_retry_capture_agent(monkeypatch):
+    """Build an EmailAgent whose LLM always 429s and records the model id
+    each ``complete_json`` call was made with. Shared by both light-retry
+    invariant tests below (RUN-20260818T0223Z BATCH-2 §5)."""
+    from app.services.llm_client import LLMUnavailableError
 
     captured: list[str | None] = []
 
@@ -261,14 +258,50 @@ def test_triage_light_retry_calls_fallback_model_not_user_chosen(monkeypatch):
             "messages": [{"from": "Ada", "fromEmail": "ada@acme.com", "body": "Intro call?"}],
         }
     ]
+    return agent, captured
+
+
+def test_triage_light_retry_calls_fallback_model_not_user_chosen(monkeypatch):
+    """ADR-ML-3 + RUN-20260818T0223Z BATCH-2 §5: with no per-run model
+    override the primary attempt runs on the REASONING tier's DEFAULT.
+    AUD-ECON-2 retuned that default to the SAME id as ``FALLBACK_MODEL``
+    (both ``claude-haiku-4-5``), so light_retry must NOT blindly reach for
+    ``get_fallback_model()`` — that would resubmit to the model that just
+    429'd, defeating the retry. ``fallback_for`` must step to the designated,
+    genuinely-different, still-cheap alternate instead.
+    """
+    from app.agents.email_agent import gmail_sync_failure_message
+    from app.services.llm_client import fallback_for, get_model
+
+    monkeypatch.delenv("AETHER_MODEL_REASONING", raising=False)
+    monkeypatch.delenv("AETHER_MODEL_FALLBACK", raising=False)
+    agent, captured = _light_retry_capture_agent(monkeypatch)
     agent.run("u1", mode="triage")
     agent.run("u1", mode="triage", light_retry=True)
-    assert captured[0] == get_model("REASONING")
-    assert captured[1] == get_fallback_model()
+    assert captured[0] == get_model("REASONING") == "claude-haiku-4-5"
+    assert captured[1] == fallback_for(get_model("REASONING")) == "claude-sonnet-4-6"
     assert captured[1] != captured[0]
     # Pin the helper used by the sync-fail path (tested below) so a rename
     # cannot silently drop the accessNotConfigured honesty.
     assert "reconnect" in gmail_sync_failure_message(RuntimeError("token expired")).lower()
+
+
+def test_triage_light_retry_calls_fallback_model_when_primary_is_user_chosen(monkeypatch):
+    """Companion case: a user-PINNED REASONING model (production 429s were
+    observed on user-pinned Sonnet/Opus) rate-limits. The retry must land on
+    the plain configured fallback (``get_fallback_model()``, Haiku) —
+    genuinely different from the user's pinned model — exactly the
+    pre-AUD-ECON-2 behaviour, unaffected by the default-tier retune."""
+    from app.services.llm_client import get_fallback_model, user_model_context
+
+    monkeypatch.delenv("AETHER_MODEL_FALLBACK", raising=False)
+    agent, captured = _light_retry_capture_agent(monkeypatch)
+    with user_model_context("claude-opus-4-8"):
+        agent.run("u1", mode="triage")
+        agent.run("u1", mode="triage", light_retry=True)
+    assert captured[0] == "claude-opus-4-8"
+    assert captured[1] == get_fallback_model() == "claude-haiku-4-5"
+    assert captured[1] != captured[0]
 
 
 def test_gmail_sync_failure_does_not_blame_oauth_for_api_not_configured():

@@ -109,6 +109,47 @@ def get_fallback_model() -> str:
     return os.environ.get("AETHER_MODEL_FALLBACK", FALLBACK_MODEL)
 
 
+#: Alternate retry model returned by :func:`fallback_for` when the model that
+#: just failed already equals :func:`get_fallback_model`. RUN-20260818T0223Z
+#: BATCH-2 §5: AUD-ECON-2 retuned the REASONING tier's code default to the
+#: SAME id as ``FALLBACK_MODEL`` (both ``claude-haiku-4-5``), so a caller that
+#: naively retries a 429'd REASONING-tier call with ``get_fallback_model()``
+#: resubmits to the model that just rate-limited it -- defeating the retry.
+#: ``claude-sonnet-4-6`` is this deployment's own next-cheapest, already-
+#: configured alternate (see ``_STATIC_MODEL_CATALOG``: haiku is
+#: ``tier=budget`` at $1/M prompt tokens, sonnet is ``tier=standard`` at
+#: $3/M, opus is ``tier=premium`` at $15/M) -- a bare ``claude-*`` id on the
+#: SAME Anthropic subscription (no provider crossing, per OWNER DIRECTIVE
+#: MODEL-DEFAULT), genuinely distinct from haiku, and still far cheaper/
+#: faster than reaching for Opus.
+_FALLBACK_ALTERNATE_MODEL = "claude-sonnet-4-6"
+
+
+def fallback_for(failing_model: str | None) -> str:
+    """Model id to retry ``failing_model`` with -- ALWAYS a different model.
+
+    This is the single source of truth for "what do we retry a rate-limited
+    call with" outside the ``auto``-mode chain (:meth:`LLMClient._model_chain`
+    handles that path separately, by dropping the retry entirely rather than
+    picking a third model, because it never asked a user to switch models).
+    ``fallback_for`` backs callers with an explicit, user-facing "retry with a
+    lighter model" contract (e.g. the Email Agent's ``light_retry`` flag,
+    ADR-ML-3) that must always honour a genuinely different model, never the
+    one that just failed.
+
+    Normally the result is :func:`get_fallback_model` (the configured
+    lightweight retry model, env-overridable via ``AETHER_MODEL_FALLBACK``).
+    But when ``failing_model`` already equals that fallback, returning it
+    again would resubmit to the model that just rate-limited -- so this steps
+    to :data:`_FALLBACK_ALTERNATE_MODEL` instead, keeping the "always
+    different" invariant true regardless of tier-default drift.
+    """
+    fallback = get_fallback_model()
+    if failing_model == fallback:
+        return _FALLBACK_ALTERNATE_MODEL
+    return fallback
+
+
 #: FREE OpenRouter models used by the ADMIN-ONLY insufficient-credits rescue
 #: (see :func:`get_admin_free_fallback_models` / :meth:`LLMClient._auto`). Both
 #: ids were verified live on the app's own zero-credit key on 2026-07-29 —

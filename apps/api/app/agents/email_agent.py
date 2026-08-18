@@ -62,7 +62,7 @@ from app.services.llm_client import (
     LLMClient,
     LLMFixtureMissingError,
     LLMUnavailableError,
-    get_fallback_model,
+    fallback_for,
     get_model,
     llm_failure_user_message,
 )
@@ -95,10 +95,16 @@ def _json_model(params: dict[str, Any] | None) -> str:
 
     ``light_retry=True`` is the Email Center's explicit "Retry with a lighter
     model" click. ADR-ML-3 forbids a silent swap, so a client-supplied
-    ``model`` string is ignored.
+    ``model`` string is ignored. The primary attempt always runs on
+    ``get_model("REASONING")`` (a user's own slash-model pick wins there via
+    ``user_model_context``, same as any other REASONING-tier call), so THAT is
+    "the model that just rate-limited" from the retry's point of view.
+    ``fallback_for`` guarantees the retry always lands on a genuinely
+    different model, even when the REASONING default and the configured
+    fallback are the same id (RUN-20260818T0223Z BATCH-2 §5 / AUD-ECON-2).
     """
     if params and params.get("light_retry") is True:
-        return get_fallback_model()
+        return fallback_for(get_model("REASONING"))
     return get_model("REASONING")
 
 #: Cron/triage may auto-DRAFT (never send) this many priority/follow-up
