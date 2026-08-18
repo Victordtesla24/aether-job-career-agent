@@ -10,6 +10,7 @@ import os
 
 from app.workers.apply_sweep import apply_sweep_cron, apply_sweep_user
 from app.workers.board_sweep import board_sweep_cron, board_sweep_user
+from app.workers.digest_cron import notification_digest_cron
 from app.workers.queue import job_timeout_seconds
 from app.workers.sales_cron import sales_agent_cron
 from app.workers.tasks import (
@@ -46,6 +47,18 @@ def _cron_jobs():
                 reconcile_abandoned_agent_runs_cron,
                 minute=set(range(2, 60, 5)),
             ),
+            # FEAT-EMAIL-BRAND digest cron — once daily at 21:00 UTC, minute
+            # :11. 21:00 UTC lands early-to-mid morning in Melbourne (AEST
+            # UTC+10 -> 07:00; AEDT UTC+11 -> 08:00), so the Owner's digest is
+            # queued before their day starts. Minute :11 is off every other
+            # registered tick above/below (:00/:05.., :02/:07.., :07/:22..,
+            # :15/:45) so it never contends with another autopilot for the
+            # same wall-clock minute on this 2-CPU VPS. Honest no-op unless
+            # AETHER_DIGEST_CRON_ENABLED is on (code default TRUE — see
+            # ``digest_cron_enabled``); queues an approval per eligible user,
+            # it never sends: notification_digest stays a manual-approval
+            # send like every other queued email (see digest_cron.py header).
+            cron(notification_digest_cron, hour={21}, minute={11}),
             # U5 NO-PREPARED-ONLY tick — every 15 min, offset off the board
             # sweep so the two autopilots never contend for this 2-CPU VM. A
             # no-op unless AETHER_APPLY_SWEEP_ENABLED is on AND the user has

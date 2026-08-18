@@ -366,6 +366,46 @@ class GmailAccountRepository:
                 )
                 return cur.fetchone() is not None
 
+    def list_connected_user_ids(self, limit: int | None = None) -> list[str]:
+        """Distinct user ids with AT LEAST ONE connected Gmail account AND a
+        still-existing ``User`` row, oldest connection first.
+
+        FEAT-EMAIL-BRAND digest cron: the notification digest can only ever be
+        mailed to the user's OWN connected Gmail address
+        (``NotificationAgent.run`` — no recipient, no queued approval, no
+        matter how much activity exists). Scanning every OTHER user's
+        Application/Job rows on a daily tick for a digest that can never be
+        sent would be pure waste, so this is the cron's eligibility filter —
+        the same bounding role ``board_sweep.eligible_users`` plays for the
+        board-sweep tick, oldest-connected-first so no user is starved by an
+        unbounded newer cohort.
+
+        The ``JOIN "User"`` is deliberate, not decorative: this table carries
+        NO foreign key to ``User`` (module docstring — same additive design as
+        ``AgentConfig``/``GoogleCredential``/``CareerProfile``), so a deleted
+        account's row can outlive the account itself. Without the join, a
+        background cron built on this list would keep attempting a dispatch
+        for a user who no longer exists — a wasted DB round-trip at best, an
+        unhandled exception surfacing as a spurious cron failure at worst.
+        Every other caller of this method wants the same guarantee, so it is
+        not scoped to the digest cron alone.
+        """
+        self._ensure_table()
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                sql = (
+                    'SELECT g."userId", MIN(g."createdAt") AS oldest'
+                    ' FROM "GmailAccount" g'
+                    ' JOIN "User" u ON u."id" = g."userId"'
+                    ' GROUP BY g."userId" ORDER BY oldest ASC'
+                )
+                params: tuple[Any, ...] = ()
+                if limit is not None:
+                    sql += " LIMIT %s"
+                    params = (limit,)
+                cur.execute(sql, params)
+                return [row[0] for row in cur.fetchall()]
+
     # --------------------------------------------------------------- writes
     def upsert_account(
         self,
