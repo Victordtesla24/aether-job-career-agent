@@ -80,5 +80,16 @@ jobs:
           pip install -q -r apps/api/requirements.txt "pytest>=9,<10"
           bash scripts/test-schema.sh provision ci
           trap 'bash scripts/test-schema.sh drop ci || true' EXIT
-          AETHER_TEST_SCHEMA=aether_test_ci flock /tmp/aether-pytest-ci.lock \
-            bash scripts/run-tests.sh -q
+          # Run in 3 alphabetical slices: a single full-suite process peaks
+          # ~2.9GB and was OOM-killed on this host (2026-08-18 14:49Z); slices
+          # peak lower and give natural checkpoints.
+          cd apps/api && ls tests/test_*.py | sort > /tmp/ci-files.txt && cd ../..
+          total=$(wc -l < /tmp/ci-files.txt); third=$(( (total + 2) / 3 ))
+          split -l "$third" /tmp/ci-files.txt /tmp/ci-slice-
+          rc=0
+          for f in /tmp/ci-slice-*; do
+            AETHER_TEST_SCHEMA=aether_test_ci flock /tmp/aether-pytest-ci.lock \
+              bash scripts/run-tests.sh $(tr '\n' ' ' < "$f") -q || rc=1
+          done
+          rm -f /tmp/ci-files.txt /tmp/ci-slice-*
+          exit $rc
