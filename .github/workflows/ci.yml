@@ -48,7 +48,10 @@ jobs:
   # disabled verification).
   api-tests:
     name: API — full pytest suite (self-hosted, isolated schema)
-    runs-on: [self-hosted, hostinger-vps]
+    # Dedicated CI runner (aether-ci-2, user-space, label hostinger-vps-ci) so
+    # full suites never occupy the root deploy runner's single slot. Deploy
+    # jobs stay exclusively on [self-hosted, hostinger-vps].
+    runs-on: [self-hosted, hostinger-vps-ci]
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
