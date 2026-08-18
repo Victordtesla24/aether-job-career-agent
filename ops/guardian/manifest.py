@@ -39,16 +39,39 @@ ENVS = [
          url=None, api_port=None, web_port=None, pg=None, redis=None, units=[], auth=None),
 ]
 
+# The guardian timer that regenerates this file. Anything observed here is at
+# most this old, and may have been false for almost all of that window.
+REGENERATED_EVERY_SECONDS = 900
+
+
+def now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def probe(e: dict) -> dict:
+    """Observe one environment's current runtime state.
+
+    Everything returned here is a point-in-time OBSERVATION, not a property of
+    the environment: services stop, health flips, worktrees go dirty. It is
+    deliberately kept out of the static fields so that a reader can tell the
+    two apart, and so that a caller who needs the truth right now can simply
+    call this again.
+    """
+    obs: dict = {"observed_at": now_iso()}
+    obs["services"] = {u: sh(f"systemctl is-active {u}") for u in e["units"]}
+    if e["api_port"]:
+        obs["api_health"] = sh(f"curl -s -o /dev/null -w '%{{http_code}}' --max-time 10 http://127.0.0.1:{e['api_port']}/health")
+    r = Path(e["repo"])
+    if (r / ".git").exists():
+        obs["git"] = dict(commit=sh("git rev-parse --short HEAD", cwd=r),
+                          branch=sh("git branch --show-current", cwd=r),
+                          dirty_paths=len([l for l in sh("git status --porcelain", cwd=r).splitlines() if l]))
+    return obs
+
+
 def build():
     for e in ENVS:
-        e["services"] = {u: sh(f"systemctl is-active {u}") for u in e["units"]}
-        if e["api_port"]:
-            e["api_health"] = sh(f"curl -s -o /dev/null -w '%{{http_code}}' --max-time 10 http://127.0.0.1:{e['api_port']}/health")
-        r = Path(e["repo"])
-        if (r / ".git").exists():
-            e["git"] = dict(commit=sh("git rev-parse --short HEAD", cwd=r),
-                            branch=sh("git branch --show-current", cwd=r),
-                            dirty_paths=len([l for l in sh("git status --porcelain", cwd=r).splitlines() if l]))
+        e["observed"] = probe(e)
     m = dict(
         schema="aether.environments/1",
         generated_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
@@ -56,9 +79,20 @@ def build():
         read_this_first=(
             "You are working on a host with THREE persistent application environments plus one "
             "ephemeral CI workspace. Load this manifest BEFORE doing any work. Do not spend tokens "
-            "rediscovering ports, paths, services or URLs — they are listed here and are generated "
-            "from live state. Do not perform environment or server management unless explicitly "
-            "asked: a guardian agent already owns that for every environment."
+            "rediscovering ports, paths, repositories or URLs — those are listed here and are "
+            "stable. The `observed` block on each environment is NOT stable: it is a snapshot from "
+            "when this file was last written and may be up to 15 minutes old. Never tell anyone an "
+            "environment is healthy on the strength of it — re-probe first (see `observations`). "
+            "Do not perform environment or server management unless explicitly asked: a guardian "
+            "agent already owns that for every environment."
+        ),
+        observations=dict(
+            what="each environment's `observed` block is a snapshot, stamped with its own observed_at",
+            regenerated_every_seconds=REGENERATED_EVERY_SECONDS,
+            stale_after_seconds=REGENERATED_EVERY_SECONDS,
+            do_not="report an environment healthy, or a worktree clean, from this file alone",
+            live_endpoint="http://127.0.0.1:9400/manifest — re-probes every environment on request",
+            live_command="python3 /opt/aether-guardian/manifest.py  (rewrites this file)",
         ),
         environments=ENVS,
         guardians=dict(
@@ -99,17 +133,27 @@ def build():
     Path("/etc/aether/environments.json").write_text(json.dumps(m, indent=2) + "\n")
 
     L = ["# Aether environments — READ BEFORE ANY WORK", "",
-         f"_Auto-generated {m['generated_at']} from live state. Do not hand-edit._", "",
+         f"_Auto-generated {m['generated_at']}. Do not hand-edit._",
+         "",
+         f"> Ports, paths, URLs and purposes below are stable. Anything describing **current state** "
+         f"— service status, API health, commit, dirty paths — was observed when this file was "
+         f"written and is regenerated every {REGENERATED_EVERY_SECONDS // 60} minutes. "
+         f"Do not report an environment healthy from this file: "
+         f"`curl -s http://127.0.0.1:9400/manifest` re-probes on request.",
+         "",
          m["read_this_first"], "",
          "| env | purpose | url | api | web | pg | redis |", "|---|---|---|---|---|---|---|"]
     for e in ENVS:
         L.append(f"| **{e['name']}** | {e['purpose']} | {e['url'] or '—'} | {e['api_port'] or '—'} | "
                  f"{e['web_port'] or '—'} | {e['pg'] or '—'} | {e['redis'] or '—'} |")
-    L += ["", "## Repositories", ""]
+    L += ["", "## Repositories", "",
+          "_Commit and dirty-path counts below are observations, not guarantees._", ""]
     for e in ENVS:
-        g = e.get("git", {})
+        obs = e.get("observed", {})
+        g = obs.get("git", {})
         L.append(f"- `{e['repo']}` — {e['name']} @ {g.get('commit','?')} ({g.get('branch','?')}), "
-                 f"dirty paths: {g.get('dirty_paths','?')}")
+                 f"dirty paths: {g.get('dirty_paths','?')} "
+                 f"(observed {obs.get('observed_at','?')})")
     L += ["", "## Real-time runtime console logs", "",
           "Do not guess at failures — read the server's own output:", "",
           "```bash",
