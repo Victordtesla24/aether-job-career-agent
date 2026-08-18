@@ -230,7 +230,7 @@ const HOP = {
     mechanism:
       "StoryRepository.create keyed by achievementKey (upsert-in-place on re-run)",
     evidence:
-      "apps/api/app/agents/story_extractor.py:616,693; dedup index apps/api/app/db.py:1159",
+      "apps/api/app/agents/story_extractor.py:616,693; dedup index apps/api/app/db.py:1193",
     discoveryEvidence:
       "apps/api/app/agents/story_extractor.py:96; dedup index apps/api/app/db.py:1159",
     anchors: [
