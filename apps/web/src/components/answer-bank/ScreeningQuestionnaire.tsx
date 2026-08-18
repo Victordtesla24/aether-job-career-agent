@@ -217,12 +217,12 @@ const ScreeningQuestionnaire = forwardRef<
               Leave anything blank to keep answering it per application.
             </span>
           </div>
-          {result ? (
-            <p data-testid="bank-questionnaire-result" className="mt-2 text-[11px] text-aether-muted">
-              {result}
-            </p>
-          ) : null}
         </>
+      ) : null}
+      {result ? (
+        <p data-testid="bank-questionnaire-result" className="mt-2 text-[11px] text-aether-muted">
+          {result}
+        </p>
       ) : null}
     </div>
   );

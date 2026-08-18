@@ -512,15 +512,23 @@ export default function SettingsClient({
   }, [profile]);
 
   const save = async () => {
-    if (Object.keys(validation).length > 0) {
-      setSavedNotice(null);
-      setError("Fix the highlighted fields before saving.");
-      return;
-    }
     setSaving(true);
     setError(null);
+    setSavedNotice(null);
     try {
+      // Flush screening drafts first. A new subscriber often has no target
+      // role or location yet; those fields must not discard answers already
+      // typed on this page.
       const screeningOk = (await screeningRef.current?.saveDrafts()) ?? true;
+      if (!screeningOk) {
+        setError("Those screening answers did not save.");
+      }
+      if (Object.keys(validation).length > 0) {
+        if (screeningOk) {
+          setError("Fix the highlighted fields before saving.");
+        }
+        return;
+      }
       const updated = await saveSettings(profile, agentConfig);
       setData(updated);
       if (screeningOk) {
@@ -611,10 +619,10 @@ export default function SettingsClient({
               {savedNotice}
             </span>
           ) : null}
-          {/* Screening drafts save via "Save my answers" on the questionnaire.
-              The header Save only writes profile + agentConfig, and on this
-              tab those fields are hidden — so the chrome must not claim it
-              banks screening answers. */}
+          {/* Screening drafts flush through this button (and through
+              "Save my answers" on the questionnaire). On the Screening
+              Answers tab the profile fields are hidden, so the header
+              button is omitted — that tab's own save is the one action. */}
           {active === "screening" ? null : (
             <button
               type="button"
@@ -1113,10 +1121,10 @@ export default function SettingsClient({
               The figures come from GET /answer-bank/readiness and are counts of
               stored rows. There is no blended "autonomy %" here on purpose (see
               answer_bank.readiness_summary). */}
-          {(active === "screening" || active === "profile") && (
             <section
               className="bg-surface-1 rounded-[14px] border border-white/10 p-5"
               data-testid="settings-screening"
+              hidden={active !== "screening" && active !== "profile"}
               aria-labelledby="screening-heading"
             >
               <h2 id="screening-heading" className="mb-1 text-[15px] font-semibold">
@@ -1148,7 +1156,7 @@ export default function SettingsClient({
                 <div className="mb-4" data-testid="screening-readiness">
                   <p className="text-[13px] text-aether-text" data-testid="screening-readiness-headline">
                     {readiness.setupComplete
-                      ? "The reusable answers are saved. A question phrased differently, or a sensitive one, still comes back to you on the application."
+                      ? "The reusable answers are saved. A question phrased differently, a sensitive one, or one you left blank, still comes back to you on the application."
                       : `${readiness.essentialCovered} of ${readiness.essentialTotal} reusable answers saved. Until the rest are answered, an application that asks one will stop and wait for you.`}
                   </p>
                   <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -1232,7 +1240,6 @@ export default function SettingsClient({
                 specifics) are asked every single time, whatever is saved.
               </p>
             </section>
-          )}
 
           {(active === "agents" || active === "profile") && (
             <section className="bg-surface-1 rounded-[14px] border border-white/10 p-5" data-testid="settings-agents">

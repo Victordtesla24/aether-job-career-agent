@@ -365,23 +365,30 @@ class TestFindMatch:
         assert find_match("Do you require visa sponsorship to work here?", [_item()]) is None
         assert find_match("Do you now or in the future require visa sponsorship?", [_item()]) is None
 
-    def test_right_skills_to_work_is_not_a_work_rights_answer(self):
-        """'Right' + 'work' in a skills/fit question is not authorisation to work.
+    @pytest.mark.parametrize(
+        "asked",
+        [
+            "Do you have the right skills to work in a fast-paced team?",
+            "Do you think you would be the right fit to work in our team?",
+            "Do you have the right experience to work in a fast-paced startup?",
+            "Do you have the right attitude to work in a high-pressure environment?",
+            "Are you the right person to work with our engineering team?",
+            "Do you have the right mindset to work autonomously?",
+            "Do you have the right qualifications to work in this role?",
+            "Do you have the right background to work on safety-critical systems?",
+        ],
+    )
+    def test_right_x_to_work_is_not_a_work_rights_answer(self, asked):
+        """'The right X to work' is not authorisation to work.
 
-        Auto-sending 'I am an Australian citizen' to 'do you have the right
-        skills to work in a fast-paced team' publishes a fact the candidate
-        never said about that question.
+        Auto-sending a citizenship answer to a question about experience,
+        attitude or fit publishes a fact the candidate never said about that
+        question. The class must require the phrase 'right to work' (or
+        another authorisation term), not the bag-of-words 'right' + 'work'.
         """
         from app.services.answer_bank import find_match
 
-        assert (
-            find_match("Do you have the right skills to work in a fast-paced team?", [_item()])
-            is None
-        )
-        assert (
-            find_match("Do you think you would be the right fit to work in our team?", [_item()])
-            is None
-        )
+        assert find_match(asked, [_item()]) is None, asked
 
     def test_the_banked_answer_is_returned_verbatim_never_reworded(self):
         from app.services.answer_bank import find_match

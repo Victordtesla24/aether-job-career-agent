@@ -250,6 +250,7 @@ class Concept:
     stale_days: int | None
     any_of: tuple[tuple[str, ...], ...]
     none_of: tuple[str, ...] = ()
+    phrases: tuple[str, ...] = ()
     subject_sensitive: bool = False
 
     def matches(self, normalized: str) -> bool:
@@ -257,6 +258,9 @@ class Concept:
         for veto in self.none_of:
             if f" {veto} " in padded:
                 return False
+        for phrase in self.phrases:
+            if f" {phrase} " in padded:
+                return True
         for group in self.any_of:
             if all(f" {term} " in padded for term in group):
                 return True
@@ -279,7 +283,6 @@ _CONCEPT_WORK_RIGHTS = Concept(
     stale_days=None,
     any_of=(
         ("legally", "work"),
-        ("right", "work"),
         ("rights", "work"),
         ("authorised", "work"),
         ("authorized", "work"),
@@ -289,10 +292,12 @@ _CONCEPT_WORK_RIGHTS = Concept(
         ("working", "right"),
         ("working", "rights"),
     ),
+    # "right"+"work" as a bag matches "the right experience to work".
+    # The consecutive phrase is the authorisation question; skills/fit
+    # nouns sitting between "right" and "to work" must not qualify.
+    phrases=("right to work",),
     # A question that mentions sponsorship or a visa subclass is a visa
     # SPECIFICS question (sensitive), not the stable yes/no work-rights one.
-    # "right"+"work" also appears in skills/fit questions ("right skills to
-    # work in a fast-paced team") — those are not authorisation to work.
     none_of=(
         "sponsorship",
         "sponsor",

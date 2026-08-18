@@ -236,6 +236,7 @@ describe("Settings — Screening Answers", () => {
     const headline = await screen.findByTestId("screening-readiness-headline");
     expect(headline.textContent).toMatch(/reusable answers are saved/i);
     expect(headline.textContent).toMatch(/still comes back/i);
+    expect(headline.textContent).toMatch(/left blank/i);
     expect(headline.textContent).not.toMatch(/will not stop/i);
   });
 
@@ -286,6 +287,61 @@ describe("Settings — Screening Answers", () => {
       ]),
     );
     expect(saveSettingsMock).toHaveBeenCalled();
+  });
+
+  it("banks screening drafts on Save Changes even when the new subscriber has no target role yet", async () => {
+    fetchSettingsMock.mockResolvedValue({
+      ...SETTINGS,
+      profile: {
+        ...SETTINGS.profile,
+        targetRole: "",
+        location: "",
+      },
+    });
+    render(<SettingsPage />);
+    const input = await screen.findByTestId("seed-input-work_rights");
+    fireEvent.change(input, { target: { value: "Yes — Australian citizen." } });
+    fireEvent.click(screen.getByTestId("save-settings-btn"));
+    await waitFor(() =>
+      expect(submitQuestionnaireMock).toHaveBeenCalledWith([
+        {
+          question: "Are you legally entitled to work in the country you are applying in?",
+          answer: "Yes — Australian citizen.",
+        },
+      ]),
+    );
+    expect(saveSettingsMock).not.toHaveBeenCalled();
+    expect(screen.getByText(/fix the highlighted fields/i)).toBeTruthy();
+    expect(screen.queryByTestId("settings-saved-notice")).toBeNull();
+  });
+
+  it("still banks typed screening answers after the user opens another Settings tab", async () => {
+    render(<SettingsPage />);
+    const input = await screen.findByTestId("seed-input-work_rights");
+    fireEvent.change(input, { target: { value: "Yes — Australian citizen." } });
+    fireEvent.click(screen.getByTestId("settings-nav-privacy"));
+    fireEvent.click(screen.getByTestId("save-settings-btn"));
+    await waitFor(() =>
+      expect(submitQuestionnaireMock).toHaveBeenCalledWith([
+        {
+          question: "Are you legally entitled to work in the country you are applying in?",
+          answer: "Yes — Australian citizen.",
+        },
+      ]),
+    );
+  });
+
+  it("tells the user when collapsed screening drafts fail to save", async () => {
+    submitQuestionnaireMock.mockRejectedValue(new Error("Answer Bank is unavailable."));
+    render(<SettingsPage />);
+    const input = await screen.findByTestId("seed-input-work_rights");
+    fireEvent.change(input, { target: { value: "Yes — Australian citizen." } });
+    fireEvent.click(screen.getByTestId("bank-questionnaire-toggle"));
+    fireEvent.click(screen.getByTestId("save-settings-btn"));
+    await waitFor(() =>
+      expect(screen.getByText(/those screening answers did not save/i)).toBeTruthy(),
+    );
+    expect(screen.queryByTestId("settings-saved-notice")).toBeNull();
   });
 
   it("mounts the shared questionnaire, expanded while set-up is incomplete", async () => {
