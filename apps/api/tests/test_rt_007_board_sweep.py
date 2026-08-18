@@ -80,9 +80,15 @@ class TestSweepProcessesWholeBoard:
         self, db_session, user_id, monkeypatch
     ):
         ids = [
-            _seed_job(db_session, user_id, fit=60.0),
-            _seed_job(db_session, user_id, fit=90.0),
-            _seed_job(db_session, user_id, fit=75.0),
+            # Comfortably above the User.agentConfig column's live DB default
+            # match threshold (80 — information_schema.columns.column_default
+            # for "User"."agentConfig", applied out-of-band to the freshly-
+            # cloned schema, no matching migration file), so all three stay
+            # ELIGIBLE — this test measures ordering, not the fit gate (that's
+            # AUD-COV-2's own suite). Relative order preserved: 60<75<90.
+            _seed_job(db_session, user_id, fit=85.0),
+            _seed_job(db_session, user_id, fit=99.0),
+            _seed_job(db_session, user_id, fit=92.0),
         ]
         calls: list[tuple[str, str]] = []
         monkeypatch.setattr(
@@ -102,11 +108,13 @@ class TestSweepProcessesWholeBoard:
         self, db_session, user_id, monkeypatch
     ):
         # Both jobs clear the user's match threshold (AUD-COV-2's gate; the
-        # config-absent bar is 50), so what this test measures is purely the
-        # ORDER: a cover-only completion outranks a better-fitting fresh job.
-        # ``stuck`` deliberately has the LOWER of the two passing scores, which
-        # is the whole point — it still goes first.
-        stuck = _seed_job(db_session, user_id, status="tailoring", fit=55.0)
+        # live schema's User.agentConfig column default is 80 — see
+        # information_schema.columns.column_default, out-of-band, no matching
+        # migration file), so what this test measures is purely the ORDER: a
+        # cover-only completion outranks a better-fitting fresh job. ``stuck``
+        # deliberately has the LOWER of the two passing scores, which is the
+        # whole point — it still goes first.
+        stuck = _seed_job(db_session, user_id, status="tailoring", fit=85.0)
         fresh = _seed_job(db_session, user_id, status="screening", fit=99.0)
         calls: list[tuple[str, str]] = []
         monkeypatch.setattr(
@@ -212,7 +220,11 @@ class TestSweepBounds:
         from app.agents.cover_letter_agent import FabricationError
 
         bad = _seed_job(db_session, user_id, fit=95.0)
-        good = _seed_job(db_session, user_id, fit=50.0)
+        # Above the live schema's User.agentConfig column default match
+        # threshold (80 — see information_schema.columns.column_default,
+        # out-of-band, no matching migration file) so ``good`` stays eligible;
+        # this test measures guard-rejection recovery, not the fit gate.
+        good = _seed_job(db_session, user_id, fit=85.0)
         calls: list[tuple[str, str]] = []
 
         def _selective(uid, agent, params):
@@ -319,7 +331,11 @@ class TestCoverFailureBackoff:
         """A job with ``max_cover_failures()`` coverLetter failures in the
         window is PERMANENTLY skipped — the sweep does not retry it."""
         bad = _seed_job(db_session, user_id, fit=95.0)
-        good = _seed_job(db_session, user_id, fit=50.0)
+        # Above the live schema's User.agentConfig column default match
+        # threshold (80 — see information_schema.columns.column_default,
+        # out-of-band, no matching migration file) so ``good`` stays eligible;
+        # this test measures the cover-failure backoff, not the fit gate.
+        good = _seed_job(db_session, user_id, fit=85.0)
         # Seed exactly MAX_COVER_FAILURES failed cover runs for `bad`.
         self._seed_failed_cover_runs(db_session, user_id, bad,
                                      board_sweep.MAX_COVER_FAILURES)

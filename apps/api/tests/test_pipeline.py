@@ -30,6 +30,30 @@ def _register_and_login(client) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
+def _clear_agent_config(conn, headers: dict[str, str]) -> None:
+    """Force this caller's ``agentConfig`` to genuinely NULL — the "never
+    configured a threshold" state ``user_match_threshold``'s 50-fallback (D2,
+    audit wf_9a87f76f-eaa) actually documents.
+
+    The freshly-cloned test schema carries a LIVE, out-of-band column default
+    for ``"User"."agentConfig"`` (``information_schema.columns.
+    column_default`` = ``{"matchThreshold": 80, ...}``, no matching migration
+    file), so a row inserted without an explicit value is no longer NULL — it
+    silently already has a threshold of 80. This test's registered user never
+    touched Settings, and AUD-COV-2's own gate is exercised on its own terms by
+    ``tests/test_cov2_generation_fit_gate.py``, so route around the schema
+    artefact rather than let it decide whether THIS test's matched job (real
+    scout-fixture data, fitScore ~55) clears the bar.
+    """
+    from app.security import decode_access_token
+
+    token = headers["Authorization"].removeprefix("Bearer ")
+    user_id = decode_access_token(token)["userId"]
+    with conn.cursor() as cur:
+        cur.execute('UPDATE "User" SET "agentConfig" = NULL WHERE "id" = %s', (user_id,))
+    conn.commit()
+
+
 class TestPipelineRun:
     def test_pipeline_records_every_node_including_supervisor_and_matcher(
         self, client, auth_headers
@@ -78,8 +102,13 @@ class TestPipelineRun:
         assert by_name["supervisor"]["status"] == "completed"
         assert by_name["matcher"]["status"] == "completed"
 
-    def test_pipeline_with_no_jobs_completes_with_empty_match(self, client):
+    def test_pipeline_with_no_jobs_completes_with_empty_match(self, client, db_session):
         headers = _register_and_login(client)
+        # AUD-COV-2 gates auto-generation on the caller's OWN matchThreshold;
+        # this test is about the "nothing matched" contract, not that gate
+        # (which has its own suite), so route around the live schema's
+        # out-of-band agentConfig column default (see _clear_agent_config).
+        _clear_agent_config(db_session, headers)
         # Defensive: if a job IS matched (fixture-dependent), the pipeline would
         # reach tailor/coverLetter, both of which now require a résumé on file.
         seed_own_resume(client, headers, raw_text=_operator_resume_text())

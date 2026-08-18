@@ -79,6 +79,23 @@ def _set_match_threshold(conn, user_id: str, threshold: int) -> None:
     conn.commit()
 
 
+def _clear_agent_config(conn, user_id: str) -> None:
+    """Force ``agentConfig`` to genuinely NULL — the "user never configured
+    this" state ``user_match_threshold``'s 50-fallback (D2, audit
+    wf_9a87f76f-eaa) actually documents.
+
+    The freshly-cloned test schema carries a LIVE, out-of-band column default
+    for ``"User"."agentConfig"`` (``information_schema.columns.column_default``
+    = ``{"matchThreshold": 80, ...}``, no matching migration file), so a row
+    inserted without an explicit value is no longer NULL — it silently already
+    has a threshold. Without this, tests aimed at the missing-config fallback
+    path exercise the schema's default instead of the code's.
+    """
+    with conn.cursor() as cur:
+        cur.execute('UPDATE "User" SET "agentConfig" = NULL WHERE "id" = %s', (user_id,))
+    conn.commit()
+
+
 def _skip_runs(conn, user_id: str) -> list[dict]:
     """Every honest low-fit skip row this user's autopilot recorded."""
     with conn.cursor() as cur:
@@ -202,6 +219,11 @@ class TestLowFitSkipIsRecordedAndVisible:
     def test_skip_is_persisted_as_an_honest_zero_cost_agent_run(
         self, db_session, user_id, monkeypatch
     ):
+        # This test's intent is the code's documented missing-config fallback
+        # (50, not the live schema's out-of-band column default of 80) — make
+        # that state explicit rather than relying on how "User" rows happen to
+        # be inserted (see ``_clear_agent_config``).
+        _clear_agent_config(db_session, user_id)
         job = _seed_job(db_session, user_id, fit=12.0)
         _recorder(monkeypatch)
 

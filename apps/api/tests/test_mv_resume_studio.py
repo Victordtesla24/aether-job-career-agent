@@ -33,6 +33,26 @@ def user_id(auth_headers) -> str:
     return decode_access_token(token)["userId"]
 
 
+def _clear_agent_config(conn, user_id: str) -> None:
+    """Force this user's ``agentConfig`` to genuinely NULL — the "never
+    configured a threshold" state ``user_match_threshold``'s 50-fallback (D2,
+    audit wf_9a87f76f-eaa) actually documents.
+
+    The freshly-cloned test schema carries a LIVE, out-of-band column default
+    for ``"User"."agentConfig"`` (``information_schema.columns.
+    column_default`` = ``{"matchThreshold": 80, ...}``, no matching migration
+    file), so a row inserted without an explicit value is no longer NULL — it
+    silently already has a threshold of 80. AUD-COV-2's own gate is exercised
+    on its own terms by ``tests/test_cov2_generation_fit_gate.py``; this
+    module's tests are about tailor no-op honesty, so route around the schema
+    artefact rather than let it decide whether a matched scout-fixture job
+    (real fitScore ~55) clears the bar.
+    """
+    with conn.cursor() as cur:
+        cur.execute('UPDATE "User" SET "agentConfig" = NULL WHERE "id" = %s', (user_id,))
+    conn.commit()
+
+
 def _seed_job(client, auth_headers) -> dict:
     """Seed the fixture user their own base résumé (every test in this file
     goes on to run a tailor — and often a cover-letter — agent, both of which
@@ -308,9 +328,16 @@ class TestNoSilentBilledNoOp:
             output = _json.loads(output)
         assert output.get("noChangesApplied") is True
 
-    def test_pipeline_tolerates_a_noop_tailor(self, client, auth_headers, monkeypatch):
+    def test_pipeline_tolerates_a_noop_tailor(
+        self, client, auth_headers, user_id, db_session, monkeypatch
+    ):
         """A no-op tailor inside the full pipeline must NOT fail the whole run —
         the cover-letter step draws on the base résumé regardless."""
+        # AUD-COV-2 gates auto-generation on the caller's OWN matchThreshold;
+        # this test is about no-op-tailor tolerance, not that gate (which has
+        # its own suite), so route around the live schema's out-of-band
+        # agentConfig column default (see _clear_agent_config).
+        _clear_agent_config(db_session, user_id)
         # The pipeline's cover-letter step runs the real (replay) generation, so
         # seed the operator-PDF text the canned fixture was recorded against —
         # a synthetic résumé would make that step 422 on fabrication grounds.
