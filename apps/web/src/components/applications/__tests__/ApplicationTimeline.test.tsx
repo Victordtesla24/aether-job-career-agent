@@ -5,8 +5,9 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
-import ApplicationTimeline from "../ApplicationTimeline";
+import ApplicationTimeline, { LABEL_W, LANE_TRACK_MIN } from "../ApplicationTimeline";
 import { BACKFILL_SOURCE, type TimelinePayload } from "../timeline-model";
+import { laneTrackWidth } from "../timeline-gl-geometry";
 import type { TrackerApplication } from "../tracker-api";
 
 function app(over: Partial<TrackerApplication> = {}): TrackerApplication {
@@ -144,6 +145,43 @@ describe("ApplicationTimeline", () => {
     expect(svg.getAttribute("style") || "").toMatch(/right:\s*28px/);
   });
 
+  it("pins the DOM lane track's rendered minWidth to the shared laneTrackWidth formula (TL-VIZ-R4 D2)", () => {
+    // Real ResizeObserver rig (same pattern as VirtualList.test.tsx): jsdom
+    // has no layout engine, so this delivers one synchronous measurement to
+    // drive glSize.w to a viewport narrow enough that the DOM track and the
+    // GL basis would visibly diverge if either side stopped calling the
+    // shared laneTrackWidth() formula (the exact regression this guards —
+    // TL-VIZ-R3 silently reintroduced a diverging DOM formula once already).
+    const realRO = window.ResizeObserver;
+    const NARROW_ROW_W = 700;
+    class NarrowRowResizeObserver {
+      constructor(private cb: ResizeObserverCallback) {}
+      observe(target: Element) {
+        this.cb(
+          [
+            {
+              target,
+              contentRect: { width: NARROW_ROW_W, height: 400 },
+            } as unknown as ResizeObserverEntry,
+          ],
+          this as unknown as ResizeObserver,
+        );
+      }
+      unobserve() {}
+      disconnect() {}
+    }
+    window.ResizeObserver = NarrowRowResizeObserver as unknown as typeof ResizeObserver;
+
+    try {
+      render(<ApplicationTimeline payload={PAYLOAD} onOpenDetail={vi.fn()} />);
+      const track = screen.getByTestId("timeline-lane-track");
+      const expected = `${laneTrackWidth(NARROW_ROW_W, LABEL_W, LANE_TRACK_MIN)}px`;
+      expect(track.style.minWidth).toBe(expected);
+    } finally {
+      window.ResizeObserver = realRO;
+    }
+  });
+
   it("suppresses node click after a drag pan (adv P1)", () => {
     const onOpen = vi.fn();
     render(<ApplicationTimeline payload={PAYLOAD} onOpenDetail={onOpen} />);
@@ -176,5 +214,78 @@ describe("ApplicationTimeline", () => {
     expect(onOpen).not.toHaveBeenCalled();
     fireEvent.click(screen.getByTestId("timeline-node-e1"));
     expect(onOpen).toHaveBeenCalledWith("app-1");
+  });
+
+  it("halts drag-release inertia before a keyboard pan takes over (adv D3)", () => {
+    render(<ApplicationTimeline payload={PAYLOAD} onOpenDetail={vi.fn()} />);
+    const track = screen.getByTestId("timeline-track");
+    const scroller = screen.getByTestId("timeline-scroller");
+
+    const dispatchPointer = (
+      type: "pointerdown" | "pointermove" | "pointerup",
+      clientX: number,
+    ) => {
+      const ev = new Event(type, { bubbles: true, cancelable: true }) as Event & {
+        button: number;
+        buttons: number;
+        clientX: number;
+        pointerId: number;
+      };
+      Object.assign(ev, {
+        button: 0,
+        buttons: type === "pointerup" ? 0 : 1,
+        clientX,
+        pointerId: 1,
+      });
+      fireEvent(track, ev);
+    };
+
+    // Fast release: builds enough velocity that pointerup's startInertia()
+    // schedules a coasting requestAnimationFrame loop (inertiaRaf.current
+    // becomes non-zero the instant startInertia() runs, synchronously).
+    dispatchPointer("pointerdown", 100);
+    dispatchPointer("pointermove", 260);
+    dispatchPointer("pointerup", 260);
+
+    const cafSpy = vi.spyOn(window, "cancelAnimationFrame");
+    fireEvent.keyDown(scroller, { key: "ArrowLeft" });
+    // stopInertia() only calls cancelAnimationFrame when a RAF id is live —
+    // this only passes if the keyboard handler actually halts the coast.
+    expect(cafSpy).toHaveBeenCalled();
+    cafSpy.mockRestore();
+  });
+
+  it("halts drag-release inertia before a wheel pan takes over (adv D3)", () => {
+    render(<ApplicationTimeline payload={PAYLOAD} onOpenDetail={vi.fn()} />);
+    const track = screen.getByTestId("timeline-track");
+    const scroller = screen.getByTestId("timeline-scroller");
+
+    const dispatchPointer = (
+      type: "pointerdown" | "pointermove" | "pointerup",
+      clientX: number,
+    ) => {
+      const ev = new Event(type, { bubbles: true, cancelable: true }) as Event & {
+        button: number;
+        buttons: number;
+        clientX: number;
+        pointerId: number;
+      };
+      Object.assign(ev, {
+        button: 0,
+        buttons: type === "pointerup" ? 0 : 1,
+        clientX,
+        pointerId: 1,
+      });
+      fireEvent(track, ev);
+    };
+
+    dispatchPointer("pointerdown", 100);
+    dispatchPointer("pointermove", 260);
+    dispatchPointer("pointerup", 260);
+
+    const cafSpy = vi.spyOn(window, "cancelAnimationFrame");
+    fireEvent.wheel(scroller, { shiftKey: true, deltaY: 40 });
+    expect(cafSpy).toHaveBeenCalled();
+    cafSpy.mockRestore();
   });
 });

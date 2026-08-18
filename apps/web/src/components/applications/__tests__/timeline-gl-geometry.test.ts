@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 import { BACKFILL_SOURCE, buildTimelineModel, type TimelinePayload } from "../timeline-model";
 import {
   buildTimelineGlGeometry,
+  laneTrackWidth,
   type TimelineGlBuildOpts,
 } from "../timeline-gl-geometry";
 import type { TrackerApplication } from "../tracker-api";
@@ -87,6 +88,7 @@ const BASE: TimelineGlBuildOpts = {
   laneH: 72,
   hoverId: null,
   hoverAppId: null,
+  trackMinW: 1,
 };
 
 describe("buildTimelineGlGeometry", () => {
@@ -146,6 +148,22 @@ describe("buildTimelineGlGeometry", () => {
     expect(geo.rails.find((r) => r.applicationId === "app-2")!.highlighted).toBe(
       false,
     );
+  });
+
+  it("derives its track basis from the shared laneTrackWidth floor (TL-VIZ-R4 D2)", () => {
+    const model = buildTimelineModel(PAYLOAD);
+    // A row narrower than labelW + trackMinW: the GL basis must clamp to the
+    // same floor the DOM lane track's minWidth uses, not to `width - labelW`.
+    const narrow = buildTimelineGlGeometry(model, {
+      ...BASE,
+      width: 700,
+      labelW: 220,
+      trackMinW: 560,
+    });
+    const rail = narrow.rails[0]!;
+    const expectedTrackW = laneTrackWidth(700, 220, 560);
+    expect(rail.x1 - rail.x0).toBe(expectedTrackW - BASE.padX * 2);
+    expect(expectedTrackW).toBe(560);
   });
 
   it("never invents coral or indigo hexes", () => {
