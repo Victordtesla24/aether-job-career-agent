@@ -3599,7 +3599,11 @@ class LLMClient:
         #: a re-send below strips a key from THIS, never from the original, so
         #: each parameter is dropped at most once per attempt.
         sent = req
-        if (free_chain or bool(_json_complete_context.get())) and resp.status_code == 400 and "reasoning" in req["json"]:
+        if (
+            (free_chain or bool(_json_complete_context.get()))
+            and resp.status_code == 400
+            and "reasoning" in req["json"]
+        ):
             # The rescue list is env-overridable against a CHURNING free catalog,
             # so an operator can legitimately point it at a model that rejects
             # the reasoning parameter. A 400 on a body WE shaped is a

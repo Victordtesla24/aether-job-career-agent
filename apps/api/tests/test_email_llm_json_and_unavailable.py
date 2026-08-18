@@ -26,9 +26,9 @@ import httpx
 import pytest
 
 from app.services.llm_client import (
+    LLM_UNAVAILABLE_USER_MESSAGE,
     LLMClient,
     LLMUnavailableError,
-    LLM_UNAVAILABLE_USER_MESSAGE,
     llm_failure_user_message,
 )
 

@@ -78,7 +78,7 @@ export default function EmailCenterPage() {
   const [error, setError] = useState<string | null>(null);
   // Default to "All Recruiter": it always has content, so the screen never opens
   // on a structurally-empty tab that reads as broken (MV-email-center-003).
-  const [category, setCategory] = useState<string>("all");
+  const [category, setCategory] = useState<(typeof CATEGORIES)[number]["key"]>("all");
   const [accountFilter, setAccountFilter] = useState<string>("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState<string>("");
