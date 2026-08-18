@@ -105,10 +105,39 @@ def create_checkout_session(
     price_id: str,
     user_id: str,
     plan_id: str,
+    plan_name: str,
+    description: str,
+    amount_aud: float,
     interval: str,
     idempotency_key: str | None = None,
 ) -> dict[str, str]:
-    """Create a subscription Checkout Session; return ``{id, url}``."""
+    """Create a subscription Checkout Session; return ``{id, url}``.
+
+    CR-P0-2 (RUN-20260818T0223Z): the line item is built from ``price_data`` —
+    an inline Price + Product created for THIS session — rather than by
+    referencing the pre-existing catalog ``price_id``. A bare ``price=`` line
+    item makes Stripe render that Price's PRODUCT-level ``name``/
+    ``description`` verbatim from whatever is configured in the Stripe
+    DASHBOARD, which is exactly how a stale "Full model access" / "Standard
+    model tier" / "Everything in Pro" overclaim survived on the live Checkout
+    page after the same claims were scrubbed from ``/pricing`` (CLI-D3) and
+    ``GET /billing/plans`` (AUD-MON-1) — neither of those fixes could reach
+    Stripe's own catalog. Building the Product/Price inline from the caller's
+    ``plan_name``/``description`` (the router sources both from the SAME
+    ``_enforced_facts`` helper /pricing and /billing/plans use) means Checkout
+    can never re-drift from what the backend actually enforces: there is
+    nothing left in the Dashboard for a future edit to silently disagree with.
+    See docs/delivery/evidence/RUN-20260818T0223Z/COMMERCIAL-READINESS/fixes/
+    cr-p0-2-checkout.md.
+
+    The catalog ``price_id`` is still required (a plan without one is not
+    purchasable — ``_resolve_price_id``) and is preserved in Checkout Session
+    metadata as ``catalog_price_id`` for financial reconciliation; it is used
+    directly (not the inline price) by ``switch_subscription_price`` /
+    ``set_subscription_price`` for an EXISTING subscriber, which modifies a
+    subscription in place and never renders a Checkout page — unaffected by
+    this change.
+    """
     stripe = _stripe()
     kwargs: dict[str, Any] = {}
     if idempotency_key:
@@ -117,14 +146,35 @@ def create_checkout_session(
         mode="subscription",
         customer=customer_id,
         client_reference_id=user_id,
-        line_items=[{"price": price_id, "quantity": 1}],
+        line_items=[
+            {
+                "price_data": {
+                    "currency": "aud",
+                    "unit_amount": int(round(float(amount_aud) * 100)),
+                    "recurring": {"interval": interval},
+                    "product_data": {
+                        "name": plan_name,
+                        "description": description,
+                    },
+                },
+                "quantity": 1,
+            }
+        ],
         # Managed Payments (enabled by default on this account) selects the
         # payment methods AND handles taxes automatically — Stripe rejects
         # payment_method_types and automatic_tax when it's on, so we omit both.
-        metadata={"user_id": user_id, "plan_id": plan_id, "interval": interval},
+        metadata={
+            "user_id": user_id,
+            "plan_id": plan_id,
+            "interval": interval,
+            "catalog_price_id": price_id,
+        },
         # Stamp plan_id + interval onto the SUBSCRIPTION metadata too (not just the
         # Checkout Session) so later customer.subscription.* events can resolve the
-        # plan even if the price-id reverse lookup ever comes up empty (PAY-R1-01).
+        # plan even if the price-id reverse lookup ever comes up empty (PAY-R1-01)
+        # — which it always will for THIS subscription's initial price, since it is
+        # inline/ad hoc rather than one of the catalog ids ``_plan_by_price_id``
+        # recognises. This metadata IS that fallback, by design.
         subscription_data={
             "metadata": {
                 "user_id": user_id,

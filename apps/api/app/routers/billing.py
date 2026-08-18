@@ -69,6 +69,26 @@ def _enforced_facts(plan: dict[str, Any]) -> list[str]:
     ]
 
 
+def _checkout_description(plan: dict[str, Any]) -> str:
+    """CR-P0-2: the honest, single-line Stripe Checkout product description —
+    the SAME quota + spend-cap facts ``_enforced_facts`` derives for
+    ``/pricing`` and ``GET /billing/plans`` (ruling D4), joined the way
+    Stripe's own line-item description renders under the product name."""
+    return " · ".join(_enforced_facts(plan))
+
+
+def _amount_for_interval(plan: dict[str, Any], interval: str) -> float:
+    """AUD amount for ``interval`` ('month' or 'year') — the SAME
+    ``priceAudMonthly``/``priceAudAnnual`` columns ``/billing/plans`` already
+    surfaces via ``gst_breakdown``. Annual is a negotiated total, not a
+    12x multiple of the monthly price, so it is read from its own column."""
+    if interval == "year":
+        annual = plan.get("priceAudAnnual")
+        if annual is not None:
+            return float(annual)
+    return float(plan["priceAudMonthly"])
+
+
 # ---------------------------------------------------------------------------
 # Request models
 # ---------------------------------------------------------------------------
@@ -214,6 +234,9 @@ def create_checkout(
         price_id=price_id,
         user_id=user_id,
         plan_id=plan["id"],
+        plan_name=plan["name"],
+        description=_checkout_description(plan),
+        amount_aud=_amount_for_interval(plan, body.interval),
         interval=body.interval,
     )
     return {"checkoutUrl": session["url"], "sessionId": session["id"]}
