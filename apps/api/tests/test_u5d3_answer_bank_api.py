@@ -95,6 +95,33 @@ class TestQuestionnaire:
         assert "years_experience" in body["answeredConcepts"]
         assert "notice_period" in body["answeredConcepts"]
 
+    def test_an_expired_answer_is_not_reported_as_answered_on_the_questionnaire(
+        self, client, auth_headers
+    ):
+        """The questionnaire and the agent must agree about a stale row.
+
+        Readiness already drops expired coverage. If GET /questionnaire still
+        lists the concept as answered, the form shows green, save is disabled,
+        and the agent refuses to send the stale words — the user cannot
+        re-confirm from the place they were told to set up.
+        """
+        client.post(
+            "/answer-bank/questionnaire",
+            headers=auth_headers,
+            json={
+                "answers": [
+                    {"question": "What is your notice period?", "answer": "4 weeks"},
+                ]
+            },
+        )
+        item_id = client.get("/answer-bank", headers=auth_headers).json()["items"][0]["id"]
+        assert (
+            client.post(f"/answer-bank/{item_id}/expire", headers=auth_headers).status_code
+            == 200
+        )
+        body = client.get("/answer-bank/questionnaire", headers=auth_headers).json()
+        assert "notice_period" not in body["answeredConcepts"]
+
     def test_skipped_questions_bank_nothing_and_are_not_an_error(
         self, client, auth_headers, user_id
     ):

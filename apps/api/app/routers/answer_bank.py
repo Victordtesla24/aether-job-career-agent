@@ -139,7 +139,7 @@ def get_questionnaire(current_user: CurrentUser) -> dict[str, Any]:
     answered = {
         concept_of(str(item["semanticKey"]))
         for item in items
-        if concept_of(str(item["semanticKey"]))
+        if concept_of(str(item["semanticKey"])) and not item_is_expired(item)
     }
     return {
         "questions": seed_question_payload(),

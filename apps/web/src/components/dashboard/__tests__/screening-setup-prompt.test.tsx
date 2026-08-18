@@ -56,7 +56,7 @@ describe("ScreeningSetupPrompt", () => {
     const card = await screen.findByTestId("screening-setup-prompt");
     expect(card.textContent).toMatch(/application forms ask/i);
     const link = screen.getByTestId("screening-setup-cta");
-    expect(link.getAttribute("href")).toBe("/dashboard/settings?section=screening");
+    expect(link.getAttribute("href")).toBe("/dashboard/settings");
   });
 
   it("states measured reusable coverage, never a blended score", async () => {
@@ -96,7 +96,7 @@ describe("ScreeningSetupPrompt", () => {
     expect(screen.queryByText(/0 of /)).toBeNull();
     expect(screen.queryByText(/^0$/)).toBeNull();
     expect(screen.getByTestId("screening-setup-cta").getAttribute("href")).toBe(
-      "/dashboard/settings?section=screening",
+      "/dashboard/settings",
     );
   });
 

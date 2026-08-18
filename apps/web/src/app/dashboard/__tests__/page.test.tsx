@@ -322,7 +322,7 @@ describe("Dashboard first-run screening prompt (SETUP-1)", () => {
     render(<DashboardPage />);
 
     const cta = await screen.findByTestId("screening-setup-cta");
-    expect(cta.getAttribute("href")).toBe("/dashboard/settings?section=screening");
+    expect(cta.getAttribute("href")).toBe("/dashboard/settings");
   });
 
   it("does not show the prompt once every reusable answer is saved", async () => {

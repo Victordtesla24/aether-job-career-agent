@@ -7,7 +7,9 @@
  * Settings, next to the résumé and the profile links, which a new subscriber
  * has no reason to open until something tells them why. This card is that
  * something: it states how far the Answer Bank can already act, and it links
- * to Settings → Screening Answers.
+ * to Settings, where the résumé, career links, and screening answers sit
+ * together on the Profile tab. Returning users who only need the answers
+ * still have Settings → Screening Answers via the sub-nav.
  *
  * A failed check is reported as a failed check. It must never render as
  * "0 answers saved" — that fact belongs to a successful empty-bank read, and
@@ -21,7 +23,7 @@ import {
   type AnswerBankReadiness,
 } from "../../lib/api/answer-bank";
 
-const SETTINGS_HREF = "/dashboard/settings?section=screening";
+const SETTINGS_HREF = "/dashboard/settings";
 
 export default function ScreeningSetupPrompt() {
   const [readiness, setReadiness] = useState<AnswerBankReadiness | null>(null);

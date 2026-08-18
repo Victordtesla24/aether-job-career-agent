@@ -24,6 +24,7 @@ from app.services.answer_bank import (
     ESSENTIAL_SEED_CONCEPTS,
     SEED_QUESTIONS,
     SENSITIVITY_FACTUAL,
+    concept_of,
     readiness_summary,
     semantic_key,
 )
@@ -93,6 +94,23 @@ class TestPureReadiness:
         for question in SEED_QUESTIONS:
             if question.sensitivity != SENSITIVITY_FACTUAL:
                 assert question.concept not in ESSENTIAL_SEED_CONCEPTS
+
+    def test_subject_sensitive_years_are_not_counted_as_unattended_setup(self):
+        """A general 'years in my field' answer does not cover 'years of Kubernetes'.
+
+        Counting years_experience as essential would let setupComplete hide the
+        first-run prompt while a named-skill years question still stops the
+        agent — the page and the agent disagreeing about the same user.
+        """
+        assert "years_experience" not in ESSENTIAL_SEED_CONCEPTS
+        years = next(q for q in SEED_QUESTIONS if q.concept == "years_experience")
+        essential = [q for q in SEED_QUESTIONS if q.concept in ESSENTIAL_SEED_CONCEPTS]
+        covered = [_item(q.question) for q in essential]
+        summary = readiness_summary(covered)
+        assert summary["setupComplete"] is True
+        assert years.concept not in {
+            concept_of(str(row["semanticKey"])) for row in covered
+        }
 
     def test_an_expired_answer_stops_counting_as_coverage_but_is_still_reported(self):
         stale = _item(

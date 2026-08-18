@@ -286,6 +286,8 @@ _CONCEPT_WORK_RIGHTS = Concept(
         ("eligible", "work"),
         ("permitted", "work"),
         ("work", "entitlement"),
+        ("working", "right"),
+        ("working", "rights"),
     ),
     # A question that mentions sponsorship or a visa subclass is a visa
     # SPECIFICS question (sensitive), not the stable yes/no work-rights one.
@@ -1226,10 +1228,18 @@ def seed_question_payload() -> list[dict[str, Any]]:
 #: The seed concepts that actually unblock an unattended submission. A
 #: judgement or sensitive class is user-gated BY DESIGN, so counting it as
 #: outstanding set-up would draw a progress bar that can never reach the end.
+#: A subject-sensitive factual class (years of experience) is also excluded:
+#: a general "years in my field" answer does not cover a named-skill re-ask,
+#: so treating it as essential would claim the agent is ready while those
+#: forms still stop.
+_SUBJECT_SENSITIVE_CONCEPTS = frozenset(
+    concept.key for concept in CONCEPTS if concept.subject_sensitive
+)
 ESSENTIAL_SEED_CONCEPTS: tuple[str, ...] = tuple(
     question.concept
     for question in SEED_QUESTIONS
     if question.sensitivity == SENSITIVITY_FACTUAL
+    and question.concept not in _SUBJECT_SENSITIVE_CONCEPTS
 )
 
 

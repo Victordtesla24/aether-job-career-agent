@@ -261,6 +261,20 @@ describe("Settings — Screening Answers", () => {
     expect(await screen.findByTestId("bank-questionnaire")).toBeTruthy();
   });
 
+  it("does not offer profile Save Changes on the Screening Answers tab", async () => {
+    window.history.replaceState(null, "", "/dashboard/settings?section=screening");
+    render(<SettingsPage />);
+    expect(await screen.findByTestId("bank-questionnaire-save")).toBeTruthy();
+    expect(screen.queryByTestId("save-settings-btn")).toBeNull();
+    expect(saveSettingsMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps profile Save Changes on the Profile tab where it belongs", async () => {
+    render(<SettingsPage />);
+    expect(await screen.findByTestId("save-settings-btn")).toBeTruthy();
+    expect(await screen.findByTestId("bank-questionnaire-save")).toBeTruthy();
+  });
+
   it("mounts the shared questionnaire, expanded while set-up is incomplete", async () => {
     render(<SettingsPage />);
     expect(await screen.findByTestId("bank-questionnaire")).toBeTruthy();

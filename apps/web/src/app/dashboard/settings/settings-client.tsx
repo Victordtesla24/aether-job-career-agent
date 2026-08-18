@@ -605,15 +605,21 @@ export default function SettingsClient({
               {savedNotice}
             </span>
           ) : null}
-          <button
-            type="button"
-            data-testid="save-settings-btn"
-            onClick={() => void save()}
-            disabled={saving}
-            className="rounded-xl bg-aether-coral px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
-          >
-            {saving ? "Saving…" : "Save Changes"}
-          </button>
+          {/* Screening drafts save via "Save my answers" on the questionnaire.
+              The header Save only writes profile + agentConfig, and on this
+              tab those fields are hidden — so the chrome must not claim it
+              banks screening answers. */}
+          {active === "screening" ? null : (
+            <button
+              type="button"
+              data-testid="save-settings-btn"
+              onClick={() => void save()}
+              disabled={saving}
+              className="rounded-xl bg-aether-coral px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+            >
+              {saving ? "Saving…" : "Save Changes"}
+            </button>
+          )}
         </div>
       </header>
 
