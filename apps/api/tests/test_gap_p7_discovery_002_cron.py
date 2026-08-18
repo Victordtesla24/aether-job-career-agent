@@ -30,6 +30,7 @@ results, one failing user never aborting the rest) is already covered by
 from __future__ import annotations
 
 import asyncio
+import logging
 import uuid
 
 import pytest
@@ -198,6 +199,125 @@ class TestDiscoverySweepCronBehaviour:
         assert discovery_sweep.discovery_sweep_min_interval_seconds() == 60.0
         monkeypatch.setenv("AETHER_DISCOVERY_SWEEP_MIN_INTERVAL_SECONDS", "not-a-number")
         assert discovery_sweep.discovery_sweep_min_interval_seconds() == 1500.0
+
+    def test_recency_check_fault_does_not_abort_the_tick_for_later_users(
+        self, client, db_session, monkeypatch, caplog
+    ):
+        """R3 delta review P1 Finding 2 — a transient DB fault on ONE user's
+        recency check must never silently abort enqueueing for every
+        later-ordered eligible user in the same tick, and the module's own
+        advertised summary log line must still fire."""
+        from app.workers import discovery_sweep
+
+        monkeypatch.setenv("AETHER_DISCOVERY_CRON_ENABLED", "true")
+        user_a = _seed_user(db_session, f"disc-fault-a-{uuid.uuid4().hex[:6]}@example.com")
+        user_b = _seed_user(db_session, f"disc-fault-b-{uuid.uuid4().hex[:6]}@example.com")
+        user_c = _seed_user(db_session, f"disc-fault-c-{uuid.uuid4().hex[:6]}@example.com")
+
+        real_recently_swept = discovery_sweep._recently_swept
+
+        def _faulting_recently_swept(user_id):
+            if user_id == user_b:
+                raise RuntimeError("simulated transient DB fault")
+            return real_recently_swept(user_id)
+
+        monkeypatch.setattr(discovery_sweep, "_recently_swept", _faulting_recently_swept)
+
+        redis = _RecordingRedis()
+        with caplog.at_level(logging.INFO, logger="app.workers.discovery_sweep"):
+            n = asyncio.run(discovery_sweep.discovery_sweep_cron({"redis": redis}))
+
+        enqueued_ids = {uid for _, uid, _ in redis.calls}
+        assert user_a in enqueued_ids, "user A (before the fault) must still be enqueued"
+        assert user_c in enqueued_ids, (
+            "user C (ordered after the faulting user B) must still be "
+            "enqueued — one user's read fault must not abort the rest of "
+            "the tick"
+        )
+        assert user_b in enqueued_ids, (
+            "the faulting user's OWN check must fail toward NOT skipping, "
+            "per this module's documented discipline"
+        )
+        assert n == 3
+
+        # The module's own advertised summary log line must fire on this
+        # path too — previously it never executed once the unhandled
+        # exception propagated out of the loop.
+        assert "eligible (pool)" in caplog.text
+        assert "1 recency-check fault(s)" in caplog.text
+        assert f"recency check failed for user {user_b}" in caplog.text
+
+
+class TestDiscoverySweepRotationFairness:
+    def test_rotation_prioritises_least_recently_swept_over_account_age(
+        self, client, db_session, monkeypatch
+    ):
+        """R3 delta review P2 Finding 3 — once eligible population exceeds
+        the per-tick enqueue cap, the OLDEST account must not always win
+        every tick forever; the LEAST recently (or never) swept user must be
+        prioritised so every eligible subscriber eventually rotates in."""
+        from app.repositories.agent_run import AgentRunRepository
+        from app.workers import discovery_sweep
+
+        monkeypatch.setenv("AETHER_DISCOVERY_CRON_ENABLED", "true")
+        monkeypatch.setenv("AETHER_DISCOVERY_SWEEP_USER_CAP", "1")
+
+        older_but_recently_swept = _seed_user(
+            db_session, f"disc-rot-old-{uuid.uuid4().hex[:6]}@example.com",
+        )
+        newer_but_never_swept = _seed_user(
+            db_session, f"disc-rot-new-{uuid.uuid4().hex[:6]}@example.com",
+        )
+
+        runs = AgentRunRepository()
+        run = runs.start(older_but_recently_swept, "scout", {"query": "x", "location": "y"})
+        runs.finish(run["id"], "completed", output={"persisted": 0}, cost_usd=0.0)
+        # Backdate the run OUTSIDE the recency-guard window, so
+        # `_recently_swept` alone would NOT exclude this user — isolating
+        # the assertion to rotation ORDER, not the unrelated recency skip
+        # (Finding 2's mechanism, already covered above).
+        with db_session.cursor() as cur:
+            cur.execute(
+                'UPDATE "AgentRun" SET "createdAt" = NOW() - INTERVAL \'2 hours\' '
+                'WHERE "id" = %s',
+                (run["id"],),
+            )
+        db_session.commit()
+
+        redis = _RecordingRedis()
+        n = asyncio.run(discovery_sweep.discovery_sweep_cron({"redis": redis}))
+        enqueued_ids = {uid for _, uid, _ in redis.calls}
+
+        assert newer_but_never_swept in enqueued_ids, (
+            "the never-swept user must win the single enqueue slot over an "
+            "OLDER account that was already (if less recently) swept — the "
+            "pre-fix ORDER BY createdAt behaviour would have picked the "
+            "older account every time"
+        )
+        assert older_but_recently_swept not in enqueued_ids
+        assert n == 1
+
+    def test_rotation_is_a_noop_when_the_pool_already_fits_inside_the_cap(self):
+        from app.workers import discovery_sweep
+
+        users = [{"id": "u1"}, {"id": "u2"}]
+        result = discovery_sweep._rotate_least_recently_swept(users, cap=5)
+        assert result == users
+
+    def test_rotation_falls_back_to_natural_pool_order_when_the_ordering_read_fails(
+        self, monkeypatch
+    ):
+        """A fault in the rotation-ordering read degrades honestly to the
+        pool's own natural order truncated at cap — never crashes the tick."""
+        from app.workers import discovery_sweep
+
+        def _faulting_last_scout_run_at(user_ids):
+            raise RuntimeError("simulated transient DB fault")
+
+        monkeypatch.setattr(discovery_sweep, "_last_scout_run_at", _faulting_last_scout_run_at)
+        users = [{"id": f"u{i}"} for i in range(5)]
+        result = discovery_sweep._rotate_least_recently_swept(users, cap=2)
+        assert result == users[:2]
 
 
 class TestDiscoverySweepUserTask:

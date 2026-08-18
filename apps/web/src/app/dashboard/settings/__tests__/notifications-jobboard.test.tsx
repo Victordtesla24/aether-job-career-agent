@@ -139,6 +139,18 @@ const SUBSCRIPTION = {
   },
 };
 
+// `SUBSCRIPTION` above carries no `entitlement` field, so
+// `subscription?.entitlement?.entitled === true` is `false` for it — used
+// deliberately (R4, R3 delta review Finding 1) by tests proving the
+// discovery-cadence legend does NOT claim automatic search for a
+// non-entitled viewer. This fixture is the CONFIRMED-entitled counterpart,
+// the exact `entitlement.entitled: true` verdict `GET /billing/subscription`
+// echoes for an active paid account.
+const SUBSCRIPTION_ENTITLED = {
+  ...SUBSCRIPTION,
+  entitlement: { unlimited: false, entitled: true, source: "plan", isAdmin: false, planId: "pro", activePaid: true },
+};
+
 afterEach(() => {
   cleanup();
   fetchSettingsMock.mockReset();
@@ -337,26 +349,63 @@ describe("SettingsPage — Job Board Sync is real, not a fake setTimeout (MV-set
   });
 });
 
-describe("SettingsPage — real discovery cadence in the Integrations legend (GAP-P7-DISCOVERY-002, closes R2 delta review P0 Finding 1)", () => {
-  it("names the real mechanism and cadence, conditioned on plan + complete profile — never a bare unverifiable claim", async () => {
+describe("SettingsPage — real discovery cadence in the Integrations legend (GAP-P7-DISCOVERY-002, closes R2 delta review P0 Finding 1, R3 delta review P1 Finding 1)", () => {
+  it("shows the present-tense automatic-search claim ONLY for a qualifying viewer (active plan + complete profile)", async () => {
     fetchSettingsMock.mockResolvedValue(FULL_CATALOG_SETTINGS);
     fetchCareerDataMock.mockResolvedValue(CAREER_DATA);
-    fetchSubscriptionMock.mockResolvedValue(SUBSCRIPTION);
+    fetchSubscriptionMock.mockResolvedValue(SUBSCRIPTION_ENTITLED);
 
     await renderOnIntegrations();
 
-    const section = screen.getByTestId("settings-integrations");
-    const text = section.textContent ?? "";
+    const legend = screen.getByTestId("jobboard-cadence-legend");
+    const text = legend.textContent ?? "";
     // The R2 copy this replaces cited a nonexistent `aether-discovery.timer`
     // systemd unit (R2 delta review P0 Finding 1) — this legend must never
     // reference that unit again.
     expect(text).not.toMatch(/aether-discovery\.timer/i);
     expect(text).toMatch(/every 30 minutes/i);
     expect(text).toMatch(/discovery worker/i);
-    // Honestly conditioned — never a claim that applies unconditionally to
-    // every viewer regardless of their own plan/profile state.
-    expect(text).toMatch(/active plan/i);
-    expect(text).toMatch(/complete profile/i);
+    expect(text).toMatch(/no manual sync required/i);
+    // Never the non-qualifying fallback's conditional framing.
+    expect(text).not.toMatch(/once your plan is active/i);
+  });
+
+  it("does NOT show the automatic-search claim for a blank-profile viewer, even when entitled (R3 delta review P1 Finding 1)", async () => {
+    // Reviewer-verified defect: a blank-profile viewer previously saw the
+    // present-tense automatic-search claim rendered beside their own honest
+    // "0 jobs, Sync disabled" notice, with no rendering-level signal
+    // excluding them — the sentence's WORDING was conditioned but its
+    // RENDERING was not. This is the exact scenario that must now differ.
+    fetchSettingsMock.mockResolvedValue(SETTINGS_MISSING_PROFILE);
+    fetchCareerDataMock.mockResolvedValue(CAREER_DATA);
+    fetchSubscriptionMock.mockResolvedValue(SUBSCRIPTION_ENTITLED);
+
+    await renderOnIntegrations();
+
+    const legend = screen.getByTestId("jobboard-cadence-legend");
+    const text = legend.textContent ?? "";
+    expect(text).not.toMatch(/no manual sync required/i);
+    expect(text).toMatch(/once your plan is active/i);
+
+    // Both honest sentences on the same card, never contradicting each
+    // other for this exact viewer.
+    const section = screen.getByTestId("settings-integrations");
+    expect(section.textContent ?? "").toMatch(/expect 0 jobs discovered/i);
+  });
+
+  it("does NOT show the automatic-search claim for a non-entitled viewer, even with a complete profile", async () => {
+    fetchSettingsMock.mockResolvedValue(FULL_CATALOG_SETTINGS);
+    fetchCareerDataMock.mockResolvedValue(CAREER_DATA);
+    // No `entitlement` field at all — subscription fetch resolved, but not
+    // confirmed entitled (the honest "unresolved/non-entitled" shape).
+    fetchSubscriptionMock.mockResolvedValue(SUBSCRIPTION);
+
+    await renderOnIntegrations();
+
+    const legend = screen.getByTestId("jobboard-cadence-legend");
+    const text = legend.textContent ?? "";
+    expect(text).not.toMatch(/no manual sync required/i);
+    expect(text).toMatch(/once your plan is active/i);
   });
 });
 

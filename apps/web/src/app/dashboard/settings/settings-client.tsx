@@ -563,6 +563,24 @@ export default function SettingsClient({
     profile.location.trim() ? null : "location",
   ].filter((v): v is string => v !== null);
 
+  // GAP-P7-DISCOVERY-002 (R4, closes R3 delta review P1 Finding 1): the
+  // legend's "boards are also searched automatically every 30 minutes"
+  // sentence used to be WORDED to describe qualifying subscribers in the
+  // abstract but RENDERED unconditionally for every viewer regardless of
+  // their own state — a blank-profile viewer saw it beside their own "0
+  // jobs, Sync disabled" notice with no rendering-level signal it excluded
+  // them (reviewer-verified: the sentence's text never changed for that
+  // fixture). This flag gates the RENDERED content itself — never assumed
+  // `true` while `subscription` is still `null` (fetch pending), mirroring
+  // `subscriberHasDefaultIntegration`'s discipline from the (since-removed,
+  // PR23-superseded) R2 gate. Real automatic discovery
+  // (`discovery_sweep_cron`, apps/api/app/workers/discovery_sweep.py) is
+  // driven by the exact same two facts server-side
+  // (`_sweep_eligible_users`: entitled + non-empty `targetRole`), so this is
+  // the honest client-side mirror of "would this account's board actually be
+  // swept right now" — not a new, invented rule.
+  const discoveryAutoSearchActive = jobBoardSyncReady && subscription?.entitlement?.entitled === true;
+
   // PAY-R3-06: the current plan's price, cross-referenced from the public
   // plan catalog by id + billing interval. `null` when the catalog hasn't
   // loaded (or failed to), or when the current plan/interval isn't found
@@ -1491,27 +1509,34 @@ export default function SettingsClient({
                     })
                   )}
                 </div>
-                <p className="mt-3 text-[10px] text-aether-muted-dim">
+                <p className="mt-3 text-[10px] text-aether-muted-dim" data-testid="jobboard-cadence-legend">
                   <i className="fa-solid fa-circle-info mr-1.5" aria-hidden="true" />
                   Job boards are synced together — per-source sync isn&rsquo;t available yet.{" "}
-                  {/* GAP-P7-DISCOVERY-002 (R3, closes R2 delta review P0 Finding 1):
+                  {/* GAP-P7-DISCOVERY-002 (R4, closes R3 delta review P1 Finding 1):
                       the REAL mechanism and cadence — a genuine ARQ cron on the
                       live worker process (discovery_sweep_cron,
                       apps/api/app/workers/discovery_sweep.py, registered in
                       apps/api/app/workers/settings.py, every 30 minutes at
                       :03/:33). R2 previously claimed this on a nonexistent
-                      `aether-discovery.timer` systemd unit; that gap is what
-                      this cron closes. Deliberately conditioned on an active
-                      plan AND a complete profile (the same two facts
-                      `jobBoardSyncReady` and `subscription.entitlement.entitled`
-                      already gate the Sync All button and the profile notice
-                      on, both visible on this same card) so this sentence
-                      never overclaims for an account the sweep would not
-                      actually serve — the exact fabricated-integration-state
-                      the R2 delta review's Finding 2 warned against. */}
-                  Subscribers with an active plan and a complete profile (target role and location) are
-                  also searched automatically every 30 minutes by Aether&rsquo;s discovery worker — no
-                  manual Sync required.
+                      `aether-discovery.timer` systemd unit; R3 corrected the
+                      wording but rendered it unconditionally regardless of
+                      the viewer's own plan/profile state (R3 delta review
+                      Finding 1) — this now actually branches on
+                      `discoveryAutoSearchActive`, not merely describes
+                      qualifying subscribers in the abstract while rendering
+                      for everyone. */}
+                  {discoveryAutoSearchActive ? (
+                    <>
+                      Boards are also searched automatically every 30 minutes by Aether&rsquo;s
+                      discovery worker — no manual Sync required.
+                    </>
+                  ) : (
+                    <>
+                      Once your plan is active and your profile has a target role and location,
+                      boards are also searched automatically every 30 minutes by Aether&rsquo;s
+                      discovery worker — until then, use Sync All above.
+                    </>
+                  )}
                 </p>
               </section>
 
