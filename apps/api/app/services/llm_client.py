@@ -672,6 +672,34 @@ def llm_failure_user_message(exc: BaseException | None) -> str:
     return LLM_UNAVAILABLE_USER_MESSAGE
 
 
+#: Remaining seconds quoted on the RT-005 cooling-skip exception
+#: (``cooldown ends in 812s``). Used so HTTP 503 can advertise an honest
+#: ``Retry-After`` instead of the "wait a minute" sentence that is a lie
+#: against the default 900 s cooldown.
+_COOLING_RETRY_AFTER_RE = re.compile(r"cooldown ends in (\d+)s", re.IGNORECASE)
+
+
+def llm_retry_after_http_headers(exc: BaseException | None) -> dict[str, str]:
+    """``Retry-After`` for a retryable provider 429; empty otherwise.
+
+    Never advertised for 401/402: waiting does not help, and a header would
+    tell the operating-loop client to keep polling a dead credential. A
+    cooling-skip exception carries the remaining seconds in its message; any
+    other HTTP 429 defaults to 60 s — the same "wait a minute" the user
+    sentence already names.
+    """
+    if classify_llm_failure(exc) != LLM_FAILURE_RETRYABLE:
+        return {}
+    if exc is None:
+        return {}
+    cooling = _COOLING_RETRY_AFTER_RE.search(str(exc))
+    if cooling:
+        return {"Retry-After": cooling.group(1)}
+    if _exc_is_http_429(exc) or llm_failure_user_message(exc) == LLM_RATE_LIMITED_USER_MESSAGE:
+        return {"Retry-After": "60"}
+    return {}
+
+
 class InsufficientCreditsError(RuntimeError):
     """Raised when OPENROUTER returns HTTP 402 — the account is out of credits.
 

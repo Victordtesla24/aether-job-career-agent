@@ -93,7 +93,7 @@ import { useNow } from "../../hooks/useNow";
 import { useRenderCapabilities } from "../../hooks/useRenderCapabilities";
 import { useUrlFlag } from "../../hooks/useUrlFlag";
 import { parseServerTime } from "../../lib/agent-run-health";
-import { runErrorNotice, type Notice } from "../../lib/agents-feedback";
+import { isProviderRateLimitText, runErrorNotice, workflowAutoRetryWaitMs, type Notice } from "../../lib/agents-feedback";
 import type { AgentRun } from "../../lib/api/agents";
 import type { OrchestrationMapData } from "../../lib/api/agentPolicy";
 import StatusBadge from "../ui/StatusBadge";
@@ -627,7 +627,7 @@ function NodeCard({
               className={`fa-solid fa-circle-nodes mt-[3px] shrink-0 text-[10px] ${
                 node.state === "live"
                   ? "text-aether-coral"
-                  : node.state === "stalled"
+                  : node.state === "stalled" || badge.tone === "warn"
                     ? "text-state-warn"
                     : node.state === "failed"
                       ? "text-state-danger"
@@ -1394,6 +1394,8 @@ interface BatchState {
   outcomes: Record<string, Notice>;
   /** The refusal that ended the batch early, if one did. */
   halted: { agentKey: string; name: string; text: string } | null;
+  /** Index in `targets` of the halted agent — Resume restarts here, not from 0. */
+  haltedIndex: number | null;
   finished: boolean;
 }
 
@@ -1535,53 +1537,92 @@ export default function OrchestrationMap({
    * six nodes sequentially and an exception from any of them ends the rest. A
    * quota or spend-cap wall is exactly such a refusal, and pressing on would
    * only collect N identical rejections while the first one is the answer.
+   *
+   * LOOP-429: a short provider rate-limit (`Retry-After` ≤ 90 s, or missing
+   * header defaulting to one minute) retries THAT step once after waiting.
+   * A long RT-005 cooldown does not auto-wait; Resume continues from the
+   * halted index so earlier successes are not re-run (and re-billed).
    */
-  const runPlan = useCallback(async (mapKey: string, targets: RunTarget[], nameOf: Map<string, string>) => {
-    const trigger = triggerRef.current;
-    if (!trigger || targets.length === 0 || batchLock.current) return;
-    batchLock.current = true;
-    setBatch({ mapKey, targets, index: 0, outcomes: {}, halted: null, finished: false });
-    try {
-      for (let i = 0; i < targets.length; i += 1) {
-        const target = targets[i];
-        setBatch((prev) => (prev ? { ...prev, index: i } : prev));
-        let outcome: Notice;
-        try {
-          outcome = await trigger(target.backend);
-        } catch (e) {
-          // The trigger path already renders its own banner; this keeps the
-          // node in agreement with it using the same truthful formatter.
-          outcome = runErrorNotice(e, target.backend);
-        }
-        const keys = [target.agentKey, ...target.alsoCovers];
-        const refused = outcome.kind === "error";
-        setBatch((prev) => {
-          if (!prev || prev.mapKey !== mapKey) return prev;
-          const outcomes = { ...prev.outcomes };
-          keys.forEach((k) => {
-            outcomes[k] = outcome;
+  const runPlan = useCallback(
+    async (
+      mapKey: string,
+      targets: RunTarget[],
+      nameOf: Map<string, string>,
+      fromIndex = 0,
+      priorOutcomes: Record<string, Notice> = {},
+    ) => {
+      const trigger = triggerRef.current;
+      if (!trigger || targets.length === 0 || batchLock.current) return;
+      if (fromIndex < 0 || fromIndex >= targets.length) return;
+      batchLock.current = true;
+      setBatch({
+        mapKey,
+        targets,
+        index: fromIndex,
+        outcomes: { ...priorOutcomes },
+        halted: null,
+        haltedIndex: null,
+        finished: false,
+      });
+      try {
+        for (let i = fromIndex; i < targets.length; i += 1) {
+          const target = targets[i];
+          setBatch((prev) => (prev ? { ...prev, index: i, halted: null, haltedIndex: null } : prev));
+          let outcome: Notice;
+          let retried = false;
+          for (;;) {
+            try {
+              outcome = await trigger(target.backend);
+            } catch (e) {
+              // The trigger path already renders its own banner; this keeps the
+              // node in agreement with it using the same truthful formatter.
+              outcome = runErrorNotice(e, target.backend);
+            }
+            const waitMs =
+              outcome.kind === "error" ? workflowAutoRetryWaitMs(outcome) : null;
+            if (waitMs !== null && !retried) {
+              retried = true;
+              if (waitMs > 0) {
+                await new Promise<void>((resolve) => {
+                  setTimeout(resolve, waitMs);
+                });
+              }
+              continue;
+            }
+            break;
+          }
+          const keys = [target.agentKey, ...target.alsoCovers];
+          const refused = outcome.kind === "error";
+          setBatch((prev) => {
+            if (!prev || prev.mapKey !== mapKey) return prev;
+            const outcomes = { ...prev.outcomes };
+            keys.forEach((k) => {
+              outcomes[k] = outcome;
+            });
+            return {
+              ...prev,
+              outcomes,
+              index: i + 1,
+              halted: refused
+                ? {
+                    agentKey: target.agentKey,
+                    name: nameOf.get(target.agentKey) ?? target.backend,
+                    text: outcome.text,
+                  }
+                : prev.halted,
+              haltedIndex: refused ? i : prev.haltedIndex,
+              finished: refused || i + 1 === targets.length,
+            };
           });
-          return {
-            ...prev,
-            outcomes,
-            index: i + 1,
-            halted: refused
-              ? {
-                  agentKey: target.agentKey,
-                  name: nameOf.get(target.agentKey) ?? target.backend,
-                  text: outcome.text,
-                }
-              : prev.halted,
-            finished: refused || i + 1 === targets.length,
-          };
-        });
-        if (refused) break;
+          if (refused) break;
+        }
+      } finally {
+        batchLock.current = false;
+        setBatch((prev) => (prev ? { ...prev, finished: true } : prev));
       }
-    } finally {
-      batchLock.current = false;
-      setBatch((prev) => (prev ? { ...prev, finished: true } : prev));
-    }
-  }, []);
+    },
+    [],
+  );
 
   const nameMaps = useMemo(
     () =>
@@ -1941,6 +1982,19 @@ export default function OrchestrationMap({
               model={model}
               mapName={model.name}
               onDismiss={() => setBatch(null)}
+              onResume={
+                mapBatch.finished && mapBatch.halted && mapBatch.haltedIndex !== null
+                  ? () => {
+                      void runPlan(
+                        model.key,
+                        mapBatch.targets,
+                        nameMaps.get(model.key) ?? new Map(),
+                        mapBatch.haltedIndex ?? 0,
+                        mapBatch.outcomes,
+                      );
+                    }
+                  : undefined
+              }
             />
           ) : null}
 
@@ -2169,11 +2223,13 @@ function BatchProgress({
   model,
   mapName,
   onDismiss,
+  onResume,
 }: {
   batch: BatchState;
   model: MapModel;
   mapName: string;
   onDismiss: () => void;
+  onResume?: () => void;
 }) {
   const stateOf = useMemo(() => {
     const out = new Map<string, MapNode>();
@@ -2207,6 +2263,9 @@ function BatchProgress({
   }, [batch.targets, batch.outcomes, stateOf]);
 
   const current = batch.targets[Math.min(batch.index, batch.targets.length - 1)];
+  const rateLimitedHalt = Boolean(
+    batch.halted && isProviderRateLimitText(batch.halted.text),
+  );
   const headline = batch.halted
     ? `Stopped at ${batch.halted.name} — ${batch.halted.text}`
     : batch.finished
@@ -2221,7 +2280,9 @@ function BatchProgress({
       aria-live="polite"
       className={`mb-4 flex flex-wrap items-start gap-x-3 gap-y-1.5 rounded-lg border px-3 py-2.5 text-[11.5px] leading-[1.5] ${
         batch.halted
-          ? "border-state-danger/30 bg-state-danger/[0.07] text-state-danger"
+          ? rateLimitedHalt
+            ? "border-state-warn/30 bg-state-warn/[0.07] text-state-warn"
+            : "border-state-danger/30 bg-state-danger/[0.07] text-state-danger"
           : "border-hairline bg-surface-1 text-aether-muted"
       }`}
     >
@@ -2232,14 +2293,26 @@ function BatchProgress({
         ))}
       </span>
       {batch.finished ? (
-        <button
-          type="button"
-          data-testid={`orchestration-run-dismiss-${model.key}`}
-          onClick={onDismiss}
-          className="ml-auto rounded border border-hairline px-2 py-0.5 text-[11px] font-medium text-aether-muted outline-none transition-colors duration-[var(--dur-fast)] hover:border-hairline-strong hover:text-aether-text focus-visible:ring-2 focus-visible:ring-aether-coral/70"
-        >
-          Dismiss
-        </button>
+        <span className="ml-auto flex shrink-0 items-center gap-2">
+          {onResume ? (
+            <button
+              type="button"
+              data-testid={`orchestration-run-resume-${model.key}`}
+              onClick={onResume}
+              className="rounded border border-state-warn/40 px-2 py-0.5 text-[11px] font-medium text-state-warn outline-none transition-colors duration-[var(--dur-fast)] hover:border-state-warn hover:bg-state-warn/10 focus-visible:ring-2 focus-visible:ring-state-warn/70"
+            >
+              Resume
+            </button>
+          ) : null}
+          <button
+            type="button"
+            data-testid={`orchestration-run-dismiss-${model.key}`}
+            onClick={onDismiss}
+            className="rounded border border-hairline px-2 py-0.5 text-[11px] font-medium text-aether-muted outline-none transition-colors duration-[var(--dur-fast)] hover:border-hairline-strong hover:text-aether-text focus-visible:ring-2 focus-visible:ring-aether-coral/70"
+          >
+            Dismiss
+          </button>
+        </span>
       ) : null}
     </div>
   );

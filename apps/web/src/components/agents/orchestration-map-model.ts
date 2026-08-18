@@ -49,6 +49,7 @@ import {
   stalledLabel,
   stalledPhrase,
 } from "../../lib/agent-run-health";
+import { isProviderRateLimitText } from "../../lib/agents-feedback";
 import type { AgentRun } from "../../lib/api/agents";
 import type {
   OrchestrationMapAgent,
@@ -75,6 +76,13 @@ export interface MapNode {
    * implicit in `state`) because U-AX-V4 was exactly this value going missing.
    */
   lastRunStatus: string | null;
+  /**
+   * The recorded `AgentRun.error` for a FAILED windowed run, or `null` when
+   * the failure is catalog-only (no error text) or the last run was not a
+   * failure. Used so a lone provider 429 is labelled "Rate limited" (warn)
+   * instead of "Last run failed" (danger).
+   */
+  lastRunError: string | null;
   /** Relative last-run time ("3 hr ago"); `null` when there is no run to date. */
   lastRunText: string | null;
   /**
@@ -175,6 +183,7 @@ export function resolveNodeState(
       stalledText: null,
       lastRunAt: null,
       lastRunStatus: null,
+      lastRunError: null,
       lastRunText: null,
       source: "none",
     };
@@ -186,12 +195,14 @@ export function resolveNodeState(
     lastRunAt: string | null,
     lastRunStatus: string | null,
     source: MapNode["source"],
+    lastRunError: string | null = null,
   ): MapNode => ({
     agent,
     state,
     stalledText,
     lastRunAt,
     lastRunStatus,
+    lastRunError,
     lastRunText: relativeRunLabel(lastRunAt, now),
     source,
   });
@@ -223,7 +234,7 @@ export function resolveNodeState(
       return node("stalled", stalledLabel(newest, now), at, newest.status, "runs");
     }
     if (newest.status === "failed") {
-      return node("failed", null, at, newest.status, "runs");
+      return node("failed", null, at, newest.status, "runs", newest.error ?? null);
     }
     return node("idle", null, at, newest.status, "runs");
   }
@@ -315,6 +326,12 @@ export function nodeBadge(node: MapNode): { tone: "ok" | "warn" | "danger" | "ne
     case "stalled":
       return { tone: "warn", label: node.stalledText ?? "Stalled" };
     case "failed":
+      // LOOP-429: a lone provider rate-limit is transient. Catalog-only
+      // failures have no error text and stay danger — we cannot invent a
+      // rate-limit we did not observe.
+      if (isProviderRateLimitText(node.lastRunError)) {
+        return { tone: "warn", label: "Rate limited" };
+      }
       return { tone: "danger", label: "Last run failed" };
     case "planned":
       // Verbatim, unchanged from the shipped contract.

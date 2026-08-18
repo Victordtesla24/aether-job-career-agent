@@ -13,7 +13,9 @@ import {
   pipelineStartNotice,
   runErrorNotice,
   stopAllAgentsNotice,
+  workflowAutoRetryWaitMs,
 } from "../../lib/agents-feedback";
+import { ApiError } from "../../lib/api/client";
 
 describe("pipelineStartNotice", () => {
   it("gives immediate info feedback mentioning Scout and expected duration", () => {
@@ -345,6 +347,18 @@ describe("runErrorNotice", () => {
     expect(n.text).toContain("press the button again");
   });
 
+  it("LOOP-429: copies Retry-After from a rate-limit 503 onto the notice", () => {
+    const err = new ApiError(
+      'POST /agents/tailor/run failed (503): {"detail":"The AI provider rate-limited this run. Wait a minute and try again, or pick a lighter model in Agent Settings."}',
+      503,
+      60,
+    );
+    const n = runErrorNotice(err, "tailor");
+    expect(n.kind).toBe("error");
+    expect(n.retryAfterSeconds).toBe(60);
+    expect(n.text).toMatch(/rate-limited/i);
+  });
+
   it("falls back to run-Scout-first guidance with a Jobs link when no 422 detail is extractable", () => {
     const n = runErrorNotice({ status: 422 }, "Tailor");
     expect(n.text).toContain("run Scout to discover jobs");
@@ -462,5 +476,33 @@ describe("stopAllAgentsNotice", () => {
     const n = stopAllAgentsNotice(2, 1);
     expect(n.text).toContain("1 run already in progress will finish");
     expect(n.text).not.toContain("1 runs");
+  });
+});
+
+describe("LOOP-429 workflowAutoRetryWaitMs", () => {
+  const RATE =
+    "The AI provider rate-limited this run. Wait a minute and try again, or pick a lighter model in Agent Settings.";
+
+  it("retries immediately when Retry-After is 0 (test seam / already elapsed)", () => {
+    expect(workflowAutoRetryWaitMs({ kind: "error", text: RATE, retryAfterSeconds: 0 })).toBe(0);
+  });
+
+  it("defaults a rate-limit without Retry-After to one minute", () => {
+    expect(workflowAutoRetryWaitMs({ kind: "error", text: RATE })).toBe(60_000);
+  });
+
+  it("does not auto-retry a quota wall", () => {
+    expect(
+      workflowAutoRetryWaitMs({
+        kind: "error",
+        text: "You've reached your plan's run quota this period.",
+      }),
+    ).toBeNull();
+  });
+
+  it("does not auto-wait a long cooldown — resume is the subscriber's call", () => {
+    expect(
+      workflowAutoRetryWaitMs({ kind: "error", text: RATE, retryAfterSeconds: 812 }),
+    ).toBeNull();
   });
 });

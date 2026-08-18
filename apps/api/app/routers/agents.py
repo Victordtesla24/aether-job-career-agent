@@ -75,6 +75,7 @@ from app.services.llm_client import (
     get_quota_block_hours,
     is_claude_model,
     llm_failure_user_message,
+    llm_retry_after_http_headers,
     normalize_model_id,
     resolve_provider,
     resolve_user_credential,
@@ -859,7 +860,9 @@ def _raise_if_llm_circuit_open(provider: str, block: dict[str, Any]) -> None:
         provider, circuit.failure_class, circuit.expires_at,
     )
     raise HTTPException(
-        status.HTTP_503_SERVICE_UNAVAILABLE, llm_failure_user_message(circuit)
+        status.HTTP_503_SERVICE_UNAVAILABLE,
+        llm_failure_user_message(circuit),
+        headers=llm_retry_after_http_headers(circuit) or None,
     ) from circuit
 
 
@@ -1374,7 +1377,9 @@ def _execute_reserved_run(
         runs.finish(run_id, "failed", error=user_message)
         _refund_once()
         raise HTTPException(
-            status.HTTP_503_SERVICE_UNAVAILABLE, user_message
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            user_message,
+            headers=llm_retry_after_http_headers(exc) or None,
         ) from exc
     except (FabricationError, StructuralError) as exc:
         # GAP-P4-002: the cover agent's fabrication / §10.2 structural guard

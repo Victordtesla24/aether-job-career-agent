@@ -32,6 +32,42 @@ export interface Notice {
   /** Optional call-to-action link rendered next to the text. */
   href?: string;
   hrefLabel?: string;
+  /**
+   * Seconds from a `Retry-After` response header, when the server sent one.
+   * Copied from `ApiError.retryAfterSeconds` — never invented. The operating
+   * loop uses this to wait a short provider 429; a long RT-005 cooldown is
+   * not auto-waited (see `workflowAutoRetryWaitMs`).
+   */
+  retryAfterSeconds?: number;
+}
+
+/** Provider 429 copy — the same sentence the API writes onto AgentRun.error. */
+const PROVIDER_RATE_LIMIT_RE = /rate-limited|rate limit/i;
+
+/**
+ * Seconds the operating-loop client will sit on a rate-limit before retrying
+ * the SAME step. Above this, auto-wait is a lie against RT-005's 900 s default
+ * cooldown — Resume is the subscriber's call.
+ */
+const WORKFLOW_AUTO_RETRY_CAP_SECONDS = 90;
+
+/** Whether user-facing copy is a provider rate-limit (not a quota wall). */
+export function isProviderRateLimitText(text: string | null | undefined): boolean {
+  return typeof text === "string" && PROVIDER_RATE_LIMIT_RE.test(text);
+}
+
+/**
+ * How long the Career Search Operating Loop should wait before retrying one
+ * rate-limited step. Returns `null` when waiting cannot help (quota, long
+ * cooldown, non-rate-limit error). `retryAfterSeconds === 0` is an elapsed
+ * / test seam and retries immediately.
+ */
+export function workflowAutoRetryWaitMs(notice: Notice): number | null {
+  if (notice.kind !== "error") return null;
+  if (!isProviderRateLimitText(notice.text)) return null;
+  if (notice.retryAfterSeconds === undefined) return 60_000;
+  if (notice.retryAfterSeconds > WORKFLOW_AUTO_RETRY_CAP_SECONDS) return null;
+  return notice.retryAfterSeconds * 1000;
 }
 
 /** Immediate feedback the instant the pipeline button is clicked. */
@@ -451,11 +487,22 @@ function formatQuotaReset(iso: string | null): string | null {
   })} at ${when.toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}`;
 }
 
+function retryAfterSecondsOf(err: unknown): number | undefined {
+  if (typeof err !== "object" || err === null || !("retryAfterSeconds" in err)) {
+    return undefined;
+  }
+  const value = (err as { retryAfterSeconds: unknown }).retryAfterSeconds;
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
+}
+
 export function runErrorNotice(err: unknown, context: string): Notice {
   const status =
     typeof err === "object" && err !== null && "status" in err
       ? Number((err as { status: unknown }).status)
       : undefined;
+  const retryAfterSeconds = retryAfterSecondsOf(err);
+  const retryAfter =
+    retryAfterSeconds === undefined ? {} : { retryAfterSeconds };
   if (status === 503) {
     // CRITICAL-3b. The API chooses the 503 body by FAILURE CLASS
     // (`llm_client.llm_failure_user_message`): an upstream HTTP 402 says the
@@ -472,11 +519,12 @@ export function runErrorNotice(err: unknown, context: string): Notice {
     // original guidance unchanged.
     const detail = extractApiJsonDetail(err);
     if (detail) {
-      return { kind: "error", text: `${context} paused — ${detail}` };
+      return { kind: "error", text: `${context} paused — ${detail}`, ...retryAfter };
     }
     return {
       kind: "error",
       text: `${context} paused — the AI model is busy or its time budget was exceeded. Wait a minute and press the button again; your data is safe.`,
+      ...retryAfter,
     };
   }
   if (status === 429) {

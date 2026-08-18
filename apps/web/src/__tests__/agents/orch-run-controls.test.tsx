@@ -424,6 +424,57 @@ describe("ORCH-RUN — an API refusal is quoted, not paraphrased", () => {
     });
   });
 
+  it("LOOP-429: waits a short rate-limit Retry-After and retries that step once before continuing", async () => {
+    const RATE =
+      "The AI provider rate-limited this run. Wait a minute and try again, or pick a lighter model in Agent Settings.";
+    const calls: string[] = [];
+    let tailorAttempts = 0;
+    const fn = vi.fn(async (backend: string) => {
+      calls.push(backend);
+      if (backend === "tailor") {
+        tailorAttempts += 1;
+        if (tailorAttempts === 1) {
+          return { kind: "error" as const, text: RATE, retryAfterSeconds: 0 };
+        }
+      }
+      return { kind: "success" as const, text: `${backend} finished.` };
+    });
+    renderMap({ onRunAgent: fn });
+
+    fireEvent.click(screen.getByTestId("orchestration-run-workflow-application-pipeline"));
+
+    await waitFor(() => expect(calls).toEqual(["scout", "fitScorer", "matcher", "tailor", "tailor"]));
+    expect(tailorAttempts).toBe(2);
+  });
+
+  it("LOOP-429: a long cooldown does not auto-retry; Resume continues from the halted agent", async () => {
+    const RATE =
+      "The AI provider rate-limited this run. Wait a minute and try again, or pick a lighter model in Agent Settings.";
+    const calls: string[] = [];
+    const fn = vi.fn(async (backend: string) => {
+      calls.push(backend);
+      if (backend === "fitScorer" && calls.filter((c) => c === "fitScorer").length === 1) {
+        return { kind: "error" as const, text: RATE, retryAfterSeconds: 812 };
+      }
+      return { kind: "success" as const, text: `${backend} finished.` };
+    });
+    renderMap({ onRunAgent: fn });
+
+    fireEvent.click(screen.getByTestId("orchestration-run-workflow-application-pipeline"));
+
+    await waitFor(() => expect(calls).toEqual(["scout", "fitScorer"]));
+    expect(calls).not.toContain("matcher");
+    await waitFor(() => {
+      expect(screen.getByTestId("orchestration-run-resume-application-pipeline")).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getByTestId("orchestration-run-resume-application-pipeline"));
+
+    await waitFor(() =>
+      expect(calls).toEqual(["scout", "fitScorer", "fitScorer", "matcher", "tailor"]),
+    );
+  });
+
   it("keeps a single node's result to the node the user actually ran", async () => {
     const { fn } = triggerStub({ fitScorer: { kind: "error", text: QUOTA } });
     renderMap({ onRunAgent: fn });

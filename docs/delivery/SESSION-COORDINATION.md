@@ -1259,3 +1259,17 @@ evidence: `docs/delivery/evidence/RUN-20260818T0223Z/commercial-readiness/ec-adv
 **Does not touch:** `llm_client.py`, sales/admin, networking CRM, ATS engine, provider OAuth, applications timeline GL.
 **Deploy:** rebase onto `origin/main`, push branch, merge to `origin/main` → VPS Delivery. Delete branch after land. No standing PR.
 **Tests (2026-08-18T16:32Z):** targeted API battery 99 passed; interviews page vitest 10 passed; integrity guard pass.
+
+## SESSION LOOP-429 — 2026-08-18T16:10Z — Career Search Operating Loop rate-limit recovery
+
+**By:** Cursor Grok session. Isolated worktree `/root/dev/aether-wt-loop-429` on `feat/loop-429-resume` from `origin/main` (`d71268e1`).
+**Why:** Production "Run workflow" halted at Resume Tailoring on a provider HTTP 429. The LLM client retries once after 2–5s; a 15-minute per-model cooldown still tells the subscriber to "wait a minute"; the batch runner treats the 503 as a hard stop and offers no resume, so a retry re-runs every successful upstream agent and burns more quota. The map card paints a lone transient 429 as "Last run failed".
+**Scope claimed:**
+- `apps/api/app/services/llm_client.py` — `llm_retry_after_http_headers` (Retry-After for retryable 429 / cooling remaining seconds; never for 401/402)
+- `apps/api/app/routers/agents.py` — `_execute_reserved_run` LLMUnavailableError 503 (and circuit-open 503) attach those headers; `_record_run` still delegates here
+- `apps/web/src/lib/agents-feedback.ts` — Notice carries `retryAfterSeconds`; workflow auto-retry helpers
+- `apps/web/src/components/agents/OrchestrationMap.tsx` — one bounded wait+retry on rate-limit; Resume from halted step
+- `apps/web/src/components/agents/orchestration-map-model.ts` — rate-limit badge is copper warn, not danger "Last run failed"
+- Tests: `test_llm_retry_after_headers.py`, `orch-run-controls.test.tsx`, `agents-feedback.test.ts`, `sui1-agents-shell.test.tsx`
+**Does not touch:** silent model swap (ADR-ML-3), `llm_client` fallback chain, email light_retry, ats_engine, sales, networking, timeline, profile avatar.
+**Deploy:** rebase onto `origin/main`, push `feat/loop-429-resume` then merge to `origin/main` → VPS Delivery. Do not hand-restart prod units. Delete branch after land. No standing PR.

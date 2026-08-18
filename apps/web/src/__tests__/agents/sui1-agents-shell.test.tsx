@@ -672,6 +672,25 @@ describe("S-UI-1 — lastRunStatus is consulted as ground truth (U-AX-V4, bindin
     expect(nodeBadge(node).tone).toBe("danger");
   });
 
+  it("LOOP-429: a lone rate-limit failure is copper warn, not Last run failed", () => {
+    const agent = agentWithLastRun("tailor", "tailor", "failed", isoAt(NOW - 3 * 60 * 60_000));
+    const failed = run({
+      id: "t-429",
+      agentName: "tailor",
+      status: "failed",
+      error:
+        "The AI provider rate-limited this run. Wait a minute and try again, or pick a lighter model in Agent Settings.",
+      createdAt: isoAt(NOW - 3 * 60 * 60_000),
+      startedAt: isoAt(NOW - 3 * 60 * 60_000),
+      completedAt: isoAt(NOW - 3 * 60 * 60_000),
+    });
+    const node = resolveNodeState(agent, [failed], NOW);
+    expect(node.state).toBe("failed");
+    expect(node.source).toBe("runs");
+    expect(nodeBadge(node).label).toBe("Rate limited");
+    expect(nodeBadge(node).tone).toBe("warn");
+  });
+
   it("renders that failed status on the node itself instead of a neutral 'Idle'", () => {
     const agent = agentWithLastRun("tailor", "tailor", "failed", isoAt(NOW - 3 * 60 * 60_000));
     render(<OrchestrationMap data={mapWith(agent)} runs={[]} now={NOW} />);
