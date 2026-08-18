@@ -376,6 +376,8 @@ class TestFindMatch:
             "Do you have the right mindset to work autonomously?",
             "Do you have the right qualifications to work in this role?",
             "Do you have the right background to work on safety-critical systems?",
+            "Do you have the right to work from home?",
+            "Are you eligible to work remotely?",
         ],
     )
     def test_right_x_to_work_is_not_a_work_rights_answer(self, asked):

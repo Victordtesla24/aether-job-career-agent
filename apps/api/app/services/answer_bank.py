@@ -251,12 +251,16 @@ class Concept:
     any_of: tuple[tuple[str, ...], ...]
     none_of: tuple[str, ...] = ()
     phrases: tuple[str, ...] = ()
+    none_phrases: tuple[str, ...] = ()
     subject_sensitive: bool = False
 
     def matches(self, normalized: str) -> bool:
         padded = f" {normalized} "
         for veto in self.none_of:
             if f" {veto} " in padded:
+                return False
+        for phrase in self.none_phrases:
+            if f" {phrase} " in padded:
                 return False
         for phrase in self.phrases:
             if f" {phrase} " in padded:
@@ -296,6 +300,9 @@ _CONCEPT_WORK_RIGHTS = Concept(
     # The consecutive phrase is the authorisation question; skills/fit
     # nouns sitting between "right" and "to work" must not qualify.
     phrases=("right to work",),
+    # "right to work from home" / "eligible to work remotely" contain the
+    # authorisation phrase but ask about location, not citizenship.
+    none_phrases=("from home", "work remotely", "remote work", "work from home"),
     # A question that mentions sponsorship or a visa subclass is a visa
     # SPECIFICS question (sensitive), not the stable yes/no work-rights one.
     none_of=(
