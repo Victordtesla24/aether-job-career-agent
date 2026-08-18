@@ -88,7 +88,14 @@ def _make_job(conn, user_id: str, *, source_url: str | None = None) -> str:
                 source_url
                 if source_url is not None
                 else f"https://jobs.ashbyhq.com/xero/{job_id}/application",
-                78.0,
+                # Comfortably above the User.agentConfig column's live DB
+                # default match threshold (80 — see
+                # ``information_schema.columns.column_default`` for
+                # ``"User"."agentConfig"``; the freshly-cloned schema surfaced
+                # it for the first time), so these orchestration tests never
+                # trip D2's below-threshold skip, which is exercised
+                # elsewhere on its own terms.
+                95.0,
             ),
         )
     conn.commit()

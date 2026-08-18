@@ -56,7 +56,15 @@ def _seed_approved(conn, user_id: str) -> tuple[str, str]:
             (
                 job_id, user_id, "Senior Engineer", "Xero", "Sydney NSW", False,
                 "Build things.", json.dumps([]), "ashby",
-                f"https://jobs.ashbyhq.com/xero/{job_id}/application", 78.0,
+                f"https://jobs.ashbyhq.com/xero/{job_id}/application",
+                # Comfortably above the User.agentConfig column's live DB
+                # default match threshold (80 — see
+                # ``information_schema.columns.column_default`` for
+                # ``"User"."agentConfig"``; the freshly-cloned schema surfaced
+                # it for the first time), so these orchestration tests never
+                # trip D2's below-threshold skip, which is exercised
+                # elsewhere on its own terms.
+                95.0,
             ),
         )
         cur.execute(
