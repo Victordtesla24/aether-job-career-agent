@@ -323,8 +323,8 @@ AGENT_CATALOG: list[dict[str, Any]] = [
     {"key": "recruiterOutreach", "name": "Recruiter Outreach Agent", "icon": "fa-handshake",
      "accent": "coral", "backend": "recruiterOutreach", "recommended": "claude-sonnet-4",
      "tip": "Drafts the FIRST outbound email to a contact of yours who has no email "
-            "thread yet — grounded only in your own résumé and that contact's "
-            "recorded details, with no enrichment and no external research. Blocks "
+            "thread yet — grounded only in your own résumé, Story Bank, and that "
+            "contact's recorded details, with no enrichment and no external research. Blocks "
             "honestly when the contact has no email address, and points you at the "
             "Email Agent when a thread already exists. The send is approval-gated: "
             "nothing leaves until you approve it, and approving needs a connected "
@@ -372,7 +372,7 @@ AGENT_CATALOG: list[dict[str, Any]] = [
     {"key": "reference", "name": "Reference Agent", "icon": "fa-user-check",
      "accent": "indigo", "backend": "reference", "recommended": "gpt-4o-mini",
      "tip": "Drafts the reference REQUEST to one of your contacts, grounded only in "
-            "your own résumé and that contact's recorded details, and reports the "
+            "your own résumé, Story Bank, and that contact's recorded details, and reports the "
             "requests it already raised for them so a repeat run is a visible "
             "re-draft. No reminder scheduling exists, so none is claimed. The send "
             "is approval-gated — nothing leaves until you approve it, and approving "
@@ -4036,35 +4036,50 @@ def _pipeline_core(
     )
     steps.append({"agent": "supervisor", "output": sup_out})
     sup_run_id = sup_out.get("run_id")
+    # ORCH-ADV: the supervisor records a plan. Consume it. A plan that is not
+    # exactly the canonical sequence falls back to that sequence rather than
+    # inventing a new LLM planner.
+    plan = sup_out.get("plan")
+    if not isinstance(plan, list) or plan != list(_PIPELINE_PLAN):
+        plan = list(_PIPELINE_PLAN)
+    spine = [step for step in plan if step in ("scout", "fitScorer", "matcher")]
+    writing = [step for step in plan if step in ("tailor", "coverLetter")]
 
-    scout_out = _dispatch(user_id, "scout", params, parent_run_id=sup_run_id)
-    steps.append({"agent": "scout", "output": scout_out})
-    fit_out = _dispatch(
-        user_id, "fitScorer", {"rescore": False}, parent_run_id=sup_run_id
-    )
-    steps.append({"agent": "fitScorer", "output": fit_out})
+    top_job_id = None
+    for step_name in spine:
+        if step_name == "scout":
+            scout_out = _dispatch(user_id, "scout", params, parent_run_id=sup_run_id)
+            steps.append({"agent": "scout", "output": scout_out})
+        elif step_name == "fitScorer":
+            fit_out = _dispatch(
+                user_id, "fitScorer", {"rescore": False}, parent_run_id=sup_run_id
+            )
+            steps.append({"agent": "fitScorer", "output": fit_out})
+        elif step_name == "matcher":
+            from app.agents.matcher_agent import MatcherAgent
 
-    from app.agents.matcher_agent import MatcherAgent
+            # Matcher node: ranks scored jobs and selects the top match.
+            # Reuses the now first-class MatcherAgent so the pipeline and the
+            # standalone /agents/matcher/run trigger share one implementation.
+            match_out = _record_run(
+                user_id, "matcher", {}, lambda: MatcherAgent().run(user_id),
+                parent_run_id=sup_run_id,
+            )
+            steps.append({"agent": "matcher", "output": match_out})
+            top_job_id = match_out.get("top_job_id")
+            if not top_job_id:
+                return {"status": "completed", "steps": steps, "approvalRequired": False}
+            # RT-005: the matcher chose this job — surface that on the board
+            # ("matched" renders in the Evaluating column). Forward-only
+            # guarded advance; kept here (not in MatcherAgent) so the
+            # standalone read-only ranking endpoint stays side-effect-free.
+            JobRepository().advance_status(
+                top_job_id, "matched", allowed_from={"discovered", "screening"}
+            )
 
-    # Matcher node: ranks scored jobs and selects the top match (audit-recorded).
-    # Reuses the now first-class MatcherAgent so the pipeline and the standalone
-    # /agents/matcher/run trigger share one implementation.
-    match_out = _record_run(
-        user_id, "matcher", {}, lambda: MatcherAgent().run(user_id),
-        parent_run_id=sup_run_id,
-    )
-    steps.append({"agent": "matcher", "output": match_out})
-
-    top_job_id = match_out.get("top_job_id")
-    if not top_job_id:
+    if not top_job_id or not writing:
         return {"status": "completed", "steps": steps, "approvalRequired": False}
-    # RT-005: the matcher chose this job — surface that on the board
-    # ("matched" renders in the Evaluating column). Forward-only guarded
-    # advance; kept here (not in MatcherAgent) so the standalone read-only
-    # ranking endpoint stays side-effect-free.
-    JobRepository().advance_status(
-        top_job_id, "matched", allowed_from={"discovered", "screening"}
-    )
+
     # One shared wall-clock budget across BOTH LLM-backed steps: without it
     # tailor and coverLetter each armed their own 60 s budget, so the pipeline
     # could exceed the HTTP edge's ~100 s ceiling and surface as a 524 (D1).
@@ -4072,81 +4087,90 @@ def _pipeline_core(
     from app.agents.tailor_agent import NoChangesApplied
     from app.services.llm_client import shared_budget
 
+    tailor_out: dict[str, Any] = {}
+    letter_out: dict[str, Any] = {}
     with shared_budget(budget_seconds):
-        try:
-            tailor_out: dict[str, Any] = _dispatch(
-                user_id, "tailor", {"job_id": top_job_id}, parent_run_id=sup_run_id
-            )
-        except NoChangesApplied as exc:
-            # MV-resume-studio-003: the guards rejected every proposed edit, so no
-            # tailored version was created and the tailor run was refunded. This
-            # must NOT fail the whole pipeline — the cover-letter step draws on the
-            # base résumé regardless — so record the honest no-op and continue.
-            #
-            # B6xP1A: "run_id" is included here too, exactly like every other
-            # step's output — the AgentRun row this no-op finished is already
-            # correctly parented under the supervisor (``_dispatch`` above
-            # passed ``parent_run_id=sup_run_id``); omitting the id from this
-            # branch only would silently make the no-op case unrecoverable
-            # from ``GET /agents/runs``, a dishonest gap the success case
-            # doesn't have.
-            tailor_out = {
-                "noChangesApplied": True, "changes": 0, "message": str(exc),
-                "run_id": getattr(exc, "run_id", None),
-            }
-        steps.append({"agent": "tailor", "output": tailor_out})
-        try:
-            letter_out = _dispatch(
-                user_id, "coverLetter", {"job_id": top_job_id},
-                parent_run_id=sup_run_id,
-            )
-        except (FabricationError, StructuralError) as exc:
-            # GAP-P7-COV-PIPE-001: the cover step's own fabrication/structural
-            # guard rejected the draft — an ungrounded term or §10.2 format
-            # violation survived every corrective retry. That is the guard
-            # WORKING (Aether never ships a fabricated cover letter), but it must
-            # NOT discard the SUCCESSFUL tailoring that precedes it. The
-            # coverLetter AgentRun is already recorded as an honest COMPLETED
-            # degrade (GAP-P4-002 — the guard working is not a failure) and its
-            # reserved quota refunded inside _dispatch/_record_run, so here we
-            # ONLY degrade gracefully: keep the tailored résumé and complete the
-            # pipeline with the cover marked unavailable + an honest, actionable
-            # message — instead of failing the whole job with a raw exception.
-            reason = getattr(exc, "flagged", None) or getattr(exc, "issues", None)
-            steps.append(
-                {
-                    "agent": "coverLetter",
-                    "output": {"coverLetterUnavailable": True, "reason": str(reason)},
-                }
-            )
-            # Honest message (adversarial-review fix): the lead must reflect what
-            # the tailor step ACTUALLY did. If tailoring ALSO no-op'd
-            # (NoChangesApplied -> 0 changes, no new résumé version persisted),
-            # never claim "your résumé was tailored" — that would be a false
-            # success claim in the compound (tailor no-op + cover rejected) case.
-            tailored = not tailor_out.get("noChangesApplied") and int(
-                tailor_out.get("changes") or 0
-            ) > 0
-            lead = (
-                "Your résumé was tailored for this role, but an auto-generated "
-                "cover letter"
-                if tailored
-                else "No verifiable résumé changes could be applied for this "
-                "role, and an auto-generated cover letter"
-            )
-            return {
-                "status": "completed",
-                "steps": steps,
-                "top_job_id": top_job_id,
-                "approvalRequired": False,
-                "coverLetterUnavailable": True,
-                "message": (
-                    f"{lead} couldn't be produced without unverifiable wording, "
-                    "so it was withheld — open the Cover Letter studio to generate "
-                    "or write one manually."
-                ),
-            }
-        steps.append({"agent": "coverLetter", "output": letter_out})
+        for step_name in writing:
+            if step_name == "tailor":
+                try:
+                    tailor_out = _dispatch(
+                        user_id, "tailor", {"job_id": top_job_id},
+                        parent_run_id=sup_run_id,
+                    )
+                except NoChangesApplied as exc:
+                    # MV-resume-studio-003: the guards rejected every proposed
+                    # edit, so no tailored version was created and the tailor
+                    # run was refunded. This must NOT fail the whole pipeline
+                    # — the cover-letter step draws on the base résumé
+                    # regardless — so record the honest no-op and continue.
+                    #
+                    # B6xP1A: "run_id" is included here too, exactly like
+                    # every other step's output — the AgentRun row this no-op
+                    # finished is already correctly parented under the
+                    # supervisor (``_dispatch`` above passed
+                    # ``parent_run_id=sup_run_id``); omitting the id from this
+                    # branch only would silently make the no-op case
+                    # unrecoverable from ``GET /agents/runs``, a dishonest gap
+                    # the success case doesn't have.
+                    tailor_out = {
+                        "noChangesApplied": True, "changes": 0,
+                        "message": str(exc),
+                        "run_id": getattr(exc, "run_id", None),
+                    }
+                steps.append({"agent": "tailor", "output": tailor_out})
+            elif step_name == "coverLetter":
+                try:
+                    letter_out = _dispatch(
+                        user_id, "coverLetter", {"job_id": top_job_id},
+                        parent_run_id=sup_run_id,
+                    )
+                except (FabricationError, StructuralError) as exc:
+                    # GAP-P7-COV-PIPE-001: the cover step's own fabrication /
+                    # structural guard rejected the draft. That is the guard
+                    # WORKING (Aether never ships a fabricated cover letter),
+                    # but it must NOT discard the SUCCESSFUL tailoring that
+                    # precedes it. The coverLetter AgentRun is already recorded
+                    # as an honest COMPLETED degrade (GAP-P4-002) and its
+                    # reserved quota refunded inside _dispatch/_record_run, so
+                    # here we ONLY degrade gracefully.
+                    reason = getattr(exc, "flagged", None) or getattr(
+                        exc, "issues", None
+                    )
+                    steps.append(
+                        {
+                            "agent": "coverLetter",
+                            "output": {
+                                "coverLetterUnavailable": True,
+                                "reason": str(reason),
+                            },
+                        }
+                    )
+                    # Honest message: the lead must reflect what the tailor
+                    # step ACTUALLY did. If tailoring ALSO no-op'd, never
+                    # claim "your résumé was tailored".
+                    tailored = not tailor_out.get("noChangesApplied") and int(
+                        tailor_out.get("changes") or 0
+                    ) > 0
+                    lead = (
+                        "Your résumé was tailored for this role, but an "
+                        "auto-generated cover letter"
+                        if tailored
+                        else "No verifiable résumé changes could be applied "
+                        "for this role, and an auto-generated cover letter"
+                    )
+                    return {
+                        "status": "completed",
+                        "steps": steps,
+                        "top_job_id": top_job_id,
+                        "approvalRequired": False,
+                        "coverLetterUnavailable": True,
+                        "message": (
+                            f"{lead} couldn't be produced without unverifiable "
+                            "wording, so it was withheld — open the Cover "
+                            "Letter studio to generate or write one manually."
+                        ),
+                    }
+                steps.append({"agent": "coverLetter", "output": letter_out})
 
     return {
         "status": "awaiting_approval",
@@ -4366,52 +4390,44 @@ def _latest_failure_is_hard(runs: list[dict[str, Any]] | None) -> bool:
 # consumes, the thresholds it is answerable for, and its measured trend.
 # ---------------------------------------------------------------------------
 
-#: THREE maps rather than one dense graph, exercising the architect's explicit
-#: decomposition freedom (U-PLAN.md item 5, "one or MULTIPLE workflow maps
-#: allowed — the constraint is the END RESULT"): the application pipeline is
-#: the linear path an application actually travels; the learning loop is a
-#: CYCLE over that pipeline's outcomes (drawing it as another pipeline stage
-#: would misrepresent it as a step rather than a feedback loop); and the
-#: enrichment map is a fan-out of context providers that no single application
-#: stage owns. Rendering them separately is what makes each one readable.
+#: ONE operating loop rather than three panels. Independent review (ORCH-ADV)
+#: proved the three-map split hid the Story Bank → tailoring team, buried the
+#: conductor inside a fabricated "Learning Loop" that claimed to re-tune
+#: agents, and parked correspondence with Submission. U-PLAN.md still allows
+#: multiple maps; the constraint is the end result. One loop is the honest
+#: picture of how these agents actually work as a team.
 #:
 #: ``(mapKey, mapName, mapSubtitle, [(stage, [agentKey, ...]), ...])``.
 _ORCHESTRATION_MAPS: tuple[tuple[str, str, str, tuple[tuple[str, tuple[str, ...]], ...]], ...] = (
     (
-        "application-pipeline",
-        "Application Pipeline",
-        "The path one job posting travels from discovery to a tracked application.",
+        "career-operating-loop",
+        "Career Search Operating Loop",
+        "How the catalog agents work as one team, from the conductor through "
+        "discovery, evidence, writing, approval-gated send, and a read-only "
+        "review of outcomes.",
         (
+            ("Conduct", ("orchestration",)),
             ("Discovery", ("jobDiscovery",)),
-            ("Fit Scoring", ("matchScoring", "atsOptimization", "skillGap", "jobMatching")),
+            (
+                "Market & employer context",
+                ("marketTrends", "salaryIntelligence", "companyResearch"),
+            ),
+            (
+                "Fit & ranking",
+                ("matchScoring", "atsOptimization", "skillGap", "jobMatching"),
+            ),
+            ("Evidence", ("storyExtraction",)),
             ("Tailoring", ("resumeTailoring",)),
             ("Cover Letter", ("coverLetter",)),
-            ("Quality Gates", ("compliance",)),
-            ("Submission", ("submission", "emailAgent")),
-            ("Tracking", ("notification", "scheduling")),
-        ),
-    ),
-    (
-        "learning-loop",
-        "Learning Loop",
-        "The cycle that reads the pipeline's real outcomes and re-tunes how hard "
-        "the agents try on the next run.",
-        (
-            ("Orchestration", ("orchestration",)),
-            ("Signal Capture", ("storyExtraction", "sentimentAnalysis")),
-            ("Learning", ("learningFeedback",)),
-        ),
-    ),
-    (
-        "enrichment",
-        "Context & Enrichment",
-        "Evidence and market context the pipeline draws on — none of these "
-        "advance an application on their own.",
-        (
-            ("Market Intelligence", ("marketTrends", "salaryIntelligence")),
-            ("Employer Research", ("companyResearch",)),
-            ("Outreach", ("recruiterOutreach", "reference")),
-            ("Interview Readiness", ("interviewPrep",)),
+            ("Quality gate", ("compliance",)),
+            ("Prepare & queue", ("submission",)),
+            (
+                "Correspondence",
+                ("emailAgent", "sentimentAnalysis", "scheduling", "notification"),
+            ),
+            ("Interview readiness", ("interviewPrep",)),
+            ("Networking", ("recruiterOutreach", "reference")),
+            ("Outcomes & review", ("learningFeedback",)),
         ),
     ),
 )
@@ -4446,7 +4462,6 @@ _AGENT_METRIC_VISIBILITY: dict[str, dict[str, tuple[str, ...]]] = {
     "resumeTailoring": {
         "metrics": (
             "ATS score before/after",
-            "interview conversion rate",
             "policy rigor tier",
         ),
         "thresholds": (
@@ -4457,7 +4472,6 @@ _AGENT_METRIC_VISIBILITY: dict[str, dict[str, tuple[str, ...]]] = {
     "coverLetter": {
         "metrics": (
             "cover-letter quality score",
-            "interview conversion rate",
             "policy rigor tier",
         ),
         "thresholds": ("cover-letter quality target 85",),
@@ -4467,38 +4481,286 @@ _AGENT_METRIC_VISIBILITY: dict[str, dict[str, tuple[str, ...]]] = {
         "thresholds": ("zero unverifiable claims shipped",),
     },
     "submission": {
-        "metrics": ("applications submitted", "transmission channel"),
-        "thresholds": ("1 interview per 5 submitted applications",),
+        "metrics": (
+            "applications prepared and queued for approval",
+            "resolved transmission channel",
+        ),
+        "thresholds": (),
     },
     "emailAgent": {
         "metrics": ("messages transmitted",),
         "thresholds": (),
     },
-    "notification": {"metrics": ("status transitions recorded",), "thresholds": ()},
-    "scheduling": {"metrics": ("interviews scheduled",), "thresholds": ()},
+    "notification": {
+        "metrics": (
+            "records changed since last digest",
+            "new scored matches",
+            "digests sent after approval",
+        ),
+        "thresholds": (),
+    },
+    "scheduling": {
+        "metrics": ("time-proposal drafts", "availability source"),
+        "thresholds": (),
+    },
     "orchestration": {
         "metrics": ("pipeline step outcomes", "policy rigor tier"),
-        "thresholds": ("1 interview per 5 submitted applications",),
+        "thresholds": (),
     },
     "storyExtraction": {"metrics": ("evidence stories captured",), "thresholds": ()},
     "sentimentAnalysis": {"metrics": ("employer response sentiment",), "thresholds": ()},
     "learningFeedback": {
         "metrics": (
-            "interview conversion rate",
+            "interview conversion rate of transmitted applications",
             "10-dimension fit scores at submission",
             "ATS score trend",
         ),
         "thresholds": (
-            "1 interview per 5 submitted applications",
+            "1 interview per 5 transmitted applications",
             "every fit dimension > 80%",
         ),
     },
-    "marketTrends": {"metrics": ("live market volumes (Adzuna, ABS)",), "thresholds": ()},
-    "salaryIntelligence": {"metrics": ("advertised salary benchmarks",), "thresholds": ()},
+    "marketTrends": {
+        "metrics": (
+            "keyword shifts in your own discovery feed",
+            "remote mix in your own feed",
+            "postings per week in your own feed",
+        ),
+        "thresholds": (),
+    },
+    "salaryIntelligence": {
+        "metrics": (
+            "advertised pay disclosed by your own postings",
+            "share of postings that disclosed pay",
+        ),
+        "thresholds": (),
+    },
     "companyResearch": {"metrics": ("employer profile coverage",), "thresholds": ()},
-    "recruiterOutreach": {"metrics": ("outreach messages sent",), "thresholds": ()},
-    "reference": {"metrics": ("references recorded",), "thresholds": ()},
+    "recruiterOutreach": {
+        "metrics": ("outreach drafts queued for approval",),
+        "thresholds": (),
+    },
+    "reference": {
+        "metrics": ("reference-request drafts queued for approval",),
+        "thresholds": (),
+    },
     "interviewPrep": {"metrics": ("prep packs generated",), "thresholds": ()},
+}
+
+#: How each catalog agent sits on the operating loop as a teammate, not a
+#: silo. ``dependsOn`` / ``supports`` name catalog keys this agent honestly
+#: consumes or feeds — never a market-trends → matcher edge the runtime
+#: does not have, and never a learning-feedback "re-tune".
+_AGENT_TEAM: dict[str, dict[str, Any]] = {
+    "orchestration": {
+        "role": (
+            "Conducts the live pipeline: records the plan, then dispatches "
+            "discovery, fit scoring, matching, tailoring and the cover letter "
+            "as one run."
+        ),
+        "dependsOn": (),
+        "supports": (
+            "jobDiscovery",
+            "matchScoring",
+            "jobMatching",
+            "resumeTailoring",
+            "coverLetter",
+        ),
+    },
+    "jobDiscovery": {
+        "role": (
+            "Finds open roles from your configured sources so later agents "
+            "have a real posting to score, rank, and write against."
+        ),
+        "dependsOn": (),
+        "supports": (
+            "matchScoring",
+            "atsOptimization",
+            "skillGap",
+            "jobMatching",
+            "marketTrends",
+            "salaryIntelligence",
+            "companyResearch",
+        ),
+    },
+    "marketTrends": {
+        "role": (
+            "Reads keyword, remote-mix and volume shifts inside your own "
+            "discovery feed. It does not score jobs or change matching."
+        ),
+        "dependsOn": ("jobDiscovery",),
+        "supports": (),
+    },
+    "salaryIntelligence": {
+        "role": (
+            "Aggregates pay ranges your own postings actually disclosed. It "
+            "does not import an external salary benchmark."
+        ),
+        "dependsOn": ("jobDiscovery",),
+        "supports": (),
+    },
+    "companyResearch": {
+        "role": (
+            "Synthesises what your own discovered postings already say about "
+            "an employer. It does not browse the public web."
+        ),
+        "dependsOn": ("jobDiscovery",),
+        "supports": (),
+    },
+    "matchScoring": {
+        "role": (
+            "Scores every discovered job on ten dimensions plus ATS. One "
+            "engine also powers the ATS and skill-gap cards."
+        ),
+        "dependsOn": ("jobDiscovery",),
+        "supports": (
+            "atsOptimization",
+            "skillGap",
+            "jobMatching",
+            "resumeTailoring",
+            "learningFeedback",
+        ),
+    },
+    "atsOptimization": {
+        "role": (
+            "The ATS keyword and semantic facet of Match Scoring — the same "
+            "fitScorer run, shown as its own card."
+        ),
+        "dependsOn": ("matchScoring",),
+        "supports": ("resumeTailoring",),
+    },
+    "skillGap": {
+        "role": (
+            "The missing-keyword facet of Match Scoring — the same fitScorer "
+            "run, shown as its own card."
+        ),
+        "dependsOn": ("matchScoring",),
+        "supports": ("resumeTailoring", "interviewPrep"),
+    },
+    "jobMatching": {
+        "role": (
+            "Ranks scored jobs and picks the top target the pipeline will "
+            "tailor and write a cover letter for."
+        ),
+        "dependsOn": ("matchScoring",),
+        "supports": ("resumeTailoring", "coverLetter", "submission"),
+    },
+    "storyExtraction": {
+        "role": (
+            "Banks STAR evidence the writing, interview-prep and outreach "
+            "agents are allowed to use."
+        ),
+        "dependsOn": (),
+        "supports": (
+            "resumeTailoring",
+            "coverLetter",
+            "interviewPrep",
+            "recruiterOutreach",
+            "reference",
+        ),
+    },
+    "resumeTailoring": {
+        "role": (
+            "Rewrites your résumé against one job using only the Story Bank "
+            "and the posting, then holds the result for you."
+        ),
+        "dependsOn": ("storyExtraction", "jobMatching"),
+        "supports": ("coverLetter", "submission", "compliance"),
+    },
+    "coverLetter": {
+        "role": (
+            "Drafts a cover letter from the same Story Bank and job the "
+            "tailor just used, then queues it for approval."
+        ),
+        "dependsOn": ("storyExtraction", "resumeTailoring"),
+        "supports": ("submission", "compliance"),
+    },
+    "compliance": {
+        "role": (
+            "Reports fabrication and entailment guard verdicts already "
+            "recorded on your tailoring and cover-letter runs."
+        ),
+        "dependsOn": ("resumeTailoring", "coverLetter"),
+        "supports": ("submission",),
+    },
+    "submission": {
+        "role": (
+            "Prepares one of your own ready applications and queues it for "
+            "approval. It transmits nothing itself."
+        ),
+        "dependsOn": ("resumeTailoring", "coverLetter", "compliance"),
+        "supports": ("learningFeedback",),
+    },
+    "emailAgent": {
+        "role": (
+            "Drafts replies and follow-ups on real Gmail threads. Sends stay "
+            "behind Approvals. Recruiter outreach hands off here once a "
+            "thread exists."
+        ),
+        "dependsOn": (),
+        "supports": (
+            "sentimentAnalysis",
+            "scheduling",
+            "notification",
+            "recruiterOutreach",
+        ),
+    },
+    "sentimentAnalysis": {
+        "role": (
+            "Reads the tone of one of your synced threads. It never changes "
+            "the Email Agent's labels."
+        ),
+        "dependsOn": ("emailAgent",),
+        "supports": (),
+    },
+    "scheduling": {
+        "role": (
+            "Drafts a time-proposal reply. It never books a calendar event "
+            "and never sends."
+        ),
+        "dependsOn": ("emailAgent",),
+        "supports": (),
+    },
+    "notification": {
+        "role": (
+            "Queues a digest of your own activity to connected Gmail, and "
+            "only after you approve it."
+        ),
+        "dependsOn": ("jobMatching", "submission"),
+        "supports": (),
+    },
+    "interviewPrep": {
+        "role": (
+            "Predicts questions from the real posting and answers them from "
+            "your Story Bank as STAR sketches."
+        ),
+        "dependsOn": ("storyExtraction",),
+        "supports": (),
+    },
+    "recruiterOutreach": {
+        "role": (
+            "Drafts a first-touch email from your résumé and Story Bank. "
+            "Nothing leaves until you approve it."
+        ),
+        "dependsOn": ("storyExtraction",),
+        "supports": ("emailAgent",),
+    },
+    "reference": {
+        "role": (
+            "Drafts a reference request from your résumé and Story Bank. "
+            "Nothing leaves until you approve it."
+        ),
+        "dependsOn": ("storyExtraction",),
+        "supports": (),
+    },
+    "learningFeedback": {
+        "role": (
+            "Read-only outcomes report across your applications. It never "
+            "adapts or retrains another agent."
+        ),
+        "dependsOn": ("submission", "matchScoring", "resumeTailoring"),
+        "supports": (),
+    },
 }
 
 #: Where a per-run numeric quality signal lives inside ``AgentRun.output``, per
@@ -4603,6 +4865,7 @@ def orchestration_map(current_user: CurrentUser) -> dict[str, Any]:
         catalog = _CATALOG_BY_KEY[agent_key]
         backend = catalog.get("backend")
         visibility = _AGENT_METRIC_VISIBILITY.get(agent_key, {})
+        team = _AGENT_TEAM.get(agent_key, {})
         last = last_runs.get(backend) if backend else None
         return {
             "agentKey": agent_key,
@@ -4616,6 +4879,9 @@ def orchestration_map(current_user: CurrentUser) -> dict[str, Any]:
             "lastRunAt": (last or {}).get("createdAt"),
             "lastRunStatus": (last or {}).get("status"),
             "trend": _agent_trend(backend or "", recent_runs.get(backend or "")),
+            "teamRole": str(team.get("role") or "").strip(),
+            "dependsOn": list(team.get("dependsOn") or ()),
+            "supports": list(team.get("supports") or ()),
         }
 
     placed: set[str] = set()

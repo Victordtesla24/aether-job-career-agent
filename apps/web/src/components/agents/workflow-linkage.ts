@@ -6,11 +6,11 @@
  * users must be able to KNOW THE LINKAGES VISUALLY to know what happened to
  * their job search and application and when."
  *
- * The orchestration maps are three separate panels because the API defines
- * three workflows. That is honest, and it is also why the single most important
- * fact about this product — the stories you bank are the evidence your resume
- * and cover letter are allowed to use — was invisible: the two ends of that
- * sentence render in different panels.
+ * The live API now ships one Career Search Operating Loop, so Story Bank and
+ * tailoring sit on adjacent stages and the node popover names the team. This
+ * table remains the provenance for the optional overlay: fixtures and any
+ * future split still render the same wiring, and a live one-map payload
+ * produces no cross-map edges.
  *
  * TWO CLASSES OF EDGE, AND ONLY ONE OF THEM IS BUILDABLE TODAY
  * ------------------------------------------------------------------------
@@ -404,7 +404,7 @@ const HOP = {
     // added `honest_map_counts` above these lines and shifted them again, and
     // MODEL-SUB-QUOTA round 3 added imports + a config guard above those —
     // re-resolved against the live tree after both merges, same anchors.
-    evidence: "apps/api/app/routers/agents.py:4008,4040",
+    evidence: "apps/api/app/routers/agents.py:4008,4051",
     discoveryEvidence: "apps/api/app/routers/agents.py:3380",
     anchors: [
       "def _pipeline_core(",

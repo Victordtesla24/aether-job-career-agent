@@ -334,14 +334,18 @@ def test_every_workflow_map_transmits_engines_and_cards(client, auth_headers):
         assert counts["engines"] == len({a["backend"] for a in nodes if a["backend"]})
 
 
-def test_the_pipeline_map_counts_the_fit_scoring_engine_once(client, auth_headers):
+def test_the_operating_loop_counts_the_fit_scoring_engine_once(client, auth_headers):
     """The exact recorded deviation, at the exact surface it survived on.
 
-    "Fit Scoring" lists four cards; three of them are the SAME ``fitScorer``
-    backend. A header summing nodes says 12 agents for the Application
-    Pipeline; the honest engine count is 10.
+    "Fit & ranking" lists four cards; three of them are the SAME ``fitScorer``
+    backend. A header summing nodes would count that engine three times; the
+    honest engine count counts it once.
     """
-    pipeline = next(m for m in _maps(client, auth_headers) if m["key"] == "application-pipeline")
+    pipeline = next(
+        m
+        for m in _maps(client, auth_headers)
+        if any(a["agentKey"] == "matchScoring" for a in _nodes(m))
+    )
     nodes = _nodes(pipeline)
 
     facets = sorted(a["agentKey"] for a in nodes if a["backend"] == "fitScorer")

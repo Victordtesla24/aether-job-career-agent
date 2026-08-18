@@ -8,8 +8,9 @@ This is that agent, at exactly that scope and no wider:
   NO ``EmailThread`` yet — the first-touch condition is DETECTED, not assumed, so
   a contact whose conversation has already started is refused with a pointer to
   the Email Agent's reply/follow-up drafting rather than opening a duplicate;
-* the draft is grounded ONLY in the caller's OWN résumé plus the contact's real
-  recorded fields. There is no enrichment, no scraping, no company research;
+* the draft is grounded ONLY in the caller's OWN résumé, their Story Bank, and
+  the contact's real recorded fields. There is no enrichment, no scraping, no
+  company research;
 * it SENDS NOTHING. Its terminal act is a pending ``email_send``
   ApprovalRequest (the emailAgent pattern). The single point where an outbound
   email really leaves the system remains ``POST /approvals/{id}/execute``, which
@@ -42,6 +43,7 @@ from app.agents.outreach_support import (
     contact_thread_ids,
     fence,
     first_touch_contacts,
+    grounded_candidate_text,
     guarded_draft,
     load_contact,
     queue_email_approval,
@@ -57,10 +59,11 @@ _MAX_CANDIDATES = 10
 SYSTEM_PROMPT = (
     "You write the FIRST outbound email from a job-seeking candidate to a "
     "professional contact they have never emailed. Use ONLY facts present in the "
-    "candidate's résumé and the contact's recorded details. Never invent a shared "
+    "candidate's résumé, their Story Bank evidence, and the contact's recorded "
+    "details. Never invent a shared "
     "history, a referral, a mutual connection, a prior conversation, an "
-    "application, a salary expectation, or a skill or employer the résumé does "
-    "not name. Do not claim to have researched the company. Keep it under 150 "
+    "application, a salary expectation, or a skill or employer the résumé and "
+    "Story Bank do not name. Do not claim to have researched the company. Keep it under 150 "
     "words, specific and plainly written, and close by asking for a short "
     f"conversation. {UNTRUSTED_RULE} Respond with JSON: "
     '{"subject": "<subject line>", "body": "<email body>"}'
@@ -233,7 +236,8 @@ class RecruiterOutreachAgent:
         # The prompt gets the FENCED SANITIZED contact block; the corpus gets a
         # single sanitize pass over the SAME raw input, so both sides are
         # byte-identical sanitizations of identical text (4a9cd6c's rule).
-        corpus = "\n".join([resume_text, sanitized_corpus(raw_contact)])
+        evidence = grounded_candidate_text(user_id, resume_text)
+        corpus = "\n".join([evidence, sanitized_corpus(raw_contact)])
         result.llm_called = True
         draft = guarded_draft(
             self._llm,
@@ -241,11 +245,11 @@ class RecruiterOutreachAgent:
             system=SYSTEM_PROMPT,
             user_prompt=(
                 f"CONTACT:\n{fence(UNTRUSTED_CONTACT, raw_contact)}\n\n"
-                f"CANDIDATE RÉSUMÉ:\n{resume_text}"
+                f"CANDIDATE RÉSUMÉ:\n{evidence}"
             ),
             corpus=corpus,
             untrusted_raw=raw_contact,
-            candidate_evidence=resume_text,
+            candidate_evidence=evidence,
             guard=self._guard,
         )
         if draft.withheld:

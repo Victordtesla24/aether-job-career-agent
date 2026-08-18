@@ -6,8 +6,9 @@ requests & reminders". There is no reminder scheduler in this product, so the
 What ships is the half that is real: it drafts the reference REQUEST to one of the
 caller's own ``Contact`` rows and queues it behind the human approval gate.
 
-* grounded ONLY in the caller's OWN résumé plus the contact's real recorded
-  fields — no invented shared history, no invented referral;
+* grounded ONLY in the caller's OWN résumé, their Story Bank, and the
+  contact's real recorded fields — no invented shared history, no invented
+  referral;
 * it SENDS NOTHING: the terminal act is a pending ``email_send``
   ApprovalRequest (the emailAgent pattern), and the one place an outbound email
   really leaves the system stays ``POST /approvals/{id}/execute``, which fails
@@ -43,6 +44,7 @@ from app.agents.outreach_support import (
     UNTRUSTED_RULE,
     contact_block,
     fence,
+    grounded_candidate_text,
     guarded_draft,
     list_contacts,
     load_contact,
@@ -64,7 +66,8 @@ _MAX_CANDIDATES = 10
 SYSTEM_PROMPT = (
     "You write a short, courteous email in which a job-seeking candidate ASKS a "
     "professional contact to act as a reference. Use ONLY facts present in the "
-    "candidate's résumé and the contact's recorded details. Never invent a shared "
+    "candidate's résumé, their Story Bank evidence, and the contact's recorded "
+    "details. Never invent a shared "
     "employer, a shared project, a prior conversation, a job title, a date, or a "
     "specific role the candidate is applying for. Make it easy to decline, and say "
     "the role details and timing will follow before the contact is named. Keep it "
@@ -231,7 +234,8 @@ class ReferenceAgent:
         result: ReferenceResult,
     ) -> None:
         raw_contact = contact_block(contact)
-        corpus = "\n".join([resume_text, sanitized_corpus(raw_contact)])
+        evidence = grounded_candidate_text(user_id, resume_text)
+        corpus = "\n".join([evidence, sanitized_corpus(raw_contact)])
         result.llm_called = True
         draft = guarded_draft(
             self._llm,
@@ -239,11 +243,11 @@ class ReferenceAgent:
             system=SYSTEM_PROMPT,
             user_prompt=(
                 f"CONTACT:\n{fence(UNTRUSTED_CONTACT, raw_contact)}\n\n"
-                f"CANDIDATE RÉSUMÉ:\n{resume_text}"
+                f"CANDIDATE RÉSUMÉ:\n{evidence}"
             ),
             corpus=corpus,
             untrusted_raw=raw_contact,
-            candidate_evidence=resume_text,
+            candidate_evidence=evidence,
             guard=self._guard,
         )
         if draft.withheld:

@@ -112,6 +112,9 @@ export const OrchestrationMapAgentSchema = z.object({
   lastRunAt: z.string().nullish(),
   lastRunStatus: z.string().nullish(),
   trend: OrchestrationTrendSchema.nullish(),
+  teamRole: z.string().default(""),
+  dependsOn: z.array(z.string()).default([]),
+  supports: z.array(z.string()).default([]),
 });
 
 export type OrchestrationMapAgent = z.infer<typeof OrchestrationMapAgentSchema>;
