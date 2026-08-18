@@ -19,9 +19,11 @@ class FakeGmail:
     def __init__(self, messages: list[dict[str, str]]) -> None:
         self.messages = messages
         self.calls: list[str] = []
+        self.queries: list[str | None] = []
 
     def list_message_headers(self, query=None, max_results=100):  # noqa: ANN001
         self.calls.append("headers")
+        self.queries.append(query)
         return [
             {
                 "id": message["id"],
@@ -50,9 +52,10 @@ def _install_gmail(monkeypatch, fake: FakeGmail) -> None:
     )
 
 
-def test_import_normalizes_deduplicates_and_hands_professional_contact_to_sales(
+def test_import_normalizes_deduplicates_without_global_sales_lead(
     client, auth_headers, monkeypatch
 ):
+    """NW-ADV: professional contacts land in CRM only — no SalesLead injection."""
     sender = _email("recruiter")
     fake = FakeGmail(
         [
@@ -86,9 +89,10 @@ def test_import_normalizes_deduplicates_and_hands_professional_contact_to_sales(
     assert response.status_code == 200, response.text
     data = response.json()
     assert data["contactsCreated"] == 1
-    assert data["leadsCreated"] == 1
+    assert data["leadsCreated"] == 0
     assert data["duplicates"] == 1
-    assert fake.calls == ["headers", "message-1", "message-2", "message-3"]
+    assert fake.calls[0] == "headers"
+    assert fake.queries == ["-in:sent -in:drafts -in:trash"]
 
     with get_connection() as conn:
         with conn.cursor() as cur:
@@ -98,13 +102,42 @@ def test_import_normalizes_deduplicates_and_hands_professional_contact_to_sales(
             )
             imported = cur.fetchall()
     assert imported == [("Riley Recruiter", sender)]
+    assert SalesRepository().get_lead_by_email(sender) is None
 
-    lead = SalesRepository().get_lead_by_email(sender)
-    assert lead is not None
-    assert lead["source"] == "inbound_email"
-    assert lead["consentType"] == "inbound_signal"
-    assert lead["sourceThreadId"] == "thread-1"
-    assert "message-1" in lead["consentEvidence"]
+
+def test_import_skips_own_mailbox_address(client, auth_headers, monkeypatch, test_user_id):
+    """SENT/self contamination: the connected user's address is never a contact."""
+    from app.db import get_connection as _gc
+
+    with _gc() as conn:
+        with conn.cursor() as cur:
+            cur.execute('SELECT "email" FROM "User" WHERE "id" = %s', (test_user_id,))
+            row = cur.fetchone()
+    assert row and row[0]
+    self_addr = str(row[0]).strip().lower()
+    fake = FakeGmail(
+        [
+            {
+                "id": "message-self",
+                "threadId": "thread-self",
+                "from": f"Me <{self_addr}>",
+                "subject": "Engineering opportunity follow-up",
+                "text": "I am recruiting for a professional engineering position.",
+            }
+        ]
+    )
+    _install_gmail(monkeypatch, fake)
+    response = client.post("/networking/gmail/import-contacts", headers=auth_headers)
+    assert response.status_code == 200, response.text
+    assert response.json()["ignored"] >= 1
+    assert response.json()["contactsCreated"] == 0
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT count(*) FROM "Contact" WHERE "userId" = %s AND LOWER("email") = %s',
+                (test_user_id, self_addr),
+            )
+            assert cur.fetchone()[0] == 0
 
 
 def test_import_never_persists_or_hands_off_suppressed_sender(
@@ -167,18 +200,19 @@ def test_import_requires_professional_inbound_signal_before_creating_contact_or_
     assert SalesRepository().get_lead_by_email(sender) is None
 
 
-def test_import_refuses_candidate_without_gmail_thread_provenance(
+def test_import_refuses_candidate_without_professional_signal_still(
     client, auth_headers, monkeypatch
 ):
-    sender = _email("no-provenance")
+    """Personal mail stays ignored; contacts need a professional signal."""
+    sender = _email("no-signal-thread")
     fake = FakeGmail(
         [
             {
                 "id": "message-no-thread",
                 "threadId": "",
-                "from": f"Morgan Recruiter <{sender}>",
-                "subject": "Engineering opportunity",
-                "text": "I am recruiting for a professional engineering position.",
+                "from": f"Morgan Friend <{sender}>",
+                "subject": "Hello",
+                "text": "Hope you are doing well this weekend!",
             }
         ]
     )

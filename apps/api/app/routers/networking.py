@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 
 from app.db import get_connection, new_id, rows_to_dicts
 from app.middleware.auth import CurrentUser
-from app.repositories.sales import ConsentViolationError, SalesRepository
+from app.repositories.sales import SalesRepository
 from app.services.networking_insights import (
     refresh_contacts_from_inbox,
     upsert_contact,
@@ -49,6 +49,29 @@ _PROFESSIONAL_SIGNAL = re.compile(
     re.IGNORECASE,
 )
 
+#: Exclude the user's own outbound/trash traffic so SENT never becomes a Contact.
+_GMAIL_IMPORT_QUERY = "-in:sent -in:drafts -in:trash"
+
+
+def _self_mailbox_emails(user_id: str) -> set[str]:
+    """Addresses that belong to this user (app User + connected Gmail accounts)."""
+    emails: set[str] = set()
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute('SELECT LOWER("email") FROM "User" WHERE "id" = %s', (user_id,))
+            row = cur.fetchone()
+            if row and row[0]:
+                emails.add(str(row[0]).strip().lower())
+            cur.execute(
+                'SELECT LOWER("accountEmail") FROM "GmailAccount" '
+                'WHERE "userId" = %s AND "accountEmail" IS NOT NULL',
+                (user_id,),
+            )
+            for (addr,) in cur.fetchall() or []:
+                if addr:
+                    emails.add(str(addr).strip().lower())
+    return {e for e in emails if e and _EMAIL_RE.fullmatch(e)}
+
 
 def _professional_sender(message: dict[str, Any]) -> tuple[str, str] | None:
     """Return normalized ``(name, email)`` only for an evidenced work signal.
@@ -70,9 +93,10 @@ def _professional_sender(message: dict[str, Any]) -> tuple[str, str] | None:
 def import_gmail_contacts(current_user: CurrentUser) -> dict[str, int]:
     """Owner-authorized import of professional inbound Gmail contacts.
 
-    Candidates need a real sender address plus a professional signal. Gmail
-    message/thread identifiers form the existing SalesLead consent provenance;
-    suppressed senders are neither saved nor handed off. Nothing is sent.
+    Candidates need a real sender address plus a professional signal. CRM
+    imports create Contact rows only — they do **not** inject into the global
+    SalesLead funnel (NW-ADV). Suppressed senders are neither saved nor
+    counted as contacts. Nothing is sent.
     """
     from app.services.gmail_service import (
         GmailAuthError,
@@ -84,6 +108,7 @@ def import_gmail_contacts(current_user: CurrentUser) -> dict[str, int]:
     uid = current_user["id"]
     gmail = GmailService(uid)
     sales = SalesRepository()
+    self_emails = _self_mailbox_emails(uid)
     seen: set[str] = set()
     counts = {
         "contactsCreated": 0,
@@ -98,7 +123,9 @@ def import_gmail_contacts(current_user: CurrentUser) -> dict[str, int]:
     # like the other Gmail-backed routes (approvals, workspaces) instead of
     # letting GmailNotConnectedError escape as a 500.
     try:
-        headers = gmail.list_message_headers(max_results=100)
+        headers = gmail.list_message_headers(
+            query=_GMAIL_IMPORT_QUERY, max_results=100
+        )
     except (GmailAuthError, GmailNotConnectedError):
         raise HTTPException(
             status.HTTP_409_CONFLICT,
@@ -133,19 +160,16 @@ def import_gmail_contacts(current_user: CurrentUser) -> dict[str, int]:
             counts["ignored"] += 1
             continue
         name, email = candidate
+        if email in self_emails:
+            # Own mailbox address must never become a CRM contact.
+            counts["ignored"] += 1
+            continue
         if email in seen:
             counts["duplicates"] += 1
             continue
         seen.add(email)
         if sales.is_suppressed(email):
             counts["suppressed"] += 1
-            continue
-        thread_id = str(message.get("threadId") or "").strip()
-        message_id = str(message.get("id") or "").strip()
-        if not thread_id or not message_id:
-            # The sales repository will refuse a missing thread too; require the
-            # message identifier as well so both provenance pointers are real.
-            counts["ignored"] += 1
             continue
 
         _cid, action = upsert_contact(uid, name=name, email=email)
@@ -155,23 +179,7 @@ def import_gmail_contacts(current_user: CurrentUser) -> dict[str, int]:
             counts["contactsUpdated"] += 1
         else:
             counts["duplicates"] += 1
-
-        if sales.get_lead_by_email(email) is None:
-            try:
-                sales.create_lead(
-                    email=email,
-                    name=name,
-                    source="inbound_email",
-                    source_thread_id=thread_id,
-                    consent_type="inbound_signal",
-                    consent_evidence=(
-                        f"Gmail inbound message {message_id} in thread {thread_id}"
-                    ),
-                )
-                counts["leadsCreated"] += 1
-            except ConsentViolationError:
-                # No guessed or incomplete provenance becomes a lead.
-                counts["ignored"] += 1
+        # NW-ADV: CRM import does not write global SalesLead rows.
     return counts
 
 
@@ -281,7 +289,6 @@ async def import_linkedin_contacts(
         company = (row.get("Company") or "").strip()
         title = (row.get("Position") or "").strip()
         url = (row.get("URL") or "").strip()
-        connected_on = (row.get("Connected On") or "").strip()
         if email and not _EMAIL_RE.fullmatch(email):
             email = ""
         if not name and not email:
@@ -317,27 +324,7 @@ async def import_linkedin_contacts(
             counts["contactsUpdated"] += 1
         else:
             counts["duplicates"] += 1
-
-        # Hand-off to Sales (R4.2): only connections who chose to share their
-        # email, with real existing-relationship provenance. Never guessed.
-        if email and sales.get_lead_by_email(email) is None:
-            try:
-                sales.create_lead(
-                    email=email,
-                    name=name or None,
-                    source="manual_approved",
-                    consent_type="existing_relationship",
-                    consent_evidence=(
-                        "LinkedIn Connections.csv export uploaded by the "
-                        f"account owner; first-degree connection '{name}'"
-                        + (f", connected {connected_on}" if connected_on else "")
-                        + "; email shared by the connection in their LinkedIn "
-                        "settings."
-                    ),
-                )
-                counts["leadsCreated"] += 1
-            except ConsentViolationError:
-                counts["ignored"] += 1
+        # NW-ADV: LinkedIn CRM import does not write global SalesLead rows.
     return counts
 
 

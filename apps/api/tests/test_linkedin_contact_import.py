@@ -45,9 +45,10 @@ def _upload(client, auth_headers, filename: str, payload: bytes):
     )
 
 
-def test_csv_import_creates_deduped_contacts_and_hands_shared_emails_to_sales(
+def test_csv_import_creates_deduped_contacts_without_global_sales_lead(
     client, auth_headers
 ):
+    """NW-ADV: LinkedIn Connections become CRM contacts only — no SalesLead."""
     shared = _email("connection")
     csv_text = _connections_csv(
         [
@@ -64,7 +65,7 @@ def test_csv_import_creates_deduped_contacts_and_hands_shared_emails_to_sales(
     data = resp.json()
     assert data["rows"] == 4
     assert data["contactsCreated"] == 2   # Casey + Nia (email-less still a contact)
-    assert data["leadsCreated"] == 1      # only the shared email becomes a lead
+    assert data["leadsCreated"] == 0
     assert data["duplicates"] == 1
     assert data["ignored"] == 1           # fully blank row
 
@@ -80,13 +81,7 @@ def test_csv_import_creates_deduped_contacts_and_hands_shared_emails_to_sales(
         "Casey Connector", "Engineering Manager", "Acme Corp",
         "https://www.linkedin.com/in/casey",
     )
-
-    lead = SalesRepository().get_lead_by_email(shared)
-    assert lead is not None
-    assert lead["source"] == "manual_approved"
-    assert lead["consentType"] == "existing_relationship"
-    assert "Connections.csv" in lead["consentEvidence"]
-    assert "Casey Connector" in lead["consentEvidence"]
+    assert SalesRepository().get_lead_by_email(shared) is None
 
     # Idempotent re-upload: nothing new, everything a duplicate or ignored.
     again = _upload(client, auth_headers, "Connections.csv", csv_text.encode())
@@ -113,8 +108,8 @@ def test_zip_import_opens_only_connections_csv(client, auth_headers):
     assert resp.status_code == 200, resp.text
     data = resp.json()
     assert data["contactsCreated"] == 1
-    assert data["leadsCreated"] == 1
-    assert SalesRepository().get_lead_by_email(shared) is not None
+    assert data["leadsCreated"] == 0
+    assert SalesRepository().get_lead_by_email(shared) is None
 
 
 def test_suppressed_email_is_neither_saved_nor_handed_off(client, auth_headers):
