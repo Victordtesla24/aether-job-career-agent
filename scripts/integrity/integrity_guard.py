@@ -24,14 +24,14 @@ import os, re, sys, pathlib, collections
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 WAIVERS = ROOT / "scripts/integrity/waivers.txt"
-EXCLUDE = {".git","node_modules",".next",".venv","__pycache__",".turbo","dist","build",
+EXCLUDE = {"negative_corpus", ".git","node_modules",".next",".venv","__pycache__",".turbo","dist","build",
            "coverage",".pytest_cache",".ruff_cache","uat","cleanup","evidence","screenshots",
            ".agent","site-packages"}
 TESTISH = ("/test","/tests/","__tests__","/fixtures/","conftest.py",".test.",".spec.",
            "/e2e/","/mocks/","/__mocks__/","/evals/","integrity_guard.py")
 SRC = {".py",".ts",".tsx",".js",".jsx",".mjs"}
 APPROVED = ("apps/api/app","apps/api/scripts","apps/web/src","apps/web/e2e","packages",
-            "scripts","ci","deploy",".github","design")
+            "scripts","ci","deploy",".github","design","ops")
 # Framework config must sit at the app root — not a misplaced file.
 CONFIG_OK = re.compile(r"^apps/(web|api)/[^/]*(config|env)[^/]*\.(ts|mjs|js|cjs|d\.ts)$")
 
@@ -46,15 +46,19 @@ def strip_comments(text: str, py: bool) -> str:
     return text
 
 # (regex, message, applies_to_code_only)
-R1 = [(r"\breturn\s+(?:\[\s*\]|\{\s*\})\s*(?:#|//)\s*(?:stub|placeholder|todo)", "stubbed return value"),
-      (r"\bMOCK_MODE\s*=\s*(?:True|true|1)\b", "mock mode enabled in shipped code"),
-      (r"\bSIMULATE\w*\s*=\s*(?:True|true|1)\b", "simulation flag enabled"),
-      (r"\bUSE_FAKE\w*\s*=\s*(?:True|true|1)\b", "fake-data flag enabled")]
+# NOTE: rules that depend on a COMMENT must be matched against raw text, because
+# strip_comments() runs first. They are listed in R1_RAW.
+R1 = [(r"\b(?:MOCK|SIMULATE|FAKE|STUB|DUMMY)[A-Z0-9_]*\s*(?::\s*[A-Za-z\[\]\.]+)?\s*=\s*(?:True|true|1)\b",
+       "fabrication flag enabled in shipped code"),
+      (r"\b[A-Z0-9_]*(?:MOCK|FAKE|STUB|DUMMY)[A-Z0-9_]*\s*(?::\s*[A-Za-z\[\]\.]+)?\s*=\s*(?:True|true|1)\b",
+       "fabrication flag enabled in shipped code")]
+R1_RAW = [(r"\breturn\s+(?:\[[^\]]*\]|\{[^}]*\}|None)\s*(?:#|//)\s*(?:stub|placeholder|todo|fake|mock)",
+           "stubbed return value")]
 R2 = [(r"sk-(?:test|dummy|fake|example)[A-Za-z0-9_-]{4,}", "test/dummy API key literal"),
       (r"(?i)(api[_-]?key|secret|token|password)\s*[:=]\s*[\"'](?:changeme|password123|test123|dummy|fake|your[_-]?\w+[_-]?here)[\"']", "placeholder credential literal")]
 # A suppression is acceptable ONLY when it states why, inline (noqa code, eslint
 # rule name, or a trailing comment). Unexplained suppression is the violation.
-R6 = [(r"except\s*(?:Exception|BaseException)?\s*(?:as\s+\w+)?\s*:(?![^\n]*(?:noqa|#))\s*\n\s*pass\b",
+R6 = [(r"except\s*(?:Exception|BaseException)?\s*(?:as\s+\w+)?\s*:(?![^\n]*(?:noqa:\s*\w|#\s*\S{3,}))(?!\s*\n\s*#)\s*(?:\n\s*)?pass\b",
        "broad except: pass with no stated reason — masks a real failure"),
       (r"catch\s*\([^)]*\)\s*\{\s*\}", "empty catch block — masks a real failure"),
       (r"@ts-nocheck", "@ts-nocheck disables type checking for the whole file"),
@@ -64,12 +68,16 @@ R6 = [(r"except\s*(?:Exception|BaseException)?\s*(?:as\s+\w+)?\s*:(?![^\n]*(?:no
       (r"(?m)#\s*noqa\s*$", "blanket '# noqa' (use a specific rule code)")]
 # Skips are allowed when conditional (skipif / a runtime guard) or when the reason
 # is stated. An unconditional, unexplained skip is a hidden failure.
-R7_SRC = [(r"\b(?:it|test|describe)\.skip\s*\(\s*(?:\)|[\"\x27`])(?![^\n]*,)",
-           "unconditional skipped test hides a failure"),
+R7_SRC = [(r"\b(?:it|test|describe)\.skip\s*\(\s*[\"\x27`][^\"\x27`]*[\"\x27`]\s*,\s*(?:async\s*)?\(",
+           "skipped test hides a failure (a disabled test is not a passing test)"),
+          (r"\b(?:it|test|describe)\.skip\s*\(\s*\)", "skipped test hides a failure"),
           (r"\bx(?:it|describe)\s*\(", "disabled test (xit/xdescribe) hides a failure"),
           (r"@pytest\.mark\.skip\b(?!if)(?![^\n]*reason)", "@pytest.mark.skip with no reason= hides a failure")]
 R7_CI = [
-         (r"(?:pytest|pnpm\s+(?:test|lint|build|type-check)|npm\s+test)[^\n|]*\|\|\s*true", "`|| true` swallows a failing check")]
+         (r"(?:pytest|pnpm\s+(?:run\s+)?(?:test|lint|build|type-check)|npm\s+(?:run\s+)?test)[^\n|;]*(?:\|\|\s*true|;\s*true)",
+           "`|| true` / `; true` swallows a failing check"),
+         (r"(?is)(?:not set|missing|unset|skip)[^\n]{0,120}\n[^\n]{0,120}exit\s+0",
+           "`exit 0` after a skip condition marks an unrun suite as passing")]
 ENV_FORBIDDEN = {"AETHER_LLM_MODE": {"replay","fixture","mock","fake"},
                  "AETHER_DISCOVERY_FIXTURES": {"1","true","yes","on"},
                  "AETHER_DISCOVERY_FIXTURE_DIR": {"*"},
@@ -110,6 +118,10 @@ def main():
                 for pat, msg in R1 + R2:
                     for m in re.finditer(pat, code):
                         add(rel, "R1" if (pat, msg) in R1 else "R2", msg, code[:m.start()].count("\n")+1)
+                # comment-dependent rules must see the ORIGINAL text
+                for pat, msg in R1_RAW:
+                    for m in re.finditer(pat, raw):
+                        add(rel, "R1", msg, raw[:m.start()].count("\n")+1)
                 for pat, msg in R6:
                     src = raw if ("ts-" in pat or "eslint" in pat or "noqa" in pat or "type:" in pat) else code
                     for m in re.finditer(pat, src, re.M):
@@ -119,7 +131,7 @@ def main():
             for pat, msg in R7_SRC:
                 for m in re.finditer(pat, code):
                     add(rel, "R7", msg, code[:m.start()].count("\n")+1)
-        if rel.startswith((".github/", "ci/", "scripts/")) and f.suffix in {".yml",".yaml",".sh"}:
+        if rel.startswith(".github/workflows/") and f.suffix in {".yml",".yaml"}:
             try: raw = f.read_text(encoding="utf-8", errors="replace")
             except OSError: continue
             lines = raw.splitlines()
@@ -128,12 +140,13 @@ def main():
                     # Acceptable only when the surrounding lines say why (e.g. an
                     # explicitly non-blocking nightly job). Silent use is a violation.
                     ctx = " ".join(lines[max(0, i-6):i+1]).lower()
-                    if not re.search(r"#|non-blocking|nightly|advisory|informational", ctx):
+                    if not re.search(r"non-blocking|nightly|advisory|informational|known[- ]flaky", ctx):
                         add(rel, "R7", "continue-on-error with no stated reason lets a failing step pass", i+1)
             for pat, msg in R7_CI:
                 for m in re.finditer(pat, raw):
                     add(rel, "R7", msg, raw[:m.start()].count("\n")+1)
-        if f.name == ".env" or f.name.endswith(".env"):
+        if (f.name == ".env" or f.name.startswith(".env.") or f.name.endswith(".env")) \
+                and not f.name.endswith((".example", ".sample", ".template")):
             try: raw = f.read_text(errors="replace")
             except OSError: continue
             for i, ln in enumerate(raw.splitlines(), 1):

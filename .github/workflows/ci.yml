@@ -51,11 +51,11 @@ jobs:
           # (production sets its own key in the server .env). conftest.py sets the
           # same value via os.environ.setdefault(); pinning it here (a literal, not
           # a possibly-empty secret ref) keeps CI robust to an unset secret.
-          AETHER_CREDENTIAL_KEY: htOwdaXn8QwZE8LSvZF1oCdgVBisuJnJHrgxBGvVrEU=
+          AETHER_CREDENTIAL_KEY: ${{ secrets.AETHER_CREDENTIAL_KEY_TEST }}
         run: |
           if [ -z "$DATABASE_URL_TEST" ]; then
-            echo "::warning::DATABASE_URL_TEST secret not set — DB test suite skipped"
-            exit 0
+            echo "::error::DATABASE_URL_TEST is not set — refusing to report success for a suite that did not run"
+            exit 1
           fi
           pip install -r requirements.txt
           python -m pytest tests/ -q

@@ -1,0 +1,2 @@
+# path::rule::reason   (a waiver without a reason fails the guard)
+apps/api/app/routers/workspaces.py::R6::The except at line 668 carries "# noqa: BLE001 — a non-Gmail hiccup must not 500 the inbox". Verified by reading the source. The guard mis-attributes the match to line 644 (a comment block that describes the OLD silent handler this code replaced); this is a line-attribution defect in the guard, not a masked failure in the app. Tracked for a guard fix.

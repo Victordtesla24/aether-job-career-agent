@@ -31,6 +31,12 @@ jobs:
           corepack prepare pnpm@11.9.0 --activate
       - name: Integrity guard (blocking)
         run: python3 scripts/integrity/integrity_guard.py
+
+      - name: Prove the guard still detects violations (anti-blindness)
+        # A guard that passes a clean tree proves nothing on its own. This runs
+        # the real guard against a corpus of deliberate violations and fails if
+        # it does NOT flag them.
+        run: python3 scripts/integrity/verify_guard_detects.py
       - name: Install workspace
         run: pnpm install --frozen-lockfile
       - name: Lint
@@ -51,7 +57,7 @@ jobs:
       - name: Deploy and smoke-test dev
         run: |
           set -euo pipefail
-          bash /opt/aether-guardian/deploy_env.sh dev
+          bash /opt/aether-guardian/deploy_env.sh dev ${{ github.sha }}
 
   deploy-test:
     name: Deploy test
@@ -62,7 +68,7 @@ jobs:
       - name: Deploy and smoke-test test
         run: |
           set -euo pipefail
-          bash /opt/aether-guardian/deploy_env.sh test
+          bash /opt/aether-guardian/deploy_env.sh test ${{ github.sha }}
 
   deploy-prod:
     name: Deploy production (auto, with rollback)
@@ -74,7 +80,7 @@ jobs:
       - name: Deploy production with automatic rollback
         run: |
           set -euo pipefail
-          bash /opt/aether-guardian/deploy_env.sh prod --rollback-on-failure
+          bash /opt/aether-guardian/deploy_env.sh prod --rollback-on-failure ${{ github.sha }}
 
       - name: Guardian post-deploy sweep
         # Escalations (e.g. unmerged branches) are reported to the orchestrator
