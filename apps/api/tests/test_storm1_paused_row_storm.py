@@ -135,8 +135,13 @@ class TestPausedSweepMintsNoPerJobRows:
         self, db_session, client, auth_headers, user_id, monkeypatch,
     ):
         jobs = [
+            # Both above the live schema's User.agentConfig column default
+            # match threshold (80 — see information_schema.columns.
+            # column_default, out-of-band, no matching migration file) so
+            # BOTH are counted as eligible-but-paused; this test measures the
+            # pause short-circuit, not the fit gate.
             _seed_job(db_session, user_id, fit=90.0),
-            _seed_job(db_session, user_id, fit=70.0),
+            _seed_job(db_session, user_id, fit=85.0),
         ]
         _set_agent_enabled(client, auth_headers, "resumeTailoring", False)
         _set_agent_enabled(client, auth_headers, "coverLetter", False)
