@@ -1207,4 +1207,7 @@ Rules of engagement unchanged: locks (git/deploy/test), runbook deploys, append-
 
 **Deploy:** rebase onto `origin/main`, push this branch then merge to `origin/main` → VPS Delivery. Do not hand-restart prod units. Do not enable `aether-sales-agent.timer`. Do not POST run-now. No leftover PR.
 
-
+### Production verification persona — PROFILE-PHOTO — 2026-08-18T10:53Z
+- email: 
+- purpose: Settings profile photo upload/replace/remove API+UI verify (×2)
+- do not promote to admin; purge with next approved test-data census

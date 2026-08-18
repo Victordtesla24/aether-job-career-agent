@@ -16,6 +16,7 @@ import {
   AVATAR_CHANGE_LABEL,
   AVATAR_HELP_TEXT,
   AVATAR_REMOVE_LABEL,
+  announceProfileAvatarChanged,
   describeAvatarUploadError,
   validateAvatarFile,
 } from "./profile-avatar";
@@ -98,6 +99,10 @@ export function ProfileAvatar({
         }
         const updated = (await res.json()) as SettingsPayload;
         onChanged(updated);
+        announceProfileAvatarChanged({
+          hasAvatar: updated.profile.hasAvatar,
+          avatarRevision: updated.profile.avatarRevision,
+        });
       } catch (e) {
         setError(e instanceof Error ? e.message : "Upload failed");
       } finally {
@@ -122,6 +127,10 @@ export function ProfileAvatar({
       }
       const updated = (await res.json()) as SettingsPayload;
       onChanged(updated);
+      announceProfileAvatarChanged({
+        hasAvatar: updated.profile.hasAvatar,
+        avatarRevision: updated.profile.avatarRevision,
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Remove failed");
     } finally {

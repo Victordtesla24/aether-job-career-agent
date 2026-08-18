@@ -23,6 +23,23 @@ export const AVATAR_CHANGE_LABEL = "Change avatar";
 /** Remove control — only shown when a photo is stored. */
 export const AVATAR_REMOVE_LABEL = "Remove photo";
 
+/**
+ * Dispatched on ``window`` after a successful upload or remove so the topbar
+ * chip can refresh without a full page reload. Detail carries the settings
+ * profile avatar fields from the API response.
+ */
+export const PROFILE_AVATAR_CHANGED_EVENT = "aether:profile-avatar-changed";
+
+export type ProfileAvatarChangedDetail = {
+  hasAvatar: boolean;
+  avatarRevision: string | null;
+};
+
+export function announceProfileAvatarChanged(detail: ProfileAvatarChangedDetail): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent(PROFILE_AVATAR_CHANGED_EVENT, { detail }));
+}
+
 const ALLOWED_EXTENSIONS = new Set([".png", ".jpg", ".jpeg"]);
 const ALLOWED_MIME = new Set(["image/png", "image/jpeg"]);
 

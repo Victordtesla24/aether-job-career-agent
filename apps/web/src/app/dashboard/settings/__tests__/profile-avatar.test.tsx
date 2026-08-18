@@ -165,6 +165,12 @@ describe("ProfileAvatar", () => {
       urlApi.revokeObjectURL = () => undefined;
     }
 
+    const announced: unknown[] = [];
+    const onAnnounce = (e: Event) => {
+      announced.push((e as CustomEvent).detail);
+    };
+    window.addEventListener("aether:profile-avatar-changed", onAnnounce);
+
     render(
       <ProfileAvatar
         initials="JR"
@@ -178,6 +184,10 @@ describe("ProfileAvatar", () => {
     await waitFor(() => screen.getByTestId("settings-avatar-remove"));
     fireEvent.click(screen.getByTestId("settings-avatar-remove"));
     await waitFor(() => expect(onChanged).toHaveBeenCalledWith(cleared));
+    await waitFor(() =>
+      expect(announced).toContainEqual({ hasAvatar: false, avatarRevision: null }),
+    );
+    window.removeEventListener("aether:profile-avatar-changed", onAnnounce);
   });
 
   it("shows a bounded client-side error for a GIF without calling the API", async () => {

@@ -51,6 +51,10 @@ import { apiBaseUrl, getToken } from "../../lib/api/client";
 import { fetchSettings } from "../../lib/api/workspaces";
 import { SPRING } from "../../lib/motion";
 import { isExpired } from "../approvals/lib";
+import {
+  PROFILE_AVATAR_CHANGED_EVENT,
+  type ProfileAvatarChangedDetail,
+} from "../settings/profile-avatar";
 import { UserMenu } from "../user-menu";
 import { CommandPalette } from "./CommandPalette";
 import { QueueStatusBadge } from "./QueueStatusBadge";
@@ -296,6 +300,53 @@ export function CommandBar({
     return () => {
       cancelled = true;
       clearInterval(timer);
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, []);
+
+  // Keep the topbar chip in sync when Settings uploads or removes a photo
+  // without requiring a full page reload (prod verify found the chip stale
+  // after Remove photo until refresh).
+  useEffect(() => {
+    let cancelled = false;
+    let objectUrl: string | null = null;
+
+    async function onAvatarChanged(event: Event) {
+      const detail = (event as CustomEvent<ProfileAvatarChangedDetail>).detail;
+      if (!detail) return;
+      if (objectUrl) {
+        URL.revokeObjectURL(objectUrl);
+        objectUrl = null;
+      }
+      if (!detail.hasAvatar) {
+        if (!cancelled) setPhotoSrc(null);
+        return;
+      }
+      try {
+        const token = await getToken();
+        const res = await fetch(`${apiBaseUrl()}/workspaces/settings/avatar`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok || cancelled) {
+          if (!cancelled) setPhotoSrc(null);
+          return;
+        }
+        const blob = await res.blob();
+        objectUrl = URL.createObjectURL(blob);
+        if (cancelled) {
+          URL.revokeObjectURL(objectUrl);
+          return;
+        }
+        setPhotoSrc(objectUrl);
+      } catch {
+        if (!cancelled) setPhotoSrc(null);
+      }
+    }
+
+    window.addEventListener(PROFILE_AVATAR_CHANGED_EVENT, onAvatarChanged);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(PROFILE_AVATAR_CHANGED_EVENT, onAvatarChanged);
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, []);
