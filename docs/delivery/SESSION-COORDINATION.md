@@ -1130,3 +1130,31 @@ Rules of engagement unchanged: locks (git/deploy/test), runbook deploys, append-
 - Tests: `test_email_agent.py`, `test_ml_w4c_email_agent_quota.py`, `email-center-wiring.test.ts`, `agents-feedback.test.ts`
 **Does not touch:** `llm_client.py`, `workspaces.py` networking/avatar routes, sales/admin, insights/draft 429 (no deterministic substitute), MV-006 wireframe chrome, unpushed `feat/ec-adv`.
 **Deploy:** push onto `origin/main`; delete `feat/ec-adv-429` after land. No PR.
+
+---
+
+## SESSION UPO-1 — 2026-08-18T09:20Z — per-user provider subscription OAuth mint
+
+**By:** Cursor Grok session. Branch `feat/provider-subscription-oauth` from `origin/main` @ `fbfc3b4c`.
+**Why:** Add Provider in Manage Agents (customer scope) only offered a manual paste of `claude setup-token`. Customers need in-app Anthropic subscription sign-in that fills the OAuth token field, then Save.
+**Scope claimed:**
+- `apps/api/app/routers/agents.py` — `POST /agents/user/providers/anthropic/oauth/start|exchange` (CurrentUser; mint-and-return; no deployment write)
+- `apps/web/src/components/agents/ProviderConfigModal.tsx`, `AnthropicOAuthPanel.tsx`, `api.ts`
+- Tests: `test_user_anthropic_oauth_mint.py`, `user-provider-oauth.test.tsx`, f01 guard update
+**Does not touch:** `llm_client.py`, applications timeline, email, networking, sales, ats_engine, profile avatar.
+**Deploy:** push → CI → merge `main` → VPS Delivery; delete branch; no standing PR.
+
+---
+
+## SESSION TL-VIZ-R2 — 2026-08-18T09:20Z — Timeline Three.js depth (continuation)
+
+**By:** Cursor Grok session. Continues SESSION TL-VIZ on `feat/applications-timeline` (already claimed). Does not reopen foreign PRs.
+**Why:** First GL pass was node auras only; product bar requires a posh interactive horizontal timeline (ribbons, status colour, hover bloom, pan polish) with DOM remaining source of truth. HyperFrames is an HTML→MP4 seekable renderer — not used for live dashboard interactivity.
+**Scope claimed (additive on TL-VIZ files only):**
+- `apps/web/src/components/applications/timeline-gl-geometry.ts` (new)
+- `apps/web/src/components/applications/ApplicationTimelineGL.tsx`
+- `apps/web/src/components/applications/ApplicationTimeline.tsx`
+- Matching vitest under `apps/web/src/components/applications/__tests__/`
+**Does not touch:** Board/Sankey restyle, agents map, profile avatar, email, networking, sales.
+**Deploy:** push → merge `main` → VPS Delivery; delete branch; no standing PR.
+
