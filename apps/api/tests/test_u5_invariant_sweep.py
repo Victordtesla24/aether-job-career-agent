@@ -56,14 +56,41 @@ from pathlib import Path
 
 import pytest
 
-from app.db import new_id
+from app.db import ensure_user_profile_columns, new_id
 from app.repositories.approval import ApprovalRepository
+from app.services.application_submission import user_match_threshold
 
 _TESTS_DIR = Path(__file__).resolve().parent
 _REPO_ROOT = _TESTS_DIR.parents[2]
 _APPLY_PAGE_FIXTURES = _TESTS_DIR / "fixtures" / "apply_pages"
 _EXECUTOR_TESTS = _TESTS_DIR / "test_u5b_apply_executor.py"
 _TRACKER_LIB = _REPO_ROOT / "apps" / "web" / "src" / "components" / "applications" / "tracker-lib.ts"
+
+
+def _above_this_users_real_match_threshold(conn, user_id: str) -> float:
+    """The fitScore every job this file seeds must clear.
+
+    Reads THIS user's real, live ``agentConfig`` straight off the ``User``
+    row (exactly what ``apply_sweep.sweep_pending_transmissions`` reads via
+    its own ``_load_user``) and runs it through the SAME public function the
+    sweep's D2 match-threshold gate calls --
+    ``app.services.application_submission.user_match_threshold`` -- so this
+    fixture can never drift from whatever the real seeded default actually
+    is (a fresh user's ``agentConfig`` currently arrives via a Postgres
+    column default of ``{"autoApply": false, "approvalGate": true,
+    "matchThreshold": 80}``, AUD-UX-1, not any hardcoded assumption in this
+    test file). A fitScore hardcoded against a stale assumption (formerly
+    78.0, calibrated against a retired "default 50" belief) silently routes
+    every seeded application to ``skippedBelowThreshold`` before
+    ``_attempt_transmission`` is ever reached -- see
+    docs/delivery/evidence/RUN-20260818T0223Z/SUB-011/03-reverse-red.md.
+    """
+    ensure_user_profile_columns()
+    with conn.cursor() as cur:
+        cur.execute('SELECT "agentConfig" FROM "User" WHERE "id" = %s', (user_id,))
+        row = cur.fetchone()
+    config = row[0] if row else None
+    return user_match_threshold(config) + 5.0
 
 
 @pytest.fixture()
@@ -88,14 +115,7 @@ def _make_job(conn, user_id: str, *, source_url: str | None = None) -> str:
                 source_url
                 if source_url is not None
                 else f"https://jobs.ashbyhq.com/xero/{job_id}/application",
-                # Comfortably above the User.agentConfig column's live DB
-                # default match threshold (80 — see
-                # ``information_schema.columns.column_default`` for
-                # ``"User"."agentConfig"``; the freshly-cloned schema surfaced
-                # it for the first time), so these orchestration tests never
-                # trip D2's below-threshold skip, which is exercised
-                # elsewhere on its own terms.
-                95.0,
+                _above_this_users_real_match_threshold(conn, user_id),
             ),
         )
     conn.commit()
@@ -462,22 +482,31 @@ class TestAutomatableChannelsAreParserBacked:
         assert _channels_riding_the_generic_fallback(candidate, monkeypatch) == ["workday"]
         assert _channels_without_test_coverage(candidate) == ["workday"]
 
-    def test_lever_smartrecruiters_and_generic_are_assisted_not_automated(self):
-        """The ruling's own disposition, pinned literally.
+    def test_smartrecruiters_and_generic_are_still_assisted_not_automated(self):
+        """The ruling's own disposition, pinned literally, for the two
+        channels that have NOT re-entered.
 
-        Track-2 slice U5c builds dedicated lever/smartrecruiters parsers with
-        full TDD; until then these three are ASSISTED channels and this
-        assertion is what has to be deliberately changed to re-admit them.
+        SUB-011 (Track-2 U5c) built the dedicated ``lever`` parser
+        (``apply_executor._parse_lever``) with full TDD — see the deliberate
+        rationale for editing this exact assertion at
+        ``docs/delivery/evidence/RUN-20260818T0223Z/SUB-011/
+        04-invariant-pin-rationale.md`` — and Lever re-admitted itself
+        legitimately per the ruling's own re-entry clause. No dedicated
+        SmartRecruiters (or bespoke-form "generic") parser exists yet, so
+        those two remain ASSISTED and this assertion is what has to be
+        deliberately changed to re-admit THEM, in turn.
         """
         from app.services.apply_channel_resolver import (
             ASSISTED_CHANNELS,
             AUTOMATABLE_CHANNELS,
         )
 
-        for channel in ("lever", "smartrecruiters", "generic"):
+        for channel in ("smartrecruiters", "generic"):
             assert channel not in AUTOMATABLE_CHANNELS
             assert channel in ASSISTED_CHANNELS
-        assert AUTOMATABLE_CHANNELS == frozenset({"ashby", "greenhouse"})
+        assert "lever" in AUTOMATABLE_CHANNELS
+        assert "lever" not in ASSISTED_CHANNELS
+        assert AUTOMATABLE_CHANNELS == frozenset({"ashby", "greenhouse", "lever"})
 
     def test_every_channel_is_classified_exactly_once(self):
         """No channel may sit outside the three dispositions.
@@ -526,10 +555,13 @@ class TestAutomatableChannelsAreParserBacked:
 
 
 class TestAssistedChannelsAreNeverAutoSubmitted:
-    def test_a_lever_posting_reaches_an_honest_assisted_state_without_a_browser(
+    def test_a_smartrecruiters_posting_reaches_an_honest_assisted_state_without_a_browser(
         self, db_session, user_id, monkeypatch
     ):
-        """THE F3 defect, end to end: a Lever application must not be driven.
+        """THE F3 defect, end to end: a SmartRecruiters application must not
+        be driven — SmartRecruiters has no dedicated parser (unlike Lever,
+        re-admitted at SUB-011; see the Lever browser-reaching test below),
+        so it stays ASSISTED and this is the live pin for that.
 
         Runs the REAL ``_attempt_transmission`` (not the orchestration seam) so
         the assertion covers the actual routing decision, and makes both browser
@@ -540,7 +572,7 @@ class TestAssistedChannelsAreNeverAutoSubmitted:
         from app.workers import apply_sweep
 
         app_id, _approval_id = _seed_approved(
-            db_session, user_id, source_url="https://jobs.lever.co/xero/abc-123/apply"
+            db_session, user_id, source_url="https://jobs.smartrecruiters.com/xero/abc-123"
         )
 
         def _exploding(*args, **kwargs):
@@ -561,15 +593,64 @@ class TestAssistedChannelsAreNeverAutoSubmitted:
                 (app_id,),
             )
             reason, detail, transmitted_at, channel = cur.fetchone()
-        assert channel == "lever"
+        assert channel == "smartrecruiters"
         assert transmitted_at is None
         assert reason == "assisted_manual_submit"
         # Honest, actionable, and specific: names the platform, says a click is
         # needed, and carries the DIRECT url — never "we could not determine
-        # where this goes", which would be false for a resolved Lever posting.
+        # where this goes", which would be false for a resolved SmartRecruiters
+        # posting.
         assert "needs your click" in detail
-        assert "https://jobs.lever.co/xero/abc-123/apply" in detail
+        assert "https://jobs.smartrecruiters.com/xero/abc-123" in detail
         assert "could not determine" not in detail
+
+    def test_a_lever_posting_now_reaches_the_browser_path_honestly(
+        self, db_session, user_id, monkeypatch
+    ):
+        """SUB-011: the F3 defect's INVERSE, now that Lever has a dedicated
+        parser + fixture-backed tests — the sweep must route it into the
+        REAL browser entry points (never the ASSISTED "needs your click"
+        copy, which would now be a false demotion), and the bare posting
+        URL (no ``/apply`` suffix — the common ``sourceUrl`` shape) must
+        reach the executor already carrying Lever's own ``/apply`` suffix,
+        never the bare marketing page that has no ``<form>`` on it at all."""
+        from app.services import apply_executor
+        from app.workers import apply_sweep
+
+        app_id, _approval_id = _seed_approved(
+            db_session, user_id, source_url="https://jobs.lever.co/xero/abc-123"
+        )
+
+        seen = {}
+
+        def _fake_fetch(apply_url: str) -> str:
+            seen["apply_url"] = apply_url
+            return "<form></form>"
+
+        def _fake_execute(*args, **kwargs):
+            seen["channel"] = kwargs.get("channel")
+            seen["apply_url"] = kwargs.get("apply_url")
+            return {"transmitted": True}
+
+        monkeypatch.setattr(apply_executor, "fetch_apply_page", _fake_fetch)
+        monkeypatch.setattr(apply_executor, "execute_site_application", _fake_execute)
+        # This test pins the CHANNEL-ROUTING decision (does Lever now reach
+        # the browser entry points at all), not the résumé-rendering pipeline
+        # — stub the two real, heavier calls between them the same way the
+        # channel decision does not depend on what they return.
+        monkeypatch.setattr(apply_sweep, "build_apply_profile", lambda *a, **k: {})
+        monkeypatch.setattr(apply_sweep, "_render_resume_pdf", lambda *a, **k: b"")
+
+        summary = apply_sweep.sweep_pending_transmissions(user_id)
+        assert summary["processed"] == 1
+        assert summary["manual_step"] == 0
+
+        with db_session.cursor() as cur:
+            cur.execute('SELECT "applyChannel" FROM "Application" WHERE "id" = %s', (app_id,))
+            (channel,) = cur.fetchone()
+        assert channel == "lever"
+        assert seen["channel"] == "lever"
+        assert seen["apply_url"] == "https://jobs.lever.co/xero/abc-123/apply"
 
     def test_an_unresolved_posting_still_says_it_is_unresolved(
         self, db_session, user_id, monkeypatch

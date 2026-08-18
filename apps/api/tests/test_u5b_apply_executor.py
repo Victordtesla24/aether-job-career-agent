@@ -88,6 +88,13 @@ ASHBY_HTML = _read_fixture("ashby_application_real.html")
 GREENHOUSE_HTML = _read_fixture("greenhouse_embed_application_real.html")
 CAPTCHA_HTML = _read_fixture("captcha_challenge_synthetic.html")
 LOGIN_WALL_HTML = _read_fixture("login_wall_synthetic.html")
+#: SUB-011 — REAL Playwright-rendered captures (2026-08-18) of two live
+#: jobs.lever.co postings; see fixtures/apply_pages/README.md for provenance.
+#: ``LEVER_HTML`` (whiterabbit) carries no employer custom question;
+#: ``LEVER_CUSTOM_QUESTION_HTML`` (theex) carries two REQUIRED employer
+#: "card" questions (``cards[<cardId>][field0]``) to pin that distinct shape.
+LEVER_HTML = _read_fixture("lever_application_real.html")
+LEVER_CUSTOM_QUESTION_HTML = _read_fixture("lever_custom_question_real.html")
 
 #: A profile that answers every STANDARD field (name/email/phone) but
 #: deliberately carries nothing that could answer either fixture's
@@ -167,6 +174,18 @@ FULL_PROFILE_GREENHOUSE = {
             "Not applicable (i.e., I selected “none of the above” for "
             "the prior question)"
         ),
+    },
+}
+
+#: SUB-011: the theex posting's two REQUIRED "card" custom questions, keyed
+#: by their REAL captured ``cards[<cardId>][field0]`` name — MINIMAL_PROFILE
+#: carries neither, which is what makes them genuinely UNKNOWN rather than
+#: merely unmapped (mirrors the Ashby/Greenhouse correction above).
+FULL_PROFILE_LEVER_CUSTOM = {
+    **MINIMAL_PROFILE,
+    "customAnswers": {
+        "cards[c0ce7fc3-2b07-4a03-a06a-865f25ed19b8][field0]": "Yes",
+        "cards[85c9808b-b3cf-48ba-8259-ba79075c1fb9][field0]": "Yes",
     },
 }
 
@@ -277,6 +296,22 @@ class TestBlockingStateDetection:
 
         assert detect_blocking_state(GREENHOUSE_HTML) is None
 
+    def test_normal_lever_form_is_not_flagged_as_blocking(self):
+        """SUB-011: the real Lever capture mounts an hCaptcha CHECKBOX widget
+        (iframe title "Widget containing checkbox for hCaptcha security
+        challenge") -- this is a routine MOUNT, not a TRIGGERED challenge, and
+        ``detect_blocking_state`` (this module's plan-building-time gate over
+        the static pre-fetch snapshot) must not fire on a routine mount, or
+        no form could ever be planned. The dedicated hCaptcha-MOUNT refusal
+        lives in the submitter instead (see ``TestLeverCaptchaDetection``
+        below), against the LIVE browser DOM, right before the submit click —
+        because for Lever a mere mount IS the honest stop signal (see
+        ``_hcaptcha_widget_mounted``'s docstring)."""
+        from app.services.apply_executor import detect_blocking_state
+
+        assert detect_blocking_state(LEVER_HTML) is None
+        assert detect_blocking_state(LEVER_CUSTOM_QUESTION_HTML) is None
+
 
 # ---------------------------------------------------------------------------
 # 2. Form-fill plan built from the REAL field schema.
@@ -347,6 +382,73 @@ class TestFormFillPlanFromRealSchema:
         assert "gender" not in blocked_names
         assert "veteran_status" not in blocked_names
         assert "disability_status" not in blocked_names
+
+    def test_lever_plan_finds_the_real_required_system_fields(self):
+        """SUB-011: the whiterabbit capture's REAL requiredness signals are
+        split across two tells -- ``name``/``email`` carry the ``required``
+        HTML attribute, ``resume`` carries NONE and is required only via its
+        label's ``<span class="required">✱</span>`` -- so this also pins that
+        ``_parse_lever`` reads both, not just the attribute."""
+        from app.services.apply_executor import build_form_fill_plan
+
+        plan = build_form_fill_plan(LEVER_HTML, channel="lever", profile=MINIMAL_PROFILE)
+        names = {f["name"] for f in plan["fields"] if f["required"]}
+        assert {"resume", "name", "email"} <= names
+        # MINIMAL_PROFILE answers every required field on THIS posting (no
+        # employer custom question here) purely from standard identity
+        # fields + the always-present résumé document -- no customAnswers
+        # needed, so a fully honest plan is reachable without ever guessing.
+        assert plan["unanswerable_required"] == []
+
+    def test_lever_optional_survey_and_consent_fields_never_block_the_plan(self):
+        """The demographic survey (``surveysResponses[...]``) and the
+        marketing-consent checkbox are real, confirmed carrying NO
+        ``<span class="required">`` on this posting -- a plan must never
+        treat a voluntary field as a submission blocker."""
+        from app.services.apply_executor import build_form_fill_plan
+
+        plan = build_form_fill_plan(LEVER_HTML, channel="lever", profile=MINIMAL_PROFILE)
+        blocked_names = {f["name"] for f in plan["unanswerable_required"]}
+        assert not any(name.startswith("surveysResponses[") for name in blocked_names)
+        assert "consent[marketing]" not in blocked_names
+
+    def test_lever_label_strips_the_heavy_asterisk_marker(self):
+        """Lever's own required marker is U+2731 HEAVY ASTERISK ``✱``, NOT
+        the ASCII ``*`` the shared ``_label_text`` helper already stripped --
+        a `_parse_lever` that reused it unfixed would leave a stray ``✱`` on
+        every required label a manual step shows the user."""
+        from app.services.apply_executor import build_form_fill_plan
+
+        plan = build_form_fill_plan(LEVER_HTML, channel="lever", profile=MINIMAL_PROFILE)
+        resume_field = next(f for f in plan["fields"] if f["name"] == "resume")
+        assert resume_field["label"] == "Resume/CV"
+        assert "✱" not in resume_field["label"]
+
+    def test_lever_custom_card_question_raises_manual_step_with_real_label(self):
+        """The theex capture's REQUIRED employer "card" questions
+        (``cards[<cardId>][field0]``) have no standard-profile analogue --
+        MINIMAL_PROFILE carries no answer for either, so this MUST raise
+        rather than fabricate a Yes/No, and the manual step must name BOTH
+        real employer questions, not just the first one found."""
+        from app.services.apply_executor import ManualStepRequired, build_form_fill_plan
+
+        with pytest.raises(ManualStepRequired) as exc_info:
+            build_form_fill_plan(
+                LEVER_CUSTOM_QUESTION_HTML, channel="lever", profile=MINIMAL_PROFILE
+            )
+        err = exc_info.value
+        assert err.reason == "unknown_required_question"
+        assert err.question is not None
+        assert "Are you available to work all days of the fair" in err.question
+        assert "Are you 16 years of age or older" in err.question
+
+    def test_lever_plan_succeeds_when_the_custom_card_questions_are_answered(self):
+        from app.services.apply_executor import build_form_fill_plan
+
+        plan = build_form_fill_plan(
+            LEVER_CUSTOM_QUESTION_HTML, channel="lever", profile=FULL_PROFILE_LEVER_CUSTOM
+        )
+        assert plan["unanswerable_required"] == []
 
     def test_blocking_html_raises_before_building_any_plan(self):
         from app.services.apply_executor import ManualStepRequired, build_form_fill_plan
@@ -525,6 +627,72 @@ class TestManualStepPersistence:
             with conn.cursor() as cur:
                 cur.execute('SELECT "manualStepReason" FROM "Application" WHERE "id" = %s', (app_id,))
                 assert cur.fetchone()[0] == "captcha"
+
+
+# ---------------------------------------------------------------------------
+# 4b. SUB-011 — Lever's hCaptcha MOUNT is an honest stop, not a bypass target.
+# ---------------------------------------------------------------------------
+
+
+class TestLeverCaptchaDetection:
+    def test_mounted_hcaptcha_raises_a_distinct_manual_step_before_any_click(
+        self, client, auth_headers, user_id, tmp_path
+    ):
+        """SUB-011: every real Lever ``/apply`` page captured so far mounts
+        hCaptcha. The submitter must detect it and refuse -- honestly, and
+        with a reason DISTINCT from the generic ``"captcha"`` (a TRIGGERED
+        challenge, checked earlier while the plan is built) -- rather than
+        click submit and hope no token was actually required. A full,
+        answerable profile is used so this pins the captcha refusal itself,
+        not an unrelated unanswered-question refusal."""
+        from app.services.apply_executor import ManualStepRequired, execute_site_application
+
+        job_id, resume_id, app_id = _seed(user_id, source="lever")
+        approval_id = _make_approval(user_id, app_id, job_id, status="approved")
+
+        with pytest.raises(ManualStepRequired) as exc_info:
+            execute_site_application(
+                user_id, app_id, approval_id,
+                page_html=LEVER_HTML, channel="lever", profile=MINIMAL_PROFILE,
+                resume_pdf_bytes=b"%PDF-1.4 fake", cover_letter_text="Dear Hiring Manager,",
+                evidence_dir=str(tmp_path),
+            )
+        assert exc_info.value.reason == "captcha_challenge"
+
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    'SELECT "manualStepReason", "transmittedAt" FROM "Application" WHERE "id" = %s',
+                    (app_id,),
+                )
+                reason, transmitted_at = cur.fetchone()
+        assert reason == "captcha_challenge"
+        assert transmitted_at is None, "a captcha refusal must never also read as transmitted"
+
+    def test_mounted_hcaptcha_releases_the_execution_claim_for_a_retry(
+        self, client, auth_headers, user_id, tmp_path
+    ):
+        """Not a permanently burnt approval: an hCaptcha mount is Lever's
+        default, so a retry (e.g. once interactive solving is supported)
+        must find the approval still claimable, exactly like every other
+        manual-step outcome."""
+        from app.services.apply_executor import ManualStepRequired, execute_site_application
+
+        job_id, resume_id, app_id = _seed(user_id, source="lever")
+        approval_id = _make_approval(user_id, app_id, job_id, status="approved")
+
+        with pytest.raises(ManualStepRequired):
+            execute_site_application(
+                user_id, app_id, approval_id,
+                page_html=LEVER_HTML, channel="lever", profile=MINIMAL_PROFILE,
+                resume_pdf_bytes=b"%PDF-1.4 fake", cover_letter_text="Dear Hiring Manager,",
+                evidence_dir=str(tmp_path),
+            )
+
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute('SELECT "executedAt" FROM "ApprovalRequest" WHERE "id" = %s', (approval_id,))
+                assert cur.fetchone()[0] is None, "captcha refusal must release the claim, not leave it stamped"
 
 
 # ---------------------------------------------------------------------------

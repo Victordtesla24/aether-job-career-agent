@@ -390,6 +390,9 @@ describe("U5 manualStepLabel", () => {
     expect(manualStepLabel("no_confirmation")).toBe(
       "Aether submitted the form but the site did not confirm it",
     );
+    expect(manualStepLabel("verification_code_email")).toBe(
+      "The employer emailed a verification code to finish this application",
+    );
   });
 
   // SUB-007: the executor now distinguishes "the site refused the form" from
@@ -657,17 +660,19 @@ describe("U5 describeTransmission", () => {
 });
 
 // ---------------------------------------------------------------------------
-// ORCHESTRATOR RULING U5-F3 (2026-08-14, binding) — `lever` and
-// `smartrecruiters` (and `generic`) left the automation allowlist: they had no
-// dedicated form parser, so automating them meant a best-effort schema driving
-// a real submit click on a real employer's form. They are ASSISTED channels
-// now — Aether prepares the tailored résumé and cover letter and hands the
-// user the direct link. The FE copy has to say exactly that, because the FE
-// copy is what the user believes.
+// ORCHESTRATOR RULING U5-F3 (2026-08-14, binding) — `lever`, `smartrecruiters`
+// and `generic` left the automation allowlist: they had no dedicated form
+// parser, so automating them meant a best-effort schema driving a real submit
+// click on a real employer's form. `smartrecruiters`/`generic` are ASSISTED
+// channels — Aether prepares the tailored résumé and cover letter and hands
+// the user the direct link. `lever` re-entered the allowlist at SUB-011
+// (Track-2 U5c) once its dedicated backend parser + fixture-backed tests
+// existed, so its copy now matches Ashby/Greenhouse instead. The FE copy has
+// to say exactly that, because the FE copy is what the user believes.
 // ---------------------------------------------------------------------------
-describe("U5-F3 assisted channels (lever / smartrecruiters / generic)", () => {
+describe("U5-F3 assisted channels (smartrecruiters / generic)", () => {
   it("says the artifacts are ready and that the platform needs the user's click", () => {
-    for (const channel of ["lever", "smartrecruiters", "generic"]) {
+    for (const channel of ["smartrecruiters", "generic"]) {
       const reason = notTransmittedReason({ autoSubmittable: false, applyChannel: channel });
       expect(reason).toContain("ready to submit");
       expect(reason).toContain("needs your click");
@@ -677,16 +682,13 @@ describe("U5-F3 assisted channels (lever / smartrecruiters / generic)", () => {
   });
 
   it("names the platform instead of a vague 'the employer's site'", () => {
-    expect(notTransmittedReason({ autoSubmittable: false, applyChannel: "lever" })).toContain(
-      "Lever",
-    );
     expect(
       notTransmittedReason({ autoSubmittable: false, applyChannel: "smartrecruiters" }),
     ).toContain("SmartRecruiters");
   });
 
-  it("keeps the 'not enabled yet' wording ONLY for the two automatable channels, sweep OFF", () => {
-    for (const channel of ["ashby", "greenhouse"]) {
+  it("keeps the 'not enabled yet' wording ONLY for automatable channels, sweep OFF", () => {
+    for (const channel of ["ashby", "greenhouse", "lever"]) {
       expect(
         notTransmittedReason({ autoSubmittable: false, applyChannel: channel, sweepEnabled: false }),
       ).toContain("not enabled on this deployment yet");
@@ -694,7 +696,7 @@ describe("U5-F3 assisted channels (lever / smartrecruiters / generic)", () => {
   });
 
   it("assisted channels never mention deployment-enablement even when the sweep is ON — they are never automated", () => {
-    for (const channel of ["lever", "smartrecruiters", "generic"]) {
+    for (const channel of ["smartrecruiters", "generic"]) {
       const reason = notTransmittedReason({
         autoSubmittable: false,
         applyChannel: channel,
@@ -712,6 +714,22 @@ describe("U5-F3 assisted channels (lever / smartrecruiters / generic)", () => {
   });
 });
 
+// SUB-011 (Track-2 U5c): Lever's dedicated backend parser + fixture-backed
+// tests exist now, so it left FE_ASSISTED_CHANNELS and joined
+// FE_AUTOMATABLE_CHANNELS — its copy must match Ashby/Greenhouse, never the
+// "needs your click" ASSISTED wording asserted above for SmartRecruiters.
+describe("SUB-011 — lever is automatable, not assisted", () => {
+  it("reads like the other automatable channels, not like an assisted one", () => {
+    const reason = notTransmittedReason({
+      autoSubmittable: false,
+      applyChannel: "lever",
+      sweepEnabled: true,
+    });
+    expect(reason).toContain("Lever");
+    expect(reason).not.toContain("needs your click");
+  });
+});
+
 describe("U5 closing round — new manual-step reasons are legible", () => {
   it("labels the assisted-channel outcome as ready-for-your-click, not a failure", () => {
     expect(manualStepLabel("assisted_manual_submit")).toBe(
@@ -721,5 +739,31 @@ describe("U5 closing round — new manual-step reasons are legible", () => {
 
   it("labels an expired approval as reconfirmable, not as a broken submission", () => {
     expect(manualStepLabel("approval_expired")).toBe("Approval expired — reconfirm to submit");
+  });
+});
+
+// SUB-011: every real Lever /apply page mounts hCaptcha, which needs a real
+// human to solve — distinct from the generic TRIGGERED-challenge "captcha"
+// reason.
+describe("SUB-011 — a mounted hCaptcha is legible and distinct from a triggered CAPTCHA", () => {
+  it("labels captcha_challenge distinctly from the generic captcha reason", () => {
+    expect(manualStepLabel("captcha_challenge")).toBe(
+      "An hCaptcha challenge blocked automatic submission",
+    );
+    expect(manualStepLabel("captcha_challenge")).not.toBe(manualStepLabel("captcha"));
+  });
+});
+
+// CLI-SUB-005-R2 (adversarial review FAIL, 08-adversarial-review.md): a
+// conditional/branching question revealed only after the plan's static
+// pre-fill snapshot was taken now gets its own honest, distinct reason
+// rather than falling through to the generic "form_fill_failed" wording —
+// the user needs to know a NEW question appeared, not that a planned one
+// failed to type.
+describe("U5-CLI-SUB-005-R2 — a post-snapshot conditional field is legible", () => {
+  it("labels an unplanned required field distinctly from a planned-fill failure", () => {
+    expect(manualStepLabel("unplanned_required_field")).toBe(
+      "This form revealed a new required question Aether could not answer",
+    );
   });
 });
