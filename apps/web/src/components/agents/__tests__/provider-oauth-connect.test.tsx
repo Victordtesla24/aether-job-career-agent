@@ -378,6 +378,102 @@ describe("GAP-PROVIDER-OAUTH-1 — user-scope Connect button", () => {
     expect(rendered).not.toContain('"detail"');
   });
 
+  it("P3-2 review finding #1 (14-p3-review.md): an unhandled 500 with a PLAIN-TEXT body never leaks the raw route path into the modal", async () => {
+    // The exact shape Starlette's default (no generic exception handler
+    // registered in apps/api/app/main.py) produces for an unhandled 500 —
+    // reproduced live by the reviewer against the real, unmodified extractor.
+    putUserProviderCredential.mockRejectedValue(
+      new ApiError(
+        "PUT /agents/user/providers/anthropic/credential failed (500): Internal Server Error",
+        500,
+      ),
+    );
+
+    render(
+      <ProviderConfigModal
+        provider={provider({ id: "anthropic" })}
+        onClose={noop}
+        onSaved={asyncNoop}
+        onNotice={noop}
+        scope="user"
+      />,
+    );
+
+    fireEvent.change(screen.getByTestId("provider-secret-input"), {
+      target: { value: "sk-ant-api-fake-secret-value" },
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("provider-config-save"));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("provider-config-error")).toBeTruthy();
+    });
+    const rendered = screen.getByTestId("provider-config-error").textContent ?? "";
+    // Honest failure still shown (never silently swallowed) — just never the
+    // raw internal route path / status / plain-text body.
+    expect(rendered.length).toBeGreaterThan(0);
+    expect(rendered).not.toContain("failed (500)");
+    expect(rendered).not.toContain("/agents/user/providers/anthropic/credential");
+    expect(rendered).not.toContain("Internal Server Error");
+  });
+
+  it("P3-2 review finding #1 (14-p3-review.md): a Pydantic 422 whose detail is an ARRAY never leaks the raw JSON into the modal", async () => {
+    // The exact shape FastAPI's RequestValidationError handler produces
+    // (main.py) — `detail` is an array, not a string, so it fails the
+    // strict extractor's typeof === "string" check just like a genuinely
+    // absent detail would, and must fall through to the generic fallback.
+    startUserProviderOAuth.mockResolvedValue({
+      authorizeUrl: "https://platform.claude.com/oauth/code/callback?client_id=abc&state=xyz",
+      flow: "code_relay",
+      provider: "anthropic",
+    });
+    exchangeUserProviderOAuth.mockRejectedValue(
+      new ApiError(
+        "POST /agents/user/providers/anthropic/oauth/exchange failed (422): " +
+          '{"detail":[{"type":"missing","loc":["body","pastedCode"],"msg":"Field required"}]}',
+        422,
+      ),
+    );
+    vi.spyOn(window, "open").mockReturnValue({
+      location: { href: "" },
+      close: vi.fn(),
+      closed: false,
+    } as unknown as Window);
+
+    render(
+      <ProviderConfigModal
+        provider={provider({ id: "anthropic" })}
+        onClose={noop}
+        onSaved={asyncNoop}
+        onNotice={noop}
+        scope="user"
+      />,
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("user-oauth-connect"));
+    });
+    await waitFor(() => screen.getByTestId("user-oauth-code-input"));
+
+    fireEvent.change(screen.getByTestId("user-oauth-code-input"), {
+      target: { value: "BADCODE#xyz" },
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("user-oauth-complete"));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId("provider-config-error")).toBeTruthy();
+    });
+    const rendered = screen.getByTestId("provider-config-error").textContent ?? "";
+    expect(rendered.length).toBeGreaterThan(0);
+    expect(rendered).not.toContain("failed (422)");
+    expect(rendered).not.toContain("POST /agents/user/providers");
+    expect(rendered).not.toContain('"detail"');
+    expect(rendered).not.toContain("pastedCode");
+    expect(rendered).not.toContain("Field required");
+  });
+
   it("a key-only provider (no OAuth descriptor) shows ONLY the key field — no Connect button", () => {
     render(
       <ProviderConfigModal

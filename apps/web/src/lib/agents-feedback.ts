@@ -392,14 +392,18 @@ export function missingResumeNotice(output: Record<string, unknown>): Notice | n
  * otherwise falls back to the raw message text. Mirrors the extraction
  * already used for email-send errors (see lib/api/workspaces.ts).
  *
- * Exported (P3-2, RUN-20260818T0223Z third-party adversarial review):
- * `ProviderConfigModal`'s inline error slot used to render `Error.message`
- * verbatim, which is exactly the raw `METHOD /path failed (status): {json}`
- * string this function exists to strip — so the modal showed a clean top
- * banner AND a raw backend echo directly below it. Reusing this same
- * extraction for the modal's inline error keeps both surfaces in agreement.
+ * Module-private: this is `providerCredentialErrorNotice`'s (the modal's TOP
+ * BANNER) own helper. P3-2 (RUN-20260818T0223Z third-party adversarial
+ * review) briefly reused it for the modal's INLINE error slot too, but
+ * review finding #1 (`14-p3-review.md`) reproduced live that its raw-message
+ * fallback still leaks `METHOD /path failed (status): <body>` — including
+ * the real internal route path — for any body that isn't precisely
+ * `{"detail": "<string>"}` JSON (an unhandled 500's plain-text body, or a
+ * Pydantic 422's `detail` array both slip through). The inline slot now uses
+ * the strict `extractApiJsonDetail` instead (never falls back to raw text),
+ * so this function no longer needs to be public.
  */
-export function extractApiDetail(err: unknown): string | null {
+function extractApiDetail(err: unknown): string | null {
   if (!(err instanceof Error) || !err.message.trim()) return null;
   // Shared JSON-detail core lives in extractApiJsonDetail (hoisted declaration);
   // this variant adds the documented raw-message fallback.
@@ -408,9 +412,16 @@ export function extractApiDetail(err: unknown): string | null {
 
 /**
  * Strict variant of `extractApiDetail`: returns the parsed JSON `detail`
- * ONLY when `err.message` genuinely ends in a real backend error body
- * (`apiRequest`'s `... failed (<status>): {"detail": "..."}` shape) —
- * unlike `extractApiDetail`, this NEVER falls back to the raw message text.
+ * ONLY when `err.message` genuinely ends in a real backend error body whose
+ * `detail` is itself a STRING (`apiRequest`'s
+ * `... failed (<status>): {"detail": "<string>"}` shape) — unlike
+ * `extractApiDetail`, this NEVER falls back to the raw message text. Returns
+ * `null` — never a truncated/garbled echo — for every other shape: a
+ * non-JSON body (e.g. Starlette's plain-text default 500,
+ * `"Internal Server Error"`, since `apps/api/app/main.py` registers no
+ * generic exception handler), a JSON body whose `detail` is an array (a
+ * Pydantic `RequestValidationError` 422) or object, or no trailing `{...}`
+ * at all.
  *
  * Review regression fix (NF-final-closure-002): `runErrorNotice`'s 422
  * branch used `extractApiDetail`, whose raw-message fallback made it treat
@@ -426,10 +437,22 @@ export function extractApiDetail(err: unknown): string | null {
  * fitScorer/genuine-backend-422 improvement (a real `{"detail":...}` body
  * still surfaces) while restoring the original Scout-guidance notice for
  * any 422 whose message isn't genuinely JSON. `providerCredentialErrorNotice`
- * still uses `extractApiDetail` (unchanged) — its raw-message fallback is
- * correct there since every error on that path is a real backend response.
+ * (the modal's TOP BANNER) still uses `extractApiDetail` — its raw-message
+ * fallback is an intentional, pre-existing (unchanged by this lane) design
+ * choice for that one surface.
+ *
+ * Exported (P3-2 follow-up, RUN-20260818T0223Z third-party adversarial
+ * review, review finding #1 in `14-p3-review.md`): the modal's own INLINE
+ * error slot (`ProviderConfigModal.inlineErrorMessage`) must never fall back
+ * to the raw message the way the banner does — an unhandled 500 or a
+ * Pydantic-array 422 both bypass `extractApiDetail`'s JSON-string check and
+ * would otherwise leak the raw `METHOD /path failed (status): <body>`
+ * string, including the real internal route path, straight into the DOM.
+ * This strict variant is the fix: it returns a real detail or nothing, so
+ * the caller's own bounded, generic fallback string is always what renders
+ * instead of an internal implementation detail.
  */
-function extractApiJsonDetail(err: unknown): string | null {
+export function extractApiJsonDetail(err: unknown): string | null {
   if (!(err instanceof Error) || !err.message.trim()) return null;
   const match = err.message.match(/\{[\s\S]*\}$/);
   if (!match) return null;

@@ -42,7 +42,11 @@ import {
 } from "./api";
 import AnthropicOAuthPanel from "./AnthropicOAuthPanel";
 import { normalizeCredentialSecret, providerSourceBadge, type ProviderSourceBadge } from "./logic";
-import { extractApiDetail, providerCredentialErrorNotice, type Notice } from "../../lib/agents-feedback";
+import {
+  extractApiJsonDetail,
+  providerCredentialErrorNotice,
+  type Notice,
+} from "../../lib/agents-feedback";
 
 interface AuthModeOption {
   value: ProviderAuthMode;
@@ -91,11 +95,23 @@ function authModeOptions(providerId: string): AuthModeOption[] {
  * `Error.message` — that is an internal route path and JSON error shape, not
  * something a customer should read, and it duplicated (less honestly than)
  * the friendly banner `providerCredentialErrorNotice` already renders one
- * line above it. `extractApiDetail` lifts the same backend `detail` string
- * that notice uses; still bounded to the historical 160-char cap.
+ * line above it.
+ *
+ * Review finding #1 (`14-p3-review.md`, RUN-20260818T0223Z): the first
+ * version of this helper used `extractApiDetail`, whose documented raw-
+ * message fallback still returned the whole raw string — including the real
+ * internal route path — for any error body that wasn't precisely
+ * `{"detail": "<string>"}` JSON. Reproduced live for two realistic shapes:
+ * an unhandled 500 (Starlette's plain-text default body — `apps/api/app/
+ * main.py` registers no generic exception handler) and a Pydantic
+ * `RequestValidationError` 422 (`detail` is an array, not a string). This
+ * helper now uses the STRICT `extractApiJsonDetail`, which returns a real
+ * backend detail or `null` — never a raw echo — so every other case falls
+ * through to the caller's own bounded, generic `fallback` string (e.g.
+ * "Save failed") instead of any internal implementation detail.
  */
 function inlineErrorMessage(e: unknown, fallback: string): string {
-  return (extractApiDetail(e) ?? fallback).slice(0, 160);
+  return (extractApiJsonDetail(e) ?? fallback).slice(0, 160);
 }
 
 /** Short, accurate billing implication — the whole point of the feature. */
