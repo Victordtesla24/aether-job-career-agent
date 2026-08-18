@@ -25,6 +25,7 @@ from app.db import (
 )
 from app.middleware.auth import CurrentUser
 from app.repositories.career_profile import CAREER_SOURCES, CareerProfileRepository
+from app.services.application_submission import DEFAULT_MATCH_THRESHOLD
 from app.services.career_data import (
     LINKEDIN_EXPORT_FILES,
     MAX_LINKEDIN_EXPORT_BYTES,
@@ -1132,7 +1133,7 @@ def _build_settings(
     agent_cfg = user.get("agentConfig") or {
         "autoApply": False,
         "approvalGate": True,
-        "matchThreshold": 80,
+        "matchThreshold": int(DEFAULT_MATCH_THRESHOLD),
     }
     # Compute display name
     display_name = user.get("name") or user.get("email", "")
@@ -1192,7 +1193,7 @@ def _build_settings(
         "agentConfig": {
             "autoApply": bool(agent_cfg.get("autoApply", False)),
             "approvalGate": bool(agent_cfg.get("approvalGate", True)),
-            "matchThreshold": int(agent_cfg.get("matchThreshold", 80)),
+            "matchThreshold": int(agent_cfg.get("matchThreshold", DEFAULT_MATCH_THRESHOLD)),
         },
         "integrations": [],
         "connectedAccounts": [],

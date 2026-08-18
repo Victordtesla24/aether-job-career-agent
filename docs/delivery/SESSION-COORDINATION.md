@@ -879,7 +879,6 @@ tsc 0, targeted vitest 53/53; GitHub CI run 31930523543 must be GREEN on a3e1fe5
 **Session CLI (Fable 5).** Owner: peer(DA) owns sales agent; CLI owns SUBMISSION agent. Scope claimed (apps/api only): `apps/api/app/workers/apply_sweep.py` + `apps/api/tests/test_cli_apply_sweep_offloop.py`.
 **CLI-SUB-001 (ROOT CAUSE of prod auto-apply = 1/687):** `apply_sweep_user` (async arq job) ran `sweep_pending_transmissions` — which drives a REAL browser via Playwright SYNC API — directly on the worker event loop. Sync Playwright refuses to run in a live loop → bare `Error` → every browser submission failed as `ApplyExecutorTransportError("Could not open the application page (Error)")`. FIX mirrors the working `board_sweep_user`: `await asyncio.to_thread(sweep_pending_transmissions, ...)`. RED→GREEN test + regression green; ruff/mypy clean.
 **OPS (owner directive, autonomous submission):** enabled `AETHER_APPLY_SWEEP_ENABLED=true` + `AETHER_APPLY_SWEEP_BATCH=25` in prod .env (append-only, credentials untouched, verified); worker restarted under deploy lock (apps/api clean at each restart; peer apps/web WIP never shipped by the worker). 7-day stale-approval guard kept (correctly reconfirms ~83 old approvals). 306 recent approvals draining.
->>>>>>> bd316a51 (CLI-SUB-001: run apply sweep off the event loop (asyncio.to_thread) so sync-Playwright browser submissions work - root cause of prod auto-apply 1/687; mirrors board_sweep_user; RED->GREEN test)
 
 ### 2026-08-16 06:1xZ — Session DA: DEPLOY WINDOW RELEASED (Wave B residuals)
 - Deployed main@a3e1fe52 (S-UI-B4-MOBILE Wave B residual fixes). New BUILD_ID ts9OVkqLJijdMGdlojOWP;
@@ -1033,3 +1032,25 @@ Rules of engagement unchanged: locks (git/deploy/test), runbook deploys, append-
 
 **Continuation 2026-08-18T04:47Z — CI green follow-up.** Squash `702cdc5d` made Zod team fields required on fixture types and tripped ruff I001 on the two new pytest files. `fix/orch-adv-ci-green` makes team fields optional on the client schema (popover already treats absence as "—") and sorts the new test imports. Same scope; no other session files.
 
+---
+
+## SESSION ADM — 2026-08-18T04:00Z — Admin portal + Sales AI (adversarial review close-out)
+
+**By:** Cursor Grok session. Independent review of `/admin` and `/admin/sales-agent`, then production-grade close-out of the findings that actually move money or honesty. Isolated worktree `/root/dev/aether-wt-admin-sales` rebased onto `origin/main` after SESSION EC-FIX, SESSION NW-ADV close-out, and SESSION ORCH-TEAM. Does not revert those lands. PR #19 was closed by NW-ADV; this session does not reopen it.
+
+**Scope claimed:**
+- `apps/api/app/services/stripe_gateway.py` — `app_base_url()` only (reject retired Abacus host)
+- `apps/api/app/agents/sales_agent.py` — live product URL in footer/facts, yearly+20% grounding, inbound `replied` observer, generate-time URL rewrite. Keeps `_run_network_nurture` fence (SESSION NW-ADV); does not reimplement it
+- `apps/api/app/repositories/sales.py` — honest `replyRate` from observed replies; default campaign URL host
+- `apps/api/app/routers/sales_agent.py` — generate audit keys, `GET /admin/sales-agent/strategy`
+- `apps/api/app/repositories/admin_metrics.py` — `failedRuns24h` + `salesAi` blocks
+- `apps/web/src/app/admin/page.tsx`, `admin-shell.tsx`, `admin/sales-agent/page.tsx`, matching API clients and tests
+- Matching pytest: `test_sales_agent.py`, `test_admin2_exec_metrics.py`; vitest: executive-dashboard, admin-nav
+
+**Does not touch:** email center, networking CRM UI, `ats_engine`, `llm_client.py`, `aether.env`, dry-run flag, campaign activation. ADM-009 touches `workspaces.py` only for the shared matchThreshold constant and `apply_sweep.py` comments only.
+
+**Tickets:** ADM-001 live URL · ADM-002 yearly+20% grounding · ADM-003 generate audit keys · ADM-004 inbound reply observer · ADM-005 failedRuns24h · ADM-006 salesAi executive block · ADM-007 strategy handoff · ADM-008 gilt active nav · **ADM-009 AUD-UX-1** reconcile matchThreshold display/code/DB to 80.
+
+**ADM-009 (2026-08-18T04:30Z):** live prod `"User"."agentConfig"` column default is `'{"autoApply": false, "approvalGate": true, "matchThreshold": 80}'::jsonb` with no migration file (read-only `information_schema` + `pg_get_expr` this session; 0 NULL rows, 2 of 3 users at 80). Settings display and `GET /settings` already default to 80. Code fallback was 50 — a missing key would auto-submit 50–79 while the slider showed 80. Reconcile all three to 80: `DEFAULT_MATCH_THRESHOLD` in `application_submission.py` + Settings client, `DEFAULT_AGENT_CONFIG_JSON` owned by `ensure_user_profile_columns`, `workspaces._build_settings` imports the same constant. Does not flip auto-apply, does not rewrite stored user values.
+
+**Deploy:** push `main` → VPS Delivery. No hand-restart of prod units. No leftover branch or PR for this session.
