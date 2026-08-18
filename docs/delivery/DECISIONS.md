@@ -864,7 +864,7 @@ call.
 
 ## D-0030 — Avatar management deferred: no backend storage exists
 
-**Date:** 2026-07-13 · **Author:** DOC-K · **Status:** Accepted
+**Date:** 2026-07-13 · **Author:** DOC-K · **Status:** Superseded by D-0044 (2026-08-18)
 
 **Context.** Candidate C-26 (GAP-P4-064) found the Settings → Profile section's wireframe "Change
 Avatar" control (`btn-avatar-st08`, "PNG or JPG, max 2MB") absent from production. There is no
@@ -886,6 +886,8 @@ out of Phase 4 fix-cycle scope).
 **Consequences.** GAP-P4-064 is VERIFIED-CLOSED as documentary — this ADR is the evidence. The
 Settings Profile section ships without avatar upload; the wireframe control is tracked here as a
 Phase 3+ backlog item. **Reversible?** Yes — purely additive feature; no existing behavior changes.
+**Supersession.** D-0044 lands the reversible path: Postgres `bytea` storage, Settings upload UI,
+and topbar chip — see that ADR for the live contract.
 
 ---
 
@@ -1581,3 +1583,36 @@ requires no schema change, and the per-row contract degrades every row to its ex
 5. **Carve-outs unchanged.** Candidate→employer application email, and the employer-facing résumé/cover-letter *page*, stay the candidate's voice — gilt branding there would leak the tool.
 
 **Consequences.** New artefacts that introduce coral/indigo, emoji-as-icon, or a parallel palette fail `tests/test_design_system_canonical.py`. Historical delivery ADRs that mention coral remain historical; they are not rewritten.
+
+---
+
+## D-0044 — Settings profile photo: Postgres bytea upload (supersedes D-0030)
+
+**Date:** 2026-08-18 · **Author:** SESSION PROFILE-PHOTO · **Status:** Adopted
+
+**Context.** D-0030 deferred wireframe control `btn-avatar-st08` ("Change avatar", PNG/JPG max 2MB)
+because no storage path existed. Résumé originals already prove the product pattern for owner-scoped
+binary storage in Postgres `bytea` (bounded read, magic-byte sniff, no object store). Users need an
+account chrome photo on Settings → Profile and in the topbar chip; it must never leak into
+employer-facing résumés or application emails.
+
+**Decision.**
+1. **Storage.** `User.avatarFile` (`bytea`) + `User.avatarContentType`; `User.image` holds the
+   SHA-256 hex revision for cache-busting only (never a data URL or OAuth image URL).
+2. **API.** Authenticated `POST|GET|DELETE /workspaces/settings/avatar` — magic-byte PNG/JPEG only,
+   2MB cap via `read(MAX+1)`, owner-only, `Cache-Control: private, no-store`, `X-Content-Type-Options: nosniff`.
+3. **UI.** Settings Profile shows Change avatar / Remove photo with wireframe help text; the topbar
+   chip loads via authenticated blob URL (JWT cannot ride an `<img src>`) and refreshes in place on
+   `aether:profile-avatar-changed`.
+4. **DDL.** Lazy `ensure_user_avatar_columns()` (ADR-TR-1); documentary mirror
+   `apps/api/migrations/0033_user_profile_avatar.sql`.
+5. **Production host.** Verify on Hostinger same-origin
+   `https://aether.srv1356245.hstgr.cloud` (Traefik → `:3200` / `:8000`). The legacy Abacus hostname
+   is a separate edge and must not be used as the sole prod-verification target for this surface.
+
+**Alternatives rejected.** (a) Object storage / CDN URLs (rejected: no S3 wiring in-repo; résumé
+pattern already ships bytea). (b) Keep D-0030 deferral (rejected: storage pattern now exists).
+(c) Data-URL in `User.image` (rejected: unbounded JSON, no sniffing, cache poison).
+
+**Consequences.** D-0030 is superseded. GAP-P4-064 is functionally closed on Hostinger prod.
+**Reversible?** Yes — drop columns + routes; Settings falls back to initials.

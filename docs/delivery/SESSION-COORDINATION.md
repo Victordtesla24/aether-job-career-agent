@@ -1082,25 +1082,14 @@ Rules of engagement unchanged: locks (git/deploy/test), runbook deploys, append-
 
 ## SESSION PROFILE-PHOTO — 2026-08-18T08:34Z — Settings profile photo upload
 
-**CI-UNBLOCK provenance:** retarget workflow-linkage citations shifted by EC light-retry so Delivery verify passes.
-
-**By:** Cursor Grok session. Worktree `/root/dev/aether-wt-profile-photo` on `feat/settings-profile-photo` from `origin/main` @ `fbfc3b4c`.
-**Scope claimed:**
-- `apps/api/app/db.py` — `ensure_user_avatar_columns` only
-- `apps/api/app/repositories/user.py` — avatar set/get/clear methods
-- `apps/api/app/routers/workspaces.py` — settings avatar POST/GET/DELETE + `_build_settings` profile avatar fields
-- `apps/api/migrations/0033_user_profile_avatar.sql` (new)
-- `apps/api/tests/test_profile_avatar.py` (new)
-- `packages/db/src/schema.prisma` — User avatarFile/avatarContentType
-- `apps/web/src/lib/api/workspaces.ts` — SettingsPayload profile avatar fields
-- `apps/web/src/components/settings/profile-avatar.ts`, `ProfileAvatar.tsx` (new)
-- `apps/web/src/app/dashboard/settings/settings-client.tsx` — Profile section wiring only
-- `apps/web/src/components/user-menu.tsx`, `shell/CommandBar.tsx` — photo chip
-- Settings vitest fixtures + `profile-avatar.test.tsx`
-- `apps/web/src/components/agents/workflow-linkage.ts` — retarget StoryEntry dedup citation after db.py insert
+**Status:** DONE — landed `babf9f3d` + topbar refresh `87428638`; Hostinger prod verified
+(`aether.srv1356245.hstgr.cloud` Settings shows Change avatar / PNG or JPG max 2MB; API
+upload/get/delete 200). D-0044 supersedes D-0030. Local branch `feat/settings-profile-photo`
+deleted after closeout push. No standing PR.
+**Test persona (purge):** `avatar-probe-1787051367@example.com` (id `c0c5c79694ee17efc8f0ebeaa`) —
+created 2026-08-18 for prod avatar probe; remove on next test-data purge.
+**By:** Cursor Grok session. Worktree `/root/dev/aether-wt-profile-photo`.
 **Does not touch:** résumés/PDF generation, apply_executor, networking, sales, admin, applications timeline WIP on other branches.
-**Deploy:** push to `main` → VPS Delivery. Delete `feat/settings-profile-photo` after land. No standing PR.
-**Status:** GATED green — avatar pytest 11 + DEF-B 2; settings vitests; type-check; lint; integrity_guard. Pushing.
 
 ---
 
