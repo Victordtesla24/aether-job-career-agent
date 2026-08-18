@@ -46,8 +46,6 @@ import { FormEvent, useState } from "react";
 import { AuthApiError, login } from "../../lib/api/auth";
 import { persistSessionToken } from "../../lib/auth/session-cookie";
 
-const TOKEN_STORAGE_KEY = "aether_token";
-
 export default function AdminLoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
