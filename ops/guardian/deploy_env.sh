@@ -17,7 +17,11 @@ for arg in "${@:2}"; do
 done
 
 case "$ENV" in
-  dev)  REPO=/root/dev/aether-job-career-agent; EXPORTS=/root/dev/.agent/staging/env.export.sh
+  # Dedicated checkout. The agent workspace at
+  # /root/dev/aether-job-career-agent is shared by concurrent sessions;
+  # `git reset --hard` there destroys their branches, and untracked files
+  # that survive the reset (e.g. ScreeningQuestionnaire.tsx) fail next build.
+  dev)  REPO=/root/dev/aether-staging; EXPORTS=/root/dev/.agent/staging/env.export.sh
         UNITS="aether-dev-api aether-dev-web";   API=8100; WEB=3100 ;;
   test) REPO=/root/test/app;                    EXPORTS=/root/test/env.export.sh
         UNITS="aether-test-api aether-test-web"; API=8300; WEB=3300 ;;
@@ -25,6 +29,11 @@ case "$ENV" in
         UNITS="aether-prod-api aether-prod-web aether-prod-worker"; API=8000; WEB=3200 ;;
   *) echo "unknown environment '$ENV'" >&2; exit 2 ;;
 esac
+
+if [ ! -e "$REPO/.git" ]; then
+  echo "[$ENV] checkout missing: $REPO" >&2
+  exit 1
+fi
 
 GUARD=/root/dev/aether-job-career-agent/scripts/integrity/runtime_env_guard.sh
 
@@ -59,6 +68,9 @@ smoke() {
 build_and_restart() {
   git fetch --all --prune -q
   git reset --hard -q "${1:-origin/main}"
+  # Untracked source files survive reset --hard and are typechecked by
+  # `next build`. Ignored paths (.env, .venv, node_modules, .next) stay.
+  git clean -fd -e .env
   echo "[$ENV] deploying $(git rev-parse --short HEAD): $(git log -1 --format=%s | cut -c1-60)"
   # .env is environment-local and untracked; it must survive every deploy.
   test -f .env || { echo "[$ENV] .env missing — refusing to deploy"; exit 1; }

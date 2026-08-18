@@ -209,6 +209,126 @@ def test_triage_rate_limit_degrades_with_filter_categories_no_scores(monkeypatch
     assert any(params[0] == "priority" and params[1] == "t-int" for params in written)
 
 
+def test_triage_light_retry_calls_fallback_model_not_user_chosen(monkeypatch):
+    """ADR-ML-3: only an explicit light_retry flag may select Haiku.
+
+    The client must not pass an arbitrary model id. Production 429s were
+    user-pinned Sonnet/Opus; the in-page retry posts light_retry=true.
+    """
+    from app.agents.email_agent import gmail_sync_failure_message
+    from app.services.llm_client import LLMUnavailableError, get_fallback_model, get_model
+
+    captured: list[str | None] = []
+
+    class _CaptureLLM:
+        def complete_json(self, *a, **k):
+            captured.append(k.get("model"))
+            raise LLMUnavailableError("LLM provider HTTP 429: rate_limit_error")
+
+    class _Cur:
+        def execute(self, sql, params=None):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    class _Conn:
+        def cursor(self):
+            return _Cur()
+
+        def commit(self):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    monkeypatch.setattr("app.agents.email_agent.get_connection", lambda: _Conn())
+    monkeypatch.setattr(
+        "app.services.interview_ingest.ingest_inbound_for_user",
+        lambda *a, **k: None,
+    )
+    agent = EmailAgent(llm=_CaptureLLM(), credentials=_FakeCreds(connected=False))
+    agent._threads = lambda uid: [  # type: ignore[method-assign]
+        {
+            "id": "t1",
+            "subject": "Role at Acme",
+            "messages": [{"from": "Ada", "fromEmail": "ada@acme.com", "body": "Intro call?"}],
+        }
+    ]
+    agent.run("u1", mode="triage")
+    agent.run("u1", mode="triage", light_retry=True)
+    assert captured[0] == get_model("REASONING")
+    assert captured[1] == get_fallback_model()
+    assert captured[1] != captured[0]
+    # Pin the helper used by the sync-fail path (tested below) so a rename
+    # cannot silently drop the accessNotConfigured honesty.
+    assert "reconnect" in gmail_sync_failure_message(RuntimeError("token expired")).lower()
+
+
+def test_gmail_sync_failure_does_not_blame_oauth_for_api_not_configured():
+    from app.agents.email_agent import gmail_sync_failure_message
+
+    msg = gmail_sync_failure_message(
+        RuntimeError('403 Forbidden with reason "accessNotConfigured"')
+    )
+    assert "reconnect" not in msg.lower()
+    assert "google api" in msg.lower() or "google cloud" in msg.lower()
+
+
+def test_insights_rate_limit_degrades_without_invented_score():
+    from app.services.llm_client import LLM_RATE_LIMITED_USER_MESSAGE, LLMUnavailableError
+
+    class _BoomLLM:
+        def complete_json(self, *a, **k):
+            raise LLMUnavailableError("LLM provider HTTP 429: rate_limit_error")
+
+    agent = EmailAgent(llm=_BoomLLM(), credentials=_FakeCreds())
+    agent._thread = lambda user_id, thread_id: {  # type: ignore[method-assign]
+        "id": thread_id,
+        "subject": "Intro call",
+        "messages": [{"body": "Are you free Tuesday?"}],
+    }
+    res = agent.run("u1", mode="insights", thread_id="t1")
+    assert res.degraded is True
+    assert res.llm_called is False
+    assert res.insights is None
+    assert LLM_RATE_LIMITED_USER_MESSAGE in res.message
+
+
+def test_draft_reply_rate_limit_degrades_without_invented_body():
+    from app.services.llm_client import LLM_RATE_LIMITED_USER_MESSAGE, LLMUnavailableError
+
+    class _BoomLLM:
+        def complete_json(self, *a, **k):
+            raise LLMUnavailableError("LLM provider HTTP 429: rate_limit_error")
+
+    agent = EmailAgent(llm=_BoomLLM(), credentials=_FakeCreds())
+    agent._thread = lambda user_id, thread_id: {  # type: ignore[method-assign]
+        "id": thread_id,
+        "subject": "Intro call",
+        "messages": [{"body": "Are you free Tuesday?"}],
+    }
+    agent._resume_text = lambda *a, **k: "Delivery lead, 8 years."  # type: ignore[method-assign]
+    res = agent.run("u1", mode="draft_reply", thread_id="t1")
+    assert res.degraded is True
+    assert res.llm_called is False
+    assert res.draft == ""
+    assert LLM_RATE_LIMITED_USER_MESSAGE in res.message
+
+
+def test_email_agent_request_accepts_light_retry_flag():
+    from app.routers.agents import EmailAgentRequest
+
+    assert EmailAgentRequest().light_retry is False
+    assert EmailAgentRequest(mode="triage", light_retry=True).light_retry is True
+
+
 # ------------------------------------------------------------- integration
 def _make_draft(client, auth_headers, subject):
     resp = client.post(

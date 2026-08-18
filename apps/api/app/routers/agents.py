@@ -3942,6 +3942,9 @@ class EmailAgentRequest(BaseModel):
     max_messages: int | None = None
     #: Restrict the scan to ONE connected mailbox. Omit to scan them all.
     account_id: str | None = None
+    #: Explicit lighter-model retry after a provider 429. Never a free-form
+    #: model id — ADR-ML-3 forbids the client choosing an arbitrary substitute.
+    light_retry: bool = False
 
 
 @router.post("/email/run")

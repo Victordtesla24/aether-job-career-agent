@@ -56,6 +56,7 @@ from app.services.llm_client import (
     LLMClient,
     LLMFixtureMissingError,
     LLMUnavailableError,
+    get_fallback_model,
     get_model,
     llm_failure_user_message,
 )
@@ -65,6 +66,34 @@ logger = logging.getLogger(__name__)
 
 #: Inbox categories the Email Center filters on (see apps/web email/page.tsx).
 _CATEGORIES = ("priority", "followup", "auto", "all")
+
+
+def gmail_sync_failure_message(exc: BaseException) -> str:
+    """Honest Gmail sync failure copy (never a fabricated inbox).
+
+    ``accessNotConfigured`` means the Gmail API is disabled on the Google
+    Cloud project. That is not an expired OAuth grant — telling the user to
+    reconnect will not enable the API.
+    """
+    text = str(exc)
+    if "accessNotConfigured" in text:
+        return (
+            "Gmail sync failed — the Gmail API is not enabled for this Google "
+            "Cloud project. Enable it in Google Cloud Console."
+        )
+    return f"Gmail sync failed — reconnect your account. ({exc})"
+
+
+def _json_model(params: dict[str, Any] | None) -> str:
+    """Model id for Email Agent JSON completions.
+
+    ``light_retry=True`` is the Email Center's explicit "Retry with a lighter
+    model" click. ADR-ML-3 forbids a silent swap, so a client-supplied
+    ``model`` string is ignored.
+    """
+    if params and params.get("light_retry") is True:
+        return get_fallback_model()
+    return get_model("REASONING")
 
 #: Cron/triage may auto-DRAFT (never send) this many priority/follow-up
 #: recruiter threads per run. Bounds LLM cost on the 10-minute timer.
@@ -318,7 +347,7 @@ class EmailAgent:
         self, user_id: str, mode: str = "triage", **params: Any
     ) -> "EmailAgentResult | JobAlertIntakeResult":
         if mode == "triage":
-            return self._triage(user_id)
+            return self._triage(user_id, params)
         if mode in ("job_alerts", "job-alerts"):
             return self._job_alerts(user_id, params)
         if mode == "draft_reply":
@@ -366,7 +395,9 @@ class EmailAgent:
             raise RuntimeError(errors[-1])
         return synced
 
-    def _triage(self, user_id: str) -> EmailAgentResult:
+    def _triage(
+        self, user_id: str, params: dict[str, Any] | None = None
+    ) -> EmailAgentResult:
         from app.services.career_email_filter import (
             classify_thread,
             should_auto_draft_reply,
@@ -386,7 +417,7 @@ class EmailAgent:
                     connected=False,
                     degraded=True,
                     llm_called=False,
-                    message=f"Gmail sync failed — reconnect your account. ({exc})",
+                    message=gmail_sync_failure_message(exc),
                 )
         threads = self._threads(user_id)
         ingest_inbound_for_user(user_id, threads, force_calendar=True)
@@ -434,7 +465,7 @@ class EmailAgent:
                 "email_triage",
                 _TRIAGE_SYSTEM,
                 f"Emails:\n{listing}",
-                model=get_model("REASONING"),
+                model=_json_model(params),
                 temperature=0.0,
             )
         except LLMUnavailableError as exc:
@@ -835,7 +866,17 @@ class EmailAgent:
                 f"Candidate resume:\n{resume_text}"
             )
             message = "Draft ready — review and approve before sending."
-        draft, flagged = self._draft_once(prompt, corpus, "default")
+        try:
+            draft, flagged = self._draft_once(prompt, corpus, "default", params)
+        except LLMUnavailableError as exc:
+            return EmailAgentResult(
+                mode=mode,
+                connected=self._is_connected(user_id),
+                degraded=True,
+                llm_called=False,
+                thread_id=str(thread_id),
+                message=llm_failure_user_message(exc),
+            )
         if flagged:
             retry_prompt = (
                 f"{prompt}\n\nIMPORTANT: your previous draft used terms with no "
@@ -843,8 +884,10 @@ class EmailAgent:
                 "using ONLY words that appear in the resume or the incoming email."
             )
             try:
-                draft, flagged = self._draft_once(retry_prompt, corpus, "retry")
-            except LLMFixtureMissingError:
+                draft, flagged = self._draft_once(
+                    retry_prompt, corpus, "retry", params
+                )
+            except (LLMFixtureMissingError, LLMUnavailableError):
                 pass  # keep the first draft; flagged is surfaced honestly below
         try:
             from app.services.gmail_service import persist_email_thread_draft
@@ -867,13 +910,17 @@ class EmailAgent:
         )
 
     def _draft_once(
-        self, prompt: str, corpus: str, fixture_key: str
+        self,
+        prompt: str,
+        corpus: str,
+        fixture_key: str,
+        params: dict[str, Any] | None = None,
     ) -> tuple[str, list[str]]:
         raw = self._llm.complete_json(
             "email_reply",
             _REPLY_SYSTEM,
             prompt,
-            model=get_model("REASONING"),
+            model=_json_model(params),
             temperature=0.0,
             fixture_key=fixture_key,
         )
@@ -887,13 +934,23 @@ class EmailAgent:
             raise EmailAgentError("insights requires thread_id")
         thread = self._thread(user_id, thread_id)
         body = self._latest_body(thread)
-        raw = self._llm.complete_json(
-            "email_insights",
-            _INSIGHTS_SYSTEM,
-            f"Subject: {thread.get('subject')}\n\n{body}",
-            model=get_model("REASONING"),
-            temperature=0.0,
-        )
+        try:
+            raw = self._llm.complete_json(
+                "email_insights",
+                _INSIGHTS_SYSTEM,
+                f"Subject: {thread.get('subject')}\n\n{body}",
+                model=_json_model(params),
+                temperature=0.0,
+            )
+        except LLMUnavailableError as exc:
+            return EmailAgentResult(
+                mode="insights",
+                connected=self._is_connected(user_id),
+                degraded=True,
+                llm_called=False,
+                thread_id=str(thread_id),
+                message=llm_failure_user_message(exc),
+            )
         # NEVER fabricate a score: when the LLM returns no genuine numeric score,
         # `score` is null (the client renders an honest "no usable score" state)
         # rather than a fake 0 that would read as a real 'irrelevant' verdict —

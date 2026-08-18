@@ -373,6 +373,11 @@ export function emailAgentErrorMessage(error: unknown, fallback: string): string
   return workspaceApiErrorMessage(error, fallback);
 }
 
+/** True only for the honest provider 429 sentence — not Gmail reconnect copy. */
+export function emailAgentRateLimited(message: string): boolean {
+  return /rate-limited/i.test(message);
+}
+
 export type EmailTriageNotice = {
   kind: "success" | "warn";
   message: string;

@@ -1132,3 +1132,21 @@ Rules of engagement unchanged: locks (git/deploy/test), runbook deploys, append-
 **Does not touch:** `llm_client.py`, `workspaces.py` networking/avatar routes, sales/admin, insights/draft 429 (no deterministic substitute), MV-006 wireframe chrome, unpushed `feat/ec-adv`.
 **Deploy:** push onto `origin/main`; delete `feat/ec-adv-429` after land. No PR.
 
+---
+
+## SESSION EC-RETRY — 2026-08-18T09:40Z — Email Center explicit light retry + LLM honesty
+
+**By:** Cursor Grok session. Isolated worktree `/root/dev/aether-wt-ec-retry` on `feat/ec-retry-light` from `origin/main`. Does not take SESSION TL-VIZ, PROFILE-PHOTO, NW-ADV, ADM, or unpushed `feat/ec-adv`.
+**Why:** EC-ADV (`42b6d800`) is on `origin/main` but **not in production** — VPS Delivery deploy-dev failed on a foreign dirty `ScreeningQuestionnaire.tsx` in the shared checkout (`32119387469`). Prod (SHA `77231581`) still 503s Triage on Claude HTTP 429 (job `ca91c2b8bd0e39f7ba4dba365`, 2026-08-18T06:02:34Z). ADR-ML-3 forbids a silent Haiku swap; the user needs an **explicit** in-page retry. Insights/draft still 503 on the same 429 class. Gmail `accessNotConfigured` must not be messaged as “reconnect”.
+**Scope claimed:**
+- `apps/api/app/agents/email_agent.py` — `_json_model` / pass params into `_triage`; catch `LLMUnavailableError` on insights + draft (honest degrade, no invented score/draft); Gmail API-not-enabled copy
+- `apps/api/app/routers/agents.py` — `EmailAgentRequest.light_retry: bool = False` only
+- `apps/web/src/app/dashboard/email/page.tsx` + `apps/web/src/lib/api/workspaces.ts` — rate-limit helper + `triage-retry-light-btn`
+- `ops/guardian/deploy_env.sh` — staging REPO `/root/dev/aether-staging` so deploy-dev never `git reset --hard`s the agent workspace
+- Tests: `test_email_agent.py`, `email-center-wiring.test.ts`, `triage-light-retry.test.tsx`
+**Does not touch:** `llm_client.py`, `_model_chain` / silent fallback, networking, sales/admin, applications timeline, profile avatar, `feat/ec-adv`.
+**Deploy:** rebase onto `origin/main`, push onto `origin/main`; delete `feat/ec-retry-light` after land. No PR.
+
+### Deploy window — Email Center light-retry — 2026-08-18T09:45Z
+
+**Claimed by:** SESSION EC-RETRY. Units: `aether-prod-api` + `aether-prod-web` via VPS Delivery after push to `main`. No hand-restart of prod units.
