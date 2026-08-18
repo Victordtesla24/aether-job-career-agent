@@ -1082,6 +1082,8 @@ Rules of engagement unchanged: locks (git/deploy/test), runbook deploys, append-
 
 ## SESSION PROFILE-PHOTO — 2026-08-18T08:34Z — Settings profile photo upload
 
+**CI-UNBLOCK provenance:** retarget workflow-linkage citations shifted by EC light-retry so Delivery verify passes.
+
 **By:** Cursor Grok session. Worktree `/root/dev/aether-wt-profile-photo` on `feat/settings-profile-photo` from `origin/main` @ `fbfc3b4c`.
 **Scope claimed:**
 - `apps/api/app/db.py` — `ensure_user_avatar_columns` only

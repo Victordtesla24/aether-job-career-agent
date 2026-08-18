@@ -370,7 +370,7 @@ const HOP = {
       "triage mode: UPDATE EmailThread SET classification, aiScore (NULL when the model gave no real score)",
     // EC-ADV 429-degrade inserted `_persist_filter_classifications` above the
     // scored UPDATE and shifted these lines — re-resolved against the live tree.
-    evidence: "apps/api/app/agents/email_agent.py:509-513",
+    evidence: "apps/api/app/agents/email_agent.py:540-541",
     discoveryEvidence: "apps/api/app/agents/email_agent.py:365-382",
     anchors: ['UPDATE "EmailThread" SET "classification" = %s,'],
     status: "live",
@@ -408,7 +408,7 @@ const HOP = {
     // AUD-COV-2 fit-gate (woven into the loop's coverLetter branch,
     // preserving both) shifted these lines again -- re-resolved against the
     // actually-merged tree, not copied from either parent.
-    evidence: "apps/api/app/routers/agents.py:4014,4057",
+    evidence: "apps/api/app/routers/agents.py:4017,4060",
     discoveryEvidence: "apps/api/app/routers/agents.py:3380",
     anchors: [
       "def _pipeline_core(",
@@ -442,9 +442,9 @@ const HOP = {
     kind: "writes",
     mechanism:
       "job_alerts mode: detect_alert_platform -> parse_job_alert -> JobRepository.create(posting.to_job_raw()) through the SAME upsert path as a board adapter; counts jobsCreated vs jobsUpdated from wasInserted",
-    // EC-ADV 429-degrade inserted `_persist_filter_classifications` above
-    // `_job_alerts` and shifted these lines — re-resolved against the live tree.
-    evidence: "apps/api/app/agents/email_agent.py:617,697,712,726,736",
+    // EC-ADV 429-degrade + light-retry shifted `_job_alerts` — re-resolved
+    // against HEAD so provenance CI stays honest (PROFILE-PHOTO Delivery unblock).
+    evidence: "apps/api/app/agents/email_agent.py:648,728,743,757,767",
     discoveryEvidence: "apps/api/app/agents/email_agent.py:410-420,505-518",
     anchors: [
       "def _job_alerts(",
