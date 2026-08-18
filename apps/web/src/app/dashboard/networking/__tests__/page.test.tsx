@@ -570,6 +570,29 @@ describe("NetworkingPage — honesty and freshness (NET-HONEST)", () => {
     });
   });
 
+  it("empty state keeps the CRM shell visible (stats + pipeline), not only a help panel", async () => {
+    fetchNetworkingSummaryMock.mockResolvedValue(
+      summary({
+        stats: { contacts: 0, activeConversations: 0, referralsInFlight: 0, responseRate: null },
+        pipeline: [
+          { stage: "New", count: 0, contacts: [] },
+          { stage: "Warm", count: 0, contacts: [] },
+          { stage: "Active", count: 0, contacts: [] },
+          { stage: "Scheduled", count: 0, contacts: [] },
+          { stage: "Placed", count: 0, contacts: [] },
+        ],
+        outreachQueue: [],
+        communicationLog: [],
+      }),
+    );
+    render(<NetworkingPage />);
+    await waitFor(() => screen.getByTestId("networking-empty-state"));
+    expect(screen.getByTestId("networking-stats").textContent).toMatch(/not measured/i);
+    expect(screen.getByTestId("contact-pipeline")).toBeTruthy();
+    expect(screen.getByTestId("outreach-queue-empty")).toBeTruthy();
+    expect(screen.getByTestId("empty-state-add-contact-btn")).toBeTruthy();
+  });
+
   it("empty state offers Gmail and LinkedIn import, not only manual add", async () => {
     fetchNetworkingSummaryMock.mockResolvedValue(
       summary({ stats: { contacts: 0, activeConversations: 0, referralsInFlight: 0, responseRate: null }, pipeline: [] }),

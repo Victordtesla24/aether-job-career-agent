@@ -1054,3 +1054,13 @@ Rules of engagement unchanged: locks (git/deploy/test), runbook deploys, append-
 **ADM-009 (2026-08-18T04:30Z):** live prod `"User"."agentConfig"` column default is `'{"autoApply": false, "approvalGate": true, "matchThreshold": 80}'::jsonb` with no migration file (read-only `information_schema` + `pg_get_expr` this session; 0 NULL rows, 2 of 3 users at 80). Settings display and `GET /settings` already default to 80. Code fallback was 50 — a missing key would auto-submit 50–79 while the slider showed 80. Reconcile all three to 80: `DEFAULT_MATCH_THRESHOLD` in `application_submission.py` + Settings client, `DEFAULT_AGENT_CONFIG_JSON` owned by `ensure_user_profile_columns`, `workspaces._build_settings` imports the same constant. Does not flip auto-apply, does not rewrite stored user values.
 
 **Deploy:** push `main` → VPS Delivery. No hand-restart of prod units. No leftover branch or PR for this session.
+
+---
+
+## SESSION NW-ADV-UX — 2026-08-18T08:10Z — Networking empty-state CRM shell
+
+**By:** Cursor Grok session. Worktree `/root/dev/aether-wt-nw-ux2` on `feat/nw-adv-ux2`.
+**Why:** Adversarial requirements shipped, but zero-contact empty state hid stats/pipeline/outreach — owners saw a help panel and concluded “nothing changed”.
+**Scope:** `apps/web/src/app/dashboard/networking/page.tsx` (+ tests). Always render honest empty CRM shell; keep purpose copy.
+**Does not touch:** sales_agent nurture fence, email center, branding.
+
