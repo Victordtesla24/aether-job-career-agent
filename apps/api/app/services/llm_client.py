@@ -66,10 +66,37 @@ FALLBACK_MODEL = "claude-haiku-4-5"
 #: documented config edit applied at land time; these code defaults must agree
 #: with it). Every id is a bare ``claude-*`` the operator's Anthropic
 #: subscription serves (MODEL-DEFAULT-SCOUT D1, == the app's static anthropic
-#: catalog): reasoning/heavy -> opus-class, structured -> sonnet-class,
-#: fast/light -> haiku-class. No tier default is ever an OpenRouter id.
+#: catalog): structured -> sonnet-class, fast/light -> haiku-class, heavy ->
+#: opus-class (legacy alias, no current backend runs on it — see below). No
+#: tier default is ever an OpenRouter id.
+#:
+#: AUD-ECON-2 (RUN-20260818T0223Z) SUPERSEDES the REASONING half of the
+#: OWNER DIRECTIVE (MODEL-DEFAULT, 2026-08-14) comment this constant used to
+#: carry verbatim ("reasoning/heavy -> opus-class"). That directive fixed
+#: WHICH PROVIDER serves the default (the Anthropic subscription, never
+#: OpenRouter) — untouched here, REASONING is still a bare ``claude-*`` id.
+#: What changes is the PRICE TIER: the 2026-08-14 default pinned
+#: ``claude-opus-4-8``, but the decision memo
+#: (docs/delivery/evidence/RUN-20260818T0223Z/05-decision-memos/AUD-ECON-2.md)
+#: found that EVERY real prod tailor run (n=5, tailor+coverLetter are the only
+#: backends on this tier — ``routers/agents.py::_LLM_TIER_BY_BACKEND``) was
+#: actually served by ``claude-haiku-4-5`` via the existing one-retry
+#: fallback chain, never the configured Opus tier — and that serving Opus for
+#: real would cost ~$1.70/application (~7x today's ~$0.24), blowing the Free
+#: plan's spend cap on a SINGLE tailoring run and leaving every paid plan
+#: delivering only 16-20% of its advertised runsPerMonth once the spend cap
+#: binds before the run quota. Decision: make the CONFIGURED default match
+#: what the product actually serves and can afford at current plan prices —
+#: the tier the fallback chain already lands on — rather than reprice plans.
+#: No customer-facing copy changes (plan copy already claims only
+#: "same models on every plan", not a premium-model promise). An Owner can
+#: still re-pin Opus with zero code change via ``AETHER_MODEL_REASONING``
+#: (the env-override mechanism below is untouched). Full rationale + the
+#: measured-vs-configured cost table:
+#: docs/delivery/evidence/RUN-20260818T0223Z/AUD-ECON-2/
+#: 03-implementation-rationale.md.
 _DEFAULT_MODEL_BY_TIER = {
-    "REASONING": "claude-opus-4-8",
+    "REASONING": "claude-haiku-4-5",
     "HEAVY": "claude-opus-4-8",
     "STRUCTURED": "claude-sonnet-4-6",
     "FAST": "claude-haiku-4-5",
