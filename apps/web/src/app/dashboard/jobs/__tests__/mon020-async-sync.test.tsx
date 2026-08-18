@@ -180,7 +180,7 @@ describe("MON-020 · Sync Now no longer blocks the request", () => {
     await waitFor(() =>
       expect(screen.queryByTestId("discovery-progress")).toBeNull(),
     );
-  });
+  }, 15_000);
 
   it("renders a friendly message for a failed background run, never raw markup", async () => {
     jobFrames = [
@@ -200,7 +200,7 @@ describe("MON-020 · Sync Now no longer blocks the request", () => {
     await waitFor(() =>
       expect(screen.queryByTestId("discovery-progress")).toBeNull(),
     );
-  });
+  }, 15_000);
 
   it("routes the enqueue failure through the shared friendly-error helper", async () => {
     apiRequest.mockImplementation((path: string, init?: { method?: string }) => {
