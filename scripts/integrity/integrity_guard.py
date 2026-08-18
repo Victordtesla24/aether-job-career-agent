@@ -26,7 +26,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[2]
 WAIVERS = ROOT / "scripts/integrity/waivers.txt"
 EXCLUDE = {"negative_corpus", ".git","node_modules",".next",".venv","__pycache__",".turbo","dist","build",
            "coverage",".pytest_cache",".ruff_cache","uat","cleanup","evidence","screenshots",
-           ".agent","site-packages"}
+           ".agent","site-packages","worktrees"}
 TESTISH = ("/test","/tests/","__tests__","/fixtures/","conftest.py",".test.",".spec.",
            "/e2e/","/mocks/","/__mocks__/","/evals/","integrity_guard.py")
 SRC = {".py",".ts",".tsx",".js",".jsx",".mjs"}
@@ -128,9 +128,16 @@ def waivers():
 def files():
     for dp, dn, fns in os.walk(ROOT):
         dn[:] = [d for d in dn if d not in EXCLUDE]
+        rel_dp = str(pathlib.Path(dp).relative_to(ROOT)).replace("\\", "/")
+        if rel_dp == ".claude/worktrees" or rel_dp.startswith(".claude/worktrees/"):
+            dn[:] = []
+            continue
         for fn in fns:
             f = pathlib.Path(dp)/fn
-            yield f, str(f.relative_to(ROOT))
+            rel = str(f.relative_to(ROOT)).replace("\\", "/")
+            if rel.startswith(".claude/worktrees/"):
+                continue
+            yield f, rel
 
 def main():
     W = waivers(); V = []
