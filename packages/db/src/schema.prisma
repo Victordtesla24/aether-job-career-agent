@@ -74,7 +74,13 @@ model User {
   id           String   @id @default(cuid())
   email        String   @unique
   name         String?
+  // Cache-busting SHA-256 hex of the profile photo bytes when present; never
+  // a data URL. Raw bytes live in avatarFile (lazy DDL / migration 0033).
   image        String?
+  // Profile photo bytes + sniffed content type (Settings → Profile upload).
+  // Additive; nullable; no backfill — pre-existing rows honestly have none.
+  avatarFile         Bytes?
+  avatarContentType  String?
   // bcrypt hash for credentials auth (P2-S01). Nullable: OAuth-only users
   // have no local password.
   passwordHash String?

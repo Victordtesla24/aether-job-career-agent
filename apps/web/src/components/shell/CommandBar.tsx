@@ -47,6 +47,7 @@ import { createPortal } from "react-dom";
 import { fetchMe } from "../../lib/api/admin";
 import { fetchAgents } from "../../lib/api/agents";
 import { fetchApprovals, type Approval } from "../../lib/api/approvals";
+import { apiBaseUrl, getToken } from "../../lib/api/client";
 import { fetchSettings } from "../../lib/api/workspaces";
 import { SPRING } from "../../lib/motion";
 import { isExpired } from "../approvals/lib";
@@ -206,6 +207,7 @@ export function CommandBar({
     chipName: "Welcome",
     role: "",
   });
+  const [photoSrc, setPhotoSrc] = useState<string | null>(null);
   // One pop when the count RISES; never on a decrease, never a loop (§1.3).
   const previousApprovals = useRef(0);
   const [bellPop, setBellPop] = useState(0);
@@ -213,8 +215,9 @@ export function CommandBar({
 
   useEffect(() => {
     let cancelled = false;
+    let objectUrl: string | null = null;
     fetchSettings()
-      .then((settings) => {
+      .then(async (settings) => {
         if (cancelled) return;
         const fullName = settings.profile.fullName || "";
         const derived = deriveChip(fullName, settings.profile.targetRole || "");
@@ -225,6 +228,27 @@ export function CommandBar({
             : "Welcome",
         );
         setSettingsLoaded(true);
+        if (settings.profile.hasAvatar) {
+          try {
+            const token = await getToken();
+            const res = await fetch(`${apiBaseUrl()}/workspaces/settings/avatar`, {
+              headers: { Authorization: `Bearer ${token}` },
+            });
+            if (!res.ok || cancelled) return;
+            const blob = await res.blob();
+            objectUrl = URL.createObjectURL(blob);
+            if (cancelled) {
+              URL.revokeObjectURL(objectUrl);
+              return;
+            }
+            setPhotoSrc(objectUrl);
+          } catch {
+            // Keep initials — never a broken image.
+            if (!cancelled) setPhotoSrc(null);
+          }
+        } else if (!cancelled) {
+          setPhotoSrc(null);
+        }
       })
       .catch(() => {
         // Graceful fallback — leave the neutral "Welcome" state in place.
@@ -272,6 +296,7 @@ export function CommandBar({
     return () => {
       cancelled = true;
       clearInterval(timer);
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, []);
 
@@ -567,6 +592,7 @@ export function CommandBar({
             initials={chip.initials}
             name={chip.chipName}
             role={chip.role}
+            photoSrc={photoSrc}
             loading={!settingsLoaded}
           />
         </div>

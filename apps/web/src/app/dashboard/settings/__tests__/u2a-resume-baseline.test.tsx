@@ -62,7 +62,7 @@ const SUBSCRIPTION = {
 // cast in the first place.
 function settingsWith(originalStored: boolean): SettingsPayload {
   return {
-    profile: { fullName: "Jamie Rivera", email: "jamie@example.com", targetRole: "Staff Engineer", location: "Sydney, AU" },
+    profile: { fullName: "Jamie Rivera", email: "jamie@example.com", targetRole: "Staff Engineer", location: "Sydney, AU" , hasAvatar: false, avatarRevision: null },
     resume: { activeFile: "resume.pdf", uploadedAt: "2026-08-01", versions: 2, originalStored },
     portfolio: { url: null, cadence: null, lastSynced: null },
     agentConfig: { autoApply: false, approvalGate: true, matchThreshold: 80 },

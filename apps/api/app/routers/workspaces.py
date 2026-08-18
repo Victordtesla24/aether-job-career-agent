@@ -6,6 +6,7 @@ fixtures, no in-process dictionaries, no demo personas.
 """
 from __future__ import annotations
 
+import hashlib
 import logging
 import threading
 import time
@@ -14,17 +15,19 @@ from datetime import datetime, timezone
 from typing import Annotated, Any
 
 from email_validator import EmailNotValidError, validate_email
-from fastapi import APIRouter, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, File, HTTPException, Query, Response, UploadFile, status
 from pydantic import AfterValidator, BaseModel, Field
 
 from app.db import (
     ensure_resume_columns,
+    ensure_user_avatar_columns,
     ensure_user_profile_columns,
     get_connection,
     rows_to_dicts,
 )
 from app.middleware.auth import CurrentUser
 from app.repositories.career_profile import CAREER_SOURCES, CareerProfileRepository
+from app.repositories.user import UserRepository
 from app.services.application_submission import DEFAULT_MATCH_THRESHOLD
 from app.services.career_data import (
     LINKEDIN_EXPORT_FILES,
@@ -1159,6 +1162,12 @@ def _build_settings(
             "email": user.get("email", ""),
             "targetRole": user.get("targetRole") or "",
             "location": user.get("location") or "",
+            # Profile photo (Settings → Profile). ``hasAvatar`` is True only
+            # when bytea is present; ``avatarRevision`` is the SHA-256 hex
+            # stored in ``User.image`` for cache-busting — never a URL or the
+            # raw bytes (those come from GET /workspaces/settings/avatar).
+            "hasAvatar": bool(user.get("hasAvatar")),
+            "avatarRevision": user.get("avatarRevision") or None,
         },
         "resume": {
             "activeFile": resume_row.get("label") if resume_row else None,
@@ -1205,6 +1214,7 @@ def get_settings(current_user: CurrentUser) -> dict[str, Any]:
     """Current settings read from the User table."""
     uid = current_user["id"]
     ensure_user_profile_columns()
+    ensure_user_avatar_columns()
     # U2a (R-F1): "originalFile" is a lazily-added column (app.db.ensure_resume_
     # columns) — must run before the "Latest resume" query below selects a
     # presence check on it, exactly like every other Resume read path.
@@ -1214,7 +1224,9 @@ def get_settings(current_user: CurrentUser) -> dict[str, Any]:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT id, email, name, "targetRole", "location", "agentConfig"
+                SELECT id, email, name, "targetRole", "location", "agentConfig",
+                       "avatarFile" IS NOT NULL AS "hasAvatar",
+                       "image" AS "avatarRevision"
                 FROM "User" WHERE id = %s
                 """,
                 (uid,),
@@ -1445,6 +1457,89 @@ def update_settings(payload: SettingsUpdate, current_user: CurrentUser) -> dict[
                 ) from None
         conn.commit()
 
+    return get_settings(current_user)
+
+
+
+# ---------------------------------------------------------------------------
+# Profile photo — POST/GET/DELETE /workspaces/settings/avatar
+# Wireframe: design/screens/settings.html btn-avatar-st08 (PNG/JPG, max 2MB).
+# Account chrome only — never applied to résumés, cover letters, or employer
+# application emails.
+# ---------------------------------------------------------------------------
+
+MAX_AVATAR_BYTES = 2 * 1024 * 1024
+_PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
+_JPEG_MAGIC = b"\xff\xd8\xff"
+_UNSUPPORTED_AVATAR_DETAIL = (
+    "Aether accepts PNG or JPG photos up to 2 MB. This file is not a readable "
+    "PNG or JPEG."
+)
+_NO_AVATAR_DETAIL = "No profile photo is stored for this account."
+
+
+def _sniff_avatar_content_type(data: bytes) -> str | None:
+    """Return image/png or image/jpeg from magic bytes; ignore client claims."""
+    if data.startswith(_PNG_MAGIC):
+        return "image/png"
+    if data.startswith(_JPEG_MAGIC):
+        return "image/jpeg"
+    return None
+
+
+@router.post("/settings/avatar")
+async def upload_settings_avatar(
+    current_user: CurrentUser, file: UploadFile = File(...)
+) -> dict[str, Any]:
+    """Store the authenticated user's profile photo (PNG or JPG, max 2MB)."""
+    ensure_user_avatar_columns()
+    data = await file.read(MAX_AVATAR_BYTES + 1)
+    if len(data) > MAX_AVATAR_BYTES:
+        raise HTTPException(
+            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            f"Profile photo is larger than the "
+            f"{MAX_AVATAR_BYTES // (1024 * 1024)}MB upload limit.",
+        )
+    content_type = _sniff_avatar_content_type(data)
+    if content_type is None:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY, _UNSUPPORTED_AVATAR_DETAIL
+        )
+    revision = hashlib.sha256(data).hexdigest()
+    UserRepository().set_avatar(current_user["id"], data, content_type, revision)
+    return get_settings(current_user)
+
+
+@router.get("/settings/avatar")
+def download_settings_avatar(current_user: CurrentUser) -> Response:
+    """Stream the authenticated user's profile photo bytes (owner-only)."""
+    ensure_user_avatar_columns()
+    record = UserRepository().get_avatar(current_user["id"])
+    if record is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
+    data = record.get("avatarFile")
+    if not data:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, _NO_AVATAR_DETAIL)
+    if not isinstance(data, (bytes, bytearray)):
+        data = bytes(data)
+    revision = record.get("image") or hashlib.sha256(data).hexdigest()
+    media_type = record.get("avatarContentType") or "application/octet-stream"
+    return Response(
+        content=data,
+        media_type=media_type,
+        headers={
+            "X-Content-Type-Options": "nosniff",
+            "Cache-Control": "private, no-store",
+            "ETag": f'"{revision}"',
+        },
+    )
+
+
+@router.delete("/settings/avatar")
+def delete_settings_avatar(current_user: CurrentUser) -> dict[str, Any]:
+    """Remove the authenticated user's profile photo."""
+    ensure_user_avatar_columns()
+    UserRepository().clear_avatar(current_user["id"])
     return get_settings(current_user)
 
 

@@ -1082,7 +1082,7 @@ Rules of engagement unchanged: locks (git/deploy/test), runbook deploys, append-
 
 ## SESSION PROFILE-PHOTO — 2026-08-18T08:34Z — Settings profile photo upload
 
-**By:** Cursor Grok session. Worktree `/root/dev/aether-wt-profile-photo` on `feat/settings-profile-photo` from `origin/main` @ `77231581`.
+**By:** Cursor Grok session. Worktree `/root/dev/aether-wt-profile-photo` on `feat/settings-profile-photo` from `origin/main` @ `fbfc3b4c`.
 **Scope claimed:**
 - `apps/api/app/db.py` — `ensure_user_avatar_columns` only
 - `apps/api/app/repositories/user.py` — avatar set/get/clear methods
@@ -1095,9 +1095,10 @@ Rules of engagement unchanged: locks (git/deploy/test), runbook deploys, append-
 - `apps/web/src/app/dashboard/settings/settings-client.tsx` — Profile section wiring only
 - `apps/web/src/components/user-menu.tsx`, `shell/CommandBar.tsx` — photo chip
 - Settings vitest fixtures + `profile-avatar.test.tsx`
+- `apps/web/src/components/agents/workflow-linkage.ts` — retarget StoryEntry dedup citation after db.py insert
 **Does not touch:** résumés/PDF generation, apply_executor, networking, sales, admin, applications timeline WIP on other branches.
 **Deploy:** push to `main` → VPS Delivery. Delete `feat/settings-profile-photo` after land. No standing PR.
-
+**Status:** GATED green — avatar pytest 11 + DEF-B 2; settings vitests; type-check; lint; integrity_guard. Pushing.
 
 ---
 
@@ -1130,3 +1131,4 @@ Rules of engagement unchanged: locks (git/deploy/test), runbook deploys, append-
 - Tests: `test_email_agent.py`, `test_ml_w4c_email_agent_quota.py`, `email-center-wiring.test.ts`, `agents-feedback.test.ts`
 **Does not touch:** `llm_client.py`, `workspaces.py` networking/avatar routes, sales/admin, insights/draft 429 (no deterministic substitute), MV-006 wireframe chrome, unpushed `feat/ec-adv`.
 **Deploy:** push onto `origin/main`; delete `feat/ec-adv-429` after land. No PR.
+

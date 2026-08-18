@@ -532,8 +532,21 @@ export const deleteOffer = (offerId: string, options: RequestOptions = {}) =>
 
 /* -------------------------------- Settings -------------------------------- */
 
+/** Text fields persisted by PUT /workspaces/settings (photo is separate). */
+export interface SettingsProfileFields {
+  fullName: string;
+  email: string;
+  targetRole: string;
+  location: string;
+}
+
 export interface SettingsPayload {
-  profile: { fullName: string; email: string; targetRole: string; location: string };
+  profile: SettingsProfileFields & {
+    /** True only when profile photo bytes are stored. */
+    hasAvatar: boolean;
+    /** SHA-256 hex revision for cache-busting, or null when no photo. */
+    avatarRevision: string | null;
+  };
   resume: {
     /** `null` when the user has no resume at all (see workspaces.py's
      * `_build_settings` — never coerced to `""`). F-3 refix: this used to be
@@ -563,7 +576,7 @@ export const fetchSettings = (options: RequestOptions = {}) =>
   apiRequest<SettingsPayload>("/workspaces/settings", options);
 
 export const saveSettings = (
-  profile: SettingsPayload["profile"],
+  profile: SettingsProfileFields,
   agentConfig: SettingsPayload["agentConfig"],
   options: RequestOptions = {},
 ) =>

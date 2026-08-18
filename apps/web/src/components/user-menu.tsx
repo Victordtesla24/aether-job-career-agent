@@ -16,11 +16,14 @@ export function UserMenu({
   initials,
   name,
   role,
+  photoSrc = null,
   loading = false,
 }: {
   initials: string;
   name: string;
   role: string;
+  /** Authenticated blob URL for the profile photo, or null for initials. */
+  photoSrc?: string | null;
   /** M6: while the session/profile is still loading, render calm skeleton
    * placeholders instead of the fallback "AE"/"Welcome" chip, so the identity
    * does not visibly flip once the real name arrives. */
@@ -69,6 +72,14 @@ export function UserMenu({
             aria-hidden="true"
             data-testid="user-chip-skeleton"
             className="w-9 h-9 rounded-full bg-white/10 animate-pulse"
+          />
+        ) : photoSrc ? (
+          // eslint-disable-next-line @next/next/no-img-element -- blob: URL from authenticated fetch
+          <img
+            src={photoSrc}
+            alt={name.trim() || "Profile photo"}
+            data-testid="user-menu-photo"
+            className="h-9 w-9 rounded-full object-cover"
           />
         ) : (
           <span className="w-9 h-9 rounded-full bg-gradient-to-br from-aether-indigo to-aether-violet flex items-center justify-center text-sm font-semibold">

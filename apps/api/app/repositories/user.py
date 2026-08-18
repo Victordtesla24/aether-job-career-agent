@@ -8,6 +8,7 @@ from typing import Any
 from app.db import (
     ensure_admin_user_columns,
     ensure_password_reset_columns,
+    ensure_user_avatar_columns,
     ensure_user_lifecycle_columns,
     ensure_user_profile_columns,
     get_connection,
@@ -227,6 +228,54 @@ class UserRepository:
                 )
                 rows = rows_to_dicts(cur)
         return (rows[0].get("targetRole") or "").strip() if rows else ""
+
+    def set_avatar(
+        self, user_id: str, data: bytes, content_type: str, revision: str
+    ) -> None:
+        """Persist profile-photo bytes + sniffed type; stamp ``image`` = revision.
+
+        ``avatarFile`` is deliberately NOT on ``_USER_COLUMNS`` — callers that
+        only need the revision read ``image``; the raw bytes are fetched via
+        :meth:`get_avatar` on the dedicated download route.
+        """
+        ensure_user_avatar_columns()
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    'UPDATE "User" SET "avatarFile"=%s, "avatarContentType"=%s,'
+                    ' "image"=%s, "updatedAt"=NOW() WHERE "id"=%s',
+                    (data, content_type, revision, user_id),
+                )
+            conn.commit()
+
+    def get_avatar(self, user_id: str) -> dict[str, Any] | None:
+        """Owner-scoped avatar row, or ``None`` when the user does not exist.
+
+        A present user with no photo returns a dict whose ``avatarFile`` is
+        ``None`` — callers distinguish "no photo" from "no user" that way.
+        """
+        ensure_user_avatar_columns()
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    'SELECT "avatarFile", "avatarContentType", "image"'
+                    ' FROM "User" WHERE "id" = %s',
+                    (user_id,),
+                )
+                rows = rows_to_dicts(cur)
+        return rows[0] if rows else None
+
+    def clear_avatar(self, user_id: str) -> None:
+        """Remove the stored photo and clear the revision in ``image``."""
+        ensure_user_avatar_columns()
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    'UPDATE "User" SET "avatarFile"=NULL, "avatarContentType"=NULL,'
+                    ' "image"=NULL, "updatedAt"=NOW() WHERE "id"=%s',
+                    (user_id,),
+                )
+            conn.commit()
 
     def _get_one(self, where: str, params: tuple) -> dict[str, Any] | None:
         with get_connection() as conn:
