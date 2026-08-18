@@ -27,13 +27,15 @@ const ApplicationTimelineGL = dynamic(() => import("./ApplicationTimelineGL"), {
 });
 
 const LANE_H = 80;
-const LABEL_W = 220;
+// Exported so tests can assert the DOM lane track's rendered minWidth against
+// laneTrackWidth(...) using the real constants, instead of duplicating them.
+export const LABEL_W = 220;
 const PAD_X = 28;
 // The DOM lane track never renders narrower than this. GL geometry shares
 // the exact same floor (via laneTrackWidth) so its overlay stays aligned
 // with the interactive dots when the timeline is narrower than
 // label + track (TL-VIZ-R4 / D2).
-const LANE_TRACK_MIN = 560;
+export const LANE_TRACK_MIN = 560;
 const VIEWPORT_H = "min(calc(100dvh - 300px), 1120px)";
 
 const LEGEND: Array<{ key: keyof typeof STATUS_NODE_COLOR; label: string }> = [
@@ -428,7 +430,11 @@ export default function ApplicationTimeline({
                     ) : null}
                   </div>
 
-                  <div className="relative min-w-0 flex-1" style={{ minWidth: laneTrackWidthPx }}>
+                  <div
+                    data-testid="timeline-lane-track"
+                    className="relative min-w-0 flex-1"
+                    style={{ minWidth: laneTrackWidthPx }}
+                  >
                     <div
                       aria-hidden="true"
                       className="absolute left-7 right-7 top-1/2 h-px -translate-y-1/2 bg-white/[0.08]"

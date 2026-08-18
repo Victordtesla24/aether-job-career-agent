@@ -5,8 +5,9 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
-import ApplicationTimeline from "../ApplicationTimeline";
+import ApplicationTimeline, { LABEL_W, LANE_TRACK_MIN } from "../ApplicationTimeline";
 import { BACKFILL_SOURCE, type TimelinePayload } from "../timeline-model";
+import { laneTrackWidth } from "../timeline-gl-geometry";
 import type { TrackerApplication } from "../tracker-api";
 
 function app(over: Partial<TrackerApplication> = {}): TrackerApplication {
@@ -142,6 +143,43 @@ describe("ApplicationTimeline", () => {
     const svg = screen.getByTestId("timeline-connectors");
     expect(svg.getAttribute("style") || "").toMatch(/left:\s*28px/);
     expect(svg.getAttribute("style") || "").toMatch(/right:\s*28px/);
+  });
+
+  it("pins the DOM lane track's rendered minWidth to the shared laneTrackWidth formula (TL-VIZ-R4 D2)", () => {
+    // Real ResizeObserver rig (same pattern as VirtualList.test.tsx): jsdom
+    // has no layout engine, so this delivers one synchronous measurement to
+    // drive glSize.w to a viewport narrow enough that the DOM track and the
+    // GL basis would visibly diverge if either side stopped calling the
+    // shared laneTrackWidth() formula (the exact regression this guards —
+    // TL-VIZ-R3 silently reintroduced a diverging DOM formula once already).
+    const realRO = window.ResizeObserver;
+    const NARROW_ROW_W = 700;
+    class NarrowRowResizeObserver {
+      constructor(private cb: ResizeObserverCallback) {}
+      observe(target: Element) {
+        this.cb(
+          [
+            {
+              target,
+              contentRect: { width: NARROW_ROW_W, height: 400 },
+            } as unknown as ResizeObserverEntry,
+          ],
+          this as unknown as ResizeObserver,
+        );
+      }
+      unobserve() {}
+      disconnect() {}
+    }
+    window.ResizeObserver = NarrowRowResizeObserver as unknown as typeof ResizeObserver;
+
+    try {
+      render(<ApplicationTimeline payload={PAYLOAD} onOpenDetail={vi.fn()} />);
+      const track = screen.getByTestId("timeline-lane-track");
+      const expected = `${laneTrackWidth(NARROW_ROW_W, LABEL_W, LANE_TRACK_MIN)}px`;
+      expect(track.style.minWidth).toBe(expected);
+    } finally {
+      window.ResizeObserver = realRO;
+    }
   });
 
   it("suppresses node click after a drag pan (adv P1)", () => {
