@@ -47,9 +47,9 @@ from app.services.llm_client import LLMClient
 from app.services.stripe_gateway import StripeNotConfiguredError
 from tests.test_cli_d5_served_model_disclosure import (  # noqa: F401 — reused fixture/helpers
     _CHEAP_PRIMARY,
-    _Resp,
     _install_transport,
     _ok,
+    _Resp,
     openrouter_env,
 )
 
@@ -217,7 +217,7 @@ def _responder_success_then_failure(n_success: int):
 
 
 def test_generate_marketing_content_discloses_served_model_on_completion(
-    monkeypatch, openrouter_env, sales_wiring, tmp_path
+    monkeypatch, openrouter_env, sales_wiring, tmp_path  # noqa: F811
 ):
     """FAILS on unpatched sales_agent.py: no ``served_model_capture()`` scope
     is ever opened, so ``get_last_served_model()`` reads ``None`` and neither
@@ -244,7 +244,7 @@ def test_generate_marketing_content_discloses_served_model_on_completion(
 
 
 def test_generate_marketing_content_disclosure_is_persisted_on_the_run_row(
-    monkeypatch, openrouter_env, sales_wiring, tmp_path
+    monkeypatch, openrouter_env, sales_wiring, tmp_path  # noqa: F811
 ):
     """The persisted ``AgentRun.output`` (what ``GET /agents/runs`` and the
     admin UI actually read) must carry the same disclosure as the HTTP-shaped
@@ -271,7 +271,7 @@ def test_generate_marketing_content_disclosure_is_persisted_on_the_run_row(
 
 
 def test_generate_marketing_content_failure_after_a_successful_call_discloses_it(
-    monkeypatch, openrouter_env, sales_wiring, tmp_path
+    monkeypatch, openrouter_env, sales_wiring, tmp_path  # noqa: F811
 ):
     """FAILS on unpatched sales_agent.py: the ``except Exception`` branch
     that finishes the run 'failed' never reads ``get_last_served_model()`` —
@@ -297,7 +297,7 @@ def test_generate_marketing_content_failure_after_a_successful_call_discloses_it
 
 
 def test_generate_marketing_content_failure_before_any_success_discloses_nothing(
-    monkeypatch, openrouter_env, sales_wiring, tmp_path
+    monkeypatch, openrouter_env, sales_wiring, tmp_path  # noqa: F811
 ):
     """PIN (passes before and after the fix): every attempt fails before any
     successful call — nothing was ever observed, so nothing may be disclosed."""
@@ -324,7 +324,7 @@ def test_generate_marketing_content_failure_before_any_success_discloses_nothing
 
 
 def test_run_discloses_served_model_via_linkedin_draft(
-    monkeypatch, openrouter_env, sales_wiring, tmp_path
+    monkeypatch, openrouter_env, sales_wiring, tmp_path  # noqa: F811
 ):
     """FAILS on unpatched sales_agent.py: ``run()`` never opens
     ``served_model_capture()`` either, so a manual/timer run that drafted a
@@ -350,7 +350,7 @@ def test_run_discloses_served_model_via_linkedin_draft(
 
 
 def test_run_discloses_served_model_on_the_failed_terminal_path(
-    monkeypatch, openrouter_env, sales_wiring, tmp_path
+    monkeypatch, openrouter_env, sales_wiring, tmp_path  # noqa: F811
 ):
     """FAILS on unpatched sales_agent.py: the ``except Exception`` branch in
     ``run()`` never reads ``get_last_served_model()`` — a run that genuinely
@@ -382,7 +382,9 @@ def test_run_discloses_served_model_on_the_failed_terminal_path(
     assert sales_wiring.finished[-1]["output"]["servedProvider"] == "openrouter"
 
 
-def test_run_with_no_llm_call_discloses_nothing(monkeypatch, openrouter_env, sales_wiring):
+def test_run_with_no_llm_call_discloses_nothing(
+    monkeypatch, openrouter_env, sales_wiring  # noqa: F811
+):
     """PIN (passes before and after the fix): drafting switched off
     (``AETHER_SALES_LINKEDIN_DRAFTS_PER_WEEK=0``), no sending accounts, no
     lifecycle scope — a fully deterministic run makes zero LLM calls and must
