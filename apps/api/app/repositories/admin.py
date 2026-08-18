@@ -1513,9 +1513,18 @@ def purge_orphan_billing(cur: Any) -> dict[str, Any]:
 def _cron_status() -> dict[str, Any]:
     """P1-9: honest scheduler status derived from the scout run ledger.
 
-    The discovery scheduler is a systemd timer (``aether-discovery.timer``,
-    fires every 30 min) whose runs land in ``AgentRun`` as ``agentName='scout'``.
-    Rather than hardcoding "not configured", report from that ledger:
+    GAP-P7-DISCOVERY-002 (R3): the discovery scheduler is the ``discovery_
+    sweep_cron`` ARQ cron on the live worker process (``apps/api/app/workers/
+    discovery_sweep.py``, registered in ``apps/api/app/workers/settings.py``,
+    every 30 min at :03/:33), whose runs land in ``AgentRun`` as
+    ``agentName='scout'`` — same ledger this function already read. This
+    docstring/detail text previously claimed an ``aether-discovery.timer``
+    systemd unit; that unit does not exist on this host (it was the
+    Abacus-era mechanism, dropped in the VPS migration and never replaced
+    until this cron) — the R2 delta review (docs/delivery/evidence/
+    RUN-20260818T0223Z/FEAT-JOBBOARD/10-r2-delta-review.md) flagged the
+    identical false citation in Settings' own copy. Rather than hardcoding
+    "not configured", report from the ledger:
     - no scout runs at all      → not_configured
     - last run within 90 min    → ok (3 missed 30-min fires is the alarm line)
     - older than 90 min         → stale
@@ -1547,7 +1556,7 @@ def _cron_status() -> dict[str, Any]:
             "status": "ok",
             "detail": (
                 f"Discovery scheduler live — last scout run {age_min} min ago "
-                "(systemd timer fires every 30 min)."
+                "(discovery_sweep_cron ARQ worker cron fires every 30 min)."
             ),
             "lastRunAt": last.isoformat(),
         }

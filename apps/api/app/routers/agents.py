@@ -3662,6 +3662,64 @@ def _sweep_eligible_users(limit: int) -> list[dict[str, str]]:
             return rows_to_dicts(cur)
 
 
+def _execute_discovery_for_user(user_id: str, email: str | None = None) -> dict[str, Any]:
+    """One subscriber's scheduled discovery pass (scout + fitScorer) — an
+    honest per-user result row. Never raises: every failure (missing search
+    target, a paused agent, an upstream outage) is caught and reported on the
+    row instead of aborting the caller's loop.
+
+    GAP-P7-DISCOVERY-002 (R3): lifted verbatim out of ``run_discovery_sweep``'s
+    per-user loop body so it has exactly ONE implementation, shared by BOTH
+    real discovery triggers on this deployment — the synchronous
+    ``POST /agents/discovery/sweep`` endpoint below (still reachable, e.g. for
+    an operator's manual re-run) and the ``discovery_sweep_user`` ARQ task
+    (``apps/api/app/workers/discovery_sweep.py``), which the periodic
+    ``discovery_sweep_cron`` enqueues per eligible user off the REAL worker
+    schedule (see that module's docstring for the cadence). Neither caller
+    duplicates this dispatch logic, and neither goes through HTTP — the worker
+    calls this function directly, in-process, so it needs no
+    ``X-Aether-System-Run`` secret of its own.
+
+    ``_dispatch(..., system_run=True)`` is the SAME scoped paywall exemption
+    (ADR-P7-05) and the SAME per-user guard the manual endpoint always used —
+    including ``_agent_paused_by_user``, so a user who has stopped their agents
+    via Agent Controls is skipped here exactly as honestly as a manual dispatch
+    would refuse them (a 409 ``agent_paused`` message lands on ``row["error"]``,
+    never a silent skip and never a bypass of their own pause).
+    """
+    row: dict[str, Any] = {
+        "userId": user_id, "email": email, "status": "ok",
+        "persisted": 0, "updated": 0, "scored": 0, "error": None,
+    }
+    try:
+        query, location = _resolve_scout_target(user_id, {})
+        scout = _dispatch(
+            user_id, "scout", {"query": query, "location": location},
+            system_run=True,
+        )
+        row["persisted"] = int(scout.get("persisted") or 0)
+        row["updated"] = int(scout.get("updated") or 0)
+        row["perSource"] = scout.get("per_source", [])
+        scored = _dispatch(user_id, "fitScorer", {"rescore": False}, system_run=True)
+        row["scored"] = int(scored.get("scored") or 0)
+        # Parity with POST /agents/fit-scorer/run (RT-008): newly scored
+        # jobs are exactly the board work the sweep consumes, so nudge it
+        # now instead of waiting up to 10 minutes for the ARQ cron.
+        # Best-effort — an enqueue hiccup must not taint an honest run.
+        if row["scored"] > 0:
+            try:
+                from app.workers.board_sweep import enqueue_user_sweep
+
+                enqueue_user_sweep(user_id)
+            except Exception:  # noqa: BLE001 — cron remains the floor
+                pass
+    except Exception as exc:  # noqa: BLE001 — report, never abort the caller
+        row["status"] = "error"
+        row["error"] = f"{type(exc).__name__}: {exc}"
+        logger.warning("discovery-sweep: user %s failed: %s", user_id, row["error"])
+    return row
+
+
 @router.post("/discovery/sweep")
 def run_discovery_sweep(request: Request) -> dict[str, Any]:
     """Scheduled discovery for EVERY entitled subscriber (S-FIX-A / S-1).
@@ -3678,6 +3736,16 @@ def run_discovery_sweep(request: Request) -> dict[str, Any]:
     one would be far worse than a scoped secret). The secret is compared in
     constant time by ``_is_system_run``; when ``AETHER_SYSTEM_RUN_SECRET`` is
     unset the endpoint is unreachable (401) rather than open.
+
+    GAP-P7-DISCOVERY-002 (R3 delta review, closes P0 Finding 1): this HTTP
+    route is no longer the only way discovery actually runs on this
+    deployment — ``apps/api/app/workers/discovery_sweep.py``'s
+    ``discovery_sweep_cron`` (a real ARQ cron on the live worker process, see
+    that module for the cadence) now serves the same eligible population
+    automatically, calling the same ``_execute_discovery_for_user`` this route
+    calls below, directly in-process (no HTTP self-call, no shared secret
+    needed from inside the worker). This route remains reachable for an
+    operator's manual/ad-hoc re-run and is not removed.
 
     Each user's runs go through the SAME ``_dispatch`` as their own manual run,
     with ``system_run=True`` — so the scoped paywall exemption for scout /
@@ -3711,36 +3779,7 @@ def run_discovery_sweep(request: Request) -> dict[str, Any]:
     rows: list[dict[str, Any]] = []
     for index, user in enumerate(users):
         user_id = str(user["id"])
-        row: dict[str, Any] = {
-            "userId": user_id, "email": user.get("email"), "status": "ok",
-            "persisted": 0, "updated": 0, "scored": 0, "error": None,
-        }
-        try:
-            query, location = _resolve_scout_target(user_id, {})
-            scout = _dispatch(
-                user_id, "scout", {"query": query, "location": location},
-                system_run=True,
-            )
-            row["persisted"] = int(scout.get("persisted") or 0)
-            row["updated"] = int(scout.get("updated") or 0)
-            row["perSource"] = scout.get("per_source", [])
-            scored = _dispatch(user_id, "fitScorer", {"rescore": False}, system_run=True)
-            row["scored"] = int(scored.get("scored") or 0)
-            # Parity with POST /agents/fit-scorer/run (RT-008): newly scored
-            # jobs are exactly the board work the sweep consumes, so nudge it
-            # now instead of waiting up to 10 minutes for the ARQ cron.
-            # Best-effort — an enqueue hiccup must not taint an honest run.
-            if row["scored"] > 0:
-                try:
-                    from app.workers.board_sweep import enqueue_user_sweep
-
-                    enqueue_user_sweep(user_id)
-                except Exception:  # noqa: BLE001 — cron remains the floor
-                    pass
-        except Exception as exc:  # noqa: BLE001 — report, never abort the sweep
-            row["status"] = "error"
-            row["error"] = f"{type(exc).__name__}: {exc}"
-            logger.warning("discovery-sweep: user %s failed: %s", user_id, row["error"])
+        row = _execute_discovery_for_user(user_id, user.get("email"))
         rows.append(row)
         # Space the runs so N users do not burst the shared external API budget
         # or the database connection ceiling. Never sleeps after the last user.

@@ -12,6 +12,7 @@ from app.workers.agent_directives_sweep import agent_directives_cron
 from app.workers.apply_sweep import apply_sweep_cron, apply_sweep_user
 from app.workers.board_sweep import board_sweep_cron, board_sweep_user
 from app.workers.digest_cron import notification_digest_cron
+from app.workers.discovery_sweep import discovery_sweep_cron, discovery_sweep_user
 from app.workers.queue import job_timeout_seconds
 from app.workers.sales_cron import sales_agent_cron
 from app.workers.tasks import (
@@ -80,6 +81,17 @@ def _cron_jobs():
             # agent_directives_sweep.directives_enabled for why this cadence
             # gates on that flag more conservatively than the manual endpoint.
             cron(agent_directives_cron, hour={3}, minute={20}),
+            # GAP-P7-DISCOVERY-002 (R3, closes R2 delta review P0 Finding 1) —
+            # the real periodic discovery mechanism restoring the Owner
+            # directive: every 30 min at :03/:33 (offset from board-sweep
+            # :00/10/20/30/40/50, apply-sweep :07/22/37/52, sales :15/:45, and
+            # the stale-job watchdog's :00/05/10.../55). Enqueues one
+            # discovery pass per eligible, not-recently-swept entitled
+            # subscriber. Honest no-op unless AETHER_DISCOVERY_CRON_ENABLED is
+            # on (code default ON — see discovery_sweep.py). This IS the
+            # scheduler; the Abacus-era `aether-discovery.timer` systemd unit
+            # this cron replaces does not exist on this host.
+            cron(discovery_sweep_cron, minute={3, 33}),
         ]
     except Exception:  # noqa: BLE001 — cron optional; enqueue path is primary
         return []
@@ -130,7 +142,7 @@ async def _on_startup(ctx) -> None:
 
 
 class WorkerSettings:
-    functions = [run_agent_job, _sweep_func(), _apply_sweep_func()]
+    functions = [run_agent_job, _sweep_func(), _apply_sweep_func(), discovery_sweep_user]
     cron_jobs = _cron_jobs()
     on_startup = _on_startup
     redis_settings = _redis_settings()

@@ -139,6 +139,18 @@ const SUBSCRIPTION = {
   },
 };
 
+// `SUBSCRIPTION` above carries no `entitlement` field, so
+// `subscription?.entitlement?.entitled === true` is `false` for it — used
+// deliberately (R4, R3 delta review Finding 1) by tests proving the
+// discovery-cadence legend does NOT claim automatic search for a
+// non-entitled viewer. This fixture is the CONFIRMED-entitled counterpart,
+// the exact `entitlement.entitled: true` verdict `GET /billing/subscription`
+// echoes for an active paid account.
+const SUBSCRIPTION_ENTITLED = {
+  ...SUBSCRIPTION,
+  entitlement: { unlimited: false, entitled: true, source: "plan", isAdmin: false, planId: "pro", activePaid: true },
+};
+
 afterEach(() => {
   cleanup();
   fetchSettingsMock.mockReset();
@@ -300,6 +312,100 @@ describe("SettingsPage — Job Board Sync is real, not a fake setTimeout (MV-set
 
     fireEvent.click(syncAllBtn);
     expect(runScoutAgentMock).not.toHaveBeenCalled();
+  });
+
+  it("shows an inline (not hover-only) notice naming the missing profile field(s), visible on first render", async () => {
+    // FEAT-JOBBOARD notice restored R3 (lane/feat-jobboard-r2 rebase onto
+    // origin/main@a32ea3a6/PR23): pre-dates the default-on catalog rework and
+    // was dropped by the rebase; PR23's catalog fix (never an empty board
+    // list) is a different, complementary problem from this one — WHY Sync
+    // All is disabled — so it does not supersede this notice.
+    fetchSettingsMock.mockResolvedValue(SETTINGS_MISSING_PROFILE);
+    fetchCareerDataMock.mockResolvedValue(CAREER_DATA);
+    fetchSubscriptionMock.mockResolvedValue(SUBSCRIPTION);
+
+    await renderOnIntegrations();
+
+    const notice = screen.getByTestId("jobboard-missing-profile-notice");
+    expect(notice.getAttribute("role")).toBe("status");
+    const text = notice.textContent ?? "";
+    expect(text).toMatch(/target role and location/i);
+    expect(text).toMatch(/not set on your profile yet/i);
+    expect(text).toMatch(/expect 0 jobs discovered/i);
+
+    const cta = screen.getByTestId("jobboard-profile-cta");
+    fireEvent.click(cta);
+    await waitFor(() => screen.getByTestId("settings-profile"));
+  });
+
+  it("does not show the missing-profile notice once target role and location are both set", async () => {
+    fetchSettingsMock.mockResolvedValue(SETTINGS);
+    fetchCareerDataMock.mockResolvedValue(CAREER_DATA);
+    fetchSubscriptionMock.mockResolvedValue(SUBSCRIPTION);
+
+    await renderOnIntegrations();
+
+    expect(screen.queryByTestId("jobboard-missing-profile-notice")).toBeNull();
+  });
+});
+
+describe("SettingsPage — real discovery cadence in the Integrations legend (GAP-P7-DISCOVERY-002, closes R2 delta review P0 Finding 1, R3 delta review P1 Finding 1)", () => {
+  it("shows the present-tense automatic-search claim ONLY for a qualifying viewer (active plan + complete profile)", async () => {
+    fetchSettingsMock.mockResolvedValue(FULL_CATALOG_SETTINGS);
+    fetchCareerDataMock.mockResolvedValue(CAREER_DATA);
+    fetchSubscriptionMock.mockResolvedValue(SUBSCRIPTION_ENTITLED);
+
+    await renderOnIntegrations();
+
+    const legend = screen.getByTestId("jobboard-cadence-legend");
+    const text = legend.textContent ?? "";
+    // The R2 copy this replaces cited a nonexistent `aether-discovery.timer`
+    // systemd unit (R2 delta review P0 Finding 1) — this legend must never
+    // reference that unit again.
+    expect(text).not.toMatch(/aether-discovery\.timer/i);
+    expect(text).toMatch(/every 30 minutes/i);
+    expect(text).toMatch(/discovery worker/i);
+    expect(text).toMatch(/no manual sync required/i);
+    // Never the non-qualifying fallback's conditional framing.
+    expect(text).not.toMatch(/once your plan is active/i);
+  });
+
+  it("does NOT show the automatic-search claim for a blank-profile viewer, even when entitled (R3 delta review P1 Finding 1)", async () => {
+    // Reviewer-verified defect: a blank-profile viewer previously saw the
+    // present-tense automatic-search claim rendered beside their own honest
+    // "0 jobs, Sync disabled" notice, with no rendering-level signal
+    // excluding them — the sentence's WORDING was conditioned but its
+    // RENDERING was not. This is the exact scenario that must now differ.
+    fetchSettingsMock.mockResolvedValue(SETTINGS_MISSING_PROFILE);
+    fetchCareerDataMock.mockResolvedValue(CAREER_DATA);
+    fetchSubscriptionMock.mockResolvedValue(SUBSCRIPTION_ENTITLED);
+
+    await renderOnIntegrations();
+
+    const legend = screen.getByTestId("jobboard-cadence-legend");
+    const text = legend.textContent ?? "";
+    expect(text).not.toMatch(/no manual sync required/i);
+    expect(text).toMatch(/once your plan is active/i);
+
+    // Both honest sentences on the same card, never contradicting each
+    // other for this exact viewer.
+    const section = screen.getByTestId("settings-integrations");
+    expect(section.textContent ?? "").toMatch(/expect 0 jobs discovered/i);
+  });
+
+  it("does NOT show the automatic-search claim for a non-entitled viewer, even with a complete profile", async () => {
+    fetchSettingsMock.mockResolvedValue(FULL_CATALOG_SETTINGS);
+    fetchCareerDataMock.mockResolvedValue(CAREER_DATA);
+    // No `entitlement` field at all — subscription fetch resolved, but not
+    // confirmed entitled (the honest "unresolved/non-entitled" shape).
+    fetchSubscriptionMock.mockResolvedValue(SUBSCRIPTION);
+
+    await renderOnIntegrations();
+
+    const legend = screen.getByTestId("jobboard-cadence-legend");
+    const text = legend.textContent ?? "";
+    expect(text).not.toMatch(/no manual sync required/i);
+    expect(text).toMatch(/once your plan is active/i);
   });
 });
 
