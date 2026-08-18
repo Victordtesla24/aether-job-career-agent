@@ -52,7 +52,13 @@ from app.repositories.gmail_account import (
     mask_account_email,
 )
 from app.services.fabrication_guard import FabricationGuard
-from app.services.llm_client import LLMClient, LLMFixtureMissingError, get_model
+from app.services.llm_client import (
+    LLMClient,
+    LLMFixtureMissingError,
+    LLMUnavailableError,
+    get_model,
+    llm_failure_user_message,
+)
 from app.services.resume_grounding import resolve_user_resume_text
 
 logger = logging.getLogger(__name__)
@@ -431,6 +437,35 @@ class EmailAgent:
                 model=get_model("REASONING"),
                 temperature=0.0,
             )
+        except LLMUnavailableError as exc:
+            # Prod 2026-08-18: user-chosen Claude HTTP 429 (and glm-5 unusable
+            # JSON before extract_json_document) failed the whole job after
+            # Gmail sync had already succeeded. ADR-ML-3 forbids swapping the
+            # model. Persist the career-filter categories (no invented scores,
+            # no auto-draft) and price the run at zero.
+            triaged, categories = self._persist_filter_classifications(
+                user_id, threads
+            )
+            user_message = llm_failure_user_message(exc)
+            logger.warning(
+                "email_triage LLM unavailable; persisted career-filter "
+                "categories without scores: %s",
+                exc,
+            )
+            return EmailAgentResult(
+                mode="triage",
+                connected=connected,
+                degraded=True,
+                llm_called=False,
+                synced=synced,
+                triaged=triaged,
+                categories=categories,
+                message=(
+                    f"Sorted {triaged} career "
+                    f"{'thread' if triaged == 1 else 'threads'} with the "
+                    f"career filter (no AI scores this run). {user_message}"
+                ),
+            )
         except LLMFixtureMissingError as exc:
             raise EmailAgentError("triage model unavailable") from exc
         items = {int(it.get("index", -1)): it for it in raw.get("items", [])}
@@ -510,6 +545,36 @@ class EmailAgent:
             categories=categories,
             message=message,
         )
+
+    def _persist_filter_classifications(
+        self, user_id: str, threads: list[dict[str, Any]]
+    ) -> tuple[int, dict[str, int]]:
+        """Write career-filter categories only — never a fabricated aiScore."""
+        from app.services.career_email_filter import classify_thread
+
+        categories: dict[str, int] = {}
+        triaged = 0
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                for t in threads:
+                    thread_id = t.get("id")
+                    if not thread_id:
+                        continue
+                    verdict = classify_thread(t)
+                    category = (
+                        verdict.category
+                        if verdict.category in _CATEGORIES
+                        else "all"
+                    )
+                    categories[category] = categories.get(category, 0) + 1
+                    cur.execute(
+                        'UPDATE "EmailThread" SET "classification" = %s'
+                        ' WHERE id = %s AND "userId" = %s',
+                        (category, thread_id, user_id),
+                    )
+                    triaged += 1
+            conn.commit()
+        return triaged, categories
 
     def _auto_draft_recruiter_threads(
         self, user_id: str, targets: list[tuple[str, str]]

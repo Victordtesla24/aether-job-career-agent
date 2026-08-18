@@ -130,6 +130,85 @@ def test_apply_labels_degrades_when_not_connected():
     assert "Connect Gmail" in res.message
 
 
+def test_triage_rate_limit_degrades_with_filter_categories_no_scores(monkeypatch):
+    """Prod 2026-08-18: user-chosen Claude HTTP 429 must not 503 the Email Center.
+
+    Sync + career-filter keep/hide already ran. Inventing scores or silently
+    swapping models would violate honesty / ADR-ML-3. Persist deterministic
+    categories, leave aiScore untouched, bill nothing, return degraded.
+    """
+    from app.agents import email_agent as email_agent_mod
+    from app.services.llm_client import (
+        LLM_RATE_LIMITED_USER_MESSAGE,
+        LLMUnavailableError,
+    )
+
+    class _BoomLLM:
+        def complete_json(self, *a, **k):
+            raise LLMUnavailableError("LLM provider HTTP 429: rate_limit_error")
+
+    class _Cur:
+        def __init__(self):
+            self.calls = []
+
+        def execute(self, sql, params=None):
+            self.calls.append((sql, params))
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    class _Conn:
+        def __init__(self):
+            self.cur = _Cur()
+
+        def cursor(self):
+            return self.cur
+
+        def commit(self):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    conn = _Conn()
+    monkeypatch.setattr(email_agent_mod, "get_connection", lambda: conn)
+    monkeypatch.setattr(
+        "app.services.interview_ingest.ingest_inbound_for_user",
+        lambda *a, **k: None,
+    )
+
+    agent = EmailAgent(llm=_BoomLLM(), credentials=_FakeCreds(connected=False))
+    agent._threads = lambda uid: [  # type: ignore[method-assign]
+        {
+            "id": "t-int",
+            "subject": "Interview invitation Tuesday 10am",
+            "gmailThreadId": "g1",
+            "messages": [
+                {
+                    "from": "Ada Recruiter",
+                    "fromEmail": "ada@acme.com",
+                    "body": "Please join the interview on Tuesday.",
+                }
+            ],
+        }
+    ]
+    res = agent.run("u1", mode="triage")
+    assert res.degraded is True
+    assert res.llm_called is False
+    assert res.triaged == 1
+    assert res.categories.get("priority") == 1
+    assert LLM_RATE_LIMITED_USER_MESSAGE in res.message
+    assert "no AI scores" in res.message
+    written = [params for _sql, params in conn.cur.calls if params]
+    assert any(params[0] == "priority" and params[1] == "t-int" for params in written)
+
+
 # ------------------------------------------------------------- integration
 def _make_draft(client, auth_headers, subject):
     resp = client.post(

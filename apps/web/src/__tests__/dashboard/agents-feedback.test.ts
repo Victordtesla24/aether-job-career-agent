@@ -305,6 +305,22 @@ describe("agentSuccessNotice", () => {
       expect(n.href).toBe("/dashboard/email");
     });
 
+    it("never paints success or blames Gmail when triage degraded on a rate limit", () => {
+      const n = agentSuccessNotice("emailAgent", {
+        mode: "triage",
+        connected: true,
+        degraded: true,
+        triaged: 12,
+        message:
+          "Sorted 12 career threads with the career filter (no AI scores this run). The AI provider rate-limited this run. Wait a minute and try again, or pick a lighter model in Agent Settings.",
+      });
+      expect(n.kind).not.toBe("success");
+      expect(n.text).toContain("rate-limited");
+      expect(n.text.toLowerCase()).not.toContain("gmail is not connected");
+      expect(n.href).toBe("/dashboard/email");
+      expect(n.hrefLabel).toBe("open Email Center →");
+    });
+
     it("renders a genuine success for a real, connected triage", () => {
       const n = agentSuccessNotice("emailAgent", {
         mode: "triage",

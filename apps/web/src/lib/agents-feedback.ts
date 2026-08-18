@@ -294,9 +294,11 @@ export function agentSuccessNotice(agent: string, output: Record<string, unknown
       if (output.degraded === true) {
         return {
           kind: "info",
-          text: message ?? "Email Agent could not triage your inbox — Gmail is not connected.",
+          text:
+            message ??
+            "Email Agent could not finish AI scoring. Open Email Center to see what was sorted.",
           href: "/dashboard/email",
-          hrefLabel: "connect Gmail →",
+          hrefLabel: "open Email Center →",
         };
       }
       return {

@@ -18,6 +18,7 @@ import {
   emailAgentErrorMessage,
   emailReplySentNotice,
   emailScoreBadge,
+  emailTriageNotice,
   gmailConnectedSuccessNotice,
   linkedInSearchUrl,
   parseEmailDraft,
@@ -175,6 +176,33 @@ describe("Email Center copy (no emoji / checkmarks)", () => {
     const text = emailReplySentNotice("Pat Lee");
     expect(text).toContain("Pat Lee");
     expect(text).not.toMatch(/[✓✔✅]/);
+  });
+});
+
+describe("emailTriageNotice", () => {
+  it("success copy names scores only when the run was not degraded", () => {
+    const notice = emailTriageNotice({
+      degraded: false,
+      triaged: 4,
+      drafted: 1,
+    });
+    expect(notice.kind).toBe("success");
+    expect(notice.message).toMatch(/Triaged 4 threads — scores and tabs updated/);
+    expect(notice.message).toMatch(/1 recruiter reply drafted for review/);
+  });
+
+  it("429 degrade is a warn, uses the backend sentence, never claims scores", () => {
+    const notice = emailTriageNotice({
+      degraded: true,
+      triaged: 12,
+      drafted: 0,
+      message:
+        "Sorted 12 career threads with the career filter (no AI scores this run). The AI provider rate-limited this run. Wait a minute and try again, or pick a lighter model in Agent Settings.",
+    });
+    expect(notice.kind).toBe("warn");
+    expect(notice.message).toContain("no AI scores");
+    expect(notice.message).toContain("rate-limited");
+    expect(notice.message).not.toMatch(/scores and tabs updated/i);
   });
 });
 

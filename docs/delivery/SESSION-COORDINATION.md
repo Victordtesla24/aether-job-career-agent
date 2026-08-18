@@ -1116,3 +1116,17 @@ Rules of engagement unchanged: locks (git/deploy/test), runbook deploys, append-
 ### Deploy window — API slice — 2026-08-18T08:40Z
 
 **Claimed by:** SESSION TL-VIZ. Commit `d487363d` (+ session claim). Units: `aether-prod-api` via VPS Delivery after push to `main`. Do not hand-restart while PROFILE-PHOTO or ORCH batch holds a lock.
+
+---
+
+## SESSION EC-ADV — 2026-08-18T08:30Z — Email Center triage 429 degrade
+
+**By:** Cursor Grok session. Isolated worktree `/root/dev/aether-wt-ec-triage` on `feat/ec-adv-429` from `origin/main` (`77231581`). Does not take SESSION NW-ADV, ADM, ORCH-TEAM, PROFILE-PHOTO, or applications-timeline files.
+**Why:** Production Triage (2026-08-18 06:02:34Z, job `ca91c2b8bd0e39f7ba4dba365`) still fails HTTP 503 when the user-chosen model HTTP 429s. EC-FIX made the sentence honest; the click still looks like a product crash. ADR-ML-3 forbids a silent model swap.
+**Scope claimed:**
+- `apps/api/app/agents/email_agent.py` — on `LLMUnavailableError` after sync + career filter, persist deterministic categories (no scores, no auto-draft), `degraded=True`, `llm_called=False`
+- `apps/web/src/app/dashboard/email/page.tsx` + `apps/web/src/lib/api/workspaces.ts` (`emailTriageNotice` only) — copper warn, never “scores updated”
+- `apps/web/src/lib/agents-feedback.ts` — degraded emailAgent must not paint success / must not blame missing Gmail for a 429
+- Tests: `test_email_agent.py`, `test_ml_w4c_email_agent_quota.py`, `email-center-wiring.test.ts`, `agents-feedback.test.ts`
+**Does not touch:** `llm_client.py`, `workspaces.py` networking/avatar routes, sales/admin, insights/draft 429 (no deterministic substitute), MV-006 wireframe chrome, unpushed `feat/ec-adv`.
+**Deploy:** push onto `origin/main`; delete `feat/ec-adv-429` after land. No PR.

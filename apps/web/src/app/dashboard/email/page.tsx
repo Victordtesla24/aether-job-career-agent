@@ -16,6 +16,7 @@ import {
   emailReplySentNotice,
   emailScoreBadge,
   emailSendErrorMessage,
+  emailTriageNotice,
   fetchEmailInbox,
   fetchEmailThreadBody,
   gmailConnectedSuccessNotice,
@@ -101,7 +102,10 @@ export default function EmailCenterPage() {
   const [draftBusy, setDraftBusy] = useState(false);
   const [draftError, setDraftError] = useState<string | null>(null);
   const [triageBusy, setTriageBusy] = useState(false);
-  const [triageNotice, setTriageNotice] = useState<{ kind: "success" | "error"; message: string } | null>(null);
+  const [triageNotice, setTriageNotice] = useState<{
+    kind: "success" | "error" | "warn";
+    message: string;
+  } | null>(null);
   const [syncBusy, setSyncBusy] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -320,20 +324,9 @@ export default function EmailCenterPage() {
     setTriageNotice(null);
     try {
       const res = await runAgent("email", { mode: "triage" });
-      const triaged = typeof res.triaged === "number" ? res.triaged : 0;
-      const drafted = typeof res.drafted === "number" ? res.drafted : 0;
       const data = await fetchEmailInbox();
       applyInbox(data);
-      setTriageNotice({
-        kind: "success",
-        message:
-          triaged > 0
-            ? `Triaged ${triaged} thread${triaged === 1 ? "" : "s"} — scores and tabs updated.`
-              + (drafted > 0
-                ? ` ${drafted} recruiter ${drafted === 1 ? "reply" : "replies"} drafted for review (nothing sent).`
-                : "")
-            : "No threads to triage yet.",
-      });
+      setTriageNotice(emailTriageNotice(res));
     } catch (e) {
       setTriageNotice({
         kind: "error",
@@ -906,10 +899,12 @@ export default function EmailCenterPage() {
       {triageNotice ? (
         <p
           data-testid="triage-notice"
-          role={triageNotice.kind === "error" ? "alert" : "status"}
+          role={triageNotice.kind === "success" ? "status" : "alert"}
           className={`rounded-xl border p-3 text-sm ${triageNotice.kind === "error"
               ? "border-red-500/30 bg-red-500/10 text-red-300"
-              : "border-aether-violet/30 bg-aether-violet/10 text-aether-violet"
+              : triageNotice.kind === "warn"
+                ? "border-state-warn/30 bg-state-warn/10 text-state-warn"
+                : "border-aether-violet/30 bg-aether-violet/10 text-aether-violet"
             }`}
         >
           {triageNotice.message}

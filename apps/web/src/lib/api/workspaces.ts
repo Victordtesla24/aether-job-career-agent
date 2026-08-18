@@ -373,6 +373,44 @@ export function emailAgentErrorMessage(error: unknown, fallback: string): string
   return workspaceApiErrorMessage(error, fallback);
 }
 
+export type EmailTriageNotice = {
+  kind: "success" | "warn";
+  message: string;
+};
+
+/**
+ * Banner after POST /agents/email/run mode=triage. A degraded run (sync
+ * failure, empty inbox without Gmail, or LLM 429/unusable JSON) must never
+ * claim that scores were updated — those scores were not written.
+ */
+export function emailTriageNotice(result: Record<string, unknown>): EmailTriageNotice {
+  const triaged = typeof result.triaged === "number" ? result.triaged : 0;
+  const drafted = typeof result.drafted === "number" ? result.drafted : 0;
+  const backend =
+    typeof result.message === "string" && result.message.trim()
+      ? result.message.trim()
+      : "";
+  if (result.degraded === true) {
+    return {
+      kind: "warn",
+      message:
+        backend ||
+        "Inbox sorted without AI scores. Wait a minute and try again, or pick a lighter model in Agent Settings.",
+    };
+  }
+  if (triaged > 0) {
+    return {
+      kind: "success",
+      message:
+        `Triaged ${triaged} thread${triaged === 1 ? "" : "s"} — scores and tabs updated.` +
+        (drafted > 0
+          ? ` ${drafted} recruiter ${drafted === 1 ? "reply" : "replies"} drafted for review (nothing sent).`
+          : ""),
+    };
+  }
+  return { kind: "success", message: backend || "No threads to triage yet." };
+}
+
 export function gmailConnectedSuccessNotice(): string {
   return "Gmail connected — syncing your inbox.";
 }

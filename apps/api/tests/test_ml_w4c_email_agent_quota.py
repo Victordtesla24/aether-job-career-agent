@@ -167,6 +167,40 @@ def test_triage_with_nothing_to_classify_is_refunded(
     assert _runs_used(user_id) == before
 
 
+def test_triage_llm_rate_limit_completes_unmetered(
+    client, auth_headers, billing_seeded, user_id, monkeypatch
+):
+    """A 429 after the career filter must complete degraded and refund the reserve.
+
+    Charging for unused output, or failing the HTTP job, is the production
+    Email Center crash (2026-08-18 06:02Z).
+    """
+    from app.services.llm_client import (
+        LLM_RATE_LIMITED_USER_MESSAGE,
+        LLMUnavailableError,
+    )
+
+    def _boom(self, *a, **k):  # noqa: ANN001 — LLMClient.complete_json
+        raise LLMUnavailableError("LLM provider HTTP 429: rate_limit_error")
+
+    monkeypatch.setattr(
+        "app.services.llm_client.LLMClient.complete_json", _boom
+    )
+    _seed_thread(user_id, subject="Interview next Tuesday at Acme")
+    before = _runs_used(user_id)
+    resp = client.post(
+        "/agents/email/run", json={"mode": "triage"}, headers=auth_headers
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["degraded"] is True
+    assert body["triaged"] == 1
+    assert body["noLlmCall"] is True
+    assert body["costUsd"] == 0.0 and body["model"] is None
+    assert LLM_RATE_LIMITED_USER_MESSAGE in body["message"]
+    assert _runs_used(user_id) == before
+
+
 def test_a_real_triage_run_consumes_exactly_one_run(
     client, auth_headers, billing_seeded, user_id, monkeypatch
 ):
