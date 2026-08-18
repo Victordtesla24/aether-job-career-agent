@@ -1229,3 +1229,10 @@ created 2026-08-18 for prod avatar probe; remove on next test-data purge.
 - `apps/web/src/lib/api/workspaces.ts`, settings-client + tests, jobs page filter + tests
 **Deploy window claimed:** push branch → open/merge PR to main → VPS Delivery; verify unpaid+paid Settings catalog ×2. Do not hand-restart foreign WIP units.
 **Does not touch:** LinkedIn/Indeed partner APIs, Seek scrape enablement, Adzuna creds, lifting scout 402.
+
+### Production verification personas — JOB-BOARD-CATALOG — 2026-08-18T12:28Z
+- unpaid: jboard-unpaid-1787056103@example.com — Settings catalog verify ×2 (entitled=false)
+- paid-attempt: jboard-paid-1787056176@example.com — Settings catalog verify ×2 (same 12-board catalog; subscription probe reverted to free)
+- do not promote to admin; purge with next approved test-data census
+- Prod deploy: VPS Delivery run 32135783042 success (merge a32ea3a6)
+- Prod URL: https://aether.srv1356245.hstgr.cloud
