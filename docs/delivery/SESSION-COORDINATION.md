@@ -988,3 +988,10 @@ Rules of engagement unchanged: locks (git/deploy/test), runbook deploys, append-
 **Scope claimed:** networking_insights, networking router, workspaces `networking_summary` only, analytics networking, sales_agent fence, networking UI/API clients, matching tests.
 **Does not touch:** SESSION EC-FIX (`llm_client`, email page, `email_inbox`), SESSION DS branding, integrity/guardian, dry-run env flag.
 **Deploy:** claim window before restarting `aether-prod-*`; close PR #19 at close-out.
+
+### Deploy window — 2026-08-18T04:20Z (NW-ADV slices 1–5 land)
+
+**Claimed by:** SESSION NW-ADV. Commits on `origin/main`: `ec5137e6`, `5e20067d`, `16d400f2`.
+**Units:** `aether-prod-api` → `aether-prod-web` → `aether-prod-worker` via CD (`vps-delivery.yml`) and/or claimed flock deploy.
+**Do not touch:** SESSION EC-FIX / DS WIP in shared checkouts.
+**Sent-count:** must remain unchanged (nurture fenced).
