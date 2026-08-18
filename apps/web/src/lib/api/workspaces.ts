@@ -174,6 +174,7 @@ export interface EmailMessage {
   intelligence: EmailIntelligence | null;
   draftReply: string;
   unread?: boolean;
+  messageCount?: number;
 }
 
 /**
@@ -254,6 +255,58 @@ export function parseEmailDraftFlags(resp: Record<string, unknown>): string[] {
     : [];
 }
 
+export type EmailDraftTone = {
+  enthusiasm?: number;
+  formality?: number;
+  detail?: number;
+};
+
+export function parseEmailDraftTone(resp: Record<string, unknown>): EmailDraftTone | null {
+  const raw = resp?.tone;
+  if (!raw || typeof raw !== "object") return null;
+  const tone: EmailDraftTone = {};
+  for (const key of ["enthusiasm", "formality", "detail"] as const) {
+    const value = (raw as Record<string, unknown>)[key];
+    if (typeof value === "number" && Number.isFinite(value)) {
+      tone[key] = Math.max(0, Math.min(100, Math.round(value)));
+    }
+  }
+  return Object.keys(tone).length > 0 ? tone : null;
+}
+
+export function emailToneBars(tone: EmailDraftTone | null): Array<{
+  label: string;
+  value: number | null;
+}> {
+  return [
+    { label: "Enthusiasm", value: tone?.enthusiasm ?? null },
+    { label: "Formality", value: tone?.formality ?? null },
+    { label: "Detail", value: tone?.detail ?? null },
+  ];
+}
+
+export function emailAutomationStatus(inbox: EmailInbox): {
+  lastScan: string;
+  nextScan: string;
+  autoReply: string;
+  followUpsQueued: number;
+  personalHidden: number | null;
+  automatedCount: number | null;
+} {
+  const stamps = inbox.accounts
+    .map((account) => account.lastSyncedAt)
+    .filter((value): value is string => Boolean(value));
+  const lastScan = stamps.length > 0 ? stamps.slice().sort().at(-1) ?? "not measured" : "not measured";
+  return {
+    lastScan,
+    nextScan: "On demand — Sync Now or Run AI Triage. This page refreshes every 30 seconds.",
+    autoReply: "Draft for Review",
+    followUpsQueued: inbox.followUps.length,
+    personalHidden: typeof inbox.stats.personalHidden === "number" ? inbox.stats.personalHidden : null,
+    automatedCount: typeof inbox.stats.automatedCount === "number" ? inbox.stats.automatedCount : null,
+  };
+}
+
 /**
  * An honest per-sender LinkedIn *search* URL (MV-email-center-007) — a people
  * search by the sender's name (+ company), NOT a fabricated "profile" link that
@@ -291,6 +344,8 @@ export interface EmailInbox {
     sentApproved: number;
     followUpsSent: number;
     avgResponseHrs: number | null;
+    automatedCount?: number;
+    personalHidden?: number;
   };
   followUps: Array<{ company: string; role: string; dueIn: string; status: string }>;
   messages: EmailMessage[];
@@ -429,25 +484,37 @@ function receivedAtMs(value: string): number {
   return Number.isNaN(parsed) ? 0 : parsed;
 }
 
+export type EmailSortKey = "score" | "potential" | "recency";
+
+function careerPotential(message: EmailMessage): number | null {
+  const fit = message.intelligence?.breakdown?.find((row) => /role fit/i.test(row.label));
+  if (typeof fit?.value === "number") return fit.value;
+  return typeof message.score === "number" ? message.score : null;
+}
+
 /**
- * Inbox list order. Priority and Follow-Up tabs lead with the real triage
- * score (null last) so the most actionable recruiter mail is at the top.
- * The All Recruiter tab stays recency-only so a brand-new unscored thread is
- * not buried under older scored mail.
+ * Inbox list order. With no explicit sort key, Priority and Follow-Up lead
+ * with the real triage score (null last). All Recruiter stays recency-only
+ * so a brand-new unscored thread is not buried. An explicit Sort control
+ * overrides that default. Career Potential uses Role Fit from a real
+ * insights run when present, otherwise the triage score — never a fabricated
+ * third metric.
  */
 export function sortEmailInboxMessages(
   messages: EmailMessage[],
   category: EmailMessage["category"] | "all",
+  sortKey?: EmailSortKey,
 ): EmailMessage[] {
   const copy = messages.slice();
-  const scoreFirst = category === "priority" || category === "followup";
+  const key =
+    sortKey ?? (category === "priority" || category === "followup" ? "score" : "recency");
   copy.sort((a, b) => {
-    if (scoreFirst) {
-      const aHas = typeof a.score === "number";
-      const bHas = typeof b.score === "number";
-      if (aHas && bHas && a.score !== b.score) {
-        return (b.score as number) - (a.score as number);
-      }
+    if (key === "score" || key === "potential") {
+      const av = key === "potential" ? careerPotential(a) : a.score;
+      const bv = key === "potential" ? careerPotential(b) : b.score;
+      const aHas = typeof av === "number";
+      const bHas = typeof bv === "number";
+      if (aHas && bHas && av !== bv) return (bv as number) - (av as number);
       if (aHas !== bHas) return aHas ? -1 : 1;
     }
     return receivedAtMs(b.receivedAt) - receivedAtMs(a.receivedAt);

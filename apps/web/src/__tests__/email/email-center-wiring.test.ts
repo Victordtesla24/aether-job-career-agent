@@ -17,14 +17,18 @@ import { describe, expect, it } from "vitest";
 import {
   emailAgentErrorMessage,
   emailAgentRateLimited,
+  emailAutomationStatus,
   emailReplySentNotice,
   emailScoreBadge,
+  emailToneBars,
   emailTriageNotice,
   gmailConnectedSuccessNotice,
   linkedInSearchUrl,
   parseEmailDraft,
+  parseEmailDraftTone,
   parseEmailInsights,
   sortEmailInboxMessages,
+  type EmailInbox,
   type EmailMessage,
 } from "../../lib/api/workspaces";
 
@@ -163,6 +167,106 @@ describe("sortEmailInboxMessages", () => {
       "all",
     );
     expect(sorted.map((m) => m.id)).toEqual(["new", "mid", "high"]);
+  });
+
+  it("explicit recency sort overrides priority score-first default", () => {
+    const sorted = sortEmailInboxMessages(
+      [olderHigh, mid, newestUnscored],
+      "priority",
+      "recency",
+    );
+    expect(sorted.map((m) => m.id)).toEqual(["new", "mid", "high"]);
+  });
+
+  it("career potential uses Role Fit, never a fabricated third metric", () => {
+    const fitLow = msg({
+      id: "fit-low",
+      score: 90,
+      intelligence: {
+        score: 40,
+        breakdown: [{ label: "Role Fit Signals", value: 20 }],
+        summary: "Weak fit.",
+      },
+    });
+    const fitHigh = msg({
+      id: "fit-high",
+      score: 10,
+      intelligence: {
+        score: 80,
+        breakdown: [{ label: "Role Fit Signals", value: 95 }],
+        summary: "Strong fit.",
+      },
+    });
+    const sorted = sortEmailInboxMessages([fitLow, fitHigh], "all", "potential");
+    expect(sorted.map((m) => m.id)).toEqual(["fit-high", "fit-low"]);
+  });
+});
+
+describe("draft tone bars (MV-006)", () => {
+  it("shows not measured when the agent returned no tone", () => {
+    expect(parseEmailDraftTone({})).toBeNull();
+    expect(emailToneBars(null).map((row) => row.value)).toEqual([null, null, null]);
+    expect(emailToneBars(null).map((row) => row.label)).toEqual([
+      "Enthusiasm",
+      "Formality",
+      "Detail",
+    ]);
+  });
+
+  it("lifts real 0-100 tone scores", () => {
+    expect(
+      parseEmailDraftTone({ tone: { enthusiasm: 55, formality: 80, detail: 40 } }),
+    ).toEqual({ enthusiasm: 55, formality: 80, detail: 40 });
+  });
+});
+
+describe("automation status (MV-006)", () => {
+  const emptyInbox: EmailInbox = {
+    accounts: [
+      {
+        id: "a1",
+        email: "me@gmail.com",
+        provider: "Gmail",
+        status: "connected",
+        isPrimary: true,
+        unread: 0,
+        lastSyncedAt: "2026-08-18T06:00:00+00:00",
+      },
+    ],
+    stats: {
+      received: 2,
+      recruiterEmails: 1,
+      autoDrafted: 0,
+      sentApproved: 0,
+      followUpsSent: 0,
+      avgResponseHrs: null,
+      automatedCount: 3,
+      personalHidden: 4,
+    },
+    followUps: [{ company: "Acme", role: "PM", dueIn: "Needs a follow-up draft", status: "queued" }],
+    messages: [],
+    recruiterProfile: null,
+  };
+
+  it("uses the real last sync stamp and never claims auto-send", () => {
+    const status = emailAutomationStatus(emptyInbox);
+    expect(status.lastScan).toBe("2026-08-18T06:00:00+00:00");
+    expect(status.nextScan).toMatch(/On demand/);
+    expect(status.autoReply).toBe("Draft for Review");
+    expect(status.followUpsQueued).toBe(1);
+    expect(status.personalHidden).toBe(4);
+    expect(status.automatedCount).toBe(3);
+  });
+
+  it("says not measured when no mailbox has ever synced", () => {
+    const status = emailAutomationStatus({
+      ...emptyInbox,
+      accounts: [{ ...emptyInbox.accounts[0], lastSyncedAt: null }],
+      stats: { ...emptyInbox.stats, automatedCount: undefined, personalHidden: undefined },
+    });
+    expect(status.lastScan).toBe("not measured");
+    expect(status.personalHidden).toBeNull();
+    expect(status.automatedCount).toBeNull();
   });
 });
 

@@ -329,6 +329,192 @@ def test_email_agent_request_accepts_light_retry_flag():
     assert EmailAgentRequest(mode="triage", light_retry=True).light_retry is True
 
 
+def test_email_agent_request_accepts_bulk_label_fields():
+    """RUN-20260818T0223Z EC-ADV reconciliation: the bulk mark_read/apply_labels
+    UI (page.tsx runInboxAction) posts thread_ids/add/remove/message_id, but
+    EmailAgentRequest never declared them — pydantic's default extra='ignore'
+    silently dropped every one before it reached the agent, so the landed
+    bulk-label/bulk-mark-read buttons would 400 or no-op in production despite
+    passing every agent-level unit test (which calls EmailAgent directly and
+    never goes through this Pydantic layer). Not one of the review's five
+    merge conflicts — a wiring gap in e9d6c890 itself, fixed while landing."""
+    from app.routers.agents import EmailAgentRequest
+
+    req = EmailAgentRequest(
+        mode="apply_labels",
+        thread_ids=["t1", "t2"],
+        add=["Interested"],
+        remove=["id-old"],
+        message_id="m-1",
+    )
+    assert req.thread_ids == ["t1", "t2"]
+    assert req.add == ["Interested"]
+    assert req.remove == ["id-old"]
+    assert req.message_id == "m-1"
+    # Defaults stay None so `params = {k: v for ... if v is not None}` in
+    # run_email_agent() omits them entirely for callers that never set them.
+    assert EmailAgentRequest().thread_ids is None
+    assert EmailAgentRequest().add is None
+    assert EmailAgentRequest().remove is None
+    assert EmailAgentRequest().message_id is None
+
+
+# ---------------------------------------------- Email Center controls (EC-ADV)
+def test_mark_read_and_trash_and_history_degrade_when_not_connected():
+    agent = EmailAgent(credentials=_FakeCreds(connected=False))
+    read = agent.run("u1", mode="mark_read")
+    trash = agent.run("u1", mode="trash_automated")
+    history = agent.run("u1", mode="thread_history", thread_id="t1")
+    assert read.degraded is True and read.llm_called is False
+    assert trash.degraded is True and trash.llm_called is False
+    assert history.degraded is True and history.llm_called is False
+    assert "Connect Gmail" in read.message
+    assert "Connect Gmail" in trash.message
+    assert "Connect Gmail" in history.message
+
+
+class _FakeGmail:
+    def __init__(self) -> None:
+        self.trashed: list[str] = []
+        self.modified: list[tuple[str, list[str], list[str]]] = []
+        self.history_ids: list[str] = []
+
+    def trash(self, message_id: str) -> dict:
+        self.trashed.append(message_id)
+        return {}
+
+    def modify_labels(self, message_id: str, add=None, remove=None) -> dict:  # noqa: ANN001
+        self.modified.append((message_id, list(add or []), list(remove or [])))
+        return {}
+
+    def ensure_label(self, name: str) -> str:
+        return f"id-{name}"
+
+    def get_thread_messages(self, gmail_thread_id: str) -> list[dict]:
+        self.history_ids.append(gmail_thread_id)
+        return [
+            {
+                "from": "Pat Lee",
+                "fromEmail": "pat@acme.com",
+                "body": "Are you free Thursday?",
+                "receivedAt": "Mon, 17 Aug 2026",
+                "gmailMessageId": "m-1",
+            }
+        ]
+
+
+def test_mark_read_removes_unread_on_career_threads():
+    gmail = _FakeGmail()
+    agent = EmailAgent(credentials=_FakeCreds(connected=True), gmail=gmail)
+    agent._threads = lambda user_id: [  # type: ignore[assignment]
+        {
+            "id": "t-unread",
+            "labels": ["UNREAD", "INBOX"],
+            "gmailMessageId": "gm-unread",
+            "subject": "Interview with Acme",
+            "messages": [{"from": "Pat", "fromEmail": "pat@acme.com", "body": "interview"}],
+        }
+    ]
+    agent._update_thread_fields = lambda *a, **k: None  # type: ignore[assignment]
+    res = agent.run("u1", mode="mark_read")
+    assert res.llm_called is False
+    assert res.marked_read == 1
+    assert gmail.modified == [("gm-unread", [], ["UNREAD"])]
+
+
+def test_trash_automated_spares_recruiter_threads():
+    gmail = _FakeGmail()
+    agent = EmailAgent(credentials=_FakeCreds(connected=True), gmail=gmail)
+    agent._threads = lambda user_id: [  # type: ignore[assignment]
+        {
+            "id": "t-auto",
+            "subject": "New jobs matching your alert",
+            "gmailMessageId": "gm-auto",
+            "messages": [
+                {
+                    "from": "LinkedIn Job Alerts",
+                    "fromEmail": "jobalerts@linkedin.com",
+                    "body": "New jobs this week",
+                }
+            ],
+        },
+        {
+            "id": "t-rec",
+            "subject": "Interview with Acme",
+            "gmailMessageId": "gm-rec",
+            "messages": [
+                {"from": "Pat Lee", "fromEmail": "pat@acme.com", "body": "Can we interview Thursday?"}
+            ],
+        },
+    ]
+    agent._update_thread_fields = lambda *a, **k: None  # type: ignore[assignment]
+    res = agent.run("u1", mode="trash_automated")
+    assert res.llm_called is False
+    assert res.trashed == 1
+    assert gmail.trashed == ["gm-auto"]
+
+
+def test_thread_history_returns_gmail_messages():
+    gmail = _FakeGmail()
+    agent = EmailAgent(credentials=_FakeCreds(connected=True), gmail=gmail)
+    agent._thread = lambda user_id, thread_id: {  # type: ignore[assignment]
+        "id": thread_id,
+        "gmailThreadId": "gt-1",
+        "gmailAccountId": None,
+    }
+    res = agent.run("u1", mode="thread_history", thread_id="t1")
+    assert res.llm_called is False
+    assert gmail.history_ids == ["gt-1"]
+    assert res.thread_messages[0]["from"] == "Pat Lee"
+
+
+def test_apply_labels_bulk_thread_ids_dedupes_by_gmail_message_id():
+    """The "Label all visible" bulk action (page.tsx bulkLabel) resolves every
+    thread_id to its gmailMessageId and writes each UNIQUE message once — a
+    re-synced duplicate thread pointing at the same Gmail message must not
+    double the write."""
+    gmail = _FakeGmail()
+    agent = EmailAgent(credentials=_FakeCreds(connected=True), gmail=gmail)
+    threads = {
+        "t1": {"id": "t1", "gmailMessageId": "gm-1"},
+        "t2": {"id": "t2", "gmailMessageId": "gm-2"},
+        "t3": {"id": "t3", "gmailMessageId": "gm-1"},  # same message as t1
+    }
+    agent._thread = lambda user_id, thread_id: threads[thread_id]  # type: ignore[assignment]
+    res = agent.run(
+        "u1",
+        mode="apply_labels",
+        thread_ids=["t1", "t2", "t3"],
+        add=["Interested"],
+    )
+    assert res.llm_called is False
+    assert res.labels_applied == ["Interested"]
+    assert sorted(mid for mid, _add, _rm in gmail.modified) == ["gm-1", "gm-2"]
+    assert "2 message(s)" in res.message
+
+
+def test_draft_parses_tone_when_present():
+    clean = (
+        "thank you for the note about the delivery role. "
+        "i remain available for a call this week."
+    )
+    fake_llm = _FakeLLM(
+        {
+            "body": clean,
+            "tone": {"enthusiasm": 55, "formality": 80, "detail": 40},
+        }
+    )
+    agent = EmailAgent(llm=fake_llm, credentials=_FakeCreds())
+    agent._thread = lambda user_id, thread_id: {  # type: ignore[assignment]
+        "id": thread_id,
+        "subject": "Delivery role",
+        "messages": [{"body": "We have an opening for a delivery lead."}],
+    }
+    agent._resume_text = lambda *a, **k: "Experienced delivery lead and program manager."  # type: ignore[assignment]
+    res = agent.run("u1", mode="draft_reply", thread_id="t1")
+    assert res.tone == {"enthusiasm": 55, "formality": 80, "detail": 40}
+
+
 # ------------------------------------------------------------- integration
 def _make_draft(client, auth_headers, subject):
     resp = client.post(

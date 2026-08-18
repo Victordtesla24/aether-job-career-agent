@@ -146,6 +146,22 @@ def test_apply_labels_without_gmail_is_unmetered(
     assert _runs_used(user_id) == before
 
 
+@pytest.mark.parametrize("mode", ["mark_read", "trash_automated", "thread_history"])
+def test_new_no_llm_modes_without_gmail_are_unmetered(
+    client, auth_headers, billing_seeded, user_id, mode
+):
+    before = _runs_used(user_id)
+    payload: dict = {"mode": mode}
+    if mode == "thread_history":
+        payload["thread_id"] = "missing-thread"
+    resp = client.post("/agents/email/run", json=payload, headers=auth_headers)
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["connected"] is False and body["degraded"] is True
+    assert body["costUsd"] == 0.0 and body["model"] is None
+    assert _runs_used(user_id) == before
+
+
 # ---------------------------------------------------------------------------
 # DB-state-dependent no-LLM path: reserved up front, refunded by the backstop
 # ---------------------------------------------------------------------------
@@ -236,9 +252,12 @@ def test_metering_predicate_is_registered_and_scoped():
     assert _call_is_metered("emailAgent", {"mode": "draft_reply"}) is True
     assert _call_is_metered("emailAgent", {"mode": "draft_follow_up"}) is True
     assert _call_is_metered("emailAgent", {"mode": "insights"}) is True
-    # The two modes that provably reach no model.
+    # The modes that provably reach no model.
     assert _call_is_metered("emailAgent", {"mode": "send"}) is False
     assert _call_is_metered("emailAgent", {"mode": "apply_labels"}) is False
+    assert _call_is_metered("emailAgent", {"mode": "mark_read"}) is False
+    assert _call_is_metered("emailAgent", {"mode": "trash_automated"}) is False
+    assert _call_is_metered("emailAgent", {"mode": "thread_history"}) is False
     # An unknown mode is a 422 the agent raises AFTER dispatch — metered
     # conservatively so the reserve/refund path (not a silent free run) handles it.
     assert _call_is_metered("emailAgent", {"mode": "nope"}) is True
@@ -258,6 +277,9 @@ def test_no_llm_modes_report_llm_called_false_at_the_agent():
     assert sent.llm_called is False
     labels = agent.run("u1", mode="apply_labels", add=["Aether"])
     assert labels.llm_called is False
+    assert agent.run("u1", mode="mark_read").llm_called is False
+    assert agent.run("u1", mode="trash_automated").llm_called is False
+    assert agent.run("u1", mode="thread_history", thread_id="t1").llm_called is False
 
 
 class _FakeApprovals:

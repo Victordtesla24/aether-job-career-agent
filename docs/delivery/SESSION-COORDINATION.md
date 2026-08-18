@@ -1236,3 +1236,50 @@ created 2026-08-18 for prod avatar probe; remove on next test-data purge.
 - do not promote to admin; purge with next approved test-data census
 - Prod deploy: VPS Delivery run 32135783042 success (merge a32ea3a6)
 - Prod URL: https://aether.srv1356245.hstgr.cloud
+
+## SESSION EC-ADV-LAND — 2026-08-18T12:00Z — reconcile stale `feat/ec-adv` onto `origin/main`
+
+**By:** `fixer-hard` reconciliation lane for RUN-20260818T0223Z. Isolated worktree
+`.claude/worktrees/orch-ecadv-rebase`, branch `lane/ec-adv-rebase`, from `origin/main` (tip
+`9046a9b0` at branch-cut). **Not pushed** — this session prepares the landing branch only; a
+separate deploy window lands it.
+
+**Why:** Commit `e9d6c890` on `feat/ec-adv` (its own self-claim above, "SESSION EC-ADV —
+2026-08-18T07:00Z", never reached this file because the commit was never pushed) sat on a
+69-commit-stale base and never merged. Independent review
+(`docs/delivery/evidence/RUN-20260818T0223Z/commercial-readiness/ec-adv-land-review.md`, verdict
+REBASE-THEN-LAND) found 5 real merge conflicts, 2 of which would have deleted the already-shipped
+ADR-ML-3 honest-degrade behavior (EC-ADV-429 / EC-RETRY) and reopened the client-supplied-model-swap
+vector that behavior was built to close. This session note supersedes the stale 07:00Z self-claim
+above — its own description of `_json_model (explicit params.model else FAST)` describes exactly the
+design this reconciliation rejected.
+
+**What landed (`git cherry-pick -x e9d6c890` + manual conflict resolution, Cursor authorship
+preserved via `-x`):**
+- Bulk `apply_labels` (`thread_ids`, dedupe by resolved `gmailMessageId`), `mark_read`,
+  `trash_automated`, `thread_history` Email Agent modes + Email Center UI (bulk-label menu,
+  mark-all-read, trash-automated confirm, thread-history panel, sort control, tone bars,
+  automation-status panel).
+- **Rejected outright:** `feat/ec-adv`'s class-method `EmailAgent._json_model` (used
+  `normalize_model_id` on a client-supplied `model` string) and its `page.tsx`
+  `runTriage(model?: string)` / `{ model }` wire contract, and `workspaces.ts`
+  `isEmailAgentRateLimited` / `EMAIL_TRIAGE_LIGHT_MODEL`. All replaced by keeping `origin/main`'s
+  shipped module-level `_json_model` (ignores client `model`, only substitutes on explicit
+  `light_retry=True`), `runTriage(lightRetry: boolean)` → `light_retry: true`, and the pre-existing
+  `emailAgentRateLimited`. Two dropped tests asserted the rejected behavior directly
+  (`test_json_model_honours_explicit_param`, `test_insights_uses_explicit_model`) — not adapted,
+  removed, because keeping them green would have meant the vulnerability was not actually closed.
+- **Found beyond the review's 5 predicted conflicts:** `EmailAgentRequest` (the FastAPI/pydantic
+  request model) never declared `thread_ids` / `add` / `remove` / `message_id` — pydantic's default
+  `extra="ignore"` would have silently dropped every one of them before they reached the agent, so
+  the bulk-label/bulk-mark-read buttons would have 400'd or silently no-op'd once wired to a live
+  request despite passing every agent-level unit test (which calls `EmailAgent` directly, bypassing
+  the Pydantic layer). Added the 4 fields additively; added regression coverage
+  (`test_email_agent_request_accepts_bulk_label_fields`,
+  `test_apply_labels_bulk_thread_ids_dedupes_by_gmail_message_id`).
+
+**Does not touch:** anything outside the 6 files `e9d6c890` itself touched, plus this coordination
+note. No DB schema change. No push to `origin/main`.
+
+**Deploy:** none from this session — `lane/ec-adv-rebase` is a prepared, unpushed lane. Full
+evidence: `docs/delivery/evidence/RUN-20260818T0223Z/commercial-readiness/ec-adv-rebase-record.md`.

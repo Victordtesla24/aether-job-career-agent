@@ -24,12 +24,17 @@ import {
   linkedInSearchUrl,
   parseEmailDraft,
   parseEmailDraftFlags,
+  parseEmailDraftTone,
   parseEmailInsights,
   sendEmailReply,
   sortEmailInboxMessages,
+  emailAutomationStatus,
+  emailToneBars,
+  type EmailDraftTone,
   type EmailInbox,
   type EmailIntelligence,
   type EmailMessage,
+  type EmailSortKey,
 } from "../../../lib/api/workspaces";
 import { runAgent } from "../../../lib/api/agents";
 import {
@@ -52,6 +57,13 @@ const CATEGORIES = [
 ] as const;
 
 const EMAIL_POLL_MS = 30_000;
+
+const BULK_LABELS = [
+  "Aether/Recruiter",
+  "Aether/Follow-up",
+  "Aether/Interview",
+  "Aether/Applied",
+] as const;
 
 /** Keep date-only `YYYY-MM-DD` strings (tests + legacy rows) unchanged. */
 function formatReceivedAt(value: string): string {
@@ -109,6 +121,15 @@ export default function EmailCenterPage() {
   } | null>(null);
   const [syncBusy, setSyncBusy] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [sortKey, setSortKey] = useState<EmailSortKey | null>(null);
+  const [actionBusy, setActionBusy] = useState<string | null>(null);
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [threadHistory, setThreadHistory] = useState<
+    Array<{ from: string; body: string; receivedAt: string }>
+  >([]);
+  const [historyBusy, setHistoryBusy] = useState(false);
+  const [draftTones, setDraftTones] = useState<Record<string, EmailDraftTone>>({});
 
   // Job-alert intake (email agent `mode: "job_alerts"`). Before this control
   // existed the mode was reachable from no user action anywhere — the backend
@@ -382,6 +403,8 @@ export default function EmailCenterPage() {
       }
       setDrafts((prev) => ({ ...prev, [threadId]: text }));
       setDraftFlags((prev) => ({ ...prev, [threadId]: parseEmailDraftFlags(res) }));
+      const tone = parseEmailDraftTone(res);
+      if (tone) setDraftTones((prev) => ({ ...prev, [threadId]: tone }));
       setDraft(text);
     } catch (e) {
       setDraftError(emailAgentErrorMessage(e, "Could not generate a draft reply."));
@@ -580,8 +603,89 @@ export default function EmailCenterPage() {
         const hay = `${m.from} ${m.fromEmail} ${m.subject} ${m.preview} ${m.company}`.toLowerCase();
         return hay.includes(q);
       });
-    return sortEmailInboxMessages(filtered, category);
-  }, [inbox, category, accountFilter, searchQuery]);
+    return sortEmailInboxMessages(filtered, category, sortKey ?? undefined);
+  }, [inbox, category, accountFilter, searchQuery, sortKey]);
+
+  const runInboxAction = useCallback(
+    async (mode: string, params: Record<string, unknown>, busyKey: string) => {
+      setActionBusy(busyKey);
+      setTriageNotice(null);
+      try {
+        const res = await runAgent("email", { mode, ...params });
+        const data = await fetchEmailInbox();
+        applyInbox(data);
+        const message =
+          typeof res.message === "string" && res.message.trim()
+            ? res.message
+            : "Inbox updated.";
+        setTriageNotice({ kind: "success", message });
+      } catch (e) {
+        setTriageNotice({
+          kind: "error",
+          message: emailAgentErrorMessage(e, "Could not update the inbox."),
+        });
+      } finally {
+        setActionBusy(null);
+      }
+    },
+    [applyInbox],
+  );
+
+  const trashAutomated = useCallback(async () => {
+    if (
+      !window.confirm(
+        "Move automated job-alert and no-reply threads to Gmail Trash. Recruiter mail is not touched. Continue.",
+      )
+    ) {
+      return;
+    }
+    await runInboxAction("trash_automated", {}, "trash");
+  }, [runInboxAction]);
+
+  const markAllRead = useCallback(async () => {
+    const ids = visibleMessages.filter((m) => m.unread).map((m) => m.id);
+    if (ids.length === 0) {
+      setTriageNotice({ kind: "success", message: "No unread career threads in this view." });
+      return;
+    }
+    await runInboxAction("mark_read", { thread_ids: ids }, "read");
+  }, [runInboxAction, visibleMessages]);
+
+  const bulkLabel = useCallback(
+    async (name: string) => {
+      const ids = visibleMessages.map((m) => m.id);
+      if (ids.length === 0) return;
+      setBulkOpen(false);
+      await runInboxAction("apply_labels", { thread_ids: ids, add: [name] }, "label");
+    },
+    [runInboxAction, visibleMessages],
+  );
+
+  const loadThreadHistory = useCallback(async (threadId: string) => {
+    setHistoryBusy(true);
+    try {
+      const res = await runAgent("email", { mode: "thread_history", thread_id: threadId });
+      const raw = Array.isArray(res.thread_messages) ? res.thread_messages : [];
+      setThreadHistory(
+        raw.map((row) => {
+          const item = row && typeof row === "object" ? (row as Record<string, unknown>) : {};
+          return {
+            from: typeof item.from === "string" ? item.from : "",
+            body: typeof item.body === "string" ? item.body : "",
+            receivedAt: typeof item.receivedAt === "string" ? item.receivedAt : "",
+          };
+        }),
+      );
+      setHistoryOpen(true);
+    } catch (e) {
+      setTriageNotice({
+        kind: "error",
+        message: emailAgentErrorMessage(e, "Could not load thread history."),
+      });
+    } finally {
+      setHistoryBusy(false);
+    }
+  }, []);
 
   const selectMessage = (m: EmailMessage) => {
     setSelectedId(m.id);
@@ -590,6 +694,8 @@ export default function EmailCenterPage() {
     setSendError(null);
     setIntelError(null);
     setDraftError(null);
+    setHistoryOpen(false);
+    setThreadHistory([]);
   };
 
   const closeGate = useCallback(() => setGateOpen(false), []);
@@ -760,7 +866,7 @@ export default function EmailCenterPage() {
           <button
             type="button"
             onClick={openCompose}
-            className="rounded-xl bg-aether-coral px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
+            className="rounded-xl bg-gold px-4 py-2 text-sm font-semibold text-[#0A0A0A] hover:opacity-90"
           >
             <i className="fa-solid fa-pen mr-2" aria-hidden="true" />
             Compose
@@ -1118,8 +1224,54 @@ export default function EmailCenterPage() {
 
       <div className="grid gap-5 xl:grid-cols-4">
         {/* Smart Inbox */}
-        <section className="bg-surface-1 min-w-0 rounded-[14px] border border-white/10 p-4 xl:col-span-1" data-testid="smart-inbox">
+        <section className="bg-surface-1 flex min-h-0 min-w-0 max-h-[calc(100vh-12rem)] flex-col rounded-[14px] border border-white/10 p-4 xl:col-span-1" data-testid="smart-inbox">
           <h2 className="mb-3 text-[15px] font-semibold">Smart Inbox</h2>
+          <div className="mb-3 flex flex-wrap gap-1.5" data-testid="smart-actions">
+            <button
+              type="button"
+              data-testid="trash-automated-btn"
+              onClick={() => void trashAutomated()}
+              disabled={Boolean(actionBusy) || !connected}
+              className="rounded-lg border border-state-danger/25 bg-state-danger/10 px-2.5 py-1.5 text-[11px] font-medium text-state-danger hover:bg-state-danger/20 disabled:opacity-50"
+            >
+              {actionBusy === "trash" ? "Trashing…" : "Trash Automated/Spam"}
+            </button>
+            <button
+              type="button"
+              data-testid="mark-all-read-btn"
+              onClick={() => void markAllRead()}
+              disabled={Boolean(actionBusy) || !connected}
+              className="rounded-lg border border-white/15 bg-white/5 px-2.5 py-1.5 text-[11px] hover:border-white/30 disabled:opacity-50"
+            >
+              {actionBusy === "read" ? "Marking…" : "Mark All Read"}
+            </button>
+            <div className="relative">
+              <button
+                type="button"
+                data-testid="bulk-label-btn"
+                onClick={() => setBulkOpen((open) => !open)}
+                disabled={Boolean(actionBusy) || !connected || visibleMessages.length === 0}
+                className="rounded-lg border border-white/15 bg-white/5 px-2.5 py-1.5 text-[11px] hover:border-white/30 disabled:opacity-50"
+              >
+                {actionBusy === "label" ? "Labelling…" : "Bulk Label"}
+              </button>
+              {bulkOpen ? (
+                <div className="absolute z-10 mt-1 w-48 rounded-lg border border-white/15 bg-surface-2 p-1">
+                  {BULK_LABELS.map((name) => (
+                    <button
+                      key={name}
+                      type="button"
+                      data-testid={`bulk-label-${name}`}
+                      onClick={() => void bulkLabel(name)}
+                      className="block w-full rounded px-2 py-1 text-left text-[11px] text-aether-muted hover:bg-white/5 hover:text-white"
+                    >
+                      {name}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          </div>
           <label className="sr-only" htmlFor="email-inbox-search">
             Search inbox
           </label>
@@ -1147,7 +1299,27 @@ export default function EmailCenterPage() {
               </button>
             ))}
           </div>
-          <div className="max-h-[70vh] space-y-2 overflow-y-auto pr-1" data-testid="inbox-list">
+          <div className="mb-3 flex flex-wrap items-center gap-2 text-[11px] text-aether-muted" data-testid="inbox-sort">
+            <span>Sort:</span>
+            {(
+              [
+                ["score", "Interview Score"],
+                ["potential", "Career Potential"],
+                ["recency", "Recency"],
+              ] as const
+            ).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                data-testid={`sort-${key}`}
+                onClick={() => setSortKey(key)}
+                className={`rounded px-2 py-0.5 ${sortKey === key ? "bg-white/10 text-white" : "bg-white/5"}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <div className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1" data-testid="inbox-list">
             {visibleMessages.length === 0 ? (
               <p className="py-6 text-center text-xs text-aether-muted-dim" data-testid="inbox-empty">
                 {category === "trashed"
@@ -1168,7 +1340,7 @@ export default function EmailCenterPage() {
                     data-testid="email-card"
                     onClick={() => selectMessage(m)}
                     className={`w-full rounded-xl border p-3 text-left transition ${selectedId === m.id
-                        ? "border-aether-coral/50 bg-aether-coral/5"
+                        ? "border-gold/50 bg-gold/5"
                         : "border-white/10 bg-white/5 hover:border-white/20"
                       }`}
                   >
@@ -1178,7 +1350,7 @@ export default function EmailCenterPage() {
                           <span
                             data-testid="email-unread-dot"
                             title="Unread"
-                            className="h-1.5 w-1.5 shrink-0 rounded-full bg-aether-coral"
+                            className="h-1.5 w-1.5 shrink-0 rounded-full bg-gold"
                           />
                         ) : null}
                         <span className="truncate">{m.from}</span>
@@ -1320,6 +1492,41 @@ export default function EmailCenterPage() {
                         </button>
                       </p>
                     ) : null}
+                    <button
+                      type="button"
+                      data-testid="thread-history-toggle"
+                      onClick={() => {
+                        if (historyOpen) {
+                          setHistoryOpen(false);
+                          return;
+                        }
+                        void loadThreadHistory(selected.id);
+                      }}
+                      disabled={historyBusy || !connected}
+                      className="mt-3 text-[11px] text-aether-muted hover:text-white disabled:opacity-50"
+                    >
+                      {historyBusy
+                        ? "Loading thread history…"
+                        : historyOpen
+                          ? "Hide thread history"
+                          : `Show thread history${typeof selected.messageCount === "number" && selected.messageCount > 1 ? ` (${selected.messageCount} messages)` : ""}`}
+                    </button>
+                    {historyOpen ? (
+                      <div className="mt-2 space-y-2" data-testid="thread-history">
+                        {threadHistory.length === 0 ? (
+                          <p className="text-[11px] text-aether-muted-dim">No earlier messages in this thread.</p>
+                        ) : (
+                          threadHistory.map((item, idx) => (
+                            <div key={`${item.receivedAt}-${idx}`} className="rounded-lg border border-white/10 bg-white/5 p-2">
+                              <p className="text-[10px] text-aether-muted">
+                                {item.from || "Unknown"} · {formatReceivedAt(item.receivedAt)}
+                              </p>
+                              <p className="mt-1 whitespace-pre-line break-words text-xs text-aether-muted-dim">{item.body}</p>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    ) : null}
                   </>
                 )}
 
@@ -1403,6 +1610,22 @@ export default function EmailCenterPage() {
                       resume/thread: {(draftFlags[selected.id] ?? []).join(", ")}
                     </p>
                   ) : null}
+                  <div className="mb-3 grid gap-2 sm:grid-cols-3" data-testid="draft-tone">
+                    {emailToneBars(draftTones[selected.id] ?? null).map((bar) => (
+                      <div key={bar.label}>
+                        <div className="mb-1 text-[10px] text-aether-muted">{bar.label}</div>
+                        <div className="h-1.5 rounded-full bg-white/10">
+                          <div
+                            className="h-1.5 rounded-full bg-gold"
+                            style={{ width: bar.value == null ? "0%" : `${bar.value}%` }}
+                          />
+                        </div>
+                        <div className="mt-1 text-[10px] text-aether-muted-dim">
+                          {bar.value == null ? "not measured" : `${bar.value}`}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                   <textarea
                     value={draft}
                     aria-label="Draft reply"
@@ -1417,7 +1640,7 @@ export default function EmailCenterPage() {
                       data-testid="open-send-gate-btn"
                       onClick={() => setGateOpen(true)}
                       disabled={draft.trim().length === 0}
-                      className="rounded-lg bg-aether-coral px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+                      className="rounded-lg bg-gold px-4 py-2 text-sm font-semibold text-[#0A0A0A] hover:opacity-90 disabled:opacity-50"
                     >
                       Send Reply
                     </button>
@@ -1449,7 +1672,7 @@ export default function EmailCenterPage() {
                     data-testid="generate-draft-btn"
                     onClick={() => void generateDraft(selected.id)}
                     disabled={draftBusy}
-                    className="mt-3 rounded-lg bg-aether-coral px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+                    className="mt-3 rounded-lg bg-gold px-4 py-2 text-sm font-semibold text-[#0A0A0A] hover:opacity-90 disabled:opacity-50"
                   >
                     <i className="fa-solid fa-wand-magic-sparkles mr-2" aria-hidden="true" />
                     {draftBusy ? "Drafting…" : "AI Draft Reply"}
@@ -1523,6 +1746,28 @@ export default function EmailCenterPage() {
             </section>
           ) : null}
         </div>
+      </div>
+
+      <div
+        className="sticky bottom-0 z-20 mt-4 flex flex-wrap gap-4 border-t border-white/10 bg-[#08080A]/95 px-2 py-3 text-[11px] text-aether-muted"
+        data-testid="automation-status"
+      >
+        <span data-testid="status-last-scan">Last scan: {emailAutomationStatus(inbox).lastScan}</span>
+        <span data-testid="status-next-scan">Next scan: {emailAutomationStatus(inbox).nextScan}</span>
+        <span data-testid="status-auto-reply">
+          Auto-reply: {emailAutomationStatus(inbox).autoReply} (never auto-sends)
+        </span>
+        <span data-testid="status-followups">Follow-up engine: {emailAutomationStatus(inbox).followUpsQueued} queued</span>
+        <span data-testid="status-spam-filter">
+          Personal hidden:{" "}
+          {emailAutomationStatus(inbox).personalHidden == null
+            ? "not measured"
+            : emailAutomationStatus(inbox).personalHidden}{" "}
+          · Automated:{" "}
+          {emailAutomationStatus(inbox).automatedCount == null
+            ? "not measured"
+            : emailAutomationStatus(inbox).automatedCount}
+        </span>
       </div>
 
       {/* Send confirmation gate */}
@@ -1647,7 +1892,7 @@ export default function EmailCenterPage() {
                 data-testid="compose-save-draft"
                 onClick={() => void saveDraft()}
                 disabled={composeSaving || !composeSubject.trim() || !composeBody.trim()}
-                className="rounded-lg bg-aether-coral px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+                className="rounded-lg bg-gold px-4 py-2 text-sm font-semibold text-[#0A0A0A] hover:opacity-90 disabled:opacity-50"
               >
                 {composeSaving ? "Saving…" : "Save Draft"}
               </button>
