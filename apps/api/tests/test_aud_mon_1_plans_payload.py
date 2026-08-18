@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import re
+from pathlib import Path
 
 from app.db import new_id
 from app.repositories.billing import (
@@ -44,6 +45,43 @@ _UNENFORCED_CLAIM_RE = re.compile(
 _TIER_LABELS = ("light", "standard", "advanced", "premium")
 
 _RATIFIED_BY_ID = {row[0]: row for row in RATIFIED_PLANS}
+
+#: A plan name on the same line as an unenforced-claim phrase is a per-plan
+#: feature-ladder assertion (the exact shape the adversarial review found in
+#: docs/growth — round 2, AUD-MON-1-R2 §4): e.g. "Starter ... email agent".
+#: Generic product prose that never names a plan on that line (e.g. "your
+#: story bank" describing what the product does for every user) is not a
+#: claim that the feature is plan-gated, so it is not flagged.
+_PLAN_NAME_RE = re.compile(r"\b(free|starter|pro|power)\b", re.I)
+
+#: docs/growth/*.md is the versioned, committed snapshot of copy the external
+#: growth engine (Perplexity Computer cron 6592806d) sends/posts to real
+#: prospects — see docs/growth/README.md. It must obey the same ruling-D4
+#: honesty bar as the API payload above.
+_GROWTH_DOCS_DIR = Path(__file__).resolve().parents[3] / "docs" / "growth"
+
+
+def test_growth_docs_never_assert_a_plan_gated_feature_ladder():
+    """AUD-MON-1-R2 (adversarial review, RUN-20260818T0223Z §4): the growth
+    engine's versioned marketing copy (docs/growth/*.md) must not assert a
+    per-plan feature unlock — e.g. "Starter unlocks ... cover letters, your
+    story bank, and an email agent" or "Pro ... priority email agent" — that
+    no code enforces. Ruling D4: a plan differs by EXACTLY the monthly run
+    quota and the monthly AI spend cap; every plan uses the same models and
+    the same features.
+    """
+    assert _GROWTH_DOCS_DIR.is_dir(), f"missing {_GROWTH_DOCS_DIR}"
+    violations: list[str] = []
+    for doc in sorted(_GROWTH_DOCS_DIR.glob("*.md")):
+        for lineno, line in enumerate(
+            doc.read_text(encoding="utf-8").splitlines(), start=1
+        ):
+            if _PLAN_NAME_RE.search(line) and _UNENFORCED_CLAIM_RE.search(line):
+                violations.append(f"{doc.name}:{lineno}: {line.strip()!r}")
+    assert not violations, (
+        "docs/growth/*.md still asserts a plan-gated feature the backend "
+        "does not enforce (ruling D4): " + " | ".join(violations)
+    )
 
 
 def test_plans_payload_never_asserts_an_unenforced_model_tier(client):

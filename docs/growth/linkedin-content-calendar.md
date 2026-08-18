@@ -56,15 +56,14 @@ That's the entire design brief behind Aether. If your job search needs to move f
 ## Post 5 — Launch / pricing CTA
 Aether is live: [link]
 
-What you get on the Free plan — no card required:
-• 5 tailored agent runs/month
-• Resume tailoring + ATS scoring
-• Community support
-
-When you need more volume:
-• Starter — AI cover letters, your story bank, an email agent that drafts your outreach for approval
-• Pro — 100 runs/month, priority email agent
-• Power — 300 runs/month for an active, multi-track search
+Every plan gets the same AI models and the same features — resume tailoring,
+cover letters, the story bank, the email agent, ATS scoring. No tier unlocks
+anything another tier lacks. Plans differ by exactly two things: your monthly
+agent-run quota and your monthly AI spend cap.
+• Free — 5 runs/month, US$1.00 monthly AI spend cap, no card required
+• Starter — 30 runs/month, US$5.00 monthly AI spend cap
+• Pro — 100 runs/month, US$15.00 monthly AI spend cap
+• Power — 300 runs/month, US$40.00 monthly AI spend cap, for an active, multi-track search
 
 Every plan runs on the same rule: nothing goes out — no email, no application — without your explicit approval first.
 
