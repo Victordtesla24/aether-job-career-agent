@@ -475,6 +475,13 @@ class TestD6AutonomousTransmitGated:
     ):
         from app.services.application_submission import maybe_autonomous_transmit
 
+        # RUN-20260818T0223Z AUTO-APPLY killswitch, adversarial-review fix
+        # (03-killswitch-review.md): without the operator switch ON, this
+        # test passed for the WRONG reason — the new switch-gate short-
+        # circuited before the threshold check ever ran. Set the switch ON
+        # so this test genuinely exercises meets_match_threshold(), matching
+        # the sibling parity test below.
+        monkeypatch.setenv("AETHER_APPLY_SWEEP_ENABLED", "true")
         _set_agent_config(
             user_id, {"autoApply": True, "approvalGate": False, "matchThreshold": 80}
         )
@@ -492,6 +499,11 @@ class TestD6AutonomousTransmitGated:
     def test_an_unscored_job_is_never_auto_sent(self, db_session, user_id, monkeypatch):
         from app.services.application_submission import maybe_autonomous_transmit
 
+        # RUN-20260818T0223Z AUTO-APPLY killswitch, adversarial-review fix
+        # (03-killswitch-review.md): same reason as above — the operator
+        # switch must be ON so this test genuinely exercises the unscored-job
+        # gate, not the new switch-gate short-circuit.
+        monkeypatch.setenv("AETHER_APPLY_SWEEP_ENABLED", "true")
         _set_agent_config(
             user_id, {"autoApply": True, "approvalGate": False, "matchThreshold": 50}
         )
