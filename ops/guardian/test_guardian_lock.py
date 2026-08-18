@@ -153,8 +153,24 @@ def test_hygiene_defers_while_a_runner_job_is_alive(tmp: Path) -> None:
     original = guardian.ENVS["ci"]
     guardian.ENVS["ci"] = dict(original, root=str(root), repo=str(root / "repo"),
                                runner_workspace=True)
+    # Hermetic busy-signal: scope runner detection to THIS test's own spawned
+    # job. The real host may run more than one Actions runner (e.g. a second,
+    # user-space CI runner executing an unrelated job concurrently), whose live
+    # Runner.Worker would otherwise leak into the host-global `pgrep` and keep
+    # the idle-phase sweep deferred forever, flaking this test. The real pgrep
+    # detector itself is still exercised by test_foreign_runner_job_is_detected
+    # and by spawn_fake_runner()'s own confirmation below — this only removes
+    # the cross-runner coupling from the defer→sweep behavioural assertions.
+    saved_detector = guardian.foreign_runner_jobs
     try:
-        proc = spawn_fake_runner()
+        proc = spawn_fake_runner()  # validated against the REAL detector
+
+        def _only_this_jobs_worker() -> list[int]:
+            # proc.poll() reaps on exit and returns None only while truly
+            # running — avoids the zombie/pid-reuse ambiguity of os.kill(pid, 0).
+            return [proc.pid] if proc.poll() is None else []
+
+        guardian.foreign_runner_jobs = _only_this_jobs_worker
         try:
             busy = guardian.Guardian("ci", apply=True)
             busy.hygiene()
@@ -170,6 +186,7 @@ def test_hygiene_defers_while_a_runner_job_is_alive(tmp: Path) -> None:
         assert not pycache.exists(), "sweep did not run once the runner job ended"
         assert idle.actions, "no artefacts were reclaimed when the workspace was idle"
     finally:
+        guardian.foreign_runner_jobs = saved_detector
         guardian.ENVS["ci"] = original
 
 
