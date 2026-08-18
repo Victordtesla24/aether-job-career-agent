@@ -81,8 +81,9 @@ def _set_match_threshold(conn, user_id: str, threshold: int) -> None:
 
 def _clear_agent_config(conn, user_id: str) -> None:
     """Force ``agentConfig`` to genuinely NULL — the "user never configured
-    this" state ``user_match_threshold``'s 50-fallback (D2, audit
-    wf_9a87f76f-eaa) actually documents.
+    this" state ``user_match_threshold``'s 80-fallback (AUD-UX-1, commit
+    47a9997f, superseding the original D2/audit wf_9a87f76f-eaa ruling of 50)
+    actually documents.
 
     The freshly-cloned test schema carries a LIVE, out-of-band column default
     for ``"User"."agentConfig"`` (``information_schema.columns.column_default``
@@ -198,7 +199,8 @@ class TestSweepGatesAutoGenerationOnFit:
         self, db_session, user_id, monkeypatch
     ):
         """The bar is the USER's ``agentConfig.matchThreshold``, not a constant:
-        a job that clears the 50 fallback is still skipped when the user set 90."""
+        a job that clears the fallback (80, AUD-UX-1) is still skipped when
+        the user set 90."""
         _set_match_threshold(db_session, user_id, 90)
         _seed_job(db_session, user_id, fit=80.0)
         calls = _recorder(monkeypatch)
@@ -219,10 +221,15 @@ class TestLowFitSkipIsRecordedAndVisible:
     def test_skip_is_persisted_as_an_honest_zero_cost_agent_run(
         self, db_session, user_id, monkeypatch
     ):
-        # This test's intent is the code's documented missing-config fallback
-        # (50, not the live schema's out-of-band column default of 80) — make
-        # that state explicit rather than relying on how "User" rows happen to
-        # be inserted (see ``_clear_agent_config``).
+        # This test's intent is the code's documented missing-config fallback.
+        # AUD-UX-1 (2026-08-18, commit 47a9997f) reconciled that fallback to
+        # 80 -- the same number the Settings screen always displayed and the
+        # live schema's out-of-band column default already used; a 50
+        # fallback would have auto-generated letters for scores 50-79 that
+        # the UI represented as below the bar. Explicit saved values
+        # (including 50) are unaffected -- this test clears agentConfig
+        # entirely (see ``_clear_agent_config``) to exercise the fallback
+        # specifically, so it moves with the fallback's own documented value.
         _clear_agent_config(db_session, user_id)
         job = _seed_job(db_session, user_id, fit=12.0)
         _recorder(monkeypatch)
@@ -237,10 +244,10 @@ class TestLowFitSkipIsRecordedAndVisible:
         out = row["output"]
         assert out["skipped"] is True
         assert float(out["fitScore"]) == 12.0
-        assert float(out["matchThreshold"]) == 50.0
+        assert float(out["matchThreshold"]) == 80.0
         # The user-facing sentence must state BOTH numbers, so the reason is
         # legible without reading JSON.
-        assert "12" in out["message"] and "50" in out["message"]
+        assert "12" in out["message"] and "80" in out["message"]
 
     def test_repeated_ticks_do_not_flood_the_audit_trail(
         self, db_session, user_id, monkeypatch
