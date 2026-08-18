@@ -78,6 +78,26 @@ describe("AgentPolicyPanel — honest tier + trigger disclosure", () => {
 });
 
 // ---------------------------------------------------------------------------
+// AUD-TAILOR-1 — the ATS score target is an internal tuning knob, not a
+// promised outcome: 0 of 5 real production tailoring runs reached it
+// (docs/delivery/evidence/RUN-20260818T0223Z/AUD-TAILOR-1/01-scout-reproduction.log).
+// ---------------------------------------------------------------------------
+
+describe("AgentPolicyPanel — AUD-TAILOR-1: the ATS target chip is honest about being internal", () => {
+  it("labels the targetScore knob as an internal target, not a bare promised score", () => {
+    render(<AgentPolicyPanel policy={policy({ knobs: { maxIterations: 5, targetScore: 85 } })} />);
+    const knobs = screen.getByTestId("agent-policy-knobs");
+    expect(knobs.textContent).toMatch(/internal ats target/i);
+  });
+
+  it("carries a not-a-promise caption on the targetScore chip", () => {
+    render(<AgentPolicyPanel policy={policy({ knobs: { maxIterations: 5, targetScore: 85 } })} />);
+    const chip = screen.getByTestId("agent-policy-knob-target-score");
+    expect(chip.getAttribute("title") ?? "").toMatch(/not a promised outcome/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // B1b (ADR-AGI-2 P1) — the "Supervisor directives" block,
 // ORCH-B1-BLUEPRINT-2026-08-14.md §8.1/§8.2.
 // ---------------------------------------------------------------------------

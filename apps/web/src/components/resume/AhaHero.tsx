@@ -131,6 +131,12 @@ export default function AhaHero({
 }: AhaHeroProps) {
   const measured = beforeAts !== null && afterAts !== null;
   const delta = measured ? (afterAts as number) - (beforeAts as number) : null;
+  // AUD-TAILOR-1: "measurably better" is a betterment claim — it may render
+  // ONLY when there is a measured, strictly positive delta. Zero or negative
+  // deltas (both real, reproduced outcomes — see
+  // docs/delivery/evidence/RUN-20260818T0223Z/AUD-TAILOR-1/01-scout-reproduction.log)
+  // and the unmeasured case all fall back to an honest, non-comparative headline.
+  const claimsBetterment = delta !== null && delta > 0;
 
   // The verified chip is gated on the API's counts EXACTLY: a report with a
   // real request count and nothing dropped is the only thing that earns green.
@@ -223,7 +229,7 @@ export default function AhaHero({
         >
           Your resume,{" "}
           <span className="bg-gradient-to-r from-aether-coral to-aether-amber bg-clip-text text-transparent">
-            measurably better.
+            {claimsBetterment ? "measurably better." : "rewritten on your evidence."}
           </span>
         </h2>
         <p className="mt-2 max-w-[62ch] text-[13px] leading-[1.6] text-aether-muted">
@@ -232,6 +238,14 @@ export default function AhaHero({
             : evidenceTotal > 0
               ? `${evidenceCovered} of ${evidenceTotal} rewritten lines carry an evidence reference back to your base resume.`
               : "Select a tailored version to trace its changes to evidence."}
+        </p>
+        <p
+          data-testid="aha-hero-honesty-note"
+          className="type-meta mt-1 max-w-[62ch] text-aether-muted-dim"
+        >
+          Tailoring rewrites your resume using evidence from your own work history. It never
+          invents experience or fabricates metrics, and it does not stuff keywords — typical
+          score lift is modest, not guaranteed.
         </p>
 
         <div className="mt-6 flex flex-wrap items-end gap-x-7 gap-y-4">

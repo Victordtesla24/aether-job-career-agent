@@ -110,6 +110,53 @@ describe("AhaHero — the evidence claim is counted, not asserted", () => {
   });
 });
 
+describe("AhaHero — AUD-TAILOR-1: the headline claims betterment only when the delta earns it", () => {
+  it("keeps the betterment claim when the measured delta is positive", () => {
+    const hero = renderHero({ beforeAts: 60, afterAts: 65 });
+    expect(hero.textContent).toMatch(/measurably better/i);
+  });
+
+  it("drops the betterment claim when the measured delta is exactly zero", () => {
+    const hero = renderHero({ beforeAts: 62, afterAts: 62 });
+    expect(hero.textContent).not.toMatch(/measurably better/i);
+  });
+
+  it("drops the betterment claim when the measured delta is negative", () => {
+    const hero = renderHero({ beforeAts: 62, afterAts: 58 });
+    expect(hero.textContent).not.toMatch(/measurably better/i);
+  });
+
+  it("drops the betterment claim when nothing was measured", () => {
+    const hero = renderHero({
+      beforeAts: null,
+      afterAts: null,
+      unmeasuredReason: "the semantic scoring model was unavailable",
+    });
+    expect(hero.textContent).not.toMatch(/measurably better/i);
+  });
+});
+
+describe("AhaHero — AUD-TAILOR-1: plain copy on what tailoring does and does not do", () => {
+  it("states the evidence-backed rewrite guarantee and the anti-fabrication guard", () => {
+    renderHero();
+    const note = screen.getByTestId("aha-hero-honesty-note");
+    expect(note.textContent).toMatch(/evidence from your own/i);
+    expect(note.textContent).toMatch(/never invents/i);
+  });
+
+  it("states plainly that it does not stuff keywords and the typical lift is modest", () => {
+    renderHero();
+    const note = screen.getByTestId("aha-hero-honesty-note");
+    expect(note.textContent).toMatch(/does not stuff keywords/i);
+    expect(note.textContent).toMatch(/modest/i);
+  });
+
+  it("renders the honesty note even in the unconditional betterment case", () => {
+    renderHero({ beforeAts: 60, afterAts: 65 });
+    expect(screen.getByTestId("aha-hero-honesty-note")).toBeTruthy();
+  });
+});
+
 describe("AhaHero — the loading state claims nothing at all", () => {
   it("renders a skeleton instead of a premature 'not measured' verdict", () => {
     const hero = renderHero({
