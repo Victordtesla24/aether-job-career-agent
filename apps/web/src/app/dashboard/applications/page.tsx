@@ -24,6 +24,7 @@ import PageHeader from "../../../components/shell/PageHeader";
 import SegmentedControl from "../../../components/ui/SegmentedControl";
 import { button, listCard, scrollBody } from "../../../components/ui/recipes";
 import SankeyFlow from "../../../components/applications/SankeyFlow";
+import AnswerPackPanel from "../../../components/applications/AnswerPack";
 import SubmissionControl from "../../../components/applications/SubmissionControl";
 import { useRealtimeResources } from "../../../hooks/useRealtime";
 import {
@@ -543,6 +544,10 @@ export default function ApplicationsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [view, setView] = useState<ViewMode>("board");
   const [filter, setFilter] = useState<FilterKey>("all");
+  // SUB-010: which application's answer pack is open, if any. Holding the id
+  // (not the pack) keeps the panel the single reader of the endpoint, so the
+  // board never carries a stale copy of material the server owns.
+  const [answerPackId, setAnswerPackId] = useState<string | null>(null);
   const [sort, setSort] = useState<SortKey>("recent");
   const [sankey, setSankey] = useState<SankeyData | null>(null);
   const [sankeyError, setSankeyError] = useState<string | null>(null);
@@ -1395,6 +1400,33 @@ export default function ApplicationsPage() {
                                 onAnswered={() => void load()}
                               />
                             ) : null}
+                            {/* SUB-010 — the answer pack, offered on exactly
+                                the cards whose last step is the user's own
+                                click: a row Aether prepared but never
+                                transmitted (the `needs your click` filter's
+                                population), or one that stopped at a manual
+                                step on the employer's form. Read-only: it
+                                opens a GET and nothing else. */}
+                            {card.app &&
+                            (isPreparedNotTransmitted(card.app) ||
+                              card.app.manualStepReason) ? (
+                              <button
+                                type="button"
+                                data-testid="answer-pack-btn"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setAnswerPackId(card.app!.id);
+                                }}
+                                aria-label={`Open the answer pack for ${card.title} at ${card.company}`}
+                                className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-md border border-hairline bg-surface-2 px-2 py-1 text-[10px] text-aether-muted transition hover:border-hairline-strong hover:text-aether-text"
+                              >
+                                <i
+                                  className="fa-regular fa-clipboard text-[9px]"
+                                  aria-hidden="true"
+                                />
+                                Answer pack
+                              </button>
+                            ) : null}
                             <CardLink stageKey={stage.key} />
                             <div className="mt-2 flex items-center justify-between gap-2">
                               <p className="mono text-[10px] text-aether-muted-dim">
@@ -1598,6 +1630,16 @@ export default function ApplicationsPage() {
           )}
         </section>
       )}
+
+      {/* SUB-010 — the fused answer pack for one prepared application. It is
+          a read-only reader of GET /applications/{id}/answer-pack: no submit
+          control, no write, no path from it to an employer. */}
+      {answerPackId ? (
+        <AnswerPackPanel
+          applicationId={answerPackId}
+          onClose={() => setAnswerPackId(null)}
+        />
+      ) : null}
 
       {/* Clear Pipeline confirmation gate — mirrors the bulk-apply gate
           pattern from the Jobs page (MV-job-discovery-002): irreversible

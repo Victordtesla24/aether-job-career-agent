@@ -667,14 +667,31 @@ export function buildStages(apps: TrackerApplication[], jobs: Job[]): Stage[] {
 
 // ---- Filter / Sort (btn-filter-at06 / btn-sort-at07) -----------------------
 
-export type FilterKey = "all" | "high-fit" | "below-fit" | "needs-approval";
+export type FilterKey =
+  | "all"
+  | "high-fit"
+  | "below-fit"
+  | "needs-approval"
+  | "needs-your-click";
 export type SortKey = "recent" | "fit" | "company";
+
+/**
+ * SUB-010 — the filter label for the population whose last step is the user's
+ * own click: everything is prepared, nothing was transmitted.
+ *
+ * The wording is the SUB-006 wording minus the state half ("Prepared — needs
+ * your click"), because a filter names an action to take rather than a state
+ * to read. It says nothing about applying, submitting or sending, which is the
+ * whole point: these are exactly the rows where none of those happened.
+ */
+export const NEEDS_YOUR_CLICK_LABEL = "Needs your click";
 
 export const FILTER_OPTIONS: ReadonlyArray<{ key: FilterKey; label: string }> = [
   { key: "all", label: "All applications" },
   { key: "high-fit", label: "Match ≥ 85" },
   { key: "below-fit", label: "Match < 85" },
   { key: "needs-approval", label: "Needs approval" },
+  { key: "needs-your-click", label: NEEDS_YOUR_CLICK_LABEL },
 ] as const;
 
 export const SORT_OPTIONS: ReadonlyArray<{ key: SortKey; label: string }> = [
@@ -707,6 +724,13 @@ export function cardMatchesFilter(
       return card.fit != null && card.fit < 85;
     case "needs-approval":
       return card.app != null && pendingApprovalIds.has(card.app.id);
+    case "needs-your-click":
+      // SUB-010 clause 2. `isPreparedNotTransmitted` is the SUB-006 predicate
+      // ITSELF, not a copy of its rule: the filter and the card badge must
+      // never be able to disagree about which rows are still waiting on the
+      // user. A card with no application behind it (a discovered job) has
+      // nothing prepared, so it is never in this set.
+      return card.app != null && isPreparedNotTransmitted(card.app);
     default:
       return true;
   }

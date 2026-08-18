@@ -354,6 +354,140 @@ def get_application(application_id: str, current_user: CurrentUser) -> dict[str,
     return _with_submission(rows)[0]
 
 
+def _account_row(user_id: str) -> dict[str, Any]:
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute('SELECT "name", "email" FROM "User" WHERE "id" = %s', (user_id,))
+            rows = rows_to_dicts(cur)
+    return rows[0] if rows else {}
+
+
+def _tailored_resume_row(user_id: str, job_id: str) -> dict[str, Any] | None:
+    """The most recent résumé tailored to THIS job, or ``None``.
+
+    The same fact ``_COLUMNS``'s ``hasTailoredResume`` and
+    ``jobs._resume_for_apply`` read (``Resume.sourceJobId = jobId``, newest
+    version first), so the pack points at exactly the document the submission
+    path would attach — never the base résumé standing in for it.
+    """
+    if not job_id:
+        return None
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT "id", "version", "label", "sections", "updatedAt" '
+                'FROM "Resume" WHERE "userId" = %s AND "sourceJobId" = %s '
+                'ORDER BY "version" DESC, "updatedAt" DESC LIMIT 1',
+                (user_id, job_id),
+            )
+            rows = rows_to_dicts(cur)
+    return rows[0] if rows else None
+
+
+def _resume_row(user_id: str, resume_id: str) -> dict[str, Any] | None:
+    if not resume_id:
+        return None
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT "id", "version", "label", "sections", "updatedAt" '
+                'FROM "Resume" WHERE "id" = %s AND "userId" = %s',
+                (resume_id, user_id),
+            )
+            rows = rows_to_dicts(cur)
+    return rows[0] if rows else None
+
+
+def _contact_from_resume(
+    resume: dict[str, Any] | None,
+) -> tuple[str, tuple[str, ...], str]:
+    """``(name, contact lines, location)`` off a stored résumé record.
+
+    Parsed by ``resume_document.parse_resume_document`` — the SAME document
+    model the renderer draws and the completeness verifier measures — so the
+    contact details the pack shows are the ones printed on the document the
+    employer receives, not a second reading of the same JSON.
+    """
+    if not resume:
+        return "", (), ""
+    from app.services.resume_document import parse_resume_document
+
+    document = parse_resume_document(resume)
+    payload = resume.get("sections")
+    contact = payload.get("contact") if isinstance(payload, dict) else None
+    location = ""
+    if isinstance(contact, dict):
+        for key in ("location", "address", "city"):
+            value = str(contact.get(key) or "").strip()
+            if value:
+                location = value
+                break
+    return document.name, document.contact, location
+
+
+@router.get("/{application_id}/answer-pack")
+def application_answer_pack(
+    application_id: str, current_user: CurrentUser
+) -> dict[str, Any]:
+    """SUB-010 — the SMART SHORTLIST pack for one manual application.
+
+    READ-ONLY, and auth-scoped to the owning user (another user's application
+    is a 404 with no id echoed back, exactly like ``GET /applications/{id}``).
+    It writes nothing, transmits nothing and contacts no employer: every value
+    is fused from rows this product already holds —
+
+    * the user's account + their résumé's own contact block + Career Data →
+      the profile fields the form will ask for;
+    * the questions the employer's form actually asked (captured on the row)
+      plus the seed set of questions nearly every ATS asks → matched against
+      the user's Answer Bank and this application's own answers;
+    * the résumé tailored to THIS job → an artifact reference, not a copy;
+    * the cover letter Aether wrote for THIS application → verbatim.
+
+    Anything absent is reported absent, with the place to go and fix it. The
+    payload never claims the application was applied for or sent — see
+    ``app.services.answer_pack`` rules 1-3, and the honesty block it returns.
+    """
+    from app.repositories.answer_bank import AnswerBankRepository
+    from app.repositories.career_profile import CareerProfileRepository
+    from app.services.answer_pack import build_answer_pack
+
+    user_id = current_user["id"]
+    _ensure_read_columns()
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                f'SELECT {_COLUMNS} FROM "Application" a '
+                'JOIN "Job" j ON j."id" = a."jobId" '
+                'WHERE a."id" = %s AND a."userId" = %s',
+                (application_id, user_id),
+            )
+            rows = rows_to_dicts(cur)
+    if not rows:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Application not found")
+    row = rows[0]
+
+    account = _account_row(user_id)
+    tailored = _tailored_resume_row(user_id, str(row.get("jobId") or ""))
+    # The contact block comes from the tailored document when one exists (that
+    # is the résumé this application ships), and from the application's own
+    # résumé otherwise — never invented when neither is readable.
+    contact_source = tailored or _resume_row(user_id, str(row.get("resumeId") or ""))
+    resume_name, contact_lines, location = _contact_from_resume(contact_source)
+
+    return build_answer_pack(
+        row=row,
+        account_name=str(account.get("name") or ""),
+        account_email=str(account.get("email") or ""),
+        resume_name=resume_name,
+        resume_contact=contact_lines,
+        resume_location=location,
+        career_profiles=CareerProfileRepository().list_by_user(user_id),
+        bank_items=AnswerBankRepository().list_for_user(user_id),
+        tailored_resume=tailored,
+    )
+
+
 class ScreeningAnswer(BaseModel):
     """One answer the user typed into the card for one employer question."""
 
