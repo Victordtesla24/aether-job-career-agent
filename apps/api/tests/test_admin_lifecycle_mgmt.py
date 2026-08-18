@@ -147,7 +147,8 @@ def _seed_child_rows(user_id: str) -> dict[str, str]:
                 (new_id(), user_id, "t", "s", "t", "a", "r"),
             )
             cur.execute(
-                'INSERT INTO "Contact" ("id","userId","name") VALUES (%s,%s,%s)',
+                'INSERT INTO "Contact" ("id","userId","name","updatedAt")'
+                " VALUES (%s,%s,%s,now())",
                 (new_id(), user_id, "A Contact"),
             )
             cur.execute(
