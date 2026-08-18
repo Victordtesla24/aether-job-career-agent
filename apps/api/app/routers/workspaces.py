@@ -82,51 +82,69 @@ def _email_provider_connected(user_id: str) -> bool:
 # Interview Center  GET /interviews/prep
 # ---------------------------------------------------------------------------
 
+def _active_interview_application(uid: str) -> dict[str, Any] | None:
+    """Soonest upcoming interview-stage application — same row Interview Prep uses."""
+    from app.routers.interviews import _ensure_interview_tables
+    from app.services.interview_prep_briefing import (
+        ACTIVE_INTERVIEW_FROM,
+        ACTIVE_INTERVIEW_ORDER,
+    )
+
+    _ensure_interview_tables()
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT a.id, a.status, a."createdAt", a."jobId",
+                       j.title, j.company, j.location, j."fitScore",
+                       i."scheduledAt", i."type" AS "interviewType",
+                       i."location" AS "interviewLocation"
+                """
+                + ACTIVE_INTERVIEW_FROM
+                + ACTIVE_INTERVIEW_ORDER
+                + " LIMIT 1",
+                (uid,),
+            )
+            rows = rows_to_dicts(cur)
+    return rows[0] if rows else None
+
+
+def _session_from_application(app: dict[str, Any]) -> dict[str, Any]:
+    from app.services.interview_prep_briefing import FORMAT_LABELS
+
+    itype = app.get("interviewType")
+    when = app.get("scheduledAt")
+    scheduled = (
+        when.isoformat()
+        if hasattr(when, "isoformat")
+        else (str(when) if when else None)
+    )
+    if itype:
+        fmt = FORMAT_LABELS.get(str(itype), str(itype))
+    else:
+        fmt = "not measured"
+    return {
+        "role": app["title"],
+        "company": app["company"],
+        "round": "Active Interview",
+        "scheduledFor": scheduled,
+        "format": fmt,
+        "jobId": str(app["jobId"]),
+        "location": app.get("interviewLocation") or app.get("location"),
+    }
+
+
 @router.get("/interviews/prep")
 def interview_prep(current_user: CurrentUser) -> dict[str, Any]:
     """Interview Center payload derived from real Application + AgentRun records."""
     uid = current_user["id"]
+    interview_app = _active_interview_application(uid)
 
     with get_connection() as conn:
         with conn.cursor() as cur:
-            # Most-recent active interview application
-            cur.execute(
-                """
-                SELECT a.id, a.status, a."createdAt", a."jobId",
-                       j.title, j.company, j.location, j."fitScore"
-                FROM "Application" a
-                JOIN "Job" j ON a."jobId" = j.id
-                WHERE a."userId" = %s AND a.status = 'interview'
-                ORDER BY a."createdAt" DESC
-                LIMIT 1
-                """,
-                (uid,),
-            )
-            interview_rows = rows_to_dicts(cur)
-
-            # The prep brief this panel may render (ML-W4B verification of
-            # 25ccabe). Two defects sat in this read, unreachable for as long as
-            # NOTHING wrote an ``%interview%`` AgentRun row, and became reachable
-            # the moment the interviewPrep agent started writing them:
-            #
-            #  * it took the newest matching row of ANY status, so a later FAILED
-            #    run — the honest 503 when the LLM is unavailable, whose row
-            #    carries no usable output — silently WIPED a good brief from an
-            #    earlier successful run. Hence ``status = 'completed'``, which the
-            #    sibling debrief query below already had.
-            #  * it took that run's questions regardless of WHICH job they were
-            #    predicted for. ``job_id`` is an OPTIONAL parameter of the agent,
-            #    so a run for another job is a normal thing to have — and its
-            #    questions, predicted from a DIFFERENT posting, were rendered as
-            #    the prep for THIS interview. That is a misattribution of
-            #    generated content. Hence the ``output->>'jobId'`` match against
-            #    the job actually being rendered.
-            #
-            # A run that makes no job claim at all (no ``jobId`` key — the
-            # pre-4B output shape) cannot be misattributed, so it still renders.
             prep_rows: list[dict[str, Any]] = []
             unrelated_prep_rows: list[dict[str, Any]] = []
-            if interview_rows:
+            if interview_app:
                 cur.execute(
                     """
                     SELECT id, "agentName", status, output, "startedAt",
@@ -139,13 +157,10 @@ def interview_prep(current_user: CurrentUser) -> dict[str, Any]:
                     ORDER BY "startedAt" DESC
                     LIMIT 1
                     """,
-                    (uid, "%interview%", str(interview_rows[0]["jobId"])),
+                    (uid, "%interview%", str(interview_app["jobId"])),
                 )
                 prep_rows = rows_to_dicts(cur)
                 if not prep_rows:
-                    # Nothing for THIS job. Is there a brief at all? If so the
-                    # panel must say why it is withholding it, rather than look
-                    # identical to "you have never run interview prep".
                     cur.execute(
                         """
                         SELECT output
@@ -160,7 +175,6 @@ def interview_prep(current_user: CurrentUser) -> dict[str, Any]:
                     )
                     unrelated_prep_rows = rows_to_dicts(cur)
 
-            # Last completed debrief run (for the debrief panel)
             cur.execute(
                 """
                 SELECT id, "agentName", output, "completedAt"
@@ -173,8 +187,7 @@ def interview_prep(current_user: CurrentUser) -> dict[str, Any]:
             )
             debrief_rows = rows_to_dicts(cur)
 
-    # ── No active interview ──────────────────────────────────────────────────
-    if not interview_rows:
+    if not interview_app:
         return {
             "session": None,
             "compliance": {
@@ -187,9 +200,9 @@ def interview_prep(current_user: CurrentUser) -> dict[str, Any]:
             },
             "brief": None,
             "questions": [],
-            # Same key on both branches so the payload shape never varies; there
-            # is no interview to attribute a brief to, so nothing to explain.
             "questionsNote": None,
+            "briefing": None,
+            "pack": None,
             "liveAssist": {
                 "enabled": False,
                 "fillerWordsPerMin": 0,
@@ -200,12 +213,9 @@ def interview_prep(current_user: CurrentUser) -> dict[str, Any]:
             "debrief": None,
         }
 
-    app = interview_rows[0]
+    app = interview_app
     debrief_run = debrief_rows[0] if debrief_rows else None
 
-    # The brief selected above, plus — when the only brief on file belongs to
-    # another job — an honest note naming that withholding instead of serving
-    # someone else's questions or looking like "never run".
     prep_run = prep_rows[0] if prep_rows else None
     questions_note: str | None = None
     if prep_run is None and unrelated_prep_rows:
@@ -223,7 +233,6 @@ def interview_prep(current_user: CurrentUser) -> dict[str, Any]:
             "role to get questions for it."
         )
 
-    # Derive debrief from the last completed agent run output
     debrief = None
     if debrief_run and debrief_run.get("output"):
         out = debrief_run["output"]
@@ -236,24 +245,22 @@ def interview_prep(current_user: CurrentUser) -> dict[str, Any]:
                 "warnings": out.get("warnings", []),
             }
 
-    # The selected brief's own output — the questions this panel renders, plus
-    # whatever live-assist signals a run recorded. ``jsonb_typeof(output) =
-    # 'object'`` in the query already guarantees a dict; the isinstance check
-    # stays as a cheap belt-and-braces against a shape change.
     live_assist_output: dict[str, Any] = (
         prep_run["output"]
         if prep_run is not None and isinstance(prep_run.get("output"), dict)
         else {}
     )
+    briefing = live_assist_output.get("briefing")
+    if not isinstance(briefing, dict):
+        briefing = None
 
+    from app.services.interview_pack import pack_payload
+
+    location_item = (
+        app.get("interviewLocation") or app.get("location") or "not measured"
+    )
     return {
-        "session": {
-            "role": app["title"],
-            "company": app["company"],
-            "round": "Active Interview",
-            "scheduledFor": None,
-            "format": "Check your calendar for details",
-        },
+        "session": _session_from_application(app),
         "compliance": {
             "message": (
                 "Live Assist is disabled by default during interviews. Some employers "
@@ -273,7 +280,7 @@ def interview_prep(current_user: CurrentUser) -> dict[str, Any]:
                 },
                 {
                     "title": "Location",
-                    "items": [app.get("location") or "Remote / TBD"],
+                    "items": [location_item],
                 },
             ],
             "insight": (
@@ -282,9 +289,9 @@ def interview_prep(current_user: CurrentUser) -> dict[str, Any]:
             ),
         },
         "questions": live_assist_output.get("predictedQuestions", []),
-        #: Non-null ONLY when a real prep brief exists but belongs to another job
-        #: — the withholding is reported instead of looking like "never run".
         "questionsNote": questions_note,
+        "briefing": briefing,
+        "pack": pack_payload(uid, str(app["jobId"])),
         "liveAssist": {
             "enabled": False,
             "fillerWordsPerMin": live_assist_output.get("fillerWordsPerMin", 0),
@@ -296,6 +303,102 @@ def interview_prep(current_user: CurrentUser) -> dict[str, Any]:
         },
         "debrief": debrief,
     }
+
+
+def _resolve_pack_job_id(uid: str, job_id: str | None) -> str:
+    if job_id:
+        return job_id
+    row = _active_interview_application(uid)
+    if row is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            "No interview-stage application to pack.",
+        )
+    return str(row["jobId"])
+
+
+@router.post("/interviews/pack")
+def assemble_interview_pack_route(
+    current_user: CurrentUser,
+    job_id: str | None = Query(default=None),
+    run_missing: bool = Query(default=False),
+) -> dict[str, Any]:
+    """Orchestrator builds the interview folder for the active (or named) job."""
+    from dataclasses import asdict
+
+    from app.services.interview_pack import assemble_interview_pack
+
+    uid = current_user["id"]
+    resolved = _resolve_pack_job_id(uid, job_id)
+    try:
+        result = assemble_interview_pack(
+            uid,
+            resolved,
+            current_user=current_user,
+            run_missing=run_missing,
+        )
+    except LookupError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+    return {
+        "jobId": result.jobId,
+        "files": [asdict(f) for f in result.files],
+        "gaps": result.gaps,
+        "plan": result.plan,
+        "downloadPath": result.downloadPath,
+        "message": result.message,
+        "supervisorRunId": result.supervisorRunId,
+    }
+
+
+@router.get("/interviews/pack/download")
+def download_interview_pack(
+    current_user: CurrentUser,
+    job_id: str | None = Query(default=None),
+) -> Response:
+    from app.services.interview_pack import load_pack, load_pack_zip
+
+    uid = current_user["id"]
+    resolved = _resolve_pack_job_id(uid, job_id)
+    blob = load_pack_zip(uid, resolved)
+    if not blob:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            "No interview pack assembled yet. Assemble the folder first.",
+        )
+    row = load_pack(uid, resolved) or {}
+    manifest = row.get("manifest") or {}
+    folder = str(manifest.get("folder") or "interview-pack")
+    safe_name = "".join(ch if ch.isalnum() or ch in " -_." else "-" for ch in folder)
+    return Response(
+        content=blob,
+        media_type="application/zip",
+        headers={
+            "Content-Disposition": f'attachment; filename="{safe_name[:80]}.zip"',
+        },
+    )
+
+
+@router.get("/interviews/pack/file")
+def download_interview_pack_file(
+    current_user: CurrentUser,
+    name: str = Query(...),
+    job_id: str | None = Query(default=None),
+) -> Response:
+    from app.services.interview_pack import extract_pack_file
+
+    uid = current_user["id"]
+    resolved = _resolve_pack_job_id(uid, job_id)
+    found = extract_pack_file(uid, resolved, name)
+    if found is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "That file is not in the pack.")
+    data, ctype = found
+    return Response(
+        content=data,
+        media_type=ctype,
+        headers={
+            "Content-Disposition": f'attachment; filename="{name.split("/")[-1]}"',
+        },
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -448,8 +551,18 @@ def _received_at_iso(thread: dict[str, Any], latest: dict[str, Any]) -> str:
 def _ingest_inbound_interviews(uid: str, threads: list[dict[str, Any]]) -> None:
     """Best-effort: calendar events + Gmail interview invites → analytics."""
     from app.services.interview_ingest import ingest_inbound_for_user
+    from app.services.interview_prep_pipeline import generate_prep_after_ingest
 
-    ingest_inbound_for_user(uid, threads)
+    results = ingest_inbound_for_user(uid, threads)
+    if isinstance(results, list):
+        try:
+            generate_prep_after_ingest(uid, results)
+        except Exception:  # noqa: BLE001 — inbox GET must still return
+            logger.warning(
+                "interview prep after inbox ingest failed user=%s",
+                uid,
+                exc_info=True,
+            )
 
 
 @router.get("/emails/inbox")

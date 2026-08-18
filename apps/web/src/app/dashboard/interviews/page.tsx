@@ -32,10 +32,13 @@ import { runAgent } from "../../../lib/api/agents";
 import { useRealtimeResources } from "../../../hooks/useRealtime";
 import {
   ACTIVE_INTERVIEW_STATUSES,
+  assembleInterviewPack,
   cancelInterview,
   completeInterview,
   createInterview,
   deleteInterview,
+  downloadInterviewPack,
+  downloadInterviewPackFile,
   fetchInterviewPrep,
   fetchInterviews,
   INTERVIEW_TYPES,
@@ -134,6 +137,8 @@ export default function InterviewCenterPage() {
   const [prepError, setPrepError] = useState<string | null>(null);
   const [prepRunning, setPrepRunning] = useState(false);
   const [prepRunError, setPrepRunError] = useState<string | null>(null);
+  const [packBusy, setPackBusy] = useState(false);
+  const [packError, setPackError] = useState<string | null>(null);
 
   const loadPrep = useCallback(async () => {
     setPrepLoading(true);
@@ -207,13 +212,41 @@ export default function InterviewCenterPage() {
       // No job_id: the agent preps for the caller's most recent
       // interview-stage application, exactly the one this panel renders.
       await runAgent("interviewPrep", {});
+      try {
+        await assembleInterviewPack({ jobId: apps.find((a) => a.status === "interview")?.jobId });
+      } catch (packErr) {
+        setPackError(
+          packErr instanceof Error
+            ? packErr.message
+            : "Interview Prep ran; the folder could not be assembled.",
+        );
+      }
       await loadPrep();
     } catch (e) {
       setPrepRunError(e instanceof Error ? e.message : "Failed to run Interview Prep");
     } finally {
       setPrepRunning(false);
     }
-  }, [loadPrep]);
+  }, [loadPrep, apps]);
+
+  const runPack = useCallback(
+    async (runMissing = false) => {
+      setPackBusy(true);
+      setPackError(null);
+      try {
+        await assembleInterviewPack({
+          jobId: prep?.session?.jobId ?? apps.find((a) => a.status === "interview")?.jobId,
+          runMissing,
+        });
+        await loadPrep();
+      } catch (e) {
+        setPackError(e instanceof Error ? e.message : "Failed to assemble the interview folder");
+      } finally {
+        setPackBusy(false);
+      }
+    },
+    [apps, loadPrep, prep?.session?.jobId],
+  );
 
   const setField = (key: keyof FormState, value: string) =>
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -371,10 +404,22 @@ export default function InterviewCenterPage() {
                 Interview Prep
               </h2>
               {prep?.session ? (
-                <p className="mt-1 text-base font-semibold text-white">
-                  {prep.session.role}{" "}
-                  <span className="text-aether-muted">@ {prep.session.company}</span>
-                </p>
+                <>
+                  <p className="mt-1 text-base font-semibold text-white">
+                    {prep.session.role}{" "}
+                    <span className="text-aether-muted">@ {prep.session.company}</span>
+                  </p>
+                  <p
+                    className="mt-1 font-mono text-xs text-aether-muted-dim"
+                    data-testid="interview-prep-session-meta"
+                  >
+                    {prep.session.format}
+                    {prep.session.scheduledFor
+                      ? ` · ${formatWhen(prep.session.scheduledFor)}`
+                      : " · time not measured"}
+                    {prep.session.location ? ` · ${prep.session.location}` : ""}
+                  </p>
+                </>
               ) : null}
             </div>
             <button
@@ -428,6 +473,16 @@ export default function InterviewCenterPage() {
                   {prep.questionsNote}
                 </p>
               ) : null}
+
+              <InterviewPackFolder
+                prep={prep}
+                busy={packBusy}
+                error={packError}
+                onAssemble={() => void runPack(false)}
+                onAssembleMissing={() => void runPack(true)}
+              />
+
+              {prep.briefing ? <InterviewBriefing briefing={prep.briefing} /> : null}
 
               {prep.questions.length === 0 ? (
                 <div
@@ -890,6 +945,183 @@ export default function InterviewCenterPage() {
           })}
         </div>
       )}
+    </div>
+  );
+}
+
+function InterviewPackFolder({
+  prep,
+  busy,
+  error,
+  onAssemble,
+  onAssembleMissing,
+}: {
+  prep: InterviewPrepBrief;
+  busy: boolean;
+  error: string | null;
+  onAssemble: () => void;
+  onAssembleMissing: () => void;
+}) {
+  const pack = prep.pack;
+  const jobId = prep.session?.jobId;
+  const files = pack?.files ?? [];
+  const gaps = pack?.gaps ?? [];
+  return (
+    <section
+      className="mb-5 overflow-hidden rounded-xl border border-gold/25 bg-surface-2/40"
+      data-testid="interview-pack-folder"
+    >
+      <div className="h-[3px] bg-gold" aria-hidden="true" />
+      <div className="p-4">
+      <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h3 className="font-display text-xs font-semibold uppercase tracking-[0.18em] text-gold">
+            Interview folder
+          </h3>
+          <p className="mt-1 text-sm text-aether-muted">
+            {pack?.folder
+              ? pack.folder
+              : "Orchestrator assembles the gilt prep brief, four-slide deck, tailored résumé and cover letter."}
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            data-testid="interview-pack-assemble-btn"
+            onClick={onAssemble}
+            disabled={busy}
+            className="rounded-lg bg-gold px-3 py-1.5 text-xs font-semibold text-aether-bg transition hover:bg-gold-light disabled:opacity-50"
+          >
+            {busy ? "Assembling…" : pack ? "Refresh folder" : "Assemble folder"}
+          </button>
+          {jobId && files.length > 0 ? (
+            <button
+              type="button"
+              data-testid="interview-pack-download-zip-btn"
+              onClick={() => void downloadInterviewPack(jobId)}
+              className="rounded-lg border border-gold/40 px-3 py-1.5 text-xs font-semibold text-gold transition hover:bg-gold/10"
+            >
+              Download zip
+            </button>
+          ) : null}
+        </div>
+      </div>
+      {error ? (
+        <p role="alert" className="mb-3 text-sm text-red-300" data-testid="interview-pack-error">
+          {error}
+        </p>
+      ) : null}
+      {pack?.plan && pack.plan.length > 0 ? (
+        <p className="mb-3 text-[11px] uppercase tracking-[0.12em] text-aether-muted-dim">
+          Plan: {pack.plan.join(" → ")}
+        </p>
+      ) : null}
+      {files.length > 0 ? (
+        <ul className="space-y-2" data-testid="interview-pack-files">
+          {files.map((file) => (
+            <li
+              key={file.name}
+              className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-white/10 bg-surface-1 px-3 py-2"
+              data-testid="interview-pack-file"
+            >
+              <div className="min-w-0">
+                <p className="truncate text-sm text-aether-text">{file.name}</p>
+                <p className="text-[11px] text-aether-muted-dim">
+                  {file.branded ? "Aether-branded" : "Employer-facing"}
+                  {file.agent ? ` · ${file.agent}` : ""}
+                  {file.note ? ` · ${file.note}` : ""}
+                </p>
+              </div>
+              {jobId ? (
+                <button
+                  type="button"
+                  onClick={() => void downloadInterviewPackFile(jobId, file.name)}
+                  className="shrink-0 text-xs font-semibold text-gold underline"
+                >
+                  Open
+                </button>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-sm text-aether-muted" data-testid="interview-pack-empty">
+          No folder on file yet. Assemble it to take the brief, slides and documents to the interview.
+        </p>
+      )}
+      {gaps.length > 0 ? (
+        <div className="mt-3 space-y-2" data-testid="interview-pack-gaps">
+          {gaps.map((gap) => (
+            <p key={gap} className="text-xs text-aether-amber">
+              {gap}
+            </p>
+          ))}
+          <button
+            type="button"
+            data-testid="interview-pack-fill-missing-btn"
+            onClick={onAssembleMissing}
+            disabled={busy}
+            className="rounded-lg border border-aether-amber/40 px-3 py-1.5 text-xs font-semibold text-aether-amber transition hover:bg-aether-amber/10 disabled:opacity-50"
+          >
+            Run Tailor and Cover Letter for missing files
+          </button>
+        </div>
+      ) : null}
+      </div>
+    </section>
+  );
+}
+
+function InterviewBriefing({
+  briefing,
+}: {
+  briefing: NonNullable<InterviewPrepBrief["briefing"]>;
+}) {
+  const traps = briefing.traps ?? [];
+  const ask = briefing.questionsToAsk ?? [];
+  const guidelines = briefing.guidelines ?? [];
+  const logistics = briefing.logistics ?? [];
+  const companyNotes = briefing.companyNotes ?? [];
+  const interviewerNotes = briefing.interviewerNotes ?? [];
+  const closing = briefing.closing ?? [];
+  const card = (title: string, lines: string[], testId?: string) =>
+    lines.length === 0 ? null : (
+      <article
+        className="rounded-xl border border-white/10 bg-white/5 p-4"
+        data-testid={testId}
+      >
+        <h3 className="font-display text-xs font-semibold uppercase tracking-[0.12em] text-gold">
+          {title}
+        </h3>
+        <ul className="mt-2 space-y-1 text-sm text-aether-text">
+          {lines.map((line) => (
+            <li key={line}>{line}</li>
+          ))}
+        </ul>
+      </article>
+    );
+  return (
+    <div className="mb-5 grid gap-3 sm:grid-cols-2" data-testid="interview-prep-briefing">
+      {card("Logistics", logistics)}
+      {traps.length > 0 ? (
+        <article className="rounded-xl border border-aether-amber/25 bg-aether-amber/5 p-4">
+          <h3 className="font-display text-xs font-semibold uppercase tracking-[0.12em] text-aether-amber">
+            Traps to avoid
+          </h3>
+          <ul className="mt-2 space-y-2 text-sm text-aether-text">
+            {traps.map((trap) => (
+              <li key={trap.title}>
+                <span className="font-semibold">{trap.title}.</span> {trap.detail}
+              </li>
+            ))}
+          </ul>
+        </article>
+      ) : null}
+      {card("Company (your own postings)", companyNotes, "interview-prep-company-notes")}
+      {card("Interviewer", interviewerNotes, "interview-prep-interviewer-notes")}
+      {card("Guidelines", guidelines)}
+      {card("Questions to ask", ask)}
+      {card("Close", closing)}
     </div>
   );
 }

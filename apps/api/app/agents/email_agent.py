@@ -456,6 +456,7 @@ class EmailAgent:
             should_auto_draft_reply,
         )
         from app.services.interview_ingest import ingest_inbound_for_user
+        from app.services.interview_prep_pipeline import generate_prep_after_ingest
 
         connected = self._is_connected(user_id)
         synced = 0
@@ -473,7 +474,16 @@ class EmailAgent:
                     message=gmail_sync_failure_message(exc),
                 )
         threads = self._threads(user_id)
-        ingest_inbound_for_user(user_id, threads, force_calendar=True)
+        results = ingest_inbound_for_user(user_id, threads, force_calendar=True)
+        if isinstance(results, list):
+            try:
+                generate_prep_after_ingest(user_id, results)
+            except Exception:  # noqa: BLE001 — triage must still classify the inbox
+                logger.warning(
+                    "interview prep after email triage failed user=%s",
+                    user_id,
+                    exc_info=True,
+                )
         kept: list[dict[str, Any]] = []
         hidden_ids: list[str] = []
         for t in threads:

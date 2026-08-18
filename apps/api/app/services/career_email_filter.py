@@ -50,6 +50,7 @@ _CAREER_SIGNAL = re.compile(
     r"\bjobs\b|"
     r"\bvacanc(?:y|ies)\b|"
     r"\bphone\s*screen\b|\bscreening\s+call\b|"
+    r"\bface[\s-]*to[\s-]*face\b|\bin[\s-]*person\b|"
     r"your application (?:for|was|has been)|"
     r"application was successfully submitted|"
     r"\bapplicant\b|\bcandidacy\b|\bshortlist\b|"
@@ -68,7 +69,8 @@ _INTERVIEW_INVITE = re.compile(
     r"\b("
     r"interview|phone\s*screen|screening\s+call|hiring\s+manager|"
     r"meet(?:ing)?\s+invite|calendar\s+invite|"
-    r"invitation:\s*interview|interview\s+with"
+    r"invitation:\s*interview|interview\s+with|"
+    r"face[\s-]*to[\s-]*face|in[\s-]*person"
     r")\b",
     re.IGNORECASE,
 )
@@ -289,15 +291,28 @@ def thread_is_local_draft(thread: dict[str, Any]) -> bool:
 def classify_thread(
     thread: dict[str, Any], latest: dict[str, Any] | None = None
 ) -> CareerMailVerdict:
-    """Classify a stored EmailThread row (+ optional latest message dict)."""
-    latest = latest or {}
+    """Classify a stored EmailThread from the FULL trail, not only the latest body.
+
+    A confirmation that drops the word "interview" ("face to face tomorrow at
+    Docklands") is still an invite when an earlier message arranged the
+    interview. Latest-only classification dropped those threads from ingest.
+    """
     msgs = thread.get("messages") or []
-    if not latest and isinstance(msgs, list) and msgs:
+    if not isinstance(msgs, list):
+        msgs = []
+    latest = latest or {}
+    if not latest and msgs:
         latest = msgs[-1] if isinstance(msgs[-1], dict) else {}
+    bodies: list[str] = []
+    has_cal = bool(latest.get("hasCalendarInvite"))
+    for msg in msgs:
+        if not isinstance(msg, dict):
+            continue
+        bodies.append(str(msg.get("body") or ""))
+        if msg.get("hasCalendarInvite"):
+            has_cal = True
     labels = thread.get("labels") or latest.get("labelIds") or []
-    has_cal = bool(latest.get("hasCalendarInvite")) or "CALENDAR" in {
-        str(x).upper() for x in (labels or [])
-    }
+    has_cal = has_cal or "CALENDAR" in {str(x).upper() for x in (labels or [])}
     return classify_career_email(
         subject=str(thread.get("subject") or ""),
         sender=str(latest.get("from") or thread.get("contact_name") or ""),
@@ -307,7 +322,7 @@ def classify_thread(
             or latest.get("from")
             or ""
         ),
-        body=str(latest.get("body") or ""),
+        body="\n".join(bodies) if bodies else str(latest.get("body") or ""),
         label_ids=labels,
         has_calendar_invite=has_cal,
         is_local_draft=thread_is_local_draft(thread),
