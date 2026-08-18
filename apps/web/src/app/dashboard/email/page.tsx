@@ -515,14 +515,20 @@ export default function EmailCenterPage() {
     [inbox],
   );
 
-  // GMV4-email-001. Three states, not two. The backend already distinguishes
-  // "linked but the grant expired" (`status: "needs_reauth"`, `actionRequired`,
-  // plus a human `note`) from "never linked" — the UI used to collapse both into
-  // `!connected` and render the same bare "Connect Gmail", so a user whose token
-  // expired saw an Email Center identical to a brand-new one while every
-  // email-dependent agent silently degraded.
+  // GMV4-email-001 / CR-P1-3 (RUN-20260818T0223Z). Three states, not two.
+  // The backend already distinguishes "linked but the grant expired"
+  // (`status: "needs_reauth"`, `actionRequired`, a human `note`) from "never
+  // linked" (`status: "not_connected"`, the single placeholder row with
+  // `id: null` sent when nothing has ever been connected —
+  // `apps/api/app/routers/workspaces.py:963-975`). This used to be tested as
+  // `status !== "connected"`, which is true for BOTH real states, so a
+  // brand-new subscriber who had never touched Gmail saw the exact same
+  // "Reconnect Gmail" / "needs re-authorization" copy as someone whose real
+  // grant expired — a false claim about a connection that never existed.
+  // Only a genuine `needs_reauth` row counts as "broken"; `not_connected`
+  // takes the honest first-time "Connect" path below.
   const linkedButBroken = useMemo(
-    () => (inbox?.accounts ?? []).some((a) => a.status !== "connected"),
+    () => (inbox?.accounts ?? []).some((a) => a.status === "needs_reauth"),
     [inbox],
   );
   const allAccountsBroken = !connected && linkedButBroken;
@@ -892,15 +898,21 @@ export default function EmailCenterPage() {
 
           {/* GMV4-email-001: every linked account renders, including broken ones.
               Filtering to `connected` here made an all-expired inbox render ZERO
-              chips — visually identical to having linked nothing at all. */}
+              chips — visually identical to having linked nothing at all.
+              CR-P1-3 (RUN-20260818T0223Z): "broken" (amber, needs-reconnect)
+              styling is reserved for a genuine `needs_reauth` row. The
+              `not_connected` placeholder (nothing ever linked, `id: null`)
+              renders with the same neutral styling as an unfiltered chip —
+              nothing is broken, so nothing should look broken. */}
           {inbox.accounts.map((a) => {
             const isConnected = a.status === "connected";
+            const isNeedsReauth = a.status === "needs_reauth";
             return (
               <div
                 key={a.id ?? a.email}
                 data-testid="inbox-account"
                 data-account-status={a.status}
-                className={`flex min-w-0 max-w-full items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs transition ${!isConnected
+                className={`flex min-w-0 max-w-full items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs transition ${isNeedsReauth
                     ? "border-amber-400/40 bg-amber-400/5 text-amber-100"
                     : accountFilter === a.email
                       ? "border-aether-coral/50 text-white"
@@ -913,7 +925,7 @@ export default function EmailCenterPage() {
                   className="flex min-w-0 items-center gap-2"
                 >
                   <span
-                    className={`h-1.5 w-1.5 shrink-0 rounded-full ${isConnected ? "bg-aether-green" : "bg-amber-400"
+                    className={`h-1.5 w-1.5 shrink-0 rounded-full ${isConnected ? "bg-aether-green" : isNeedsReauth ? "bg-amber-400" : "bg-aether-muted-dim"
                       }`}
                   />
                   <span className="min-w-0 truncate">{a.email}</span>
@@ -940,8 +952,10 @@ export default function EmailCenterPage() {
                     screen decides WHICH account is re-authorized, so a per-chip
                     "Reconnect" would imply a precision the OAuth flow cannot honour.
                     The single CTA below is the one true reconnect action. Carries the
-                    backend's own `note` rather than wording invented here. */}
-                {!isConnected ? (
+                    backend's own `note` rather than wording invented here.
+                    CR-P1-3: only a genuine `needs_reauth` grant gets this badge —
+                    the never-connected placeholder has nothing to reconnect. */}
+                {isNeedsReauth ? (
                   <span
                     data-testid="inbox-needs-reconnect"
                     title={a.note ?? "Gmail authorization expired — reconnect to resume syncing."}
