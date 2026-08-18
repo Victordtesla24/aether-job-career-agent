@@ -16,6 +16,7 @@ import { apiBaseUrl, apiRequest, getToken } from "./client";
 
 export interface GmailImportResult {
   contactsCreated: number;
+  contactsUpdated?: number;
   leadsCreated: number;
   duplicates: number;
   suppressed: number;
@@ -24,6 +25,7 @@ export interface GmailImportResult {
 
 export interface LinkedInImportResult {
   contactsCreated: number;
+  contactsUpdated?: number;
   duplicates: number;
   suppressed: number;
   /** Present when rows also became relationship-consented sales leads. */
@@ -51,6 +53,14 @@ export const importGmailContacts = (): Promise<GmailImportResult> =>
   apiRequest<GmailImportResult>("/networking/gmail/import-contacts", {
     method: "POST",
   });
+
+export const refreshContactsFromInbox = (): Promise<{
+  contactsCreated: number;
+  contactsUpdated: number;
+  threadsLinked: number;
+  ignored: number;
+}> =>
+  apiRequest("/networking/refresh-from-inbox", { method: "POST" });
 
 export async function importLinkedInConnections(
   file: File,

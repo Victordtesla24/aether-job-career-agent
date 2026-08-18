@@ -39,14 +39,17 @@ const fetchNetworkingSummaryMock = vi.fn();
 const createNetworkingContactMock = vi.fn();
 const fetchNetworkingContactMock = vi.fn();
 const deleteNetworkingContactMock = vi.fn();
+const updateNetworkingContactMock = vi.fn();
 
 const importGmailContactsMock = vi.fn();
 const importLinkedInConnectionsMock = vi.fn();
 const listContactsMock = vi.fn();
+const refreshContactsFromInboxMock = vi.fn();
 vi.mock("../../../../lib/api/networking", () => ({
   importGmailContacts: (...a: unknown[]) => importGmailContactsMock(...a),
   importLinkedInConnections: (...a: unknown[]) => importLinkedInConnectionsMock(...a),
   listContacts: (...a: unknown[]) => listContactsMock(...a),
+  refreshContactsFromInbox: (...a: unknown[]) => refreshContactsFromInboxMock(...a),
 }));
 
 vi.mock("../../../../lib/api/workspaces", async (importOriginal) => {
@@ -57,6 +60,7 @@ vi.mock("../../../../lib/api/workspaces", async (importOriginal) => {
     createNetworkingContact: (...args: unknown[]) => createNetworkingContactMock(...args),
     fetchNetworkingContact: (...args: unknown[]) => fetchNetworkingContactMock(...args),
     deleteNetworkingContact: (...args: unknown[]) => deleteNetworkingContactMock(...args),
+    updateNetworkingContact: (...args: unknown[]) => updateNetworkingContactMock(...args),
   };
 });
 
@@ -127,6 +131,8 @@ afterEach(() => {
   createNetworkingContactMock.mockReset();
   fetchNetworkingContactMock.mockReset();
   deleteNetworkingContactMock.mockReset();
+  updateNetworkingContactMock.mockReset();
+  refreshContactsFromInboxMock.mockReset();
 });
 
 describe("NetworkingPage — Add Contact wiring (MV-networking-001)", () => {
@@ -492,5 +498,110 @@ describe("NetworkingPage — full contact browser (W-NET-2)", () => {
     fireEvent.click(screen.getByTestId("all-contacts-row-c2"));
     expect(screen.queryByTestId("all-contacts-modal")).toBeNull();
     await waitFor(() => expect(fetchNetworkingContactMock).toHaveBeenCalledWith("c2"));
+  });
+
+  it("Escape closes the all-contacts browser", async () => {
+    fetchNetworkingSummaryMock.mockResolvedValue(summary());
+    listContactsMock.mockResolvedValue(rows);
+    render(<NetworkingPage />);
+    await waitFor(() => screen.getByTestId("networking-crm"));
+    fireEvent.click(screen.getByTestId("view-all-contacts-btn"));
+    await waitFor(() => screen.getByTestId("all-contacts-modal"));
+    fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() => {
+      expect(screen.queryByTestId("all-contacts-modal")).toBeNull();
+    });
+  });
+});
+
+describe("NetworkingPage — honesty and freshness (NET-HONEST)", () => {
+  it("renders 'not measured' when responseRate is null, never a fabricated 0%", async () => {
+    fetchNetworkingSummaryMock.mockResolvedValue(
+      summary({ stats: { contacts: 1, activeConversations: 0, referralsInFlight: 0, responseRate: null } }),
+    );
+    render(<NetworkingPage />);
+    await waitFor(() => screen.getByTestId("networking-stats"));
+    const stats = screen.getByTestId("networking-stats").textContent ?? "";
+    expect(stats).toMatch(/not measured/i);
+    expect(stats).not.toMatch(/0%/);
+  });
+
+  it("does not sell stage as relationship-warmth stars", async () => {
+    fetchNetworkingSummaryMock.mockResolvedValue(summary());
+    render(<NetworkingPage />);
+    await waitFor(() => screen.getByTestId("contact-card"));
+    expect(screen.queryByLabelText(/warmth/i)).toBeNull();
+    expect(screen.getByTestId("contact-card").textContent).not.toMatch(/★/);
+  });
+
+  it("Add Contact sends email and LinkedIn URL the API already accepts", async () => {
+    fetchNetworkingSummaryMock.mockResolvedValueOnce(summary());
+    createNetworkingContactMock.mockResolvedValue(CONTACT_RECORD);
+    fetchNetworkingSummaryMock.mockResolvedValueOnce(summary());
+    render(<NetworkingPage />);
+    await waitFor(() => screen.getByTestId("networking-crm"));
+    fireEvent.click(screen.getByTestId("add-contact-btn"));
+    fireEvent.change(screen.getByTestId("contact-name-input"), { target: { value: "Jamie Rivera" } });
+    fireEvent.change(screen.getByTestId("contact-email-input"), { target: { value: "jamie@stripe.test" } });
+    fireEvent.change(screen.getByTestId("contact-linkedin-input"), {
+      target: { value: "https://linkedin.com/in/jamier" },
+    });
+    fireEvent.click(screen.getByTestId("save-contact-btn"));
+    await waitFor(() => {
+      expect(createNetworkingContactMock).toHaveBeenCalledTimes(1);
+    });
+    expect(createNetworkingContactMock.mock.calls[0][0]).toMatchObject({
+      name: "Jamie Rivera",
+      email: "jamie@stripe.test",
+      linkedinUrl: "https://linkedin.com/in/jamier",
+    });
+  });
+
+  it("empty state offers Gmail and LinkedIn import, not only manual add", async () => {
+    fetchNetworkingSummaryMock.mockResolvedValue(
+      summary({ stats: { contacts: 0, activeConversations: 0, referralsInFlight: 0, responseRate: null }, pipeline: [] }),
+    );
+    render(<NetworkingPage />);
+    await waitFor(() => screen.getByTestId("networking-empty-state"));
+    const empty = screen.getByTestId("networking-empty-state");
+    expect(empty.textContent).toMatch(/gmail/i);
+    expect(empty.textContent).toMatch(/linkedin/i);
+    expect(screen.getByTestId("empty-state-add-contact-btn")).toBeTruthy();
+  });
+
+  it("contact detail can PATCH stage via updateNetworkingContact", async () => {
+    fetchNetworkingSummaryMock.mockResolvedValue(summary());
+    fetchNetworkingContactMock.mockResolvedValue(CONTACT_RECORD);
+    updateNetworkingContactMock.mockResolvedValue({ ...CONTACT_RECORD, stage: "contacted" });
+    render(<NetworkingPage />);
+    await waitFor(() => screen.getByTestId("networking-crm"));
+    fireEvent.click(screen.getAllByTestId("contact-card")[0]);
+    await waitFor(() => screen.getByTestId("contact-detail-modal"));
+    fireEvent.change(screen.getByTestId("contact-stage-select"), { target: { value: "contacted" } });
+    fireEvent.click(screen.getByTestId("save-contact-edits-btn"));
+    await waitFor(() => {
+      expect(updateNetworkingContactMock).toHaveBeenCalledWith(
+        "c-1",
+        expect.objectContaining({ stage: "contacted" }),
+      );
+    });
+  });
+
+  it("Refresh from inbox reports the server counts and reloads the board", async () => {
+    fetchNetworkingSummaryMock.mockResolvedValue(summary());
+    refreshContactsFromInboxMock.mockResolvedValue({
+      contactsCreated: 3,
+      contactsUpdated: 1,
+      threadsLinked: 4,
+      ignored: 2,
+    });
+    render(<NetworkingPage />);
+    await waitFor(() => screen.getByTestId("networking-crm"));
+    const before = fetchNetworkingSummaryMock.mock.calls.length;
+    fireEvent.click(screen.getByTestId("refresh-from-inbox-btn"));
+    await waitFor(() => screen.getByTestId("import-notice"));
+    expect(refreshContactsFromInboxMock).toHaveBeenCalled();
+    expect(screen.getByTestId("import-notice").textContent).toMatch(/3 contact/);
+    expect(fetchNetworkingSummaryMock.mock.calls.length).toBeGreaterThan(before);
   });
 });

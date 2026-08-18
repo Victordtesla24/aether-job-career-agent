@@ -977,3 +977,14 @@ Rules of engagement unchanged: locks (git/deploy/test), runbook deploys, append-
 - Matching tests under `apps/api/tests/test_networking*.py`, `test_workspaces.py`, `test_gmail_contact_import.py`, `test_linkedin_contact_import.py`, networking vitest
 **Does not touch:** `email_agent.py`, `career_email_filter.py`, `gmail_service.py`, Email Center page, `aether.env`, `opengaps.md`.
 **Deploy:** stash foreign WIP (email/sales branding) before restart; claim window here.
+
+---
+
+## SESSION NW-ADV — 2026-08-18T03:40Z — Networking adversarial review + enhancement
+
+**By:** Cursor Grok session (independent of SESSION NW / PR #19 author). Branch `feat/nw-adv-review` in worktree `/root/dev/aether-wt-nw-adv` from `origin/main` @ `4e46d140`. Ticket range `NW-ADV-001+`, governance `GOV-300+`.
+**Absorbs:** sound honesty work from `origin/feat/networking-crm-honesty` / PR #19 (cherry-pick `a0746d74` only — not branding, not guardian).
+**Rejects / fences:** live `_run_network_nurture` Gmail send into CRM contacts.
+**Scope claimed:** networking_insights, networking router, workspaces `networking_summary` only, analytics networking, sales_agent fence, networking UI/API clients, matching tests.
+**Does not touch:** SESSION EC-FIX (`llm_client`, email page, `email_inbox`), SESSION DS branding, integrity/guardian, dry-run env flag.
+**Deploy:** claim window before restarting `aether-prod-*`; close PR #19 at close-out.
