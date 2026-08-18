@@ -20,12 +20,13 @@ Safety invariants (hard-coded, not configurable):
   * production hygiene is report-only for anything it has not proven disposable
 """
 from __future__ import annotations
-import argparse, json, os, shutil, subprocess, sys, time, hashlib, socket
+import argparse, fcntl, json, os, shutil, subprocess, sys, time, hashlib, socket
 from datetime import datetime, timezone
 from pathlib import Path
 
 INBOX = Path("/var/lib/aether-orchestrator/inbox")
 STATE = Path("/var/lib/aether-orchestrator/state")
+LOCKS = Path("/var/lib/aether-orchestrator/locks")
 CONSTRAINTS = Path("/root/dev/aether-job-career-agent/scripts/integrity/NON-NEGOTIABLE-CONSTRAINTS.md")
 
 ENVS = {
@@ -38,8 +39,12 @@ ENVS = {
     "dev":  dict(root="/root/dev", repo="/root/dev/aether-job-career-agent", units=["aether-dev-api","aether-dev-web"],
                  url="https://aether-dev.srv1356245.hstgr.cloud", api="http://127.0.0.1:8100",
                  pg="aether-staging-postgres", redis="aether-staging-redis", protected=False),
+    # The ci "environment" is the GitHub Actions runner's own _work tree. The
+    # runner cannot take the guardian's lock, so this flag makes the guardian
+    # check for a live runner job before touching anything here.
     "ci":   dict(root="/opt/actions-runner", repo="/opt/actions-runner/_work/aether-job-career-agent/aether-job-career-agent",
-                 units=[], url=None, api=None, pg=None, redis=None, protected=False),
+                 units=[], url=None, api=None, pg=None, redis=None, protected=False,
+                 runner_workspace=True),
 }
 
 # Disposable by definition — regenerable from source or a package manager.
@@ -102,12 +107,68 @@ def parse_porcelain_z(raw: str) -> list[str]:
             i += 1
     return paths
 
+def env_lock_path(env: str) -> Path:
+    return LOCKS / f"{env}.lock"
+
+
+def acquire_env_lock(env: str):
+    """Take an environment's exclusive lock, or return None if it is held.
+
+    deploy_env.sh takes the same lock, so a maintenance sweep can never run
+    against a checkout a deploy is in the middle of rewriting.  Non-blocking on
+    purpose: a guardian cycle is periodic, so deferring to the next cycle costs
+    nothing and is always safe.  The caller must keep the returned handle alive
+    for as long as the lock is needed - closing it releases the lock.
+    """
+    LOCKS.mkdir(parents=True, exist_ok=True)
+    fh = open(env_lock_path(env), "w")
+    try:
+        fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        fh.close()
+        return None
+    return fh
+
+
+def process_ancestors(pid: int) -> set[int]:
+    """Every pid from `pid` up to init, read from /proc.
+
+    Used to tell "a runner job is building" apart from "I am myself running
+    inside a runner job", which look identical to pgrep.
+    """
+    chain: set[int] = set()
+    while pid and pid > 1 and pid not in chain:
+        chain.add(pid)
+        try:
+            # /proc/<pid>/stat: field 4 is ppid, but comm (field 2) may contain
+            # spaces or parentheses, so split after the final ')'.
+            stat = Path(f"/proc/{pid}/stat").read_text()
+            pid = int(stat[stat.rindex(")") + 1:].split()[1])
+        except (OSError, ValueError, IndexError):
+            break
+    return chain
+
+
+def foreign_runner_jobs() -> list[int]:
+    """Live GitHub Actions job processes that this guardian is NOT running under."""
+    rc, out, _ = run(["pgrep", "-f", "Runner.Worker"])
+    pids = [int(tok) for tok in out.split() if tok.isdigit()]
+    mine = process_ancestors(os.getpid())
+    return sorted(p for p in pids if p not in mine)
+
+
 class Guardian:
     def __init__(self, env: str, apply: bool):
         if env not in ENVS: sys.exit(f"unknown environment '{env}'")
         self.env, self.cfg, self.apply = env, ENVS[env], apply
         self.findings, self.actions, self.escalations = [], [], []
         self.freed = 0
+
+    def runner_busy(self) -> list[int]:
+        """Runner jobs holding this environment's files, if it is a CI workspace."""
+        if not self.cfg.get("runner_workspace"):
+            return []
+        return foreign_runner_jobs()
 
     def note(self, area, level, msg, **kw):
         self.findings.append(dict(area=area, level=level, message=msg, **kw))
@@ -150,6 +211,12 @@ class Guardian:
     def hygiene(self):
         root = Path(self.cfg["root"])
         if not root.exists(): return
+        busy = self.runner_busy()
+        if busy:
+            self.note("hygiene", "info",
+                      "CI workspace is in use by a runner job - sweep deferred to the next cycle",
+                      runner_pids=busy)
+            return
         targets = []
         for pat in SWEEP:
             for p in root.glob(pat):
@@ -184,6 +251,12 @@ class Guardian:
         repo = Path(self.cfg["repo"])
         if not (repo / ".git").exists():
             self.note("git", "warning", "no git checkout", repo=str(repo)); return
+        busy = self.runner_busy()
+        if busy:
+            self.note("git", "info",
+                      "CI workspace is in use by a runner job - worktree left untouched",
+                      runner_pids=busy)
+            return
         rc, dirty, _ = run(["git", "status", "--porcelain", "-z"], cwd=repo, strip=False)
         if not dirty.strip("\0"):
             self.note("git", "ok", "worktree clean"); return
@@ -356,7 +429,18 @@ def main():
                          "Off by default: an escalation is a REPORT to the orchestrator, not a "
                          "pipeline failure, and must not fail a deploy that otherwise succeeded.")
     a = ap.parse_args()
-    rep = Guardian(a.environment, a.apply).cycle()
+    lock = acquire_env_lock(a.environment)
+    if lock is None:
+        # A deploy or another guardian owns this environment right now. Acting
+        # anyway is how a sweep deletes a build that is still being produced.
+        print(json.dumps(dict(environment=a.environment, status="deferred",
+                              reason="environment lock held by a deploy or another guardian cycle"),
+                         indent=2))
+        return 0
+    try:
+        rep = Guardian(a.environment, a.apply).cycle()
+    finally:
+        lock.close()
     st = rep["summary"]["status"]
     if st == "degraded":
         return 1                      # a real, unremediated environment fault

@@ -27,6 +27,21 @@ case "$ENV" in
 esac
 
 GUARD=/root/dev/aether-job-career-agent/scripts/integrity/runtime_env_guard.sh
+
+# The environment guardian sweeps this same checkout on a 15-minute timer: it
+# deletes build artefacts and stashes dirty worktrees. Without a shared lock it
+# can do that in the middle of a `git reset --hard` / `pnpm build`, which is how
+# a deploy ends up shipping a half-deleted .next. Both sides take this lock.
+# The deploy WAITS for it (a deploy must never be silently skipped); the
+# guardian does not (its next cycle is 15 minutes away and costs nothing).
+LOCKDIR=/var/lib/aether-orchestrator/locks
+mkdir -p "$LOCKDIR"
+exec 9>"$LOCKDIR/$ENV.lock"
+if ! flock -w 900 9; then
+  echo "[$ENV] environment lock still held after 900s - refusing to deploy" >&2
+  exit 1
+fi
+
 cd "$REPO"
 
 PREV=$(git rev-parse HEAD)

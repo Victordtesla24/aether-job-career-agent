@@ -47,6 +47,12 @@ jobs:
         # renamed paths, and `git stash push` rejecting the source side of a
         # staged rename.
         run: python3 ops/guardian/test_guardian_git.py
+
+      - name: Guardian concurrency regression tests
+        # Proves the guardian cannot sweep a checkout while a deploy holds the
+        # environment lock, and cannot delete this runner's own build cache
+        # while a job is executing - while still sweeping once the job ends.
+        run: python3 ops/guardian/test_guardian_lock.py
       - name: Install workspace
         run: pnpm install --frozen-lockfile
       - name: Lint
