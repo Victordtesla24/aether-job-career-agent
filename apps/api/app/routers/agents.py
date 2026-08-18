@@ -4394,8 +4394,17 @@ _ORCHESTRATION_MAPS: tuple[tuple[str, str, str, tuple[tuple[str, tuple[str, ...]
     (
         "learning-loop",
         "Learning Loop",
-        "The cycle that reads the pipeline's real outcomes and re-tunes how hard "
-        "the agents try on the next run.",
+        # AUD-AGENT-3: the prior subtitle ("...re-tunes how hard the agents
+        # try on the next run") claimed an open-ended, always-adapting
+        # feedback loop. What ships is narrower and one-directional —
+        # AgentDirective's Stage-1 rules (supervisor_rules.py) can only
+        # TIGHTEN a knob off a measured outcome (ADR-AGI-2's ratchet is
+        # deliberately never a loosening directive), never "learn" in the
+        # bidirectional sense a reader would infer. This copy now says
+        # exactly that, matching the ADR-AG-1 fix already applied to the
+        # learningFeedback catalog card below.
+        "Adjusts agent behaviour from measured outcomes (tighten-only) — "
+        "never loosens a gate, never adapts beyond the rules it is given.",
         (
             ("Orchestration", ("orchestration",)),
             ("Signal Capture", ("storyExtraction", "sentimentAnalysis")),

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 
+from app.workers.agent_directives_sweep import agent_directives_cron
 from app.workers.apply_sweep import apply_sweep_cron, apply_sweep_user
 from app.workers.board_sweep import board_sweep_cron, board_sweep_user
 from app.workers.queue import job_timeout_seconds
@@ -50,6 +51,16 @@ def _cron_jobs():
             # no-op unless AETHER_APPLY_SWEEP_ENABLED is on AND the user has
             # applications sitting on an APPROVED gate with no terminal state.
             cron(apply_sweep_cron, minute=set(range(7, 60, 15))),
+            # AUD-AGENT-3 — the Stage-1 rules cadence rules_stage_evaluate
+            # never had (0 AgentDirective rows ever on production; see
+            # docs/delivery/evidence/RUN-20260818T0223Z/AUD-AGENT-3/). Daily
+            # at 03:20 UTC (off-hour, offset from aether-backup.timer's 6h
+            # cadence): the rule table is deterministic/$0/no-LLM (its own
+            # docstring), so there is no cost pressure for a tighter interval.
+            # A no-op unless AETHER_AGI_DIRECTIVES_ENABLED is on — see
+            # agent_directives_sweep.directives_enabled for why this cadence
+            # gates on that flag more conservatively than the manual endpoint.
+            cron(agent_directives_cron, hour={3}, minute={20}),
         ]
     except Exception:  # noqa: BLE001 — cron optional; enqueue path is primary
         return []
