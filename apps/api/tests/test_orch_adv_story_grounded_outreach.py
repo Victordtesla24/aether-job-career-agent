@@ -11,7 +11,6 @@ from conftest import JORDAN_RESUME_TEXT, seed_own_resume
 from app.db import get_connection, new_id
 from app.repositories.story import StoryRepository
 
-
 STORY_MARKER = "Kookaburras platform migration"
 
 
