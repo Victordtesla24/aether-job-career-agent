@@ -145,13 +145,27 @@ def generate_state() -> str:
     return secrets.token_urlsafe(32)
 
 
-def build_authorize_url(challenge: str, state: str) -> str:
-    """Build Anthropic's authorize URL for the subscription setup-token flow."""
+def build_authorize_url(
+    challenge: str,
+    state: str,
+    *,
+    redirect_uri: str | None = None,
+    client_id: str | None = None,
+) -> str:
+    """Build Anthropic's authorize URL for the subscription setup-token flow.
+
+    ``redirect_uri``/``client_id`` default to the manual code-relay constants
+    above (unchanged default behaviour for every existing caller). They are
+    overridable so GAP-PROVIDER-OAUTH-1's per-user app-hosted-callback flow
+    (``app.services.provider_oauth_registry``) can reuse this exact builder
+    with an app-hosted redirect and an operator-registered client id, without
+    duplicating the PKCE/query-param assembly.
+    """
     params = {
         "code": "true",
-        "client_id": _client_id(),
+        "client_id": client_id or _client_id(),
         "response_type": "code",
-        "redirect_uri": REDIRECT_URI,
+        "redirect_uri": redirect_uri or REDIRECT_URI,
         "scope": _scope(),
         "code_challenge": challenge,
         "code_challenge_method": "S256",
@@ -228,15 +242,29 @@ def _normalize_token_response(raw: Any) -> dict:
     }
 
 
-def exchange_code(code: str, verifier: str, state: str) -> dict:
+def exchange_code(
+    code: str,
+    verifier: str,
+    state: str,
+    *,
+    redirect_uri: str | None = None,
+    client_id: str | None = None,
+) -> dict:
     """Exchange an authorization ``code`` (+ server-held ``verifier`` + ``state``)
     for tokens. JSON body, ``state`` included. Returns the normalised token dict.
+
+    ``redirect_uri``/``client_id`` default to the manual code-relay constants
+    (unchanged behaviour for every existing caller) and are overridable for
+    the app-hosted-callback flow — see :func:`build_authorize_url`. The value
+    sent here MUST match whatever was sent to the authorize call for the same
+    state, which is the caller's responsibility (the app-hosted callback
+    route stores the exact redirect_uri it used alongside the PKCE state).
     """
     body = {
         "grant_type": "authorization_code",
         "code": code,
-        "redirect_uri": REDIRECT_URI,
-        "client_id": _client_id(),
+        "redirect_uri": redirect_uri or REDIRECT_URI,
+        "client_id": client_id or _client_id(),
         "code_verifier": verifier,
         "state": state,
         "expires_in": REQUESTED_EXPIRES_IN,

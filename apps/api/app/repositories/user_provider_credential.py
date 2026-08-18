@@ -129,6 +129,20 @@ def _ensure_user_agent_tables() -> None:
                 )
                 '''
             )
+            # GAP-PROVIDER-OAUTH-1: widen this table (additive-only, no data
+            # loss) so the per-user, multi-provider app_callback/code_relay
+            # connect flow (AgentsOAuthStateRepository below) reuses it rather
+            # than duplicating a near-identical table. Every existing caller
+            # omits both columns, which default to the prior Anthropic-only
+            # behaviour ('anthropic', no stored redirect_uri) — fully
+            # backward compatible.
+            cur.execute(
+                'ALTER TABLE "AnthropicOAuthState" ADD COLUMN IF NOT EXISTS '
+                '"provider" text NOT NULL DEFAULT \'anthropic\''
+            )
+            cur.execute(
+                'ALTER TABLE "AnthropicOAuthState" ADD COLUMN IF NOT EXISTS "redirectUri" text'
+            )
             cur.execute(
                 '''
                 CREATE TABLE IF NOT EXISTS "AnthropicOAuthToken" (
@@ -341,16 +355,36 @@ class UserProviderCredentialRepository:
 
 
 class AnthropicOAuthStateRepository:
-    """Short-lived PKCE state rows for the Anthropic OAuth authorize round-trip."""
+    """Short-lived PKCE state rows for a provider OAuth authorize round-trip.
 
-    def create(self, state_token: str, user_id: str, code_verifier: str) -> None:
+    Despite the Anthropic-specific name (kept for the existing admin-only
+    Connect-with-Anthropic import sites — ``anthropic_oauth_start``/
+    ``_exchange`` in ``routers/agents.py``), the table carries a ``provider``
+    column (GAP-PROVIDER-OAUTH-1) and this repository is the single state
+    store BOTH that admin flow and the newer per-user, multi-provider
+    ``/agents/user/providers/{provider}/oauth/*`` routes use — one state
+    table, not two near-duplicates. Every pre-existing call site omits
+    ``provider``/``redirect_uri`` and gets EXACTLY its previous behaviour
+    (an 'anthropic' row, no stored redirect_uri).
+    """
+
+    def create(
+        self,
+        state_token: str,
+        user_id: str,
+        code_verifier: str,
+        *,
+        provider: str = "anthropic",
+        redirect_uri: str | None = None,
+    ) -> None:
         _ensure_user_agent_tables()
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     'INSERT INTO "AnthropicOAuthState" '
-                    '("stateToken", "userId", "codeVerifier") VALUES (%s, %s, %s)',
-                    (state_token, user_id, code_verifier),
+                    '("stateToken", "userId", "codeVerifier", "provider", "redirectUri") '
+                    'VALUES (%s, %s, %s, %s, %s)',
+                    (state_token, user_id, code_verifier, provider, redirect_uri),
                 )
             conn.commit()
 
@@ -359,7 +393,10 @@ class AnthropicOAuthStateRepository:
 
         Returns ``None`` when the token is unknown or already expired — the
         caller then rejects the callback. Deleting in the same statement means a
-        state token can never be replayed.
+        state token can never be replayed. The returned dict additionally
+        carries ``provider``/``redirectUri`` (GAP-PROVIDER-OAUTH-1) — a
+        superset of the historical ``{userId, codeVerifier}`` shape, so every
+        existing caller that only reads those two keys is unaffected.
         """
         _ensure_user_agent_tables()
         with get_connection() as conn:
@@ -367,7 +404,7 @@ class AnthropicOAuthStateRepository:
                 cur.execute(
                     'DELETE FROM "AnthropicOAuthState" '
                     'WHERE "stateToken" = %s AND "expiresAt" > now() '
-                    'RETURNING "userId", "codeVerifier"',
+                    'RETURNING "userId", "codeVerifier", "provider", "redirectUri"',
                     (state_token,),
                 )
                 rows = rows_to_dicts(cur)
