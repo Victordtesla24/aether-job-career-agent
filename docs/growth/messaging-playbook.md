@@ -8,10 +8,15 @@ Active job seekers (career changers, layoff-affected professionals, early/mid-ca
 Differentiators: anti-fabrication entailment guard, human-approval gate on every outbound action, ToS-compliant job sourcing (licensed APIs, no scraping), transparent before/after ATS scoring.
 
 ## Pricing (GST-inclusive AUD, from docs/subscription/billing-architecture.md)
-- Free: $0 — 5 runs/month, resume tailoring + ATS scoring, no card required
-- Starter: $19/mo ($179/yr) — 30 runs/month, cover letters + story bank + email agent
-- Pro: $39/mo ($359/yr) — 100 runs/month, priority email agent
-- Power: $69/mo ($649/yr) — 300 runs/month
+Every plan uses the same AI models and the same product features (resume
+tailoring, cover letters, the story bank, the email agent, ATS scoring) — no
+tier unlocks a feature another tier lacks. Plans differ by EXACTLY two
+enforced facts: the monthly agent-run quota and the monthly AI spend cap
+(ruling D4, `apps/api/tests/test_aud_mon_1_plans_payload.py`).
+- Free: $0 — 5 agent runs/month, US$1.00 monthly AI spend cap, no card required
+- Starter: $19/mo ($179/yr) — 30 agent runs/month, US$5.00 monthly AI spend cap
+- Pro: $39/mo ($359/yr) — 100 agent runs/month, US$15.00 monthly AI spend cap
+- Power: $69/mo ($649/yr) — 300 agent runs/month, US$40.00 monthly AI spend cap
 
 ## Compliance footer — append to EVERY commercial/outreach email (Spam Act 2003 requirement)
 ```
@@ -48,7 +53,7 @@ If you'd rather not hear from me again, just reply "unsubscribe" and I will not 
 Subject: You're close to your free run limit
 Hi {first_name},
 You've used {runs_used}/5 free Aether runs this month — nice, that means you're actively using it.
-Starter ($19/mo) unlocks 30 runs, AI cover letters, your story bank, and an email agent that drafts outreach for your approval. Upgrade here: https://5cb5f0620.abacusai.cloud/pricing
+Starter ($19/mo) gives you 30 agent runs/month and a US$5.00 monthly AI spend cap — same AI models, same features you already have on Free, just more room to run them. Upgrade here: https://5cb5f0620.abacusai.cloud/pricing
 —
 Sent by Vic (Aether Career Agent), aether-job-career-agent.
 Live product: https://5cb5f0620.abacusai.cloud
