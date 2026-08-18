@@ -8,6 +8,8 @@
 import type { TrackerApplication } from "./tracker-api";
 import {
   cardMatchesFilter,
+  isPreparedNotTransmitted,
+  PREPARED_NOT_SENT_LABEL,
   sortCards,
   type FilterKey,
   type SortKey,
@@ -19,6 +21,23 @@ export const BACKFILL_SOURCE = "backfill:current-status";
 
 /** Visible copy on genesis (backfill) nodes — never invent prior stages. */
 export const GENESIS_NOTE = "Earlier transitions were not observed.";
+
+/**
+ * Visible copy on a "submitted" node whose application cannot prove it was
+ * transmitted (CR-P0-1, RUN-20260818T0223Z applications-assisted P0-1).
+ *
+ * `status='submitted'` has always meant "the user's own tracker says
+ * submitted" — never "Aether sent this" — but before this fix the Timeline's
+ * node label, hover tooltip, aria-label and click-to-focus panel all painted
+ * the bare word "Submitted" regardless, the identical claim a genuinely
+ * transmitted application gets. The board already carries this exact
+ * distinction (`tracker-lib.ts` `isPreparedNotTransmitted` /
+ * `PREPARED_NOT_SENT_LABEL`); this note is the Timeline's copy of the same
+ * fact, reusing the SAME predicate so the two surfaces can never disagree
+ * about which applications were actually sent.
+ */
+export const PREPARED_NOT_SENT_NOTE =
+  "Aether prepared this application but has not transmitted it — nothing has been sent to the employer.";
 
 /**
  * Status → node colour. Gilt is the ready/draft ACTION accent only — never a
@@ -174,6 +193,11 @@ export function buildTimelineModel(
   const lanes: TimelineLane[] = [];
   for (const item of payload.items) {
     if (!visibleIds.has(item.application.id)) continue;
+    // CR-P0-1: the application-level truth, computed ONCE per lane from the
+    // SAME predicate the board uses (`isPreparedNotTransmitted`) — never
+    // re-derived per node, and never a Timeline-only guess about what counts
+    // as a send.
+    const preparedNotSent = isPreparedNotTransmitted(item.application);
     const nodes: TimelineNode[] = item.events.map((ev) => {
       const t = toMs(ev.at);
       const x =
@@ -182,6 +206,17 @@ export function buildTimelineModel(
           : Math.min(1, Math.max(0, (t - startMs) / span));
       const genesis =
         ev.fromStatus == null && ev.source === BACKFILL_SOURCE;
+      // A "submitted" transition on a row the board itself cannot prove was
+      // transmitted must never read as "Submitted" here either — same word,
+      // same claim, same false positive the board was already fixed for.
+      const honestGap = ev.toStatus === "submitted" && preparedNotSent;
+      const note = honestGap
+        ? genesis
+          ? `${PREPARED_NOT_SENT_NOTE} ${GENESIS_NOTE}`
+          : PREPARED_NOT_SENT_NOTE
+        : genesis
+          ? GENESIS_NOTE
+          : null;
       return {
         id: ev.id,
         applicationId: ev.applicationId,
@@ -192,8 +227,8 @@ export function buildTimelineModel(
         x,
         color: statusColor(ev.toStatus),
         genesis,
-        note: genesis ? GENESIS_NOTE : null,
-        label: statusLabel(ev.toStatus),
+        note,
+        label: honestGap ? PREPARED_NOT_SENT_LABEL : statusLabel(ev.toStatus),
       };
     });
     lanes.push({

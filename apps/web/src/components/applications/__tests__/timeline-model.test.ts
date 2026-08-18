@@ -7,10 +7,12 @@ import type { TrackerApplication } from "../tracker-api";
 import {
   BACKFILL_SOURCE,
   GENESIS_NOTE,
+  PREPARED_NOT_SENT_NOTE,
   STATUS_NODE_COLOR,
   buildTimelineModel,
   type TimelinePayload,
 } from "../timeline-model";
+import { PREPARED_NOT_SENT_LABEL } from "../tracker-lib";
 
 function app(over: Partial<TrackerApplication> = {}): TrackerApplication {
   return {
@@ -178,5 +180,72 @@ describe("buildTimelineModel", () => {
 
     const byCompany = buildTimelineModel(payload, { filter: "all", sort: "company" });
     expect(byCompany.lanes.map((l) => l.company)).toEqual(["Alpha", "Zeta"]);
+  });
+
+  // CR-P0-1 (RUN-20260818T0223Z, applications-assisted P0-1): a row that says
+  // status='submitted' but carries no transmittedAt was reading the Timeline
+  // node/tooltip/aria-label/focus-panel as the bare word "Submitted" — the
+  // exact same word a genuinely-transmitted application gets — with no
+  // caveat anywhere in the view. The board (tracker-lib `isPreparedNotTransmitted`
+  // / `PREPARED_NOT_SENT_LABEL`) already carries this distinction; the
+  // Timeline must read the same predicate, never re-derive its own.
+  it("CR-P0-1 — a 'submitted' node with no transmittedAt never reads as Submitted (never invents a send)", () => {
+    const payload: TimelinePayload = {
+      items: [
+        {
+          application: app({
+            id: "app-untransmitted",
+            status: "submitted",
+            transmittedAt: null,
+          }),
+          events: [
+            {
+              id: "e-untransmitted",
+              applicationId: "app-untransmitted",
+              fromStatus: "draft",
+              toStatus: "submitted",
+              at: "2026-07-10T00:00:00Z",
+              source: "test:move",
+            },
+          ],
+        },
+      ],
+      range: { start: "2026-07-10T00:00:00Z", end: "2026-07-10T00:00:00Z" },
+    };
+    const model = buildTimelineModel(payload);
+    const node = model.lanes[0]!.nodes[0]!;
+    expect(node.label).not.toBe("Submitted");
+    expect(node.label).toBe(PREPARED_NOT_SENT_LABEL);
+    expect(node.note).toBe(PREPARED_NOT_SENT_NOTE);
+  });
+
+  it("CR-P0-1 — a 'submitted' node WITH a real transmittedAt still reads Submitted (never hides a real send)", () => {
+    const payload: TimelinePayload = {
+      items: [
+        {
+          application: app({
+            id: "app-transmitted",
+            status: "submitted",
+            transmittedAt: "2026-07-11T00:00:00Z",
+          }),
+          events: [
+            {
+              id: "e-transmitted",
+              applicationId: "app-transmitted",
+              fromStatus: "draft",
+              toStatus: "submitted",
+              at: "2026-07-10T00:00:00Z",
+              source: "test:move",
+            },
+          ],
+        },
+      ],
+      range: { start: "2026-07-10T00:00:00Z", end: "2026-07-10T00:00:00Z" },
+    };
+    const model = buildTimelineModel(payload);
+    const node = model.lanes[0]!.nodes[0]!;
+    expect(node.label).toBe("Submitted");
+    expect(node.note).toBeNull();
+    expect(node.color).toBe(STATUS_NODE_COLOR.submitted);
   });
 });
