@@ -61,11 +61,12 @@ itself is untouched.
 from __future__ import annotations
 
 import logging
+import os
 from dataclasses import dataclass, field
-from typing import Any, Protocol
+from typing import Any, Callable, Protocol
 
 from app.services.ats_engine import _STOPWORDS as _ATS_STOPWORDS
-from app.services.llm_client import LLMUnavailableError
+from app.services.llm_client import LLMUnavailableError, get_accumulated_usage
 from app.services.quality_gate import evaluate_tailoring
 from app.services.resume_tailor import _evidence_index, _stem, strip_bullet_lines
 
@@ -84,6 +85,47 @@ DEFAULT_MAX_ITERATIONS = 5
 
 #: §5.3 item 1 / hard rule: the ATS score at which tailoring is "done".
 DEFAULT_TARGET_SCORE = 85.0
+
+#: AUD-LLM-1 (RUN-20260818T0223Z item (a)): the counterpart to
+#: ``max_iterations`` the loop never had — a REAL cumulative prompt+completion
+#: TOKEN ceiling for one :meth:`TailoringLoop.run` call. Before this, the
+#: ONLY things bounding a multi-iteration run's live-LLM spend were the
+#: iteration cap itself and ``llm_client.get_budget_seconds()`` (a WALL-CLOCK
+#: deadline armed once and shared across the whole client instance) —
+#: nothing anywhere counted tokens (confirmed by the scout: zero matches for
+#: token_budget/max_tokens/count_tokens/prompt_tokens as a LOOP stopping
+#: condition).
+#:
+#: Default derived from MEASURED reality (AUD-ECON-2 scout,
+#: docs/delivery/evidence/RUN-20260818T0223Z/AUD-ECON-2/
+#: 01-scout-reproduction.log (a)): the 5 real, completed, standard-tier
+#: (5-iteration) tailor runs in prod averaged 55,793 prompt + 5,196
+#: completion tokens == ~60,989 tokens for a FULL 5-iteration run. The
+#: heightened tier (quality_policy.py, 7 iterations) extrapolates linearly to
+#: ~85,385 tokens for a full run. 100,000 sits above BOTH figures (~1.64x the
+#: standard-tier average, ~1.17x the heightened-tier extrapolation) so a
+#: genuinely convergent heightened-tier run is not clipped mid-way, while a
+#: run burning tokens well past the measured norm (a pathological résumé/JD,
+#: a directive loop that never converges) is still honestly bounded rather
+#: than left to run on wall-clock budget alone. Overridable via
+#: ``AETHER_TAILOR_TOKEN_BUDGET`` (:func:`get_token_budget`).
+DEFAULT_TOKEN_BUDGET = 100_000
+
+
+def get_token_budget() -> int:
+    """Cumulative prompt+completion token ceiling for one tailoring run.
+
+    ``AETHER_TAILOR_TOKEN_BUDGET`` env override, default
+    :data:`DEFAULT_TOKEN_BUDGET` — mirrors
+    ``llm_client.get_budget_seconds()``'s env-override pattern (same
+    try/except-ValueError shape, same "default when unset or malformed").
+    """
+    try:
+        return int(
+            os.environ.get("AETHER_TAILOR_TOKEN_BUDGET", str(DEFAULT_TOKEN_BUDGET))
+        )
+    except ValueError:
+        return DEFAULT_TOKEN_BUDGET
 
 #: Every English contraction a job posting realistically contains, written out
 #: in full so the fragment set below can be DERIVED from it rather than
@@ -355,6 +397,8 @@ class TailoringLoop:
         target_score: float = DEFAULT_TARGET_SCORE,
         dimension_floor: float | None = None,
         gate_extra_attempts: int = 0,
+        token_budget: int | None = None,
+        usage_provider: Callable[[], dict[str, int] | None] = get_accumulated_usage,
     ) -> None:
         """``dimension_floor`` arms the U2c quality gate (U2c RULES item 1).
 
@@ -371,6 +415,19 @@ class TailoringLoop:
         that never reaches ``target_score`` has an open SCORE gap, not a
         dimension-gate problem, and is still bounded by ``max_iterations``
         alone — arming the gate can never raise every run's worst case.
+
+        ``token_budget`` (AUD-LLM-1 item (a)) is the cumulative
+        prompt+completion token ceiling for this run's ENTIRE call sequence.
+        ``None`` — the default — resolves :func:`get_token_budget` (the env
+        knob), so unlike ``dimension_floor`` this is NOT opt-in: every loop is
+        token-bounded unless the caller deliberately passes a huge number.
+        ``usage_provider`` is the callable consulted after every iteration for
+        the run's real accumulated usage — defaults to
+        ``llm_client.get_accumulated_usage``, the SAME chars-in/chars-out
+        accumulation ``routers/agents.py`` already costs a run against.
+        Injectable so tests can pin the stop condition deterministically
+        without a real LLM client or ``served_model_capture()`` scope open;
+        production code never needs to pass it.
         """
         self._service = service
         self._ats = ats_engine
@@ -378,6 +435,8 @@ class TailoringLoop:
         self.target_score = target_score
         self.dimension_floor = dimension_floor
         self.gate_extra_attempts = max(0, int(gate_extra_attempts))
+        self.token_budget = get_token_budget() if token_budget is None else token_budget
+        self._usage_provider = usage_provider
 
     def run(
         self,
@@ -414,6 +473,10 @@ class TailoringLoop:
         supports_rotation = self._service_accepts("already_tailored_refs")
         stop_reason = "iteration_cap"
         llm_error: str | None = None
+        #: AUD-LLM-1 item (a): the real cumulative token count observed at the
+        #: moment the token budget stopped the run, for the honest warning
+        #: below. ``None`` unless that stop condition actually fired.
+        token_usage_at_stop: int | None = None
         # U2c bounded gate budget. ``budget`` starts at the shipped iteration
         # cap and is extended ONE attempt at a time, at the cap boundary only,
         # and only when the ATS target has genuinely been reached and the
@@ -558,6 +621,32 @@ class TailoringLoop:
                     stop_reason = "quality_gate_cap"
                     break
 
+            # AUD-LLM-1 item (a): the REAL cumulative token ceiling — read
+            # from the LLM client's own usage reporting (the SAME chars-in/
+            # chars-out accumulation ``routers/agents.py`` already costs a
+            # run against), never the shared wall-clock deadline alone or the
+            # iteration count alone. Checked every iteration so a
+            # pathological run (a directive loop that never converges, an
+            # oversized résumé/JD) is stopped BEFORE it burns another full
+            # pass — honestly, with the best draft achieved so far. Mirrors
+            # a6fae64a's ``llm_budget_exhausted`` handling one level up: never
+            # a fake success, and never nothing to show for a run that DID
+            # produce a real, guard-passed draft. ``usage_provider`` returns
+            # ``None`` outside a real ``served_model_capture()`` scope
+            # (replay/fixture-mode tests, lightweight test doubles) — that is
+            # "no observation", never a licence to guess, so the check is a
+            # no-op then, exactly like every other consumer of this signal.
+            usage = self._usage_provider()
+            if usage:
+                used_tokens = (
+                    max(0, int(usage.get("charsIn", 0))) // 4
+                    + max(0, int(usage.get("charsOut", 0))) // 4
+                )
+                if used_tokens >= self.token_budget:
+                    stop_reason = "token_budget_exhausted"
+                    token_usage_at_stop = used_tokens
+                    break
+
             # Prepare the next pass. Seed it with the BEST draft so far, not
             # simply the latest: when an iteration scores WORSE than an earlier
             # one, feeding its output forward compounds the regression, and the
@@ -661,6 +750,16 @@ class TailoringLoop:
                         f"of time ({llm_error}) — the score above is what the "
                         "completed passes actually achieved, not an estimate "
                         "of what further passes would have reached."
+                    )
+                if stop_reason == "token_budget_exhausted":
+                    warning += (
+                        " The run was also CUT SHORT before its iteration "
+                        "budget was spent because it reached its token budget "
+                        f"({token_usage_at_stop} tokens used of a "
+                        f"{self.token_budget}-token ceiling) — the score "
+                        "above is what the completed passes actually "
+                        "achieved, not an estimate of what further passes "
+                        "would have reached."
                     )
                 if unreachable_keywords:
                     shown = ", ".join(unreachable_keywords[:12])
