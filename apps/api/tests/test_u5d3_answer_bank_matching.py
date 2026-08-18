@@ -365,6 +365,24 @@ class TestFindMatch:
         assert find_match("Do you require visa sponsorship to work here?", [_item()]) is None
         assert find_match("Do you now or in the future require visa sponsorship?", [_item()]) is None
 
+    def test_right_skills_to_work_is_not_a_work_rights_answer(self):
+        """'Right' + 'work' in a skills/fit question is not authorisation to work.
+
+        Auto-sending 'I am an Australian citizen' to 'do you have the right
+        skills to work in a fast-paced team' publishes a fact the candidate
+        never said about that question.
+        """
+        from app.services.answer_bank import find_match
+
+        assert (
+            find_match("Do you have the right skills to work in a fast-paced team?", [_item()])
+            is None
+        )
+        assert (
+            find_match("Do you think you would be the right fit to work in our team?", [_item()])
+            is None
+        )
+
     def test_the_banked_answer_is_returned_verbatim_never_reworded(self):
         from app.services.answer_bank import find_match
 

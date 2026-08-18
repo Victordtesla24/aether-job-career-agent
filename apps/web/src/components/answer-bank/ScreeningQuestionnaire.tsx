@@ -26,7 +26,7 @@
  * that can be submitted. A blank field banks nothing and is not an error —
  * "I would rather answer that one per application" is a legitimate choice.
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useState } from "react";
 
 import {
   fetchQuestionnaire,
@@ -38,19 +38,28 @@ import {
 export interface ScreeningQuestionnaireProps {
   /** Render expanded on mount. Hosts open it when there is nothing banked. */
   defaultOpen?: boolean;
-  /** Fired after answers are banked so the host can refresh its own view. */
   onSaved?: (result: QuestionnaireResult) => void;
-  /** Section eyebrow. Differs per surface; the questions never do. */
   eyebrow?: string;
   heading?: string;
 }
 
-export default function ScreeningQuestionnaire({
-  defaultOpen = false,
-  onSaved,
-  eyebrow = "Set-up",
-  heading = "The questions employers ask most",
-}: ScreeningQuestionnaireProps) {
+export type ScreeningQuestionnaireHandle = {
+  /** Persist typed drafts. True when there was nothing to save, or save succeeded. */
+  saveDrafts: () => Promise<boolean>;
+};
+
+const ScreeningQuestionnaire = forwardRef<
+  ScreeningQuestionnaireHandle,
+  ScreeningQuestionnaireProps
+>(function ScreeningQuestionnaire(
+  {
+    defaultOpen = false,
+    onSaved,
+    eyebrow = "Set-up",
+    heading = "The questions employers ask most",
+  },
+  ref,
+) {
   const [questionnaire, setQuestionnaire] = useState<Questionnaire | null>(null);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [open, setOpen] = useState(defaultOpen);
@@ -87,11 +96,11 @@ export default function ScreeningQuestionnaire({
     ).length;
   }, [questionnaire]);
 
-  const save = useCallback(async () => {
+  const save = useCallback(async (): Promise<boolean> => {
     const answers = Object.entries(drafts)
       .map(([question, answer]) => ({ question, answer: answer.trim() }))
       .filter((entry) => entry.answer.length > 0);
-    if (answers.length === 0) return;
+    if (answers.length === 0) return true;
     setSaving(true);
     setResult(null);
     try {
@@ -100,12 +109,16 @@ export default function ScreeningQuestionnaire({
       setDrafts({});
       await load();
       onSaved?.(saved);
+      return true;
     } catch (err) {
       setResult(err instanceof Error ? err.message : "Those answers did not save.");
+      return false;
     } finally {
       setSaving(false);
     }
   }, [drafts, load, onSaved]);
+
+  useImperativeHandle(ref, () => ({ saveDrafts: save }), [save]);
 
   if (loadError) {
     return (
@@ -213,4 +226,8 @@ export default function ScreeningQuestionnaire({
       ) : null}
     </div>
   );
-}
+});
+
+ScreeningQuestionnaire.displayName = "ScreeningQuestionnaire";
+
+export default ScreeningQuestionnaire;

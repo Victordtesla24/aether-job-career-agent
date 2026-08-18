@@ -41,7 +41,9 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import ScreeningQuestionnaire from "../../../components/answer-bank/ScreeningQuestionnaire";
+import ScreeningQuestionnaire, {
+  type ScreeningQuestionnaireHandle,
+} from "../../../components/answer-bank/ScreeningQuestionnaire";
 import {
   fetchAnswerBankReadiness,
   type AnswerBankReadiness,
@@ -176,6 +178,7 @@ export default function SettingsClient({
   // default — an upload must never spend the user's quota unasked.
   const [extractStories, setExtractStories] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const screeningRef = useRef<ScreeningQuestionnaireHandle>(null);
 
   // Career Data (GAP-P4-047 · ADR D-0031): real GitHub + portfolio ingestion
   // and a workspace-stored LinkedIn paste, all feeding tailoring context.
@@ -517,10 +520,13 @@ export default function SettingsClient({
     setSaving(true);
     setError(null);
     try {
+      const screeningOk = (await screeningRef.current?.saveDrafts()) ?? true;
       const updated = await saveSettings(profile, agentConfig);
       setData(updated);
-      setSavedNotice("Settings saved ✓");
-      setTimeout(() => setSavedNotice(null), 4000);
+      if (screeningOk) {
+        setSavedNotice("Settings saved");
+        setTimeout(() => setSavedNotice(null), 4000);
+      }
     } catch (e) {
       // ML-settings-001: a raw 422 from FastAPI/Pydantic echoes the ENTIRE
       // invalid input back in ApiError.message — describeApiError() renders
@@ -1142,7 +1148,7 @@ export default function SettingsClient({
                 <div className="mb-4" data-testid="screening-readiness">
                   <p className="text-[13px] text-aether-text" data-testid="screening-readiness-headline">
                     {readiness.setupComplete
-                      ? "Every answer Aether can reuse on its own is saved. Applications will not stop for these questions."
+                      ? "The reusable answers are saved. A question phrased differently, or a sensitive one, still comes back to you on the application."
                       : `${readiness.essentialCovered} of ${readiness.essentialTotal} reusable answers saved. Until the rest are answered, an application that asks one will stop and wait for you.`}
                   </p>
                   <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -1204,6 +1210,7 @@ export default function SettingsClient({
 
               <div className="rounded-xl border border-white/10 bg-white/[0.02] p-4">
                 <ScreeningQuestionnaire
+                  ref={screeningRef}
                   defaultOpen={readiness !== null && !readiness.setupComplete}
                   onSaved={() => void loadReadiness()}
                   eyebrow="Answer once, reuse everywhere"

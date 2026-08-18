@@ -20,7 +20,7 @@
  *  * a user with applications stopped on a question is told so, and given the
  *    route to them.
  */
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const fetchSettingsMock = vi.fn();
@@ -149,6 +149,7 @@ beforeEach(() => {
   });
   fetchPlansMock.mockResolvedValue({ plans: [] });
   fetchApplySweepStatusMock.mockResolvedValue(false);
+  saveSettingsMock.mockResolvedValue(SETTINGS);
   fetchReadinessMock.mockResolvedValue(READINESS);
   fetchQuestionnaireMock.mockResolvedValue(QUESTIONNAIRE);
   submitQuestionnaireMock.mockResolvedValue({
@@ -225,7 +226,7 @@ describe("Settings — Screening Answers", () => {
     expect(screen.queryByTestId("screening-waiting-link")).toBeNull();
   });
 
-  it("tells a fully set-up user that applications will not stop", async () => {
+  it("tells a fully set-up user the reusable answers are saved, not that every phrasing is covered", async () => {
     fetchReadinessMock.mockResolvedValue({
       ...READINESS,
       essentialCovered: 10,
@@ -233,7 +234,9 @@ describe("Settings — Screening Answers", () => {
     });
     render(<SettingsPage />);
     const headline = await screen.findByTestId("screening-readiness-headline");
-    expect(headline.textContent).toContain("will not stop");
+    expect(headline.textContent).toMatch(/reusable answers are saved/i);
+    expect(headline.textContent).toMatch(/still comes back/i);
+    expect(headline.textContent).not.toMatch(/will not stop/i);
   });
 
   it("warns when a saved answer has gone stale instead of sending it", async () => {
@@ -269,10 +272,20 @@ describe("Settings — Screening Answers", () => {
     expect(saveSettingsMock).not.toHaveBeenCalled();
   });
 
-  it("keeps profile Save Changes on the Profile tab where it belongs", async () => {
+  it("banks screening drafts when Save Changes is pressed on the Profile tab", async () => {
     render(<SettingsPage />);
-    expect(await screen.findByTestId("save-settings-btn")).toBeTruthy();
-    expect(await screen.findByTestId("bank-questionnaire-save")).toBeTruthy();
+    const input = await screen.findByTestId("seed-input-work_rights");
+    fireEvent.change(input, { target: { value: "Yes — Australian citizen." } });
+    fireEvent.click(screen.getByTestId("save-settings-btn"));
+    await waitFor(() =>
+      expect(submitQuestionnaireMock).toHaveBeenCalledWith([
+        {
+          question: "Are you legally entitled to work in the country you are applying in?",
+          answer: "Yes — Australian citizen.",
+        },
+      ]),
+    );
+    expect(saveSettingsMock).toHaveBeenCalled();
   });
 
   it("mounts the shared questionnaire, expanded while set-up is incomplete", async () => {

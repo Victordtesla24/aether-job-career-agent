@@ -112,6 +112,14 @@ class TestPureReadiness:
             concept_of(str(row["semanticKey"])) for row in covered
         }
 
+    def test_a_named_skill_years_row_does_not_cover_the_general_seed_question(self):
+        """seedCovered must agree with the agent: Kubernetes years ≠ years in field."""
+        row = _item("How many years of Kubernetes experience do you have?")
+        summary = readiness_summary([row])
+        assert summary["liveAnswers"] == 1
+        assert summary["seedCovered"] == 0
+        assert any(q["concept"] == "years_experience" for q in summary["seedRemaining"])
+
     def test_an_expired_answer_stops_counting_as_coverage_but_is_still_reported(self):
         stale = _item(
             "What is your notice period?",

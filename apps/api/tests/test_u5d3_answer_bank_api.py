@@ -122,6 +122,26 @@ class TestQuestionnaire:
         body = client.get("/answer-bank/questionnaire", headers=auth_headers).json()
         assert "notice_period" not in body["answeredConcepts"]
 
+    def test_a_named_skill_years_answer_does_not_mark_the_general_seed_question_answered(
+        self, client, auth_headers
+    ):
+        """A Kubernetes years answer is not an answer to 'years in your field'.
+
+        Subject-sensitive keys store the skill in the key. Reporting the bare
+        concept as answered would show a green badge on the general seed
+        question while the agent still stops on it.
+        """
+        client.post(
+            "/answer-bank",
+            headers=auth_headers,
+            json={
+                "question": "How many years of Kubernetes experience do you have?",
+                "answer": "5 years of production Kubernetes.",
+            },
+        )
+        body = client.get("/answer-bank/questionnaire", headers=auth_headers).json()
+        assert "years_experience" not in body["answeredConcepts"]
+
     def test_skipped_questions_bank_nothing_and_are_not_an_error(
         self, client, auth_headers, user_id
     ):

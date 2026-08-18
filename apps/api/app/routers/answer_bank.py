@@ -40,12 +40,12 @@ from app.repositories.answer_bank import AnswerBankRepository
 from app.services.answer_bank import (
     AUTO_ANSWER_CONFIDENCE,
     SENSITIVITY_SENSITIVE,
-    concept_of,
     describe_gate,
     effective_sensitivity,
     item_auto_answers,
     item_is_expired,
     readiness_summary,
+    seed_concept_covered_by,
     seed_question_payload,
 )
 
@@ -137,9 +137,13 @@ def get_questionnaire(current_user: CurrentUser) -> dict[str, Any]:
     """
     items = AnswerBankRepository().list_for_user(current_user["id"])
     answered = {
-        concept_of(str(item["semanticKey"]))
-        for item in items
-        if concept_of(str(item["semanticKey"])) and not item_is_expired(item)
+        concept
+        for concept in (
+            seed_concept_covered_by(item)
+            for item in items
+            if not item_is_expired(item)
+        )
+        if concept
     }
     return {
         "questions": seed_question_payload(),

@@ -291,7 +291,9 @@ _CONCEPT_WORK_RIGHTS = Concept(
     ),
     # A question that mentions sponsorship or a visa subclass is a visa
     # SPECIFICS question (sensitive), not the stable yes/no work-rights one.
-    none_of=("sponsorship", "sponsor", "subclass", "visa", "expiry", "expires"),
+    # "right"+"work" also appears in skills/fit questions ("right skills to
+    # work in a fast-paced team") — those are not authorisation to work.
+    none_of=("sponsorship", "sponsor", "subclass", "visa", "expiry", "expires", "skill", "skills", "fit"),
 )
 
 #: Order is meaningful: the FIRST concept that matches wins, so the sensitive
@@ -736,6 +738,26 @@ def concept_of(key: str) -> str:
     if not key.startswith("concept:"):
         return ""
     return key.removeprefix("concept:").split(":", 1)[0]
+
+
+def seed_concept_covered_by(item: dict[str, Any]) -> str:
+    """The seed-questionnaire concept this row covers, or ``""`` if none.
+
+    A subject-sensitive row only covers the seed question when it has NO
+    subject — the general form. A Kubernetes years answer keyed
+    ``concept:years_experience:kubernete`` must not mark "years in your field"
+    as answered, because the agent will still stop on that general question.
+    """
+    key = str(item.get("semanticKey") or "")
+    concept = concept_of(key)
+    if not concept:
+        return ""
+    spec = next((entry for entry in CONCEPTS if entry.key == concept), None)
+    if spec is not None and spec.subject_sensitive:
+        prefix = f"concept:{concept}:"
+        if key.startswith(prefix) and key[len(prefix) :]:
+            return ""
+    return concept
 
 
 def _jaccard(left: frozenset[str], right: frozenset[str]) -> float:
@@ -1263,7 +1285,7 @@ def readiness_summary(
     live = [item for item in items if not item_is_expired(item, now=moment)]
     covered = {
         concept
-        for concept in (concept_of(str(item.get("semanticKey") or "")) for item in live)
+        for concept in (seed_concept_covered_by(item) for item in live)
         if concept
     }
 
