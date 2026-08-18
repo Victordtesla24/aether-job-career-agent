@@ -22,6 +22,7 @@ from typing import Any
 
 from app.repositories.job import JobRepository
 from app.repositories.job_source_status import JobSourceStatusRepository
+from app.services.apply_channel_resolver import resolve_ingest_redirect
 from app.services.discovery import qualification
 from app.services.discovery.adapter_registry import ADAPTERS
 from app.services.discovery.base_adapter import SourceBlockedError
@@ -253,6 +254,20 @@ class ScoutAgent:
                 if dedup_key in seen:
                     continue
                 seen.add(dedup_key)
+                # SUB-009: Adzuna's live API has no direct-employer-URL field
+                # — the only URL on a result is its own click-tracking
+                # redirector, which ``adzuna_adapter._parse`` has no choice
+                # but to store as ``sourceUrl``. Resolve it HERE, once, before
+                # the row is written, reusing apply_channel_resolver's own
+                # cache/rate-limit (never a second resolver). A URL that is
+                # not an Adzuna redirector shape, or whose one resolution
+                # attempt 429s/times out, returns None — the job is still
+                # ingested, with its honest, unresolved sourceUrl and no
+                # fabricated resolution columns.
+                resolution = resolve_ingest_redirect(job["sourceUrl"])
+                if resolution:
+                    job["resolvedApplyUrl"] = resolution["resolvedApplyUrl"]
+                    job["resolvedApplyUrlSource"] = resolution["resolvedApplyUrlSource"]
                 row = self._repository.create(user_id, job)
                 # The repository upserts on (userId, sourceUrl): only a row that
                 # was actually inserted counts as a discovery — a re-discovered

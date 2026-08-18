@@ -3,12 +3,14 @@ from __future__ import annotations
 
 import json
 import os
+from datetime import datetime, timezone
 from typing import Any, Iterator
 
 from app.db import (
     ensure_job_cover_suppression_column,
     ensure_job_dedup_columns,
     ensure_job_last_seen_column,
+    ensure_job_resolved_apply_url_columns,
     get_connection,
     new_id,
     rows_to_dicts,
@@ -331,10 +333,19 @@ class JobRepository:
         """
         ensure_job_dedup_columns()
         ensure_job_last_seen_column()
+        ensure_job_resolved_apply_url_columns()
 
         requirements = json.dumps(job_raw.get("requirements") or [])
         raw_source_url = job_raw.get("sourceUrl")
         normalized_url = normalize_source_url(raw_source_url)
+
+        # SUB-009 — set only when the scout's ingest loop already resolved an
+        # Adzuna redirector to its real destination this run. NEVER guessed:
+        # absent a genuine resolution both stay None, which is the honest
+        # value COALESCEd onto whatever (if anything) a prior run resolved.
+        resolved_apply_url = job_raw.get("resolvedApplyUrl") or None
+        resolved_apply_url_source = job_raw.get("resolvedApplyUrlSource") or None
+        resolved_at = datetime.now(timezone.utc) if resolved_apply_url else None
 
         dedup_hash: str | None = None
         content_hash: str | None = None
@@ -407,11 +418,14 @@ class JobRepository:
                         "id", "userId", "title", "company", "location", "remote",
                         "description", "requirements", "source", "sourceUrl",
                         "salaryMin", "salaryMax", "currency", "postedAt",
-                        "dedupHash", "contentHash", "lastSeenAt", "updatedAt"
+                        "dedupHash", "contentHash", "resolvedApplyUrl",
+                        "resolvedApplyUrlSource", "resolvedAt",
+                        "lastSeenAt", "updatedAt"
                     )
                     VALUES (
                         %s, %s, %s, %s, %s, %s, %s, %s,
                         %s, %s, %s, %s, %s, %s, %s, %s,
+                        %s, %s, %s,
                         NOW(), NOW()
                     )
                     ON CONFLICT ("userId", "sourceUrl") DO UPDATE SET
@@ -427,6 +441,13 @@ class JobRepository:
                         "postedAt" = COALESCE(EXCLUDED."postedAt", "Job"."postedAt"),
                         "dedupHash" = COALESCE(EXCLUDED."dedupHash", "Job"."dedupHash"),
                         "contentHash" = COALESCE(EXCLUDED."contentHash", "Job"."contentHash"),
+                        "resolvedApplyUrl" = COALESCE(
+                            EXCLUDED."resolvedApplyUrl", "Job"."resolvedApplyUrl"
+                        ),
+                        "resolvedApplyUrlSource" = COALESCE(
+                            EXCLUDED."resolvedApplyUrlSource", "Job"."resolvedApplyUrlSource"
+                        ),
+                        "resolvedAt" = COALESCE(EXCLUDED."resolvedAt", "Job"."resolvedAt"),
                         "lastSeenAt" = NOW(),
                         "updatedAt" = NOW()
                     RETURNING {_JOB_COLUMNS}, (xmax = 0) AS "wasInserted"
@@ -448,6 +469,9 @@ class JobRepository:
                         job_raw.get("postedAt"),
                         dedup_hash,
                         content_hash,
+                        resolved_apply_url,
+                        resolved_apply_url_source,
+                        resolved_at,
                     ),
                 )
                 rows = rows_to_dicts(cur)
