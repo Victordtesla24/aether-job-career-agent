@@ -38,24 +38,44 @@ jobs:
       - run: pip install ruff mypy
       - run: ruff check app/ tests/
       - run: mypy app/ --ignore-missing-imports
-      # The pytest suite needs the hosted Postgres test schema. It runs only
-      # when the DATABASE_URL_TEST secret is configured, and skips loudly
-      # (rather than passing silently) when it isn't.
-      - name: pytest (hosted DB)
+
+  # Full backend suite. Runs on the self-hosted VPS runner because the test
+  # database is the VPS-local Postgres (the old hosted reai.io test DB resolves
+  # to a private VPC address and is unreachable from GitHub-hosted runners —
+  # proven 2026-08-18, see docs/delivery/evidence/RUN-20260818T0223Z). Uses an
+  # isolated per-CI schema (aether_test_ci) via the repo's own provisioning
+  # script, and refuses loudly when the secret is unset (constraint R7 — no
+  # disabled verification).
+  api-tests:
+    name: API — full pytest suite (self-hosted, isolated schema)
+    runs-on: [self-hosted, hostinger-vps]
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Full backend suite against aether_test_ci
         env:
           DATABASE_URL_TEST: ${{ secrets.DATABASE_URL_TEST }}
-          # Deterministic Fernet key for the credential vault (ADR-PC-3) so the
-          # encrypted-credential suites (Google-OAuth callback persist, provider
-          # config) run green in CI. This is a TEST-ONLY key that encrypts
-          # ephemeral rows in the aether_test schema — NOT a production secret
-          # (production sets its own key in the server .env). conftest.py sets the
-          # same value via os.environ.setdefault(); pinning it here (a literal, not
-          # a possibly-empty secret ref) keeps CI robust to an unset secret.
+          # TEST-ONLY Fernet key for the credential vault (ADR-PC-3); production
+          # sets its own key in the server .env.
           AETHER_CREDENTIAL_KEY: ${{ secrets.AETHER_CREDENTIAL_KEY_TEST }}
         run: |
+          set -euo pipefail
           if [ -z "$DATABASE_URL_TEST" ]; then
             echo "::error::DATABASE_URL_TEST is not set — refusing to report success for a suite that did not run"
             exit 1
           fi
-          pip install -r requirements.txt "pytest>=9,<10"
-          python -m pytest tests/ -q
+          # Shared-host memory guard: never start a full suite into an OOM
+          # (runner was OOM-killed 2026-08-18 when suites stacked).
+          for i in $(seq 1 40); do
+            avail=$(free -m | awk '/^Mem:/{print $7}')
+            [ "$avail" -ge 2500 ] && break
+            echo "waiting for memory headroom (${avail}MB available)"; sleep 30
+          done
+          python3 -m venv .venv-ci 2>/dev/null || true
+          . .venv-ci/bin/activate
+          pip install -q --upgrade pip
+          pip install -q -r apps/api/requirements.txt "pytest>=9,<10"
+          bash scripts/test-schema.sh provision ci
+          trap 'bash scripts/test-schema.sh drop ci || true' EXIT
+          AETHER_TEST_SCHEMA=aether_test_ci flock /tmp/aether-pytest-ci.lock \
+            bash scripts/run-tests.sh -q
