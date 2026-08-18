@@ -31,8 +31,9 @@ Brand-tab kind ``sales_outreach`` previews this same function.
 from __future__ import annotations
 
 import html as _html
-import os
 import re
+
+from app.services.stripe_gateway import app_base_url
 
 #: Aether Career Design System tokens (tokens/colors.css) — visual only.
 BRAND = {
@@ -73,11 +74,12 @@ def strip_exclamation_marks(text: str) -> str:
 def brand_logo_url() -> str:
     """Absolute production URL of the Aether brand mark (served by the web app
     from ``apps/web/public/brand/aether-mark.png`` — the design system's
-    canonical raster mark)."""
-    base = (
-        os.environ.get("AETHER_PUBLIC_URL") or "https://5cb5f0620.abacusai.cloud"
-    ).rstrip("/")
-    return f"{base}/brand/aether-mark.png"
+    canonical raster mark).
+
+    Uses :func:`app_base_url` so a missing or retired Abacus origin cannot
+    put a dead host into Gmail HTML (Brand-tab preview is the live send).
+    """
+    return f"{app_base_url()}/brand/aether-mark.png"
 
 
 def _paragraphs_html(text: str, color: str, size: str = "15px") -> str:

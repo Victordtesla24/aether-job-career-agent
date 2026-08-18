@@ -582,6 +582,17 @@ describe("NetworkingPage — honesty and freshness (NET-HONEST)", () => {
     expect(screen.getByTestId("empty-state-add-contact-btn")).toBeTruthy();
   });
 
+  it("explains what Networking does and that drafts never auto-send", async () => {
+    fetchNetworkingSummaryMock.mockResolvedValue(summary());
+    render(<NetworkingPage />);
+    await waitFor(() => screen.getByTestId("networking-purpose"));
+    const purpose = screen.getByTestId("networking-purpose").textContent ?? "";
+    expect(purpose).toMatch(/recruiter|referral/i);
+    expect(purpose).toMatch(/Approvals/i);
+    expect(purpose).toMatch(/not measured/i);
+    expect(purpose.toLowerCase()).toMatch(/never send/);
+  });
+
   it("contact detail can PATCH stage via updateNetworkingContact", async () => {
     fetchNetworkingSummaryMock.mockResolvedValue(summary());
     fetchNetworkingContactMock.mockResolvedValue(CONTACT_RECORD);
