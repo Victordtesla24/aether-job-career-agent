@@ -290,6 +290,12 @@ const MANUAL_STEP_LABELS: Readonly<Record<string, string>> = {
   // Stale-approval guard: the approval aged out, so the submission was NOT
   // driven. One click re-confirms it.
   approval_expired: "Approval expired — reconfirm to submit",
+  // CLI-SUB-005-R2 (adversarial review FAIL): a conditional/branching
+  // question the plan's static pre-fill snapshot could not have seen was
+  // revealed live, right before submit, and Aether had no stored answer for
+  // it — distinct from `form_fill_failed` (a PLANNED field that failed to
+  // type), because the user needs to know a NEW question appeared.
+  unplanned_required_field: "This form revealed a new required question Aether could not answer",
 };
 
 /** Human headline for a manual-step reason code. Unknown codes de-slugify

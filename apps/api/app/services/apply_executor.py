@@ -1017,6 +1017,14 @@ _VERIFY_SETTLE_FILE_MS = 1500  # file uploads may re-render the form
 _PRESUBMIT_SETTLE_MS = 500  # settle before the pre-submit commit gate
 _COMBOBOX_POPUP_POLLS = 10  # x 250ms — bounded wait for an async popup
 
+# CLI-SUB-005-R2 (adversarial review FAIL, 08-adversarial-review.md): bounded
+# re-scans of the LIVE DOM for a required field the plan's static snapshot
+# never saw. A refill pass can itself reveal a FURTHER conditional (a chain
+# of branching questions), so this is never unbounded — after this many
+# passes still finding something new, the honest answer is a manual step,
+# not another loop iteration.
+_MAX_RESCAN_PASSES = 3
+
 
 def _wait(page: Any, ms: int) -> None:
     """Best-effort settle. Unit-test fakes may not implement the clock."""
@@ -1625,6 +1633,135 @@ def _presubmit_required_commit_gate(
     )
 
 
+def _live_required_fields_not_in(
+    page: Any, channel: str, known_names: set[str]
+) -> list[dict[str, Any]]:
+    """REQUIRED fields the LIVE DOM shows right now that ``known_names`` never saw.
+
+    Re-runs the channel's OWN schema parser (:func:`parse_form_schema`)
+    against the CURRENT ``page.content()`` — never the static pre-fill
+    snapshot :func:`build_form_fill_plan` was built from. This is what catches
+    a conditional/branching question (first-class on both Ashby and
+    Greenhouse: "Do you require visa sponsorship?" -> Yes -> reveals a
+    required "please explain" box) that could not have existed in an
+    unanswered snapshot taken before the browser session even opened.
+    """
+    try:
+        html = page.content()
+    except Exception:  # noqa: BLE001 — a page without a live DOM yields nothing new
+        return []
+    try:
+        live_schema = parse_form_schema(html, channel=channel)
+    except Exception:  # noqa: BLE001 — a parse failure must not crash the gate
+        return []
+    return [
+        field
+        for field in live_schema
+        if field.get("required") and str(field["name"]) not in known_names
+    ]
+
+
+def _resolve_unplanned_required_fields(
+    page: Any,
+    channel: str,
+    plan_fields: list[dict[str, Any]],
+    documents: dict[str, str],
+    *,
+    profile: dict[str, Any] | None,
+    answer_bank: Callable[[dict[str, Any]], Any] | None,
+) -> list[str]:
+    """Catch a required field the pre-fill snapshot could not have seen.
+
+    CLI-SUB-005-R2 (adversarial review FAIL, 08-adversarial-review.md):
+    :func:`build_form_fill_plan` runs exactly ONCE, against a STATIC,
+    UNANSWERED page snapshot taken before the browser session that fills and
+    submits the form ever opens (``fetch_apply_page`` -> ``page.content()``).
+    A conditional/branching question is therefore structurally invisible to
+    that plan — not a race condition, a logical impossibility for an
+    unanswered snapshot to contain a question that only exists once an
+    earlier question is answered. Both the fill loop and the pre-submit gate
+    used to iterate that same fixed ``plan["fields"]`` list and nothing
+    else, so a real required field sitting in the live DOM at submit time
+    was never attempted, never verified — and the executor reported a
+    VERIFIED, CONFIRMED submission over it (reproduced against the real
+    ``playwright_form_submitter`` in ``adversarial/attack_stale_plan.py``).
+
+    Immediately before the final pre-submit gate, re-scan the LIVE DOM with
+    the channel's own parser and resolve anything the plan never saw, via
+    the EXACT SAME ``_answer_for`` / answer-bank path
+    :func:`build_form_fill_plan` itself uses — never inventing an answer. A
+    resolved field is APPENDED to ``plan_fields`` in place, so the caller's
+    own :func:`_presubmit_required_commit_gate` re-verifies it (and catches
+    it being wiped by a later re-render) exactly like every other planned
+    field.
+
+    Filling a newly-revealed field can itself reveal a FURTHER conditional (a
+    chain of branching questions), so this re-scans again after every
+    successful pass — bounded at :data:`_MAX_RESCAN_PASSES`, after which it
+    refuses honestly rather than assume the chain has ended. Any field that
+    cannot be answered, or whose fill cannot be verified as committed, raises
+    immediately with the distinct ``"unplanned_required_field"`` reason: this
+    NEVER submits past an unplanned required field.
+
+    Returns the names of the fields it resolved (filled AND verified), for
+    the caller's own evidence sidecar — visibility that a submission needed
+    this safety net at all, not just that it eventually succeeded.
+    """
+    known = {str(field["name"]) for field in plan_fields}
+    resolved: list[str] = []
+    for _pass in range(_MAX_RESCAN_PASSES):
+        unplanned = _live_required_fields_not_in(page, channel, known)
+        if not unplanned:
+            return resolved
+        unresolved_labels: list[str] = []
+        for field in unplanned:
+            name = str(field["name"])
+            known.add(name)  # never re-attempt the same field name
+            answer = _answer_for(field, profile or {})
+            if answer is None and answer_bank is not None:
+                match = answer_bank(field)
+                if match is not None:
+                    answer = match.answer
+            if answer is None:
+                unresolved_labels.append(str(field.get("label") or name))
+                continue
+            entry = dict(field)
+            entry["value"] = answer
+            if not _fill_and_verify(page, entry, answer, documents, verify=True):
+                unresolved_labels.append(str(field.get("label") or name))
+                continue
+            plan_fields.append(entry)
+            resolved.append(name)
+        if unresolved_labels:
+            labels = "; ".join(unresolved_labels)
+            raise ManualStepRequired(
+                "unplanned_required_field",
+                (
+                    "This application revealed a required question after "
+                    "Aether had already built its plan (a conditional "
+                    "follow-up), and it could not be answered and verified, "
+                    "so nothing was submitted. Open the posting and finish "
+                    "it yourself: " + labels
+                ),
+                question=labels,
+            )
+    # Exhausted every bounded pass and the DOM is STILL revealing new
+    # required fields (a chain of conditionals deeper than any real ATS form
+    # should need) -- refuse rather than guess how many more there are.
+    still = _live_required_fields_not_in(page, channel, known)
+    labels = "; ".join(str(f.get("label") or f["name"]) for f in still)
+    raise ManualStepRequired(
+        "unplanned_required_field",
+        (
+            "This application kept revealing new required questions after "
+            "Aether's plan was built, so it stopped rather than guess how "
+            "many more there might be. Open the posting and finish it "
+            "yourself." + (f" Last seen: {labels}" if labels else "")
+        ),
+        question=labels or None,
+    )
+
+
 def _resume_suffix(data: bytes) -> str:
     """Name the uploaded résumé for what it ACTUALLY is (RFMT-5).
 
@@ -1663,6 +1800,8 @@ def playwright_form_submitter(
     resume_pdf_bytes: bytes,
     cover_letter_text: str,
     evidence_dir: str,
+    profile: dict[str, Any] | None = None,
+    answer_bank: Callable[[dict[str, Any]], Any] | None = None,
 ) -> dict[str, Any]:
     """Fill and submit the application in a REAL headless Chromium.
 
@@ -1672,9 +1811,17 @@ def playwright_form_submitter(
     tests and by re-running a captured page — and the returned summary says so
     in ``mode``, so an audit can always tell the two apart.
 
+    ``profile``/``answer_bank`` (CLI-SUB-005-R2) are consulted ONLY to resolve
+    a required field the live DOM reveals that the plan's static snapshot
+    never saw — see :func:`_resolve_unplanned_required_fields`. Omitting them
+    reproduces the pre-R2 behaviour for that (rare, additive) safety net: no
+    stored answer means an honest refusal, exactly like every other unanswered
+    required field.
+
     Returns ``{"submitted", "evidencePath", "destination", "filled",
-    "unfilled", "mode"}``. Raises :class:`ApplyExecutorTransportError` if the
-    browser itself could not be driven — never a fake success.
+    "unfilled", "unplannedFilled", "mode"}``. Raises
+    :class:`ApplyExecutorTransportError` if the browser itself could not be
+    driven — never a fake success.
     """
     try:
         from playwright.sync_api import sync_playwright
@@ -1698,6 +1845,7 @@ def playwright_form_submitter(
     filled: list[str] = []
     unfilled: list[str] = []
     blocked_required: list[str] = []
+    unplanned_filled: list[str] = []
     mode = "live" if apply_url else "replay"
     screenshot = _evidence_path(evidence_dir, application_id, "confirmation.png")
     try:
@@ -1749,11 +1897,35 @@ def playwright_form_submitter(
                         question="; ".join(blocked_required),
                     )
                 if verify_commit:
+                    # CLI-SUB-005-R2: the plan was built from a STATIC,
+                    # unanswered page snapshot — a conditional/branching
+                    # question (first-class on Ashby/Greenhouse) only exists
+                    # in the live DOM once an earlier question is answered,
+                    # so it is structurally invisible to that plan. Re-scan
+                    # the LIVE DOM now and resolve anything the plan never
+                    # saw — via the exact _answer_for/answer-bank path, and
+                    # ONLY that path — BEFORE the final commit gate below,
+                    # which then also re-verifies whatever this resolves.
+                    try:
+                        unplanned_filled = _resolve_unplanned_required_fields(
+                            page,
+                            channel,
+                            plan["fields"],
+                            documents,
+                            profile=profile,
+                            answer_bank=answer_bank,
+                        )
+                    except ManualStepRequired:
+                        page.screenshot(path=str(screenshot), full_page=True)
+                        raise
+                    filled.extend(unplanned_filled)
                     # CLI-SUB-005 PRE-SUBMIT GATE: re-verify every REQUIRED
-                    # planned field is still committed in the DOM (a résumé
-                    # upload can re-render the form and wipe earlier fills);
-                    # one refill pass, then an honest refusal — the submit
-                    # control is never activated over an empty required field.
+                    # planned field — now including anything CLI-SUB-005-R2
+                    # resolved above — is still committed in the DOM (a
+                    # résumé upload can re-render the form and wipe earlier
+                    # fills); one refill pass, then an honest refusal — the
+                    # submit control is never activated over an empty
+                    # required field.
                     try:
                         _presubmit_required_commit_gate(page, plan["fields"], documents)
                     except ManualStepRequired:
@@ -1815,6 +1987,10 @@ def playwright_form_submitter(
                 "commitVerified": verify_commit,
                 "fieldsFilled": filled,
                 "fieldsNotFilled": unfilled,
+                # CLI-SUB-005-R2: which of the above were NOT in the plan's
+                # static snapshot and only resolved by the live-DOM rescan —
+                # visible in the audit even on a successful submission.
+                "unplannedFieldsFilled": unplanned_filled,
                 "screenshot": screenshot.name,
             },
             indent=2,
@@ -1827,6 +2003,7 @@ def playwright_form_submitter(
         "destination": destination,
         "filled": filled,
         "unfilled": unfilled,
+        "unplannedFilled": unplanned_filled,
         "mode": mode,
     }
 
@@ -2039,6 +2216,12 @@ def execute_site_application(
             resume_pdf_bytes=resume_pdf_bytes,
             cover_letter_text=cover_letter_text,
             evidence_dir=evidence_dir,
+            # CLI-SUB-005-R2: so a required field the live DOM reveals AFTER
+            # this static plan was built (a conditional/branching question)
+            # can still be resolved via the same profile/answer-bank path —
+            # never a guess, and never silently unattempted.
+            profile=profile,
+            answer_bank=resolver,
         )
     except ManualStepRequired as exc:
         record_manual_step(
@@ -2100,4 +2283,5 @@ def execute_site_application(
         "confirmation": outcome.get("confirmation"),
         "fieldsFilled": outcome.get("filled") or [],
         "fieldsNotFilled": outcome.get("unfilled") or [],
+        "unplannedFieldsFilled": outcome.get("unplannedFilled") or [],
     }

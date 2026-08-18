@@ -686,3 +686,17 @@ describe("U5 closing round — new manual-step reasons are legible", () => {
     expect(manualStepLabel("approval_expired")).toBe("Approval expired — reconfirm to submit");
   });
 });
+
+// CLI-SUB-005-R2 (adversarial review FAIL, 08-adversarial-review.md): a
+// conditional/branching question revealed only after the plan's static
+// pre-fill snapshot was taken now gets its own honest, distinct reason
+// rather than falling through to the generic "form_fill_failed" wording —
+// the user needs to know a NEW question appeared, not that a planned one
+// failed to type.
+describe("U5-CLI-SUB-005-R2 — a post-snapshot conditional field is legible", () => {
+  it("labels an unplanned required field distinctly from a planned-fill failure", () => {
+    expect(manualStepLabel("unplanned_required_field")).toBe(
+      "This form revealed a new required question Aether could not answer",
+    );
+  });
+});

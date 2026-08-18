@@ -86,6 +86,12 @@ class _Locator:
         if hook:
             hook(path)
 
+    def select_option(self, *, label: str, timeout: int | None = None) -> None:
+        self._page.actions.append(("select_option", self._key, label))
+        hook = self._spec.get("on_select_option")
+        if hook:
+            hook(label)
+
     def input_value(self, timeout: int | None = None) -> str:
         getter = self._spec.get("value")
         return getter() if callable(getter) else str(getter or "")
@@ -561,6 +567,221 @@ def test_live_submitter_submits_a_wellbehaved_form_with_confirmation(tmp_path) -
     # The page only confirms when the exact committed value arrived — this is
     # the proof the fill was real, not just that a button got clicked.
     assert outcome["confirmation"] and "thank you" in str(outcome["confirmation"]).lower()
+
+
+def test_commit_state_select_reads_the_committed_selected_option_text() -> None:
+    """CLI-SUB-005-R2 (adversarial review, finding #5): the reviewer found
+    ZERO ``kind == "select"`` coverage anywhere in this file's 22 tests.
+    ``_commit_state``'s select branch reads ``el.selectedOptions[0].textContent``
+    back — this pins both the match and the mismatch."""
+    from app.services.apply_executor import _commit_state
+
+    field = {"name": "work_auth", "label": "Work Authorization", "kind": "select",
+              "required": True, "scope": ""}
+    committed = _Page({'[id="work_auth"]': {"count": 1, "selected_text": "Yes"}})
+    assert _commit_state(committed, field, "Yes", {})[0] is True
+    wrong = _Page({'[id="work_auth"]': {"count": 1, "selected_text": "No"}})
+    assert _commit_state(wrong, field, "Yes", {})[0] is False
+    empty = _Page({'[id="work_auth"]': {"count": 1, "selected_text": ""}})
+    assert _commit_state(empty, field, "Yes", {})[0] is False
+
+
+def test_fill_and_verify_select_commits_via_select_option_and_reads_it_back() -> None:
+    """The full ``_fill_value`` -> ``_commit_state`` select round trip: filling
+    calls ``select_option(label=...)`` and only counts once the DOM reflects
+    the chosen option — a widget that accepts the click without actually
+    selecting anything must be reported unfilled, not claimed."""
+    from app.services.apply_executor import _fill_and_verify
+
+    state = {"selected": ""}
+    page = _Page(
+        {
+            '[id="work_auth"]': {
+                "count": 1,
+                "selected_text": lambda: state["selected"],
+                "on_select_option": lambda label: state.__setitem__("selected", label),
+            }
+        }
+    )
+    field = {"name": "work_auth", "label": "Work Authorization", "kind": "select",
+              "required": True, "scope": ""}
+    assert _fill_and_verify(page, field, "Yes", {}, verify=True) is True
+    assert ("select_option", '[id="work_auth"]', "Yes") in page.actions
+
+    # The widget accepts the select_option call but never actually commits
+    # (selectedOptions stays empty) -- must be reported unfilled, never faked.
+    inert_page = _Page({'[id="work_auth"]': {"count": 1, "selected_text": ""}})
+    assert _fill_and_verify(inert_page, field, "Yes", {}, verify=True) is False
+
+
+# ---------------------------------------------------------------------------
+# 7. CLI-SUB-005-R2 (adversarial review FAIL, 08-adversarial-review.md):
+#    build_form_fill_plan runs ONCE against a STATIC, unanswered page
+#    snapshot, before the browser session that fills/submits ever opens. A
+#    conditional/branching question -- first-class on Ashby+Greenhouse -- is
+#    structurally invisible to that plan, and the fill loop + the pre-submit
+#    gate used to iterate ONLY that fixed plan["fields"] list. Reproduced
+#    against the REAL playwright_form_submitter (not a mock): a required
+#    field revealed 400ms after load was never attempted, never verified,
+#    and the executor reported submitted:true, commitVerified:true anyway.
+# ---------------------------------------------------------------------------
+
+# The LIVE page: Name (in the plan) + a SECOND required field, "Visa status
+# explanation", that satisfies this repo's OWN Greenhouse required-field
+# convention (aria-required="true", trailing "*") but is revealed 400ms
+# after load -- simulating a conditional follow-up question the initial
+# page-snapshot fetch (before any answers existed) could not have seen.
+_CONDITIONAL_LIVE_FORM = """
+<title>conditional-field</title>
+<form onsubmit="event.preventDefault();
+    if (document.getElementById('name').value === 'JordanBlake' &&
+        document.getElementById('visa_explain') &&
+        document.getElementById('visa_explain').value === 'No sponsorship required') {
+      document.body.innerHTML = '<h1>Thank you for applying</h1>';
+    } else {
+      document.getElementById('err').textContent = 'Missing required field';
+    }">
+  <label for="name">Name*</label><input id="name" type="text" aria-required="true">
+  <div id="conditional"></div>
+  <button type="submit">Submit Application</button>
+</form>
+<div id="err"></div>
+<script>
+  setTimeout(() => {
+    document.getElementById('conditional').innerHTML =
+      '<label for="visa_explain">Visa status explanation*</label>' +
+      '<input id="visa_explain" type="text" aria-required="true">';
+  }, 400);
+</script>
+"""
+
+
+def test_live_submitter_blocks_a_post_snapshot_conditional_field_with_no_answer(
+    tmp_path,
+) -> None:
+    """THE ADVERSARIAL-REVIEW BREAK, ported: a required field that exists in
+    the LIVE DOM at submit time but was absent from the plan's static
+    pre-fill snapshot must BLOCK submission, honestly -- never a VERIFIED,
+    CONFIRMED outcome over an untouched required field. This is the test
+    that FAILED before this fix (it reproduced the reviewer's
+    attack_stale_plan.py break against the real submitter)."""
+    from app.services.apply_executor import playwright_form_submitter
+
+    plan = {
+        "fields": [
+            # NOTE: no "visa_explain" entry -- exactly what build_form_fill_plan
+            # would have produced from a pre-conditional-reveal snapshot.
+            _name_plan_field(),
+        ]
+    }
+    with pytest.raises(ManualStepRequired) as exc_info:
+        playwright_form_submitter(
+            application_id="sub005r2-block",
+            channel="greenhouse",
+            page_html="",
+            apply_url=_data_url(_CONDITIONAL_LIVE_FORM),
+            plan=plan,
+            resume_pdf_bytes=b"%PDF-1.4 fake",
+            cover_letter_text="Dear Hiring Manager,",
+            evidence_dir=str(tmp_path),
+            profile={},  # no stored answer for "Visa status explanation"
+        )
+    err = exc_info.value
+    assert err.reason == "unplanned_required_field"
+    assert err.question is not None and "Visa status explanation" in err.question
+
+
+def test_live_submitter_answers_a_post_snapshot_conditional_field_from_the_answer_bank(
+    tmp_path,
+) -> None:
+    """Guard against over-refusal: when the SAME post-snapshot conditional
+    field CAN be answered (here: the answer bank), it is filled, verified,
+    and the submission proceeds -- the confirmation only fires when the
+    live DOM holds the EXACT committed value at submit time, so a truthy
+    confirmation proves the resolved answer really crossed the submit
+    boundary."""
+    from app.services.answer_bank import (
+        PROVENANCE_USER_ANSWERED,
+        SENSITIVITY_FACTUAL,
+        AnswerBankMatch,
+    )
+    from app.services.apply_executor import playwright_form_submitter
+
+    match = AnswerBankMatch(
+        item_id="bank-item-1",
+        answer="No sponsorship required",
+        confidence=0.97,
+        method="test",
+        question_as_seen="Visa status explanation",
+        banked_question="Visa status explanation",
+        sensitivity=SENSITIVITY_FACTUAL,
+        provenance=PROVENANCE_USER_ANSWERED,
+        per_application=False,
+    )
+
+    def answer_bank(field: dict[str, Any]) -> Any:
+        return match if field["name"] == "visa_explain" else None
+
+    plan = {"fields": [_name_plan_field()]}
+    outcome = playwright_form_submitter(
+        application_id="sub005r2-answered",
+        channel="greenhouse",
+        page_html="",
+        apply_url=_data_url(_CONDITIONAL_LIVE_FORM),
+        plan=plan,
+        resume_pdf_bytes=b"%PDF-1.4 fake",
+        cover_letter_text="Dear Hiring Manager,",
+        evidence_dir=str(tmp_path),
+        profile={},
+        answer_bank=answer_bank,
+    )
+    assert outcome["submitted"] is True
+    assert outcome["confirmation"] and "thank you" in str(outcome["confirmation"]).lower()
+    assert "visa_explain" in outcome["filled"]
+    assert "visa_explain" in outcome["unplannedFilled"]
+
+
+def test_resolve_unplanned_required_fields_bounds_an_endlessly_revealing_form() -> None:
+    """The bounded re-scan loop terminates HONESTLY, not by looping forever.
+    Every newly-revealed field in this synthetic form IS answerable and
+    fillable (unlike the two tests above), so nothing here would ever stop
+    the DOM from revealing yet another one on the next pass -- the only
+    thing that can stop it is the pass bound itself."""
+    from app.services.apply_executor import (
+        _MAX_RESCAN_PASSES,
+        ManualStepRequired,
+        _resolve_unplanned_required_fields,
+    )
+
+    calls = {"n": 0}
+
+    def growing_html() -> str:
+        calls["n"] += 1
+        fields = "".join(
+            f'<label for="field_{i}">Field {i}*</label>'
+            f'<input id="field_{i}" name="field_{i}">'
+            for i in range(calls["n"])
+        )
+        return f"<form>{fields}</form>"
+
+    total_fields = _MAX_RESCAN_PASSES + 5
+    specs = {
+        f'[id="field_{i}"]': {"count": 1, "value": "answered"} for i in range(total_fields)
+    }
+    page = _Page(specs)
+    page.content = growing_html  # type: ignore[method-assign]
+    profile = {"customAnswers": {f"field_{i}": "answered" for i in range(total_fields)}}
+
+    with pytest.raises(ManualStepRequired) as exc_info:
+        _resolve_unplanned_required_fields(
+            page, "generic", [], {}, profile=profile, answer_bank=None,
+        )
+    assert exc_info.value.reason == "unplanned_required_field"
+    # BOUNDED: the DOM was re-scanned a small, fixed number of times -- not
+    # once per newly-revealed field forever.
+    assert calls["n"] <= _MAX_RESCAN_PASSES + 2, (
+        f"the re-scan loop must be bounded, not unbounded (scanned {calls['n']} times)"
+    )
 
 
 def test_live_submitter_refills_a_field_wiped_by_a_file_upload(tmp_path) -> None:
