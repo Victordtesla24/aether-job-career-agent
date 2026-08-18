@@ -368,9 +368,9 @@ const HOP = {
     kind: "writes",
     mechanism:
       "triage mode: UPDATE EmailThread SET classification, aiScore (NULL when the model gave no real score)",
-    // Career-inbox + interview-ingest commits inserted code above the triage
-    // block and shifted these lines — re-resolved against the live tree.
-    evidence: "apps/api/app/agents/email_agent.py:473-477",
+    // EC-ADV 429-degrade inserted `_persist_filter_classifications` above the
+    // scored UPDATE and shifted these lines — re-resolved against the live tree.
+    evidence: "apps/api/app/agents/email_agent.py:509-513",
     discoveryEvidence: "apps/api/app/agents/email_agent.py:365-382",
     anchors: ['UPDATE "EmailThread" SET "classification" = %s,'],
     status: "live",
@@ -442,9 +442,9 @@ const HOP = {
     kind: "writes",
     mechanism:
       "job_alerts mode: detect_alert_platform -> parse_job_alert -> JobRepository.create(posting.to_job_raw()) through the SAME upsert path as a board adapter; counts jobsCreated vs jobsUpdated from wasInserted",
-    // Career-inbox + interview-ingest commits inserted code above _job_alerts
-    // and shifted these lines — re-resolved against the live tree.
-    evidence: "apps/api/app/agents/email_agent.py:552,632,647,661,671-675",
+    // EC-ADV 429-degrade inserted `_persist_filter_classifications` above
+    // `_job_alerts` and shifted these lines — re-resolved against the live tree.
+    evidence: "apps/api/app/agents/email_agent.py:617,697,712,726,736",
     discoveryEvidence: "apps/api/app/agents/email_agent.py:410-420,505-518",
     anchors: [
       "def _job_alerts(",
