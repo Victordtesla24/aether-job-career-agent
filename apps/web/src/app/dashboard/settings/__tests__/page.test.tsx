@@ -84,6 +84,8 @@ vi.mock("../../../../lib/api/applications", async (importOriginal) => {
 // eslint-disable-next-line import/first
 import SettingsPage from "../page";
 // eslint-disable-next-line import/first
+import { DEFAULT_MATCH_THRESHOLD } from "../settings-client";
+// eslint-disable-next-line import/first
 import { SubscriptionGate } from "../../../../components/subscription-gate";
 
 const SETTINGS = {
@@ -94,6 +96,13 @@ const SETTINGS = {
   integrations: [],
   connectedAccounts: [],
 };
+
+describe("AUD-UX-1 matchThreshold lockstep", () => {
+  it("displays the same default the apply path and column default use", () => {
+    expect(DEFAULT_MATCH_THRESHOLD).toBe(80);
+    expect(SETTINGS.agentConfig.matchThreshold).toBe(DEFAULT_MATCH_THRESHOLD);
+  });
+});
 
 const CAREER_DATA = { sources: [], linkedinNote: "" };
 

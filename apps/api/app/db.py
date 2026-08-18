@@ -509,6 +509,34 @@ def rows_to_dicts(cursor: Any) -> list[dict[str, Any]]:
 _user_profile_columns_ready = False
 
 
+#: AUD-UX-1. Same JSON the Settings screen and ``user_match_threshold`` use
+#: when the column is NULL. Must stay byte-identical to the live production
+#: default (probed 2026-08-18).
+DEFAULT_AGENT_CONFIG_JSON = (
+    '{"autoApply": false, "approvalGate": true, "matchThreshold": 80}'
+)
+
+
+def _agent_config_default_is_current(cur: Any) -> bool:
+    cur.execute(
+        "SELECT column_default FROM information_schema.columns"
+        " WHERE table_schema = ANY(current_schemas(false))"
+        " AND table_name = 'User' AND column_name = 'agentConfig'"
+    )
+    row = cur.fetchone()
+    raw = (row[0] if row else None) or ""
+    return "matchThreshold" in raw and "80" in raw
+
+
+def _ensure_agent_config_column_default(cur: Any) -> None:
+    """Put the production column default in-repo. Idempotent catalog change."""
+    cur.execute(
+        'ALTER TABLE "User" ALTER COLUMN "agentConfig" SET DEFAULT \''
+        + DEFAULT_AGENT_CONFIG_JSON.replace("'", "''")
+        + "'::jsonb"
+    )
+
+
 def ensure_user_profile_columns() -> None:
     """Idempotently add the additive profile columns to ``User`` on first use.
 
@@ -546,19 +574,25 @@ def ensure_user_profile_columns() -> None:
             )
             row = cur.fetchone()
             if row and row[0] == 4:
+                if not _agent_config_default_is_current(cur):
+                    cur.execute("SELECT pg_advisory_xact_lock(%s)", (7420240712,))
+                    _ensure_agent_config_column_default(cur)
+                    conn.commit()
                 _user_profile_columns_ready = True
                 return
             cur.execute("SELECT pg_advisory_xact_lock(%s)", (7420240712,))
             cur.execute('ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "targetRole" text')
             cur.execute('ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "location" text')
             cur.execute(
-                'ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "agentConfig" jsonb'
+                'ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "agentConfig" jsonb '
+                "DEFAULT '" + DEFAULT_AGENT_CONFIG_JSON.replace("'", "''") + "'::jsonb"
             )
             cur.execute('ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "username" text')
             cur.execute(
                 'CREATE UNIQUE INDEX IF NOT EXISTS "User_username_key"'
                 ' ON "User" ("username")'
             )
+            _ensure_agent_config_column_default(cur)
         conn.commit()
     _user_profile_columns_ready = True
 

@@ -354,6 +354,69 @@ export default function AdminExecutiveDashboardPage() {
             <RecentAuditPanel rows={audit} error={auditError} />
           </div>
 
+          <Panel
+            title="Sales AI"
+            testId="admin-exec-sales-ai"
+            measured={metrics?.salesAi != null}
+            caption="native outreach agent — not human resellers"
+            action={
+              <Link
+                href="/admin/sales-agent"
+                className="type-mono-micro text-aether-coral hover:underline"
+              >
+                Open →
+              </Link>
+            }
+            guidance={{
+              tellsYou:
+                "whether the in-app Sales AI agent is live or in shadow mode, how many emails it has actually sent, and how many inbound replies it has observed. Signups are not attributed to it.",
+              next: "open /admin/sales-agent, read the Strategy tab, and post LinkedIn drafts yourself. Do not treat this panel as revenue.",
+            }}
+          >
+            {metrics?.salesAi ? (
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <div>
+                  <p className="type-mono-micro text-aether-muted-dim">Mode</p>
+                  <p className="mono text-sm font-semibold tabular-nums text-aether-text">
+                    {metrics.salesAi.enabled === false
+                      ? "Disabled"
+                      : metrics.salesAi.dryRun
+                        ? "Shadow"
+                        : "Live"}
+                  </p>
+                </div>
+                <div>
+                  <p className="type-mono-micro text-aether-muted-dim">Emails sent</p>
+                  <p className="mono text-sm font-semibold tabular-nums text-aether-text">
+                    {metrics.salesAi.emailsSent ?? "Not measured"}
+                  </p>
+                </div>
+                <div>
+                  <p className="type-mono-micro text-aether-muted-dim">Replies observed</p>
+                  <p className="mono text-sm font-semibold tabular-nums text-aether-text">
+                    {metrics.salesAi.repliesObserved ?? "Not measured"}
+                  </p>
+                </div>
+                <div>
+                  <p className="type-mono-micro text-aether-muted-dim">Reply rate</p>
+                  <p className="mono text-sm font-semibold tabular-nums text-aether-text">
+                    {metrics.salesAi.replyRate == null
+                      ? "Not measured"
+                      : `${Math.round(metrics.salesAi.replyRate * 1000) / 10}%`}
+                  </p>
+                </div>
+                <p className="type-meta col-span-2 sm:col-span-4 text-aether-muted">
+                  {metrics.salesAi.cannotAttributeReason ??
+                    "Signups cannot be attributed to Sales AI."}
+                </p>
+              </div>
+            ) : (
+              <p className="type-meta text-aether-muted">
+                GET /admin/metrics/executive did not return a Sales AI block.
+              </p>
+            )}
+          </Panel>
+
           {/* ADMIN-MGMT E2 — operator-facing figures the growth board above
               doesn't carry: revenue-side accounts (billing/summary, not the
               metrics payload's own admin-exempt revenue block), a 7-day
@@ -410,9 +473,31 @@ export default function AdminExecutiveDashboardPage() {
                 <StatTile
                   testId="admin-ops-failed-run-rate"
                   label="Failed-run rate (24h)"
-                  value="Not measured"
-                  hint="GET /admin/metrics/executive does not report a 24h-windowed failed-run rate."
-                  tone="neutral"
+                  value={
+                    !metrics?.failedRuns24h
+                      ? "Not measured"
+                      : metrics.failedRuns24h.total === 0
+                        ? "Not measured"
+                        : metrics.failedRuns24h.insufficientData || metrics.failedRuns24h.rate == null
+                          ? `${metrics.failedRuns24h.failed} / ${metrics.failedRuns24h.total}`
+                          : `${Math.round((metrics.failedRuns24h.rate ?? 0) * 1000) / 10}%`
+                  }
+                  hint={
+                    !metrics?.failedRuns24h
+                      ? "GET /admin/metrics/executive did not return a 24h failed-run block."
+                      : metrics.failedRuns24h.total === 0
+                        ? "No agent runs in the last 24 hours."
+                        : metrics.failedRuns24h.insufficientData || metrics.failedRuns24h.rate == null
+                          ? `${metrics.failedRuns24h.failed} failed of ${metrics.failedRuns24h.total} runs. The rate is not readable below the sample threshold.`
+                          : `${metrics.failedRuns24h.failed} failed of ${metrics.failedRuns24h.total} runs in 24h.`
+                  }
+                  tone={
+                    !metrics?.failedRuns24h || metrics.failedRuns24h.total === 0
+                      ? "neutral"
+                      : (metrics.failedRuns24h.failed ?? 0) > 0
+                        ? "warn"
+                        : undefined
+                  }
                 />
                 {/* R1.2 — one guidance line spanning the operations tiles. */}
                 <DecisionGuidance

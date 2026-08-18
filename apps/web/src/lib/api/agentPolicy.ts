@@ -112,6 +112,11 @@ export const OrchestrationMapAgentSchema = z.object({
   lastRunAt: z.string().nullish(),
   lastRunStatus: z.string().nullish(),
   trend: OrchestrationTrendSchema.nullish(),
+  // Optional so a payload (or fixture) predating ORCH-ADV-014 still parses.
+  // The live map always sends them; the popover treats absence as "—".
+  teamRole: z.string().optional(),
+  dependsOn: z.array(z.string()).optional(),
+  supports: z.array(z.string()).optional(),
 });
 
 export type OrchestrationMapAgent = z.infer<typeof OrchestrationMapAgentSchema>;

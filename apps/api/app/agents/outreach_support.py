@@ -268,6 +268,22 @@ def injection_leaks(
     return found
 
 
+def grounded_candidate_text(user_id: str, resume_text: str) -> str:
+    """Résumé plus the caller's Story Bank, or the résumé alone when empty.
+
+    Recruiter outreach and reference requests are already résumé-grounded.
+    Folding in banked STAR evidence is the same honest corpus tailoring and
+    cover letters already use — it never adds company research, enrichment,
+    or invented shared history.
+    """
+    from app.agents.tailor_agent import build_story_evidence
+
+    stories = (build_story_evidence(user_id) or "").strip()
+    if not stories:
+        return resume_text
+    return f"{resume_text}\n\nSTORY BANK:\n{stories}"
+
+
 def guarded_draft(
     llm: Any,
     *,

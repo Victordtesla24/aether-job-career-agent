@@ -11,7 +11,9 @@ tests pin the enforcement that makes the copy true:
   never silently. The ``AETHER_APPLY_SWEEP_ENABLED`` env var stays an operator
   kill-switch ON TOP of the user's own toggle.
 * **D2** — within a sweep pass, an application whose ``Job.fitScore`` is below
-  the user's ``agentConfig.matchThreshold`` (default 50) is NOT auto-fired: it
+  the user's ``agentConfig.matchThreshold`` (default 80 — AUD-UX-1, same
+  number the Settings slider and the ``User.agentConfig`` column default
+  use) is NOT auto-fired: it
   is skipped non-terminally (``skippedBelowThreshold`` in the summary), its
   approval is NOT burned, and NO manual step is stamped — the user may still
   submit it explicitly from the UI, and the explicit path bypasses the
@@ -332,17 +334,58 @@ class TestD2ThresholdGatesTheSweep:
         assert calls == [app_id]
         assert summary["skippedBelowThreshold"] == 0
 
-    def test_a_missing_threshold_defaults_to_fifty(
+    def test_a_missing_threshold_defaults_to_eighty(
         self, db_session, user_id, monkeypatch
     ):
+        """AUD-UX-1: unset matchThreshold must match Settings (80) and the
+        live column default (80). A 50 fallback would auto-submit 50–79
+        while the slider still showed 80."""
         _set_agent_config(user_id, {"autoApply": True})
-        below_app, _ = _seed_approved(user_id, fit_score=49.0)
-        above_app, _ = _seed_approved(user_id, fit_score=51.0)
+        below_app, _ = _seed_approved(user_id, fit_score=79.0)
+        above_app, _ = _seed_approved(user_id, fit_score=81.0)
 
         calls, summary = self._sweep_with_recorder(monkeypatch, user_id)
 
         assert calls == [above_app]
         assert summary["skippedBelowThreshold"] == 1
+
+
+def test_aud_ux1_display_code_and_column_default_are_eighty():
+    """The three AUD-UX-1 legs must name the same number.
+
+    Display: Settings + GET /settings fallback.
+    Code: user_match_threshold when the key is missing.
+    DB: User.agentConfig column default, now owned by ensure_user_profile_columns.
+    """
+    from app import db as db_mod
+    from app.db import DEFAULT_AGENT_CONFIG_JSON, ensure_user_profile_columns, get_connection
+    from app.services.application_submission import (
+        DEFAULT_MATCH_THRESHOLD,
+        user_match_threshold,
+    )
+
+    assert DEFAULT_MATCH_THRESHOLD == 80
+    assert user_match_threshold({}) == 80
+    assert user_match_threshold({"autoApply": True}) == 80
+    assert user_match_threshold(None) == 80
+    parsed = json.loads(DEFAULT_AGENT_CONFIG_JSON)
+    assert parsed["matchThreshold"] == 80
+    assert parsed["autoApply"] is False
+    assert parsed["approvalGate"] is True
+
+    db_mod._user_profile_columns_ready = False
+    ensure_user_profile_columns()
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT column_default FROM information_schema.columns"
+                " WHERE table_schema = ANY(current_schemas(false))"
+                " AND table_name = 'User' AND column_name = 'agentConfig'"
+            )
+            raw = cur.fetchone()[0]
+    assert raw is not None
+    assert "80" in raw
+    assert "matchThreshold" in raw
 
 
 class TestD2ExplicitPathBypassesTheThreshold:

@@ -337,6 +337,71 @@ def _top_referrers(cur: Any) -> dict[str, Any]:
     }
 
 
+def _failed_runs_24h(cur: Any) -> dict[str, Any]:
+    """Failed AgentRun rows in the last 24 hours. Rate stays null below threshold."""
+    cur.execute(
+        'SELECT COUNT(*) FILTER (WHERE "status" = %s) AS failed,'
+        ' COUNT(*) AS total'
+        ' FROM "AgentRun"'
+        ' WHERE "startedAt" >= NOW() - INTERVAL \'24 hours\'',
+        ("failed",),
+    )
+    row = rows_to_dicts(cur)[0]
+    failed = int(row["failed"] or 0)
+    total = int(row["total"] or 0)
+    rate = (failed / total) if total > 0 else None
+    return {
+        "failed": failed,
+        "total": total,
+        "rate": rate,
+        "windowHours": 24,
+        "sampleSize": total,
+        "insufficientData": total == 0 or _insufficient(total),
+    }
+
+
+def sales_ai_cost_usd_30d() -> float:
+    """USD billed on salesAgent runs in the last 30 days. Unwritten cost stays 0."""
+    from app.agents.sales_agent import AGENT_KEY
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT COALESCE(SUM("costUsd"), 0) FROM "AgentRun"'
+                ' WHERE "agentName" = %s'
+                ' AND "startedAt" >= NOW() - INTERVAL \'30 days\'',
+                (AGENT_KEY,),
+            )
+            return round(float(cur.fetchone()[0] or 0), 4)
+
+
+def _sales_ai_block() -> dict[str, Any]:
+    """In-app Sales AI outreach — not the human-reseller SalesAgent table."""
+    from app.agents.sales_agent import sales_agent_dry_run, sales_agent_enabled
+    from app.repositories.sales import SalesRepository
+
+    ov = SalesRepository().overview()
+    sample = int(ov.get("emailsSent") or 0)
+    return {
+        "enabled": sales_agent_enabled(),
+        "dryRun": sales_agent_dry_run(),
+        "emailsSent": ov["emailsSent"],
+        "dryRunLogged": ov["dryRunLogged"],
+        "repliesObserved": ov["repliesObserved"],
+        "replyRate": ov["replyRate"],
+        "leads": ov["leads"],
+        "linkedinDraftsQueued": ov["linkedinDraftsQueued"],
+        "llmCostUsd30d": sales_ai_cost_usd_30d(),
+        "cannotAttributeSignups": True,
+        "cannotAttributeReason": (
+            "Sales AI outreach is not joined to User via UTM or campaignId, "
+            "so this block cannot claim a signup or paid conversion."
+        ),
+        "sampleSize": sample,
+        "insufficientData": _insufficient(sample),
+    }
+
+
 # --------------------------------------------------------------------------- #
 # The endpoint's payload
 # --------------------------------------------------------------------------- #
@@ -365,6 +430,9 @@ def executive_metrics(window_days: Optional[int] = None) -> dict[str, Any]:
                 cur, since, runs["totalCostUsd"], days
             )
             referrers = _top_referrers(cur)
+            failed_runs = _failed_runs_24h(cur)
+
+    sales_ai = _sales_ai_block()
 
     revenue = dict(revenue)
     revenue["sampleSize"] = int(revenue.get("paidSubscribers", 0))
@@ -382,5 +450,7 @@ def executive_metrics(window_days: Optional[int] = None) -> dict[str, Any]:
         "funnel": funnel,
         "costVsRevenue": cost_vs_revenue,
         "topReferrers": referrers,
+        "failedRuns24h": failed_runs,
+        "salesAi": sales_ai,
         "excluded": excluded,
     }

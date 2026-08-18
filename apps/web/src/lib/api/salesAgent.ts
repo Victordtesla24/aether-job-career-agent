@@ -397,6 +397,7 @@ export const SalesRunResultSchema = z
     dryRunLogged: z.number().optional(),
     blocked: z.number().optional(),
     suppressed: z.number().optional(),
+    repliesObserved: z.number().optional(),
     linkedinDrafts: z.number().optional(),
     digest: z.boolean().optional(),
     noSendingAccount: z.boolean().optional(),
@@ -412,6 +413,36 @@ export async function runSalesAgentNow(options: RequestOptions = {}): Promise<Sa
       ...options,
       method: "POST",
     }),
+  );
+}
+
+export const SalesStrategySchema = z.object({
+  productUrl: z.string(),
+  enabled: z.boolean(),
+  dryRun: z.boolean(),
+  lastRunAt: z.string().nullable().optional().default(null),
+  healthStatus: z.string().optional(),
+  healthDetail: z.string().optional(),
+  emailsSent: z.number(),
+  dryRunLogged: z.number(),
+  repliesObserved: z.number(),
+  replyRate: z.number().nullable(),
+  leads: z.number(),
+  campaignsActive: z.number(),
+  campaignsInactive: z.number(),
+  inactiveGeneratedNames: z.array(z.string()),
+  linkedinDraftsQueued: z.number(),
+  suppressionCount: z.number(),
+  llmCostUsd30d: z.number(),
+  cannotAttribute: z.boolean(),
+  cannotAttributeReason: z.string(),
+  nextActions: z.array(z.string()),
+});
+export type SalesStrategy = z.infer<typeof SalesStrategySchema>;
+
+export async function fetchSalesStrategy(options: RequestOptions = {}): Promise<SalesStrategy> {
+  return SalesStrategySchema.parse(
+    await apiRequest<unknown>("/admin/sales-agent/strategy", options),
   );
 }
 

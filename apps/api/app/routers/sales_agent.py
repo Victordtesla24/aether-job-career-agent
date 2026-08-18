@@ -8,7 +8,8 @@ appear on any user-facing dashboard; its visibility lives entirely under
 
 Honesty contract: every number returned here is a live database query
 (:meth:`SalesRepository.overview` et al). ``replyRate`` is ``null`` — not
-``0`` — when it is genuinely not observable.
+``0`` — when no real send exists. Once a send exists it is replied threads
+over sent threads, written only by the inbound reply observer.
 """
 from __future__ import annotations
 
@@ -71,6 +72,85 @@ def list_leads(
         limit=limit, offset=offset,
     )
     return {"leads": rows, "total": total, "limit": limit, "offset": offset}
+
+
+# ----------------------------------------------------------------- strategy
+@router.get("/strategy")
+def strategy(_admin: AdminUser) -> dict[str, Any]:
+    """Read-only handoff for the founder and the orchestrator.
+
+    This is not a second marketing agent. It reports live Sales AI facts and
+    the next human actions. It cannot attribute a signup or a paid conversion
+    to a campaign: there is no campaignId/UTM join to User.
+    """
+    from app.repositories.admin_metrics import sales_ai_cost_usd_30d
+    from app.services.stripe_gateway import app_base_url
+
+    repo = _repo()
+    repo.seed_default_campaigns()
+    ov = repo.overview()
+    campaigns = repo.list_campaigns()
+    active = [c for c in campaigns if c.get("active")]
+    inactive = [c for c in campaigns if not c.get("active")]
+    generated = [
+        c["name"]
+        for c in inactive
+        if "(agent-generated)" in str(c.get("name") or "")
+    ]
+    h = health(_admin)
+    next_actions: list[str] = []
+    if h.get("dryRun"):
+        next_actions.append(
+            "Outbound is in shadow mode. Keep it there until every live "
+            "template uses the current product URL."
+        )
+    else:
+        next_actions.append(
+            "Outbound is live. Treat replyRate as observed replies on mailed "
+            "threads, not as a conversion rate."
+        )
+    if generated:
+        next_actions.append(
+            "Generated campaigns start inactive. Read the copy, then activate "
+            "only the ones a human stands behind."
+        )
+    if int(ov.get("emailsSent") or 0) == 0:
+        next_actions.append(
+            "No real sends yet, so replyRate stays not measured."
+        )
+    next_actions.append(
+        "Do not attribute signups or paid conversions to Sales AI. There is "
+        "no UTM or campaignId join to User."
+    )
+    next_actions.append(
+        "Keep AETHERAGENT20 inactive until a human chooses to run that "
+        "one-time 20 percent offer."
+    )
+    return {
+        "productUrl": app_base_url(),
+        "enabled": bool(h.get("enabled")),
+        "dryRun": bool(h.get("dryRun")),
+        "lastRunAt": h.get("lastRunAt"),
+        "healthStatus": h.get("status"),
+        "healthDetail": h.get("detail"),
+        "emailsSent": ov["emailsSent"],
+        "dryRunLogged": ov["dryRunLogged"],
+        "repliesObserved": ov["repliesObserved"],
+        "replyRate": ov["replyRate"],
+        "leads": ov["leads"],
+        "campaignsActive": len(active),
+        "campaignsInactive": len(inactive),
+        "inactiveGeneratedNames": generated,
+        "linkedinDraftsQueued": ov["linkedinDraftsQueued"],
+        "suppressionCount": ov["suppressionCount"],
+        "llmCostUsd30d": sales_ai_cost_usd_30d(),
+        "cannotAttribute": True,
+        "cannotAttributeReason": (
+            "Sales AI cannot attribute a signup or paid conversion: outreach "
+            "rows are not joined to User via UTM or campaignId."
+        ),
+        "nextActions": next_actions,
+    }
 
 
 # ----------------------------------------------------------------- campaigns
@@ -254,8 +334,11 @@ def generate_content(admin: AdminUser) -> dict[str, Any]:
         "sales_marketing.generated",
         target_type="sales_agent",
         detail={
-            "campaigns": len(result.get("campaigns", []) or []),
-            "linkedin_drafts": len(result.get("linkedin_drafts", []) or []),
+            "campaignsCreated": len(result.get("campaignsCreated") or []),
+            "campaignsSkipped": len(result.get("campaignsSkipped") or []),
+            "linkedinDrafts": int(result.get("linkedinDrafts") or 0),
+            "promosCreated": len(result.get("promosCreated") or []),
+            "errors": len(result.get("errors") or []),
         },
     )
     return result

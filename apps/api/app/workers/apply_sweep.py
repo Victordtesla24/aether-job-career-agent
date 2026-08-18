@@ -52,7 +52,7 @@ D1+D2). ``agentConfig.autoApply`` must be true before a user is swept at all —
 the cron lists only opted-in users (:func:`users_with_pending_transmissions`)
 and the job re-checks at execution time (:func:`sweep_user_if_opted_in`); the
 ``AETHER_APPLY_SWEEP_ENABLED`` env var stays the operator kill-switch ON TOP.
-And within a pass, ``agentConfig.matchThreshold`` (default 50) bars any
+And within a pass, ``agentConfig.matchThreshold`` (default 80, AUD-UX-1) bars any
 application whose job scores below it — or has no ``fitScore`` at all — from
 being auto-transmitted: an honest, non-terminal ``skippedBelowThreshold``,
 never a burned approval or a fabricated manual step. The user's explicit
@@ -780,7 +780,7 @@ def sweep_pending_transmissions(
 
     D2 (audit wf_9a87f76f-eaa) — THE MATCH THRESHOLD IS REAL HERE. Within a
     pass, an application whose job's ``fitScore`` is below the user's
-    ``agentConfig.matchThreshold`` (default 50) is NOT auto-transmitted. The
+    ``agentConfig.matchThreshold`` (default 80, AUD-UX-1) is NOT auto-transmitted. The
     skip is honest and NON-terminal: it is counted as
     ``skippedBelowThreshold`` in the summary and logged, the approval is NOT
     burned, and NO manual step is stamped — the row simply stays queued. A

@@ -120,6 +120,11 @@ const STATUS_STYLE: Record<string, string> = {
   disconnected: "bg-red-500/10 text-red-300 border-red-500/25",
 };
 
+/** AUD-UX-1 — same number as application_submission.DEFAULT_MATCH_THRESHOLD
+ *  and the User.agentConfig column default. An absent key must not silently
+ *  become 50 while this slider still shows 80. */
+export const DEFAULT_MATCH_THRESHOLD = 80;
+
 export default function SettingsClient({
   supportEmail,
   supportPhone,
@@ -131,7 +136,11 @@ export default function SettingsClient({
   const [error, setError] = useState<string | null>(null);
   const [active, setActive] = useState<string>("profile");
   const [profile, setProfile] = useState({ fullName: "", email: "", targetRole: "", location: "" });
-  const [agentConfig, setAgentConfig] = useState({ autoApply: false, approvalGate: true, matchThreshold: 80 });
+  const [agentConfig, setAgentConfig] = useState({
+    autoApply: false,
+    approvalGate: true,
+    matchThreshold: DEFAULT_MATCH_THRESHOLD,
+  });
   // CLI-D3 refix (audit wf_9a87f76f-eaa, adversarial MUST-FIX 2): the live
   // operator kill-switch behind the apply sweep (AETHER_APPLY_SWEEP_ENABLED,
   // apps/api/app/workers/apply_sweep.py sweep_enabled() — code default OFF,

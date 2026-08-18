@@ -879,7 +879,6 @@ tsc 0, targeted vitest 53/53; GitHub CI run 31930523543 must be GREEN on a3e1fe5
 **Session CLI (Fable 5).** Owner: peer(DA) owns sales agent; CLI owns SUBMISSION agent. Scope claimed (apps/api only): `apps/api/app/workers/apply_sweep.py` + `apps/api/tests/test_cli_apply_sweep_offloop.py`.
 **CLI-SUB-001 (ROOT CAUSE of prod auto-apply = 1/687):** `apply_sweep_user` (async arq job) ran `sweep_pending_transmissions` — which drives a REAL browser via Playwright SYNC API — directly on the worker event loop. Sync Playwright refuses to run in a live loop → bare `Error` → every browser submission failed as `ApplyExecutorTransportError("Could not open the application page (Error)")`. FIX mirrors the working `board_sweep_user`: `await asyncio.to_thread(sweep_pending_transmissions, ...)`. RED→GREEN test + regression green; ruff/mypy clean.
 **OPS (owner directive, autonomous submission):** enabled `AETHER_APPLY_SWEEP_ENABLED=true` + `AETHER_APPLY_SWEEP_BATCH=25` in prod .env (append-only, credentials untouched, verified); worker restarted under deploy lock (apps/api clean at each restart; peer apps/web WIP never shipped by the worker). 7-day stale-approval guard kept (correctly reconfirms ~83 old approvals). 306 recent approvals draining.
->>>>>>> bd316a51 (CLI-SUB-001: run apply sweep off the event loop (asyncio.to_thread) so sync-Playwright browser submissions work - root cause of prod auto-apply 1/687; mirrors board_sweep_user; RED->GREEN test)
 
 ### 2026-08-16 06:1xZ — Session DA: DEPLOY WINDOW RELEASED (Wave B residuals)
 - Deployed main@a3e1fe52 (S-UI-B4-MOBILE Wave B residual fixes). New BUILD_ID ts9OVkqLJijdMGdlojOWP;
@@ -996,6 +995,14 @@ Rules of engagement unchanged: locks (git/deploy/test), runbook deploys, append-
 **Do not touch:** SESSION EC-FIX / DS WIP in shared checkouts.
 **Sent-count:** must remain unchanged (nurture fenced).
 
+### Close-out — 2026-08-18T04:45Z
+
+**Landed on `origin/main`:** `ec5137e6` (honesty API + fence + refresh/analytics), `5e20067d` (import SENT/self + no SalesLead), `16d400f2` (UI honesty/a11y/CRM actions), `9d7d396b` (deploy claim).
+**Prod verify (×2) against Hostinger prod `https://aether.srv1356245.hstgr.cloud`:** `/api/health` 200; `/dashboard/networking` 200; networking/summary/analytics/refresh-from-inbox → 401 unauthenticated (routes live). Note: abacus URL `5cb5f0620.abacusai.cloud` is decommissioned per guardian manifest — do not use for prod probes.
+**PR #19:** CLOSED (2026-08-18T04:37Z). Remote `feat/networking-crm-honesty` / `feat/nw-adv-review` already absent. Local worktree `/root/dev/aether-wt-nw-adv` removed.
+**Sent-count:** `SalesOutreachLog` outcome=sent total **42**; **0** new sends since 2026-08-18 04:00Z; nurture-like “short product update” rows are all from 2026-08-17 14:40Z (pre-fence). Fence held.
+**Release:** SESSION NW-ADV complete; files free for other sessions.
+
 ---
 
 ## SESSION EC-FIX — 2026-08-18T03:20Z — Email Center + Email AI Agent (glm-5 JSON / 429 honesty)
@@ -1010,3 +1017,40 @@ Rules of engagement unchanged: locks (git/deploy/test), runbook deploys, append-
 **Does not touch:** networking CRM, sales/branding/admin, PR #19 close-out.
 **Deploy:** push onto `origin/main`; delete `fix/email-center-llm` after land. No PR.
 
+---
+
+## SESSION ORCH-TEAM — 2026-08-18T04:40Z — Agent workflow map team-value
+
+**By:** Cursor Grok session. Isolated worktree `.claude/worktrees/feat-agent-team-workflow` on `feat/agent-team-workflow-map`, rebased onto current `origin/main` after NW-ADV and EC-FIX landed.
+**Scope claimed:**
+- `apps/api/app/routers/agents.py` — `_ORCHESTRATION_MAPS` (one Career Search Operating Loop), honest `_AGENT_METRIC_VISIBILITY`, `_AGENT_TEAM` + map payload fields, `_pipeline_core` consumes `sup_out.get("plan")`, catalog tips for recruiterOutreach / reference Story Bank only
+- `apps/api/app/agents/outreach_support.py` (`grounded_candidate_text`), `recruiter_outreach_agent.py`, `reference_agent.py`
+- `apps/web/src/components/agents/OrchestrationMap.tsx` (team popover + gilt live-run legend), `conductor.ts` mandate copy, `workflow-linkage.ts` provenance line, `agentPolicy.ts` team fields
+- Tests: `test_orch_adv_operating_loop.py`, `test_orch_adv_story_grounded_outreach.py`, `orch-adv-operating-loop.test.ts`; `test_aud_agent4_honest_counts.py` looks up the map that contains `matchScoring`
+**Does not touch:** `email_agent.py`, `llm_client.py`, Email Center, `sales_agent.py`, networking CRM, `ats_engine.py`, `apply_sweep.py`, PR #19
+**Deploy:** push this branch then merge to `origin/main`; delete `feat/agent-team-workflow-map` after land. Do not close foreign PR #19.
+
+**Continuation 2026-08-18T04:47Z — CI green follow-up.** Squash `702cdc5d` made Zod team fields required on fixture types and tripped ruff I001 on the two new pytest files. `fix/orch-adv-ci-green` makes team fields optional on the client schema (popover already treats absence as "—") and sorts the new test imports. Same scope; no other session files.
+
+---
+
+## SESSION ADM — 2026-08-18T04:00Z — Admin portal + Sales AI (adversarial review close-out)
+
+**By:** Cursor Grok session. Independent review of `/admin` and `/admin/sales-agent`, then production-grade close-out of the findings that actually move money or honesty. Isolated worktree `/root/dev/aether-wt-admin-sales` rebased onto `origin/main` after SESSION EC-FIX, SESSION NW-ADV close-out, and SESSION ORCH-TEAM. Does not revert those lands. PR #19 was closed by NW-ADV; this session does not reopen it.
+
+**Scope claimed:**
+- `apps/api/app/services/stripe_gateway.py` — `app_base_url()` only (reject retired Abacus host)
+- `apps/api/app/agents/sales_agent.py` — live product URL in footer/facts, yearly+20% grounding, inbound `replied` observer, generate-time URL rewrite. Keeps `_run_network_nurture` fence (SESSION NW-ADV); does not reimplement it
+- `apps/api/app/repositories/sales.py` — honest `replyRate` from observed replies; default campaign URL host
+- `apps/api/app/routers/sales_agent.py` — generate audit keys, `GET /admin/sales-agent/strategy`
+- `apps/api/app/repositories/admin_metrics.py` — `failedRuns24h` + `salesAi` blocks
+- `apps/web/src/app/admin/page.tsx`, `admin-shell.tsx`, `admin/sales-agent/page.tsx`, matching API clients and tests
+- Matching pytest: `test_sales_agent.py`, `test_admin2_exec_metrics.py`; vitest: executive-dashboard, admin-nav
+
+**Does not touch:** email center, networking CRM UI, `ats_engine`, `llm_client.py`, `aether.env`, dry-run flag, campaign activation. ADM-009 touches `workspaces.py` only for the shared matchThreshold constant and `apply_sweep.py` comments only.
+
+**Tickets:** ADM-001 live URL · ADM-002 yearly+20% grounding · ADM-003 generate audit keys · ADM-004 inbound reply observer · ADM-005 failedRuns24h · ADM-006 salesAi executive block · ADM-007 strategy handoff · ADM-008 gilt active nav · **ADM-009 AUD-UX-1** reconcile matchThreshold display/code/DB to 80.
+
+**ADM-009 (2026-08-18T04:30Z):** live prod `"User"."agentConfig"` column default is `'{"autoApply": false, "approvalGate": true, "matchThreshold": 80}'::jsonb` with no migration file (read-only `information_schema` + `pg_get_expr` this session; 0 NULL rows, 2 of 3 users at 80). Settings display and `GET /settings` already default to 80. Code fallback was 50 — a missing key would auto-submit 50–79 while the slider showed 80. Reconcile all three to 80: `DEFAULT_MATCH_THRESHOLD` in `application_submission.py` + Settings client, `DEFAULT_AGENT_CONFIG_JSON` owned by `ensure_user_profile_columns`, `workspaces._build_settings` imports the same constant. Does not flip auto-apply, does not rewrite stored user values.
+
+**Deploy:** push `main` → VPS Delivery. No hand-restart of prod units. No leftover branch or PR for this session.

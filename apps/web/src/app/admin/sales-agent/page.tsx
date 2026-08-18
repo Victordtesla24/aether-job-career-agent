@@ -6,8 +6,9 @@
  * This page replaced the old "external growth engine" placeholder: the sales
  * agent now runs INSIDE this app (30-min systemd timer + admin "Run now"),
  * with its own AdminUser-gated API under /api/admin/sales-agent/*. Everything
- * shown here is a live database query — no estimates, no fabricated metrics;
- * reply rate honestly reads "n/a — reply detection not yet implemented" (CLI-004).
+ * shown here is a live database query — no estimates, no fabricated metrics.
+ * Reply rate is a real fraction once a sent thread has an observed reply;
+ * it stays null when nothing has been sent.
  *
  * Compliance surfaced in the UI: LinkedIn items are DRAFTS ONLY (copy button,
  * never a post button — LinkedIn's Terms prohibit automated posting), the
@@ -32,6 +33,7 @@ import {
   fetchSalesOutreach,
   fetchSalesOverview,
   fetchSalesSendingAccounts,
+  fetchSalesStrategy,
   runSalesAgentNow,
   setSalesSendingAccount,
   generateSalesContent,
@@ -47,11 +49,13 @@ import {
   type SalesOverview,
   type SalesRunResult,
   type SalesSendingAccount,
+  type SalesStrategy,
 } from "../../../lib/api/salesAgent";
 
-type Tab = "campaigns" | "leads" | "outreach" | "linkedin" | "brand";
+type Tab = "strategy" | "campaigns" | "leads" | "outreach" | "linkedin" | "brand";
 
 const TABS: { key: Tab; label: string }[] = [
+  { key: "strategy", label: "Strategy" },
   { key: "campaigns", label: "Campaigns" },
   { key: "leads", label: "Leads" },
   { key: "outreach", label: "Outreach log" },
@@ -83,6 +87,7 @@ function OutcomeBadge({ outcome }: { outcome: string | null }) {
   // called — a real in-flight state, shown as such and never as a finished
   // draft.
   const variants: Record<string, string> = {
+    replied: "sa-badge-ok",
     sent: "sa-badge-ok",
     dry_run: "sa-badge-info",
     reserved: "sa-badge-info",
@@ -104,7 +109,8 @@ export default function SalesAgentPage() {
   const [leads, setLeads] = useState<SalesLeadList | null>(null);
   const [outreach, setOutreach] = useState<SalesOutreachList | null>(null);
   const [drafts, setDrafts] = useState<SalesOutreachList | null>(null);
-  const [tab, setTab] = useState<Tab>("campaigns");
+  const [strategy, setStrategy] = useState<SalesStrategy | null>(null);
+  const [tab, setTab] = useState<Tab>("strategy");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
@@ -133,7 +139,7 @@ export default function SalesAgentPage() {
     setLoading(true);
     setError("");
     try {
-      const [ov, he, ac, ca, le, ou, dr, bd, bt] = await Promise.all([
+      const [ov, he, ac, ca, le, ou, dr, bd, bt, st] = await Promise.all([
         fetchSalesOverview(),
         fetchSalesHealth(),
         fetchSalesSendingAccounts(),
@@ -143,6 +149,7 @@ export default function SalesAgentPage() {
         fetchSalesOutreach({ channel: "linkedin_draft", limit: 50 }),
         fetchBrandDocuments(),
         fetchBrandTemplates(),
+        fetchSalesStrategy(),
       ]);
       setOverview(ov);
       setHealth(he);
@@ -153,6 +160,7 @@ export default function SalesAgentPage() {
       setDrafts(dr);
       setBrand(bd);
       setBrandTemplates(bt);
+      setStrategy(st);
     } catch (err) {
       setError(describeApiError(err, "Failed to load the sales agent console."));
     } finally {
@@ -446,14 +454,16 @@ export default function SalesAgentPage() {
           value={
             overview
               ? overview.replyRate === null
-                ? "n/a"
+                ? "Not measured"
                 : `${(overview.replyRate * 100).toFixed(1)}%`
               : "…"
           }
           note={
             overview && overview.replyRate === null
-              ? "reply detection not yet implemented"
-              : undefined
+              ? "no sent email threads yet — a rate needs at least one send"
+              : overview
+                ? `${overview.repliesObserved} replies observed`
+                : undefined
           }
         />
         <StatCard
@@ -481,6 +491,67 @@ export default function SalesAgentPage() {
         <p className="text-sm" style={{ color: "var(--fg-2)" }}>
           Loading…
         </p>
+      ) : null}
+
+      {/* --------------------------------------------------------- strategy */}
+      {tab === "strategy" && !loading ? (
+        <div className="space-y-4">
+          <p className="sa-meta">
+            Operator and orchestrator handoff — facts plus next actions. This is
+            not a second agent. Signups are not attributed to a campaign.
+          </p>
+          {strategy ? (
+            <>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <StatCard label="Product URL" value={strategy.productUrl} />
+                <StatCard
+                  label="Mode"
+                  value={strategy.enabled ? (strategy.dryRun ? "Shadow" : "Live") : "Disabled"}
+                />
+                <StatCard
+                  label="Reply rate"
+                  value={
+                    strategy.replyRate == null
+                      ? "Not measured"
+                      : `${Math.round(strategy.replyRate * 1000) / 10}%`
+                  }
+                  note={`${strategy.repliesObserved} replies / ${strategy.emailsSent} sent`}
+                />
+                <StatCard
+                  label="LLM cost (30d)"
+                  value={`US$${strategy.llmCostUsd30d.toFixed(2)}`}
+                  note="recorded AgentRun costUsd — US$0 means unbilled or unwritten, not free"
+                />
+              </div>
+              <div className="sa-card p-4">
+                <p className="sa-eyebrow">Cannot attribute</p>
+                <p className="sa-meta mt-1">{strategy.cannotAttributeReason}</p>
+              </div>
+              <div className="sa-card p-4">
+                <p className="sa-eyebrow">Next actions</p>
+                <ol className="sa-meta mt-2 list-decimal space-y-2 pl-5">
+                  {strategy.nextActions.map((action) => (
+                    <li key={action}>{action}</li>
+                  ))}
+                </ol>
+              </div>
+              {strategy.inactiveGeneratedNames.length > 0 ? (
+                <div className="sa-card p-4">
+                  <p className="sa-eyebrow">Inactive agent-generated campaigns</p>
+                  <ul className="sa-meta mt-2 list-disc pl-5">
+                    {strategy.inactiveGeneratedNames.map((name) => (
+                      <li key={name}>{name}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+            </>
+          ) : (
+            <p className="sa-card p-6 text-center text-sm" style={{ color: "var(--fg-2)" }}>
+              Strategy handoff could not be loaded.
+            </p>
+          )}
+        </div>
       ) : null}
 
       {/* -------------------------------------------------------- campaigns */}

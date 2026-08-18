@@ -286,12 +286,13 @@ def resolve_job_apply_recipient(
     return derived
 
 
-#: D2 (audit wf_9a87f76f-eaa): the fallback when ``agentConfig.matchThreshold``
-#: is missing or unreadable. The Settings screen always WRITES an explicit
-#: value (its own display default is 80, ``app.routers.workspaces``), so this
-#: fallback only governs configs that predate the field or were written by
-#: hand — and the audit's ruling for those is 50.
-_DEFAULT_MATCH_THRESHOLD = 50.0
+#: AUD-UX-1: one number for display, code fallback, and the User.agentConfig
+#: column default. Settings shows 80. Production Postgres already defaults the
+#: column to 80 (out-of-band until ``ensure_user_profile_columns`` owned it).
+#: A 50 fallback would auto-submit scores the slider still presented as below
+#: the bar. Explicit saved values (including 50) are unchanged.
+DEFAULT_MATCH_THRESHOLD = 80.0
+_DEFAULT_MATCH_THRESHOLD = DEFAULT_MATCH_THRESHOLD
 
 
 def load_agent_config(user_id: str) -> dict[str, Any]:
@@ -334,9 +335,11 @@ def auto_apply_enabled(config: Any) -> bool:
 def user_match_threshold(config: Any) -> float:
     """The user's ``agentConfig.matchThreshold``, clamped to 0..100.
 
-    D2 (audit wf_9a87f76f-eaa): missing/unreadable values fall back to
-    ``_DEFAULT_MATCH_THRESHOLD`` (50) rather than 0 — an absent bar must not
-    silently become "auto-fire everything".
+    AUD-UX-1: missing/unreadable values fall back to
+    ``DEFAULT_MATCH_THRESHOLD`` (80) — the same bar Settings displays and
+    the ``User.agentConfig`` column default writes. An absent bar must not
+    silently become "auto-fire everything", and it must not be 50 while
+    the slider shows 80.
     """
     if not isinstance(config, dict):
         return _DEFAULT_MATCH_THRESHOLD
@@ -640,7 +643,7 @@ def maybe_autonomous_transmit(
     1. ``autoApply`` is true AND ``approvalGate`` is false (the explicit
        autonomous opt-in — both defaults are the safe ones);
     2. the job's ``fitScore`` is a real number ``>=`` the user's
-       ``matchThreshold`` (default 50 when unset). A NULL/missing score — or a
+       ``matchThreshold`` (default 80 when unset — AUD-UX-1). A NULL/missing score — or a
        payload with no resolvable job — is BELOW the bar: an unscored job is
        NEVER auto-fired.
 
