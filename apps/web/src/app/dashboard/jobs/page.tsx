@@ -1227,8 +1227,8 @@ export default function JobsPage() {
           state; the labels are verbatim. */}
       <SegmentedControl
         items={[
-          { value: "au" as Market, label: "🇦🇺 Australia (Local)", count: counts.au },
-          { value: "intl" as Market, label: "🌏 International", count: counts.intl },
+          { value: "au" as Market, label: "Australia (Local)", count: counts.au },
+          { value: "intl" as Market, label: "International", count: counts.intl },
           { value: "saved" as Market, label: "Saved", count: counts.saved },
         ]}
         value={market}
@@ -1891,7 +1891,7 @@ export default function JobsPage() {
                       <Link
                         href={`/dashboard/networking?company=${encodeURIComponent(selected.company || "")}`}
                         data-testid="crm-link"
-                        className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-medium text-[#a5b4fc] transition hover:text-white"
+                        className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-medium text-aether-indigo transition hover:text-white"
                       >
                         View company in CRM →
                       </Link>
@@ -1910,7 +1910,10 @@ export default function JobsPage() {
                           : "border-white/10 bg-white/5 text-aether-muted hover:bg-white/10 hover:text-white"
                       }`}
                     >
-                      {selected.saved ? "🔖" : "🏷️"}
+                      <i
+                        className={selected.saved ? "fa-solid fa-bookmark" : "fa-regular fa-bookmark"}
+                        aria-hidden="true"
+                      />
                     </button>
                     <div className="text-center">
                       <MatchRing value={selected.fitScore} size={64} />
@@ -1927,7 +1930,8 @@ export default function JobsPage() {
                 {/* AI Match Analysis (jd78) */}
                 <section className="relative mt-5 overflow-hidden rounded-lg border border-aether-indigo/25 bg-aether-indigo/5 p-5" data-testid="match-analysis">
                   <div className="mb-3 flex items-center gap-2">
-                    <h3 className="text-sm font-semibold">🧠 AI Match Analysis</h3>
+                    <i className="fa-solid fa-brain text-[12px] text-aether-indigo" aria-hidden="true" />
+                    <h3 className="text-sm font-semibold">AI Match Analysis</h3>
                   </div>
                   <p className="text-sm leading-relaxed text-[#C8C8DC]">
                     {selectedInsights?.narrative ?? "Analysing this role against your resume…"}
@@ -1955,7 +1959,10 @@ export default function JobsPage() {
                 {/* 10-Dimensional Fit Score (jd30) */}
                 <section className="mt-5 rounded-lg border border-white/10 bg-white/[0.02] p-5" data-testid="fit-score">
                   <div className="mb-4 flex items-center justify-between">
-                    <h3 className="text-sm font-semibold">📡 10-Dimensional Fit Score</h3>
+                    <h3 className="flex items-center gap-2 text-sm font-semibold">
+                      <i className="fa-solid fa-satellite-dish text-[12px]" aria-hidden="true" />
+                      10-Dimensional Fit Score
+                    </h3>
                     <span className="mono text-xs text-aether-muted-dim">hover a dimension for detail</span>
                   </div>
                   {selectedInsights ? (
@@ -2026,7 +2033,8 @@ export default function JobsPage() {
                 {/* Risk Signals (jd31) */}
                 <section className="mt-5 rounded-lg border border-aether-yellow/25 bg-white/[0.02] p-5" data-testid="risk-signals">
                   <div className="mb-3 flex items-center gap-2">
-                    <h3 className="text-sm font-semibold">⚠️ Risk Signals</h3>
+                    <i className="fa-solid fa-triangle-exclamation text-[12px] text-aether-yellow" aria-hidden="true" />
+                    <h3 className="text-sm font-semibold">Risk Signals</h3>
                     <span className="ml-auto rounded-full bg-aether-yellow/15 px-2 py-0.5 text-[10px] font-semibold text-aether-yellow" data-testid="risk-count">
                       {selectedInsights ? `${selectedInsights.riskSignals.length} flags` : "…"}
                     </span>
@@ -2120,7 +2128,7 @@ export default function JobsPage() {
                     </div>
                   ) : step === "tailoring" ? (
                     <div className="elev-2 flex items-center gap-3 rounded-xl border-state-info/25 px-4 py-3" data-testid="tailoring-progress" aria-live="polite">
-                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-[#a5b4fc] border-t-transparent" />
+                      <span className="h-4 w-4 animate-spin rounded-full border-2 border-aether-indigo border-t-transparent" />
                       <span className="text-sm text-[#C8C8DC]">
                         Tailoring your resume for <span className="font-semibold text-white">{selected.company}</span> — matching keywords, preserving your voice…
                       </span>
@@ -2173,7 +2181,7 @@ export default function JobsPage() {
                           </p>
                         ) : null}
                         <div className="mt-2 flex flex-wrap items-center gap-4 text-[11px]">
-                          <Link href="/dashboard/stories" className="font-medium text-[#a5b4fc] transition hover:text-white">
+                          <Link href="/dashboard/stories" className="font-medium text-aether-indigo transition hover:text-white">
                             Pull from Story Bank →
                           </Link>
                           <Link href={`/dashboard/resume?job=${selected.id}`} className="text-aether-muted transition hover:text-white">
@@ -2219,7 +2227,9 @@ export default function JobsPage() {
             className="elev-3 relative w-[480px] max-w-[92vw] rounded-[14px] border-aether-coral/35 p-6"
           >
             <div className="flex items-start gap-3">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-aether-yellow/30 bg-aether-yellow/15 text-aether-yellow">⚠️</span>
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-aether-yellow/30 bg-aether-yellow/15 text-aether-yellow">
+                <i className="fa-solid fa-triangle-exclamation" aria-hidden="true" />
+              </span>
               <div className="flex-1">
                 <h3 id="submitGateTitle" className="text-base font-semibold leading-snug">
                   Submit application to <span className="text-aether-coral">{gateJob.company}</span>?
@@ -2334,7 +2344,9 @@ export default function JobsPage() {
             className="elev-3 relative w-[520px] max-w-[92vw] rounded-[14px] border-aether-coral/35 p-6"
           >
             <div className="flex items-start gap-3">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-aether-yellow/30 bg-aether-yellow/15 text-aether-yellow">⚠️</span>
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-aether-yellow/30 bg-aether-yellow/15 text-aether-yellow">
+                <i className="fa-solid fa-triangle-exclamation" aria-hidden="true" />
+              </span>
               <div className="flex-1">
                 <h3 id="bulkGateTitle" className="text-base font-semibold leading-snug">
                   Submit {bulkGateIds.length} application{bulkGateIds.length === 1 ? "" : "s"} without tailoring?
@@ -2415,7 +2427,9 @@ function SavedView({
   if (jobs.length === 0) {
     return (
       <div className="elev-1 flex flex-col items-center justify-center rounded-[14px] py-16 text-center" data-testid="saved-jobs-empty-state">
-        <div className="elev-2 mb-3 flex h-14 w-14 items-center justify-center rounded-[10px] text-xl">🔖</div>
+        <div className="elev-2 mb-3 flex h-14 w-14 items-center justify-center rounded-[10px] text-xl">
+          <i className="fa-solid fa-bookmark" aria-hidden="true" />
+        </div>
         <p className="text-sm font-semibold">No saved jobs yet</p>
         <p className="mt-1 max-w-xs text-xs text-aether-muted-dim">
           Tap the bookmark on any role to save it here and revisit it later.
@@ -2428,7 +2442,8 @@ function SavedView({
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="flex items-center gap-2 text-[17px] font-semibold tracking-[-0.01em]">
-            🔖 Saved jobs <span className="mono text-xs font-semibold text-aether-muted-dim">· {jobs.length}</span>
+            <i className="fa-solid fa-bookmark text-[14px]" aria-hidden="true" />
+            Saved jobs <span className="mono text-xs font-semibold text-aether-muted-dim">· {jobs.length}</span>
           </h2>
           <p className="mt-0.5 text-xs text-aether-muted-dim">
             Roles you bookmarked to revisit — tailor &amp; apply when you&apos;re ready.
@@ -2459,7 +2474,7 @@ function SavedView({
               aria-label={`Remove ${job.title} from saved`}
               className="elev-2 absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-lg text-aether-coral transition-colors duration-[--dur-fast] hover:border-hairline-strong"
             >
-              🔖
+              <i className="fa-solid fa-bookmark" aria-hidden="true" />
             </button>
             <div className="flex gap-3 pr-8">
               <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/[0.07] text-sm font-bold">

@@ -197,7 +197,7 @@ function ItemRow({
             rows={3}
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
-            className="w-full rounded-md border border-white/15 bg-black/30 px-2 py-1.5 text-[12px] text-white focus:border-[#818CF8]/60 focus:outline-none"
+            className="w-full rounded-md border border-white/15 bg-black/30 px-2 py-1.5 text-[12px] text-white focus:border-aether-coral/50 focus:outline-none"
           />
           <button
             type="button"
@@ -209,7 +209,7 @@ function ItemRow({
                 setEditing(false);
               })
             }
-            className="mt-1.5 rounded-md border border-[#818CF8]/50 px-2 py-0.5 text-[10px] text-[#818CF8] transition hover:text-white disabled:opacity-50"
+            className="mt-1.5 rounded-md border border-aether-coral/50 px-2 py-0.5 text-[10px] text-aether-coral transition hover:text-white disabled:opacity-50"
           >
             Save answer
           </button>
@@ -245,7 +245,7 @@ function ItemRow({
             type="button"
             data-testid={`bank-usage-toggle-${item.id}`}
             onClick={() => setExpanded((prev) => !prev)}
-            className="text-[10px] text-[#818CF8] transition hover:text-white"
+            className="text-[10px] text-aether-coral transition hover:text-white"
           >
             {expanded ? "Hide where it was used" : "Where it was used"}
           </button>
@@ -268,7 +268,7 @@ function ItemRow({
                   {" · "}
                   <Link
                     href={`/dashboard/applications?application=${use.applicationId}`}
-                    className="text-[#818CF8] transition hover:text-white"
+                    className="text-aether-coral transition hover:text-white"
                   >
                     application
                   </Link>
