@@ -6,35 +6,15 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { glMounts, TimelineGlMountProbe } from "./TimelineGlMountProbe";
+
 vi.mock("../../../hooks/useRenderCapabilities", () => ({
   useRenderCapabilities: vi.fn(),
 }));
 
-const glMounts = { count: 0, lastHover: null as string | null };
-
 vi.mock("next/dynamic", () => ({
   __esModule: true,
-  default: () => {
-    // vi.mock factories are hoisted above ESM imports; pull React here.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports -- mock factory timing
-    const React = require("react") as typeof import("react");
-    function Mock(props: {
-      hoverId?: string | null;
-      hoverAppId?: string | null;
-    }) {
-      React.useEffect(() => {
-        glMounts.count += 1;
-      }, []);
-      glMounts.lastHover = props.hoverId ?? null;
-      return React.createElement("div", {
-        "data-testid": "timeline-gl-mock",
-        "data-hover": props.hoverId ?? "",
-        "data-hover-app": props.hoverAppId ?? "",
-      });
-    }
-    Mock.displayName = "DynamicTimelineGL";
-    return Mock;
-  },
+  default: () => TimelineGlMountProbe,
 }));
 
 import { useRenderCapabilities } from "../../../hooks/useRenderCapabilities";
