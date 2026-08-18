@@ -166,3 +166,44 @@ def test_real_prospect_with_same_text_is_still_engaged(repo, sales_env, monkeypa
     assert result["leadsCreated"] == 1
     assert result.get("inboundSkippedAutomated", 0) == 0
     assert repo.get_lead_by_email(sender) is not None
+
+
+class TestRt007SelfAlertAndInfraDomains:
+    """RT-007 (live incident 2026-08-16): 6 auto-replies to
+    onboarding@resend.dev — the transactional relay delivering the app's OWN
+    '[Aether ALERT] unit ... failed' monitoring mail. Neither the local-part
+    markers ('onboarding' carried none) nor one-send-per-thread (every alert
+    opens a NEW thread) stopped it. Three closures, each pinned here."""
+
+    def test_transactional_infra_domain_is_automated_regardless_of_local_part(self):
+        from app.agents.sales_agent import _is_automated_sender
+
+        assert _is_automated_sender("onboarding@resend.dev")
+        assert _is_automated_sender("anything@mail.sendgrid.net")
+        # exact/subdomain match only — a human at a lookalike company survives
+        assert not _is_automated_sender("pat@notresend.dev.example.com")
+        assert not _is_automated_sender("pat.prospect@acme.com")
+
+    def test_onboarding_local_part_is_automated(self):
+        from app.agents.sales_agent import _is_automated_sender
+
+        assert _is_automated_sender("onboarding@somestartup.io")
+
+    def test_self_alert_subject_is_never_a_prospect_signal(self):
+        from app.agents.sales_agent import _is_self_alert_subject
+
+        assert _is_self_alert_subject("[Aether ALERT] unit aether-api.service failed on prod VM")
+        assert _is_self_alert_subject("Re: [Aether ALERT] unit aether-worker.service failed")
+        assert not _is_self_alert_subject("Alert me about new roles please")
+
+    def test_the_exact_incident_message_shape_is_gated_by_both_checks(self):
+        """The live message shape: infra-relay sender + self-alert subject.
+        Both decision functions the scan loop consults (in guard order,
+        before any body fetch — ordering itself is pinned by the existing
+        guard-before-fetch tests in this file) must reject it."""
+        from app.agents import sales_agent as sa
+
+        assert sa._is_automated_sender("onboarding@resend.dev")
+        assert sa._is_self_alert_subject(
+            "[Aether ALERT] unit aether-api.service failed on prod VM"
+        )
