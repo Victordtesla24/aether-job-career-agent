@@ -333,12 +333,25 @@ describe("Interview Prep panel (ML-W4B-OBS-1)", () => {
     expect(screen.getByTestId("interview-prep-run-btn")).not.toBeNull();
   });
 
-  it("does not fetch the prep brief when no application is at the interview stage", async () => {
+  it("still fetches the prep brief when a schedule exists even if the application list has not caught up", async () => {
     applicationsFixture = [{ ...APP_FIXTURE, status: "screening" }];
 
     render(<InterviewCenterPage />);
 
-    await screen.findByTestId("interview-card");
+    await screen.findByTestId("interview-prep-panel");
+    expect(apiRequest).toHaveBeenCalledWith(
+      "/workspaces/interviews/prep",
+      expect.anything(),
+    );
+  });
+
+  it("does not fetch the prep brief when there are no interviews and no interview-stage application", async () => {
+    applicationsFixture = [{ ...APP_FIXTURE, status: "screening" }];
+    interviews = [];
+
+    render(<InterviewCenterPage />);
+
+    await screen.findByTestId("interviews-empty-state");
     expect(apiRequest).not.toHaveBeenCalledWith(
       "/workspaces/interviews/prep",
       expect.anything(),

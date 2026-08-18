@@ -428,6 +428,17 @@ def list_interviews(
     """
     _ensure_interview_tables()
     uid = current_user["id"]
+    try:
+        from app.services.interview_ingest import ingest_stored_mailbox
+        from app.services.interview_prep_pipeline import generate_prep_after_ingest
+
+        results = ingest_stored_mailbox(uid)
+        if results:
+            generate_prep_after_ingest(uid, results)
+    except Exception:  # noqa: BLE001 — listing interviews must still return
+        logger.warning(
+            "interview mailbox ingest on list failed user=%s", uid, exc_info=True
+        )
     clauses = ['i."userId" = %s']
     params: list[Any] = [uid]
 

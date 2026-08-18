@@ -130,8 +130,9 @@ export default function InterviewCenterPage() {
   // sets only when Google returned a real event id.
   const [calendarNotice, setCalendarNotice] = useState<CalendarResult | null>(null);
 
-  // Interview Prep brief (ML-W4B-OBS-1) — only fetched/rendered while an
-  // application is at the interview stage (see `atInterviewStage` below).
+  // Interview Prep brief — fetched when an application is at interview
+  // stage or when InterviewSchedule rows already exist (a mailbox ingest
+  // can land a schedule before GET /applications reflects the promotion).
   const [prep, setPrep] = useState<InterviewPrepBrief | null>(null);
   const [prepLoading, setPrepLoading] = useState(false);
   const [prepError, setPrepError] = useState<string | null>(null);
@@ -154,11 +155,14 @@ export default function InterviewCenterPage() {
   }, []);
 
   const load = useCallback(async () => {
+    let listed: Interview[] = [];
     try {
-      setInterviews(await fetchInterviews());
+      listed = await fetchInterviews();
+      setInterviews(listed);
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load interviews");
+      listed = [];
       setInterviews([]);
     }
     // Applications feed the "which application" picker, the role/company
@@ -168,7 +172,10 @@ export default function InterviewCenterPage() {
     try {
       const fetchedApps = await fetchApplications();
       setApps(fetchedApps);
-      if (fetchedApps.some((a) => a.status === "interview")) {
+      if (
+        fetchedApps.some((a) => a.status === "interview") ||
+        listed.length > 0
+      ) {
         await loadPrep();
       } else {
         setPrep(null);
@@ -201,8 +208,10 @@ export default function InterviewCenterPage() {
   // Same signal `load()` uses to decide whether to fetch the prep brief —
   // gates whether the panel renders at all.
   const atInterviewStage = useMemo(
-    () => apps.some((a) => a.status === "interview"),
-    [apps],
+    () =>
+      apps.some((a) => a.status === "interview") ||
+      (interviews !== null && interviews.length > 0),
+    [apps, interviews],
   );
 
   const runPrep = useCallback(async () => {

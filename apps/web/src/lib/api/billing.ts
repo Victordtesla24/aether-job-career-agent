@@ -188,6 +188,9 @@ export async function fetchEntitlement(
   options: RequestOptions = {},
 ): Promise<Entitlement> {
   return EntitlementSchema.parse(
-    await apiRequest<unknown>("/billing/entitlement", options),
+    await apiRequest<unknown>("/billing/entitlement", {
+      timeoutMs: 12_000,
+      ...options,
+    }),
   );
 }

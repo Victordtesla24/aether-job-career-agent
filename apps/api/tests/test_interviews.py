@@ -131,3 +131,75 @@ def test_create_interview_with_foreign_application_returns_404(
         headers=auth_headers,
     )
     assert resp.status_code == 404, resp.text
+
+
+def test_list_interviews_ingests_stored_confirmation_thread(
+    client, auth_headers, db_session, test_user_id
+):
+    """Opening Interview Center must ingest mailbox threads, not stay empty.
+
+    Live miss: GET /interviews never called ingest, so the NBE confirmation
+    sat in Email Center while Interview Center rendered the empty state.
+    """
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    from app.services.gmail_service import (
+        ensure_email_thread_gmail_columns,
+        ensure_email_thread_last_message_column,
+    )
+
+    ensure_email_thread_gmail_columns()
+    ensure_email_thread_last_message_column()
+    melbourne = ZoneInfo("Australia/Melbourne")
+    when = datetime(2026, 8, 18, 11, 36, tzinfo=melbourne)
+    tid, resume_id = _uid(), _uid()
+    messages = [
+        {
+            "from": "John Black",
+            "fromEmail": "john.black@robertwalters.com.au",
+            "createdAt": when.isoformat(),
+            "body": (
+                "This email confirms your in-person interview for the "
+                "Project Manager position with Next Business Energy. "
+                "Wednesday 19th August at 10:00am in Docklands."
+            ),
+        }
+    ]
+    with db_session.cursor() as cur:
+        cur.execute(
+            'INSERT INTO "Resume" ("id","userId","version","sections","formatHash",'
+            '"updatedAt") VALUES (%s,%s,1,%s,%s,NOW())',
+            (resume_id, test_user_id, json.dumps({"summary": "PM"}), "hash-list"),
+        )
+        cur.execute(
+            'INSERT INTO "EmailThread" '
+            '("id","userId","subject","messages","classification",'
+            '"gmailThreadId","lastMessageAt","createdAt","updatedAt") '
+            "VALUES (%s,%s,%s,%s::jsonb,%s,%s,%s,NOW(),NOW())",
+            (
+                tid,
+                test_user_id,
+                "Interview: Adan & Vikram (Project Manager @ Next Business Energy",
+                json.dumps(messages),
+                "priority",
+                "gmail-nbe-list",
+                when,
+            ),
+        )
+    db_session.commit()
+
+    listed = client.get("/interviews", headers=auth_headers)
+    assert listed.status_code == 200, listed.text
+    rows = listed.json()
+    assert len(rows) >= 1
+    with db_session.cursor() as cur:
+        cur.execute(
+            'SELECT j.company FROM "InterviewSchedule" i '
+            'JOIN "Application" a ON a.id = i."applicationId" '
+            'JOIN "Job" j ON j.id = a."jobId" '
+            'WHERE i."userId" = %s',
+            (test_user_id,),
+        )
+        companies = [r[0] for r in cur.fetchall()]
+    assert "Next Business Energy" in companies
