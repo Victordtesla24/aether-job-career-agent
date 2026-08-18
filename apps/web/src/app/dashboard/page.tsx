@@ -12,6 +12,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import DashboardStats from "../../components/dashboard/DashboardStats";
+import ScreeningSetupPrompt from "../../components/dashboard/ScreeningSetupPrompt";
 import { useRealtimeResources } from "../../hooks/useRealtime";
 import { useNow } from "../../hooks/useNow";
 import MarketPulse from "../../components/analytics/MarketPulse";
@@ -290,6 +291,8 @@ export default function DashboardPage() {
         strip sits inside the atmospheric glow, so the top of the page has
         depth instead of being a flat expanse.
       */}
+      <ScreeningSetupPrompt />
+
       <section className="atmos-hero">
         <div className="mb-4">
           <h1 className="type-page">

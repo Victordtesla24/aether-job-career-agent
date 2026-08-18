@@ -82,6 +82,15 @@ vi.mock("../../../lib/api/client", async (importOriginal) => {
   return { ...actual, apiRequest: (...args: unknown[]) => apiRequestMock(...args) };
 });
 
+const fetchReadinessMock = vi.hoisted(() => vi.fn());
+vi.mock("../../../lib/api/answer-bank", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../../lib/api/answer-bank")>();
+  return {
+    ...actual,
+    fetchAnswerBankReadiness: (...args: unknown[]) => fetchReadinessMock(...args),
+  };
+});
+
 // eslint-disable-next-line import/first
 import DashboardPage from "../page";
 
@@ -163,6 +172,22 @@ beforeEach(() => {
   fetchMarketPulseMock.mockResolvedValue(marketPulse());
   fetchAgentRunsMock.mockResolvedValue([]);
   fetchApprovalsMock.mockResolvedValue([]);
+  fetchReadinessMock.mockResolvedValue({
+    seedTotal: 12,
+    seedCovered: 10,
+    seedRemaining: [],
+    essentialTotal: 10,
+    essentialCovered: 10,
+    setupComplete: true,
+    liveAnswers: 10,
+    expiredAnswers: 0,
+    autoAnswerable: 10,
+    gatedAnswers: 0,
+    timesAnswered: 0,
+    learnedFromApplications: 0,
+    applicationsWaiting: 0,
+    autoAnswerThreshold: 0.86,
+  });
 });
 
 afterEach(() => {
@@ -175,6 +200,7 @@ afterEach(() => {
   fetchMarketPulseMock.mockReset();
   fetchApprovalsMock.mockReset();
   decideApprovalMock.mockReset();
+  fetchReadinessMock.mockReset();
 });
 
 describe("Dashboard agent feed — MV-dashboard-009 stale Approve button", () => {
@@ -271,6 +297,38 @@ describe("Dashboard agent feed — MV-dashboard-009 stale Approve button", () =>
     expect(confirmSpy.mock.calls[0][0]).toMatch(/below the quality floor|Below quality floor/i);
     expect(confirmSpy.mock.calls[0][0]).not.toMatch(/POST|\/approvals\/|409/);
     confirmSpy.mockRestore();
+  });
+});
+
+describe("Dashboard first-run screening prompt (SETUP-1)", () => {
+  it("routes a new subscriber whose bank is empty to Settings → Screening Answers", async () => {
+    fetchReadinessMock.mockResolvedValue({
+      seedTotal: 12,
+      seedCovered: 0,
+      seedRemaining: [],
+      essentialTotal: 10,
+      essentialCovered: 0,
+      setupComplete: false,
+      liveAnswers: 0,
+      expiredAnswers: 0,
+      autoAnswerable: 0,
+      gatedAnswers: 0,
+      timesAnswered: 0,
+      learnedFromApplications: 0,
+      applicationsWaiting: 0,
+      autoAnswerThreshold: 0.86,
+    });
+
+    render(<DashboardPage />);
+
+    const cta = await screen.findByTestId("screening-setup-cta");
+    expect(cta.getAttribute("href")).toBe("/dashboard/settings?section=screening");
+  });
+
+  it("does not show the prompt once every reusable answer is saved", async () => {
+    render(<DashboardPage />);
+    await waitFor(() => expect(fetchReadinessMock).toHaveBeenCalled());
+    expect(screen.queryByTestId("screening-setup-prompt")).toBeNull();
   });
 });
 

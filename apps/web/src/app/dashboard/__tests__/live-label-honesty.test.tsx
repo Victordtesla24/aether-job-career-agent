@@ -83,6 +83,15 @@ vi.mock("../../../lib/api/client", async (importOriginal) => {
   return { ...actual, apiRequest: (...args: unknown[]) => apiRequestMock(...args) };
 });
 
+const fetchReadinessMock = vi.hoisted(() => vi.fn());
+vi.mock("../../../lib/api/answer-bank", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../../lib/api/answer-bank")>();
+  return {
+    ...actual,
+    fetchAnswerBankReadiness: (...args: unknown[]) => fetchReadinessMock(...args),
+  };
+});
+
 // eslint-disable-next-line import/first
 import DashboardPage from "../page";
 
@@ -150,6 +159,22 @@ beforeEach(() => {
   fetchMarketPulseMock.mockResolvedValue(marketPulse());
   fetchAgentRunsMock.mockResolvedValue([coverLetterRun()]);
   fetchApprovalsMock.mockResolvedValue([]);
+  fetchReadinessMock.mockResolvedValue({
+    seedTotal: 12,
+    seedCovered: 10,
+    seedRemaining: [],
+    essentialTotal: 10,
+    essentialCovered: 10,
+    setupComplete: true,
+    liveAnswers: 10,
+    expiredAnswers: 0,
+    autoAnswerable: 10,
+    gatedAnswers: 0,
+    timesAnswered: 0,
+    learnedFromApplications: 0,
+    applicationsWaiting: 0,
+    autoAnswerThreshold: 0.86,
+  });
 });
 
 afterEach(() => {
@@ -162,6 +187,7 @@ afterEach(() => {
   fetchMarketPulseMock.mockReset();
   fetchApprovalsMock.mockReset();
   decideApprovalMock.mockReset();
+  fetchReadinessMock.mockReset();
 });
 
 describe("W-I item 3 — Agent Activity 'live' label honesty (ML-DASH-002)", () => {

@@ -140,7 +140,11 @@ export default function SettingsClient({
 }) {
   const [data, setData] = useState<SettingsPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [active, setActive] = useState<string>("profile");
+  const [active, setActive] = useState<string>(() => {
+    if (typeof window === "undefined") return "profile";
+    const section = new URLSearchParams(window.location.search).get("section");
+    return section && SECTIONS.some((entry) => entry.id === section) ? section : "profile";
+  });
   const [profile, setProfile] = useState({ fullName: "", email: "", targetRole: "", location: "" });
   const [agentConfig, setAgentConfig] = useState({
     autoApply: false,

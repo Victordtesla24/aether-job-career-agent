@@ -162,6 +162,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  window.history.replaceState(null, "", "/dashboard/settings");
 });
 
 describe("Settings — Screening Answers", () => {
@@ -246,6 +247,18 @@ describe("Settings — Screening Answers", () => {
     render(<SettingsPage />);
     const link = await screen.findByTestId("screening-bank-link");
     expect(link.getAttribute("href")).toBe("/dashboard/answer-bank");
+  });
+
+  it("opens Screening Answers alone from ?section=screening", async () => {
+    window.history.replaceState(null, "", "/dashboard/settings?section=screening");
+    render(<SettingsPage />);
+    expect(await screen.findByTestId("settings-screening")).toBeTruthy();
+    expect(screen.getByTestId("settings-nav-screening").getAttribute("aria-pressed")).toBe(
+      "true",
+    );
+    // Deep-link focuses the screening panel; résumé stays on its own tab.
+    expect(screen.queryByTestId("settings-resume")).toBeNull();
+    expect(await screen.findByTestId("bank-questionnaire")).toBeTruthy();
   });
 
   it("mounts the shared questionnaire, expanded while set-up is incomplete", async () => {
