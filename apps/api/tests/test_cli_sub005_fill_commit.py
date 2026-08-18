@@ -1462,3 +1462,263 @@ def test_unclassifiable_custom_control_refuses_via_backstop(tmp_path) -> None:
     err = exc_info.value
     assert err.reason == "unverifiable_form_surface"
     assert err.question is not None and "combobox" in err.question.lower()
+
+
+# ---------------------------------------------------------------------------
+# 11. CLI-SUB-005-R6 (ROOT-CAUSE fix, RUN-20260818T0223Z/SUB-005-R5/08-
+#     adversarial-final.md, attacks #6 and #7 — both closed the R2->R5 series
+#     was ultimately FAILed on, per 05-decision-memos/SUB-005-and-COV-3-
+#     rulings.md "SUB-005 R6 ruling"):
+#
+#     Attack #6 — a required control living entirely inside an OPEN shadow
+#     root, on a bare custom-element host with no `role`/`contenteditable` of
+#     its own. `page.content()` (and therefore BeautifulSoup/
+#     `parse_form_schema`) serializes ONLY the light DOM — an open shadow
+#     root's content is structurally ABSENT from that string, not merely
+#     unparsed, so R5's entire census (both the total-re-derivation loop and
+#     its own conservative backstop) was blind to it no matter how many times
+#     it re-ran. Ported here exactly like the reviewer's own
+#     adversarial/attack6_shadow_dom_custom_element.py construction.
+#
+#     Attack #7 — a required control appended to the live DOM inside a
+#     `mousedown` listener on the SUBMIT control itself: strictly after
+#     `_verify_no_unverifiable_form_surface` returns clean, strictly before
+#     the click's default action (the actual form submission) fires — a
+#     deterministic DOM-event-ordering gap (mousedown always precedes click
+#     for the same physical click), not a race the page has to win by luck.
+#     Ported here exactly like adversarial/attack7_reveal_on_submit_click.py.
+#
+#     R6 closes BOTH at the root: a LIVE, shadow-DOM-piercing composed-tree
+#     census (`_composed_live_census`, evaluated via Playwright's own
+#     `evaluate()` inside the page's live JS context, never a serialized
+#     string) replaces the string-based census as the required-and-
+#     uncommitted source of truth, AND a capture-phase submission guard
+#     (`_install_submission_guard`) re-runs that SAME census at the literal
+#     instant a submit/click event fires and cancels the submission outright
+#     if anything required is still uncommitted THEN — closing the check-
+#     then-act window by construction rather than by adding another check.
+# ---------------------------------------------------------------------------
+
+_SHADOW_DOM_CUSTOM_ELEMENT_FORM = """
+<title>shadow-dom-widget</title>
+<form onsubmit="event.preventDefault();
+    var xc = document.querySelector('x-legal-consent');
+    var shadowInput = xc && xc.shadowRoot ? xc.shadowRoot.querySelector('input') : null;
+    var consentValue = shadowInput ? shadowInput.value : '';
+    if (document.getElementById('name').value === 'Jordan Blake' &&
+        consentValue === 'I agree') {
+      document.body.innerHTML = '<h1>Thank you for applying</h1>';
+    } else {
+      document.body.innerHTML = '<p>Missing entry for required field: consent</p>';
+    }">
+  <div data-field-path="name">
+    <label class="_required_abc123">Full name</label>
+    <input id="name" name="name" type="text">
+  </div>
+  <x-legal-consent></x-legal-consent>
+  <button type="submit">Submit Application</button>
+</form>
+<script>
+  class LegalConsent extends HTMLElement {
+    connectedCallback() {
+      const shadow = this.attachShadow({mode: 'open'});
+      // Not a native HTML5 `required` attribute on purpose: this codebase's
+      // own ATS-shaped forms (Ashby/Greenhouse) signal requiredness via
+      // aria-required/CSS-class convention, never native browser constraint
+      // validation, which would intercept the submit event before either
+      // R5's or R6's own JS-level checks ever ran and mask the actual
+      // finding under test.
+      shadow.innerHTML =
+        '<label>I agree to the background-check policy (required)</label>' +
+        '<input type="text" aria-required="true">';
+    }
+  }
+  customElements.define('x-legal-consent', LegalConsent);
+</script>
+"""
+
+
+def test_live_submitter_never_submits_over_an_unanswerable_shadow_dom_required_field(
+    tmp_path,
+) -> None:
+    """THE R5->R6 ADVERSARIAL-REVIEW BREAK, ported exactly from
+    adversarial/attack6_shadow_dom_custom_element.py: on the unfixed R5
+    branch this returned submitted:true, confirmation:"Thank you for
+    applying", filled:["name"], unfilled:[] — the shadow-DOM field was never
+    seen by ANY census (page.content() cannot serialize an open shadow
+    root's content at all), never attempted, never verified, never raised as
+    a manual step. With no profile/answer-bank able to answer "I agree to
+    the background-check policy", the R6 live composed census must resolve
+    or refuse it — never guess, never submit silently over it."""
+    from app.services.apply_executor import playwright_form_submitter
+
+    with pytest.raises(ManualStepRequired) as exc_info:
+        playwright_form_submitter(
+            application_id="sub005r6-shadow-unanswerable",
+            channel="ashby",
+            page_html="",
+            apply_url=_data_url(_SHADOW_DOM_CUSTOM_ELEMENT_FORM),
+            plan=_name_only_plan(),
+            resume_pdf_bytes=b"%PDF-1.4 fake",
+            cover_letter_text="Dear Hiring Manager,",
+            evidence_dir=str(tmp_path),
+            profile={},
+            answer_bank=None,
+        )
+    err = exc_info.value
+    assert err.reason == "unplanned_required_field"
+    assert err.question is not None and "background-check" in err.question.lower()
+
+
+def test_live_submitter_resolves_and_submits_an_answerable_shadow_dom_required_field(
+    tmp_path,
+) -> None:
+    """Guard against over-refusal: the SAME shadow-DOM-hosted required
+    control, when it CAN genuinely be answered (here: the answer bank,
+    matched by the label the live composed census read straight out of the
+    shadow root), is discovered by the R6 live census, filled and verified
+    via a shadow-DOM-piercing Playwright locator (never assembled from an
+    id/name this anonymous control never had), and the submission proceeds —
+    proving the fix RESOLVES a legitimately answerable shadow control exactly
+    like any other newly discovered field, instead of either submitting
+    blind or refusing a form that could genuinely be completed."""
+    from app.services.answer_bank import (
+        PROVENANCE_USER_ANSWERED,
+        SENSITIVITY_FACTUAL,
+        AnswerBankMatch,
+    )
+    from app.services.apply_executor import playwright_form_submitter
+
+    match = AnswerBankMatch(
+        item_id="bank-item-shadow-1",
+        answer="I agree",
+        confidence=0.97,
+        method="test",
+        question_as_seen="I agree to the background-check policy (required)",
+        banked_question="background check consent",
+        sensitivity=SENSITIVITY_FACTUAL,
+        provenance=PROVENANCE_USER_ANSWERED,
+        per_application=False,
+    )
+
+    def answer_bank(field: dict[str, Any]) -> Any:
+        if "background-check" in str(field.get("label") or "").lower():
+            return match
+        return None
+
+    outcome = playwright_form_submitter(
+        application_id="sub005r6-shadow-answered",
+        channel="ashby",
+        page_html="",
+        apply_url=_data_url(_SHADOW_DOM_CUSTOM_ELEMENT_FORM),
+        plan=_name_only_plan(),
+        resume_pdf_bytes=b"%PDF-1.4 fake",
+        cover_letter_text="Dear Hiring Manager,",
+        evidence_dir=str(tmp_path),
+        profile={},
+        answer_bank=answer_bank,
+    )
+    assert outcome["submitted"] is True
+    assert outcome["confirmation"] and "thank you" in str(outcome["confirmation"]).lower()
+    assert any(name.startswith("__aether_live_census_") for name in outcome["filled"])
+    assert any(
+        name.startswith("__aether_live_census_") for name in outcome["unplannedFilled"]
+    )
+
+
+_MOUSEDOWN_REVEAL_FORM = """
+<title>mousedown-reveal</title>
+<form onsubmit="event.preventDefault();
+    document.body.innerHTML = '<h1>Thank you for applying</h1>';">
+  <div data-field-path="name">
+    <label class="_required_abc123">Full name</label>
+    <input id="name" name="name" type="text">
+  </div>
+  <button id="submit-btn" type="submit">Submit Application</button>
+</form>
+<script>
+  document.getElementById('submit-btn').addEventListener('mousedown', function () {
+    if (document.getElementById('late_reveal')) { return; }
+    var input = document.createElement('input');
+    input.type = 'text';
+    input.id = 'late_reveal';
+    // aria-required, not the native HTML5 `required` attribute: a native
+    // `required` empty field is blocked by the BROWSER'S OWN constraint
+    // validation before the 'submit' event ever fires at all, which would
+    // mask the actual finding under test (this codebase's own ATS-shaped
+    // forms signal requiredness via aria-required/CSS-class convention,
+    // never native browser validation, exactly like the real Ashby/
+    // Greenhouse pages this mirrors).
+    input.setAttribute('aria-required', 'true');
+    var label = document.createElement('label');
+    label.setAttribute('for', 'late_reveal');
+    label.textContent = 'Late reveal question';
+    // Appended AFTER the button — never before it — so Playwright's own
+    // click actionability/stability check has no visible layout shift under
+    // the pointer to react to (an earlier construction using insertBefore
+    // produced a different, uninteresting no_confirmation failure purely
+    // from the click missing the button, per the reviewer's own note).
+    document.querySelector('form').appendChild(label);
+    document.querySelector('form').appendChild(input);
+  });
+</script>
+"""
+
+
+def test_live_submitter_never_submits_over_a_field_revealed_at_mousedown_on_submit(
+    tmp_path,
+) -> None:
+    """THE R5->R6 ADVERSARIAL-REVIEW BREAK, ported exactly from
+    adversarial/attack7_reveal_on_submit_click.py: a required field appended
+    to the DOM inside a `mousedown` handler on the submit button itself —
+    strictly AFTER _verify_no_unverifiable_form_surface returns clean,
+    strictly BEFORE the click's default action (the actual submission)
+    fires — must never let that submission complete. On the unfixed R5
+    branch this returned submitted:true, confirmation:"Thank you for
+    applying" over the empty, unattempted, unverified late_reveal field. The
+    R6 capture-phase submission guard must cancel the submission itself, in
+    the browser, at the instant it would fire — never a Python-side re-check
+    with its own gap for the SAME race to reopen in."""
+    from app.services.apply_executor import playwright_form_submitter
+
+    with pytest.raises(ManualStepRequired) as exc_info:
+        playwright_form_submitter(
+            application_id="sub005r6-mousedown-reveal",
+            channel="ashby",
+            page_html="",
+            apply_url=_data_url(_MOUSEDOWN_REVEAL_FORM),
+            plan=_name_only_plan(),
+            resume_pdf_bytes=b"%PDF-1.4 fake",
+            cover_letter_text="Dear Hiring Manager,",
+            evidence_dir=str(tmp_path),
+            profile={},
+            answer_bank=None,
+        )
+    err = exc_info.value
+    assert err.reason == "unplanned_required_field"
+    assert err.question is not None and "late reveal" in err.question.lower()
+
+
+def test_live_submitter_still_submits_a_well_behaved_form_with_the_guard_installed(
+    tmp_path,
+) -> None:
+    """Guard against over-refusal at the architecture level: installing the
+    R6 capture-phase submission guard on every application (not merely the
+    exotic ones under test) must never block an ordinary, fully-answered
+    submission — the SAME assertion as
+    test_live_submitter_submits_a_wellbehaved_form_with_confirmation, now
+    with the guard active, proving it is a silent no-op for a clean form."""
+    from app.services.apply_executor import playwright_form_submitter
+
+    outcome = playwright_form_submitter(
+        application_id="sub005r6-guard-no-overrefusal",
+        channel="generic",
+        page_html="",
+        apply_url=_data_url(_HONEST_FORM),
+        plan={"fields": [_name_plan_field()]},
+        resume_pdf_bytes=b"%PDF-1.4 fake",
+        cover_letter_text="Dear Hiring Manager,",
+        evidence_dir=str(tmp_path),
+    )
+    assert outcome["submitted"] is True
+    assert outcome["confirmation"] and "thank you" in str(outcome["confirmation"]).lower()

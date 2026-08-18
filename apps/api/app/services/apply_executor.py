@@ -1219,8 +1219,15 @@ def _locate_file_input(page: Any, field: dict[str, Any]) -> Any | None:
     """
     name = str(field["name"])
     scope = str(field.get("scope") or "")
+    live_selector = str(field.get("liveSelector") or "")
     escaped = name.replace('"', '\\"')
-    candidates = ([f"{scope} input[type=file]"] if scope else []) + [
+    # CLI-SUB-005-R6: a live-census-discovered field (root cause 1) carries a
+    # `liveSelector` — a marker attribute placed directly on the control
+    # itself, which Playwright's CSS engine resolves by piercing shadow DOM —
+    # tried FIRST, ahead of the id/name guesses this control may not have.
+    candidates = ([live_selector] if live_selector else []) + (
+        [f"{scope} input[type=file]"] if scope else []
+    ) + [
         f'[id="{escaped}"]',
         f'[name="{escaped}"]',
     ]
@@ -1253,11 +1260,18 @@ def _fill_value(page: Any, field: dict[str, Any], value: Any, documents: dict[st
     name = str(field["name"])
     kind = str(field.get("kind") or "text")
     scope = str(field.get("scope") or "")
+    # CLI-SUB-005-R6 root cause 1: a live-census-discovered field's own
+    # marker-attribute locator, resolved by Playwright's shadow-DOM-piercing
+    # CSS engine — tried BEFORE the id/name guesses below, which a shadow-
+    # hosted or otherwise anonymous control may never have at all.
+    live_selector = str(field.get("liveSelector") or "")
     escaped = name.replace('"', '\\"')
     # Attribute selectors, never ``#id``: real ATS field ids start with digits
     # (Ashby's UUID-keyed questions) or carry ``[]`` (Greenhouse's checkbox
     # groups), both of which are invalid inside a CSS id selector.
-    control_selectors = [f'[id="{escaped}"]', f'[name="{escaped}"]']
+    control_selectors = ([live_selector] if live_selector else []) + [
+        f'[id="{escaped}"]', f'[name="{escaped}"]'
+    ]
     scoped_controls = (
         [
             f"{scope} input:not([type=hidden])",
@@ -1284,6 +1298,17 @@ def _fill_value(page: Any, field: dict[str, Any], value: Any, documents: dict[st
             return False
     text_value = str(value)
     if kind in {"radio", "checkbox"}:
+        if live_selector:
+            # A native shadow-DOM/anonymous checkbox or radio, tagged
+            # directly — a real `.check()` is both simpler and more reliable
+            # than the label-text guesses below, which assume Ashby/
+            # Greenhouse's own UI sugar (a sibling <label> reading the exact
+            # answer text) that a bare custom element has no reason to carry.
+            try:
+                page.locator(live_selector).first.check(timeout=_ACTION_TIMEOUT_MS)
+                return True
+            except Exception:  # noqa: BLE001 — fall through to the label-text path
+                pass
         candidates = [f'{scope} >> text="{text_value}"'] if scope else []
         candidates.append(f'label:text-is("{text_value}")')
         target = _first_present(page, candidates)
@@ -1470,8 +1495,11 @@ def _commit_state(
     name = str(field["name"])
     kind = str(field.get("kind") or "text")
     scope = str(field.get("scope") or "")
+    live_selector = str(field.get("liveSelector") or "")
     escaped = name.replace('"', '\\"')
-    control_selectors = [f'[id="{escaped}"]', f'[name="{escaped}"]']
+    control_selectors = ([live_selector] if live_selector else []) + [
+        f'[id="{escaped}"]', f'[name="{escaped}"]'
+    ]
     scoped_controls = (
         [f"{scope} input:not([type=hidden])", f"{scope} textarea", f"{scope} select"]
         if scope
@@ -1502,6 +1530,12 @@ def _commit_state(
         return False, "no file committed"
     text_value = str(value)
     if kind in {"radio", "checkbox"}:
+        if live_selector:
+            try:
+                if page.locator(live_selector).first.is_checked(timeout=_ACTION_TIMEOUT_MS):
+                    return True, "live-census control checked"
+            except Exception:  # noqa: BLE001 — fall through to the signal-selector path
+                pass
         signal_selectors = (
             [
                 f"{scope} input:checked",
@@ -1580,7 +1614,23 @@ def _commit_state(
     try:
         observed = str(target.input_value(timeout=_ACTION_TIMEOUT_MS) or "")
     except Exception:  # noqa: BLE001
-        return False, "value unreadable"
+        # CLI-SUB-005-R6: a live-census-discovered `[contenteditable]` box
+        # (root cause 1) is not an <input>/<textarea>/<select> at all, so
+        # `input_value()` always raises for it — read its committed TEXT
+        # directly instead of reporting a genuinely readable control as
+        # unreadable. Every pre-existing field has no `liveSelector`, so
+        # this branch is unreachable for them — zero behaviour change.
+        if live_selector:
+            try:
+                observed = str(
+                    page.locator(live_selector)
+                    .first.evaluate("el => (el.textContent || '').trim()")
+                    or ""
+                )
+            except Exception:  # noqa: BLE001
+                return False, "value unreadable"
+        else:
+            return False, "value unreadable"
     if kind == "tel":
         observed_digits = re.sub(r"\D", "", observed)
         expected_digits = re.sub(r"\D", "", text_value)
@@ -1836,6 +1886,308 @@ def _resolve_unplanned_required_fields(
     )
 
 
+# ---------------------------------------------------------------------------
+# CLI-SUB-005-R6 — ROOT-CAUSE fix for the two mechanisms
+# RUN-20260818T0223Z/SUB-005-R5/08-adversarial-final.md proved underlie the
+# ENTIRE R2->R5 series (05-decision-memos/SUB-005-and-COV-3-rulings.md, "SUB-
+# 005 R5 outcome + R6 ruling"):
+#
+# (1) Every census above this point (_uncommitted_live_required_fields'
+#     `parse_form_schema(page.content())` call, _unclassifiable_controls'
+#     BeautifulSoup walk) reads `page.content()`/`frame.content()` — a
+#     SERIALIZED STRING SNAPSHOT of the light DOM only. An OPEN shadow root's
+#     content is not merely unparsed by that string: it is STRUCTURALLY
+#     ABSENT from it, so no amount of re-parsing, however fresh, can ever see
+#     a control that lives inside one (attack #6: a bare custom-element host
+#     with no role/contenteditable, whose real required control lives in its
+#     own open shadow root).
+# (2) The call site was CHECK-then-ACT: every safety net above runs, THEN
+#     `_activate_submit` clicks — and Playwright's own click dispatches a
+#     real DOM event sequence (mousedown before click, by spec, deterministic
+#     for the SAME click) a page's own handler can use to reveal a brand-new,
+#     perfectly classifiable required field in that gap, with nothing here
+#     ever re-verifying anything after (attack #7).
+#
+# _composed_live_census (below) closes (1): it runs LIVE, inside the page's
+# or frame's own JS execution context via Playwright's `evaluate()`, and
+# walks the COMPOSED tree — every element reachable through `.shadowRoot`
+# (OPEN shadow roots only; a CLOSED shadow root's content is genuinely
+# unreachable by ANY web API, Playwright's locators included — a real
+# browser-platform limit, not a gap left open by choice) — so a shadow-DOM-
+# hosted required control IS seen, read at the instant this runs, never from
+# a cached string. It feeds :func:`_uncommitted_live_required_fields` as a
+# SUPPLEMENTARY source, additive to (never replacing) the existing
+# `parse_form_schema` path, so every already-covered field (Ashby/Greenhouse/
+# generic, matched by id/name/`[data-field-path]`) is still resolved exactly
+# as before — only a control NO parser call can classify at all newly
+# appears, exactly the residual class this round must close.
+#
+# _install_submission_guard closes (2) by construction rather than by adding
+# yet another check-then-act layer (the same class of gap, merely narrower):
+# it installs a CAPTURE-PHASE 'submit' and submit-click listener, in-browser,
+# that re-runs the SAME composed census AT THE INSTANT the event fires and
+# cancels the submission outright (`preventDefault` + `stopImmediatePropagation`)
+# if anything required is still uncommitted THEN — never a Python-side gap for
+# page-authored JS to win a race against. The property this makes hold:
+# a required control uncommitted at the instant of submission => the
+# submission does not complete => Python observes no submission occurred and
+# raises an honest ManualStepRequired, never a silent submit.
+# ---------------------------------------------------------------------------
+
+# Walks `document` plus every OPEN shadow root reachable from it, recursively,
+# and defines `window.__aetherComposedCensus()` (idempotent: a no-op if
+# already installed on THIS document — a navigation/reload replaces the
+# document, and with it this installation, so every caller re-runs this
+# rather than assuming a prior install still holds). Calling the installed
+# function returns one descriptor per REQUIRED control the composed tree
+# currently holds (native form control, a recognized interactive ARIA role
+# with no native control nested inside, or a bare `[contenteditable]` box),
+# each carrying its live-read `committed` state and a STABLE identifying
+# `marker` — persisted as a `data-aether-live-field` attribute directly on
+# the control itself, so the SAME control maps to the SAME marker (and
+# therefore the same Playwright locator) across every call for as long as
+# the document lives, exactly like a normal field's own name would.
+_COMPOSED_CENSUS_SETUP_JS = r"""
+() => {
+  if (window.__aetherComposedCensus) { return true; }
+  const EXCLUDED_TYPES = { hidden: 1, submit: 1, button: 1, reset: 1, image: 1, search: 1 };
+  const ROLES = {
+    combobox: 1, radio: 1, checkbox: 1, listbox: 1, switch: 1, textbox: 1,
+    spinbutton: 1, slider: 1, menuitemradio: 1, menuitemcheckbox: 1,
+  };
+  function walk(root, out) {
+    let all;
+    try { all = root.querySelectorAll('*'); } catch (e) { return; }
+    for (let i = 0; i < all.length; i++) {
+      const el = all[i];
+      out.push(el);
+      if (el.shadowRoot) { walk(el.shadowRoot, out); }
+    }
+  }
+  function kindFor(el) {
+    const tag = el.tagName.toLowerCase();
+    if (tag === 'textarea') { return 'textarea'; }
+    if (tag === 'select') { return 'select'; }
+    const t = (el.getAttribute('type') || 'text').toLowerCase();
+    if (t === 'radio' || t === 'checkbox' || t === 'file' || t === 'email' ||
+        t === 'tel' || t === 'number' || t === 'url' || t === 'date') { return t; }
+    return 'text';
+  }
+  function isRequired(el, tag) {
+    if ((tag === 'input' || tag === 'select' || tag === 'textarea') && el.required) { return true; }
+    return (el.getAttribute('aria-required') || '').toLowerCase() === 'true';
+  }
+  function nativeCommitted(el, kind) {
+    if (kind === 'checkbox' || kind === 'radio') { return !!el.checked; }
+    if (kind === 'file') { return !!(el.files && el.files.length); }
+    return !!(el.value && el.value.trim());
+  }
+  function fieldPathFor(el) {
+    try {
+      const w = el.closest ? el.closest('[data-field-path]') : null;
+      return w ? (w.getAttribute('data-field-path') || '') : '';
+    } catch (e) { return ''; }
+  }
+  function labelFor(el) {
+    const aria = el.getAttribute('aria-label');
+    if (aria && aria.trim()) { return aria.trim(); }
+    const id = el.id;
+    if (id) {
+      try {
+        const root = el.getRootNode();
+        const esc = (window.CSS && CSS.escape) ? CSS.escape(id) : id;
+        const lab = root.querySelector ? root.querySelector('label[for="' + esc + '"]') : null;
+        if (lab && lab.textContent && lab.textContent.trim()) { return lab.textContent.trim(); }
+      } catch (e) {}
+    }
+    try {
+      const root2 = el.getRootNode();
+      if (root2 && root2.querySelectorAll) {
+        const labels = root2.querySelectorAll('label');
+        if (labels.length === 1 && labels[0].textContent && labels[0].textContent.trim()) {
+          return labels[0].textContent.trim();
+        }
+      }
+    } catch (e) {}
+    const ph = el.getAttribute('placeholder');
+    if (ph && ph.trim()) { return ph.trim(); }
+    const txt = (el.textContent || '').trim();
+    if (txt) { return txt.slice(0, 120); }
+    return '';
+  }
+  window.__aetherComposedCensus = function () {
+    const nodes = [];
+    walk(document, nodes);
+    const results = [];
+    for (let i = 0; i < nodes.length; i++) {
+      const el = nodes[i];
+      const tag = el.tagName.toLowerCase();
+      let kind = null;
+      let isRole = false;
+      let isCE = false;
+      if (tag === 'input' || tag === 'select' || tag === 'textarea') {
+        const type = (el.getAttribute('type') || 'text').toLowerCase();
+        if (EXCLUDED_TYPES[type]) { continue; }
+        if ((el.getAttribute('aria-hidden') || '').toLowerCase() === 'true') { continue; }
+        const nameAttr = el.getAttribute('name') || '';
+        const idAttr = el.id || '';
+        if (nameAttr === 'g-recaptcha-response' || idAttr.indexOf('iti-') === 0) { continue; }
+        kind = kindFor(el);
+      } else {
+        const role = (el.getAttribute('role') || '').toLowerCase();
+        const ce = el.getAttribute('contenteditable');
+        if (role && ROLES[role]) {
+          if (el.querySelector && el.querySelector('input, select, textarea')) { continue; }
+          isRole = true; kind = 'role:' + role;
+        } else if (ce !== null && ce.toLowerCase() !== 'false') {
+          if (el.querySelector && el.querySelector('input, select, textarea')) { continue; }
+          isCE = true; kind = 'contenteditable';
+        } else { continue; }
+      }
+      if (!isRequired(el, tag)) { continue; }
+      let committed;
+      if (isRole) {
+        const ac = (el.getAttribute('aria-checked') || '').toLowerCase();
+        const asel = (el.getAttribute('aria-selected') || '').toLowerCase();
+        const ap = (el.getAttribute('aria-pressed') || '').toLowerCase();
+        committed = ac === 'true' || asel === 'true' || ap === 'true';
+      } else if (isCE) {
+        committed = !!((el.textContent || '').trim());
+      } else {
+        committed = nativeCommitted(el, kind);
+      }
+      let marker = el.getAttribute('data-aether-live-field');
+      if (!marker) {
+        window.__aetherCensusSeq = (window.__aetherCensusSeq || 0) + 1;
+        marker = 'c' + window.__aetherCensusSeq;
+        el.setAttribute('data-aether-live-field', marker);
+      }
+      results.push({
+        marker: marker,
+        kind: kind,
+        label: labelFor(el),
+        required: true,
+        committed: committed,
+        inShadow: el.getRootNode() !== document,
+        id: el.id || '',
+        controlName: el.getAttribute('name') || '',
+        fieldPath: fieldPathFor(el),
+      });
+    }
+    return results;
+  };
+  return true;
+}
+"""
+
+_COMPOSED_CENSUS_CALL_JS = "() => window.__aetherComposedCensus()"
+
+# Idempotent (per document): ensures the composed census is installed, then
+# installs a CAPTURE-PHASE 'submit' listener and a capture-phase 'click'
+# listener scoped to submit-shaped controls (the same selector shapes
+# :func:`_activate_submit` targets). Capture phase at `document` runs BEFORE
+# the event reaches the form/button at all — before any page-authored
+# handler, before the browser's own default action (the actual form
+# submission) — so a `preventDefault`+`stopImmediatePropagation` here reliably
+# stops the submission from ever happening, regardless of what the page's own
+# JS does at, or after, that point.
+_SUBMIT_GUARD_INSTALL_JS = (
+    "() => {\n"
+    "  (" + _COMPOSED_CENSUS_SETUP_JS.strip() + ")();\n"
+    "  if (window.__aetherSubmitGuardInstalled) { return true; }\n"
+    "  window.__aetherSubmitGuardInstalled = true;\n"
+    "  function isSubmitControl(el) {\n"
+    "    if (!el || !el.closest) { return false; }\n"
+    "    if (el.closest('button[type=\"submit\"], input[type=\"submit\"]')) { return true; }\n"
+    "    const btn = el.closest('button');\n"
+    "    if (btn && /submit/i.test(btn.textContent || '')) { return true; }\n"
+    "    return false;\n"
+    "  }\n"
+    "  function guard(event) {\n"
+    "    let census;\n"
+    "    try { census = window.__aetherComposedCensus(); } catch (e) { return; }\n"
+    "    const bad = (census || []).filter(function (c) { return c.required && !c.committed; });\n"
+    "    if (bad.length) {\n"
+    "      window.__aetherBlockedSubmit = bad;\n"
+    "      event.preventDefault();\n"
+    "      event.stopImmediatePropagation();\n"
+    "    }\n"
+    "  }\n"
+    "  document.addEventListener('submit', guard, true);\n"
+    "  document.addEventListener('click', function (event) {\n"
+    "    if (!isSubmitControl(event.target)) { return; }\n"
+    "    guard(event);\n"
+    "  }, true);\n"
+    "  return true;\n"
+    "}\n"
+)
+
+_READ_BLOCKED_SUBMIT_JS = "() => window.__aetherBlockedSubmit || null"
+
+
+def _composed_live_census(root: Any) -> list[dict[str, Any]]:
+    """Every REQUIRED control the LIVE composed DOM tree of ``root`` (the top
+    document, or one Playwright frame) holds RIGHT NOW — light DOM plus every
+    open shadow root, walked recursively — with its committed state read at
+    THIS instant. See :data:`_COMPOSED_CENSUS_SETUP_JS`. A root this cannot
+    read (no ``evaluate`` at all — this repo's own unit-test fakes predate
+    frame/JS-eval support, or a genuinely dead page) reports zero controls
+    rather than erroring: there is nothing beyond what the existing
+    parser-based census already covers for it to add.
+    """
+    try:
+        root.evaluate(_COMPOSED_CENSUS_SETUP_JS)
+        result = root.evaluate(_COMPOSED_CENSUS_CALL_JS)
+    except Exception:  # noqa: BLE001 — an unreadable/uneval-able root adds nothing
+        return []
+    return list(result or [])
+
+
+def _live_census_kind(raw_kind: str) -> str:
+    """Map a composed-census control's raw JS-reported kind onto the exact
+    vocabulary :func:`_kind_for` already produces, so :func:`_fill_value` /
+    :func:`_commit_state`'s existing kind dispatch handles a live-census
+    field exactly like any other. A custom ARIA role (other than
+    ``combobox``, which behaves enough like the existing typeahead widgets to
+    reuse that branch) or a bare ``[contenteditable]`` box has no reliable
+    native fill mechanism this codebase automates — falls through to the
+    generic text-fill attempt, which either lands (Playwright's own
+    ``fill()`` supports ``[contenteditable]`` directly) or fails cleanly and
+    is reported unfilled, never faked as committed.
+    """
+    if raw_kind == "role:combobox":
+        return "combobox"
+    if raw_kind.startswith("role:") or raw_kind == "contenteditable":
+        return "text"
+    return raw_kind or "text"
+
+
+def _install_submission_guard(root: Any) -> None:
+    """CLI-SUB-005-R6 root cause 2 — see the module note above. Installs the
+    capture-phase submission guard on ``root`` (idempotent). The ONLY DOM
+    mutation this performs is adding an event listener (plus, if the guard
+    ever fires, an inert ``data-aether-live-field`` marker attribute already
+    added by the census itself during convergence) — it can never reveal,
+    hide, or answer anything, so it does not violate the "no mutation
+    between convergence's return and the submit click" invariant the call
+    site documents; it is what CLOSES that invariant's remaining gap.
+    """
+    try:
+        root.evaluate(_SUBMIT_GUARD_INSTALL_JS)
+    except Exception:  # noqa: BLE001 — an unreadable root cannot submit anything either
+        pass
+
+
+def _read_blocked_submission(root: Any) -> list[dict[str, Any]] | None:
+    """Whatever :data:`_SUBMIT_GUARD_INSTALL_JS` blocked on ``root``'s most
+    recent submit attempt, or ``None`` if nothing was blocked."""
+    try:
+        result = root.evaluate(_READ_BLOCKED_SUBMIT_JS)
+    except Exception:  # noqa: BLE001 — an unreadable root never reports a block
+        return None
+    return list(result) if result else None
+
+
 def _uncommitted_live_required_fields(
     page: Any,
     channel: str,
@@ -1925,6 +2277,53 @@ def _uncommitted_live_required_fields(
             live_fields = parse_form_schema(html, channel=channel)
         except Exception:  # noqa: BLE001 — a parse failure must not crash the gate
             live_fields = []
+
+    # CLI-SUB-005-R6 root cause 1 (see the module note above
+    # _uncommitted_live_required_fields' neighbourhood): `parse_form_schema`
+    # above can only ever see what `page.content()`'s STRING serialized —
+    # never an open shadow root's content, which is structurally absent from
+    # that string, not merely unparsed. Supplement (never replace) the
+    # parser-derived `live_fields` with the LIVE, shadow-DOM-piercing
+    # composed census — but only for a control the parser could NOT already
+    # classify (matched by its own id/name/`[data-field-path]` ancestor
+    # against every name the parser DID recognize): a field the parser
+    # already covers is already handled, correctly, by the two loops below,
+    # and must not be double-processed under a second, synthetic name.
+    known_field_names = {str(f["name"]) for f in live_fields}
+    for item in _composed_live_census(page):
+        if item.get("committed"):
+            continue  # already satisfied — not this census's job to report
+        control_id = str(item.get("id") or "")
+        control_name = str(item.get("controlName") or "")
+        field_path = str(item.get("fieldPath") or "")
+        if (
+            (control_id and control_id in known_field_names)
+            or (control_name and control_name in known_field_names)
+            or (field_path and field_path in known_field_names)
+        ):
+            continue
+        marker = str(item.get("marker") or "")
+        if not marker:
+            continue
+        synthetic_name = f"__aether_live_census_{marker}"
+        if synthetic_name in known_field_names:
+            continue
+        known_field_names.add(synthetic_name)
+        live_fields.append(
+            {
+                "name": synthetic_name,
+                "label": str(item.get("label") or "an embedded control"),
+                "kind": _live_census_kind(str(item.get("kind") or "")),
+                "required": True,
+                "options": [],
+                "scope": "",
+                # A direct, shadow-DOM-piercing locator (Playwright's CSS
+                # engine pierces open shadow roots by default) — never
+                # assembled from an id/name this control may not have.
+                "liveSelector": f'[data-aether-live-field="{marker}"]',
+            }
+        )
+
     live_required_names = {str(f["name"]) for f in live_fields if f.get("required")}
 
     seen: set[str] = set()
@@ -2557,8 +2956,13 @@ def playwright_form_submitter(
                     # fixed-point loop (_converge_presubmit_state) that
                     # rescans and refills together until a pass changes
                     # nothing, then a final READ-ONLY pass confirms it before
-                    # returning — no DOM mutation of any kind happens between
-                    # this call returning and the submit click below.
+                    # returning. CLI-SUB-005-R6: the ONLY thing that happens
+                    # between this call returning and the submit click below
+                    # is installing our OWN defensive instrumentation
+                    # (_install_submission_guard) — an inert marker attribute
+                    # plus an event listener that can never itself reveal,
+                    # hide, or answer anything — never a change to any
+                    # question's requiredness or committed state.
                     try:
                         unplanned_filled = _converge_presubmit_state(
                             page,
@@ -2574,16 +2978,69 @@ def playwright_form_submitter(
                         # still strictly before the submit click below: the
                         # decisive check that nothing shaped like a control,
                         # on any readable or unreadable surface, was left
-                        # unaccounted for. Read-only, like everything above
-                        # it — the "no DOM mutation before the submit click"
-                        # guarantee in the comment above still holds.
+                        # unaccounted for. Read-only, like everything above it.
                         _verify_no_unverifiable_form_surface(page, channel)
+                        # CLI-SUB-005-R6 root cause 2 (RUN-20260818T0223Z/
+                        # SUB-005-R5/08-adversarial-final.md attack #7):
+                        # everything above is a CHECK; the click below is the
+                        # ACT, and a page's own mousedown/focus handler on the
+                        # submit control can reveal a brand-new required field
+                        # in that exact gap — deterministically, by DOM
+                        # event-ordering spec, not a race. Rather than add
+                        # another check-then-act layer, GUARD THE SUBMISSION
+                        # EVENT ITSELF: install a capture-phase listener, in
+                        # the browser, that re-runs the identical shadow-DOM-
+                        # piercing live census (root cause 1) at the literal
+                        # instant the submit/click event fires and cancels the
+                        # submission outright if anything required is still
+                        # uncommitted THEN. Installed on the top document and
+                        # every reachable frame, mirroring the backstop above.
+                        _install_submission_guard(page)
+                        for frame in _reachable_frames(page):
+                            _install_submission_guard(frame)
                     except ManualStepRequired:
                         page.screenshot(path=str(screenshot), full_page=True)
                         raise
                     filled.extend(unplanned_filled)
                 before_url = page.url
                 submitted = _activate_submit(page)
+                # The click above can succeed (Playwright's own actionability
+                # check is satisfied) even when our capture-phase guard
+                # cancelled the SUBMISSION itself — `submitted` alone cannot
+                # tell the two apart, so read back what the guard actually
+                # blocked, on every surface it was installed on.
+                blocked_submission = _read_blocked_submission(page)
+                if not blocked_submission:
+                    for frame in _reachable_frames(page):
+                        frame_blocked = _read_blocked_submission(frame)
+                        if frame_blocked:
+                            blocked_submission = frame_blocked
+                            break
+                if blocked_submission:
+                    # CLI-SUB-005-R6 — THE DECISIVE INVARIANT: a required
+                    # control uncommitted at the instant of submission ⇒ the
+                    # submission never completed ⇒ this is an honest refusal,
+                    # never a submitted:true outcome. The employer received
+                    # NOTHING — the guard cancelled the browser's own default
+                    # action before it ever fired.
+                    page.screenshot(path=str(screenshot), full_page=True)
+                    labels = "; ".join(
+                        str(item.get("label") or item.get("kind") or "a required field")
+                        for item in blocked_submission
+                    )
+                    raise ManualStepRequired(
+                        "unplanned_required_field",
+                        (
+                            "This application revealed a required question "
+                            "(sometimes hidden inside a shadow-DOM widget, "
+                            "sometimes only at the exact instant of "
+                            "submitting) that Aether could not verify was "
+                            "answered — its own browser-level guard refused "
+                            "to let the submission go through, so nothing "
+                            "was sent: " + labels
+                        ),
+                        question=labels,
+                    )
                 page.wait_for_timeout(1500)
                 confirmation = (
                     _confirmation_signal(page, before_url) if apply_url else None
