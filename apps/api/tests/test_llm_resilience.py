@@ -404,6 +404,48 @@ class TestRouter503Mapping:
         assert detail == LLM_UNAVAILABLE_USER_MESSAGE
         assert "backend" not in detail.lower()
         assert "simulated outage" not in detail.lower()
+        assert resp.headers.get("Retry-After") is None
+
+    def test_tailor_rate_limit_503_advertises_retry_after(
+        self, client, auth_headers, patch_agent_run
+    ):
+        job = _seed_job(client, auth_headers)
+        from app.agents import tailor_agent as tailor_module
+        from app.services.llm_client import LLM_RATE_LIMITED_USER_MESSAGE
+
+        def _boom():
+            raise LLMUnavailableError(
+                "LLM backend unavailable: live call failed: LLM provider HTTP 429: "
+                "rate_limit_error"
+            )
+
+        patch_agent_run(tailor_module.TailoringAgent, _boom)
+        resp = client.post(
+            "/agents/tailor/run", json={"job_id": job["id"]}, headers=auth_headers
+        )
+        assert resp.status_code == 503, resp.text
+        assert resp.json()["detail"] == LLM_RATE_LIMITED_USER_MESSAGE
+        assert resp.headers.get("Retry-After") == "60"
+
+    def test_tailor_cooling_503_advertises_remaining_cooldown(
+        self, client, auth_headers, patch_agent_run
+    ):
+        job = _seed_job(client, auth_headers)
+        from app.agents import tailor_agent as tailor_module
+
+        def _boom():
+            raise LLMUnavailableError(
+                "LLM backend unavailable: live call failed: LLM provider HTTP 429 "
+                "(cooling): model claude-opus-4-8 is rate-limited; cooldown ends "
+                "in 812s for 'tailor'"
+            )
+
+        patch_agent_run(tailor_module.TailoringAgent, _boom)
+        resp = client.post(
+            "/agents/tailor/run", json={"job_id": job["id"]}, headers=auth_headers
+        )
+        assert resp.status_code == 503, resp.text
+        assert resp.headers.get("Retry-After") == "812"
 
     def test_failed_run_is_audited(self, client, auth_headers, patch_agent_run):
         job = _seed_job(client, auth_headers)
