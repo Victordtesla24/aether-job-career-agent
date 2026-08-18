@@ -27,6 +27,11 @@ const listUserCredentials = vi.fn();
 const verifyUserProvider = vi.fn();
 const putUserProviderCredential = vi.fn();
 const deleteUserProviderCredential = vi.fn();
+// RUN-20260818T0223Z deploy-merge P3 fix regression guard: the UPO-1 mint
+// panel's own Connect (`startUserAnthropicOAuth`) must be reachable-but-
+// unmocked-network-free here too, since the state-isolation test below
+// exercises BOTH the generic and the mint panel in the same render.
+const startUserAnthropicOAuth = vi.fn();
 
 vi.mock("../api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../api")>();
@@ -38,6 +43,7 @@ vi.mock("../api", async (importOriginal) => {
     verifyUserProvider: (...args: unknown[]) => verifyUserProvider(...args),
     putUserProviderCredential: (...args: unknown[]) => putUserProviderCredential(...args),
     deleteUserProviderCredential: (...args: unknown[]) => deleteUserProviderCredential(...args),
+    startUserAnthropicOAuth: (...args: unknown[]) => startUserAnthropicOAuth(...args),
   };
 });
 
@@ -348,5 +354,82 @@ describe("GAP-PROVIDER-OAUTH-1 — user-scope Connect button", () => {
       />,
     );
     expect(screen.queryByTestId("user-oauth-connect")).toBeNull();
+  });
+});
+
+describe("RUN-20260818T0223Z deploy-merge — generic connect and UPO-1 mint state isolation (P3)", () => {
+  // Both anthropic user-scope Connect affordances (UPO-1's mint panel,
+  // testid anthropic-oauth-user-*, and GAP-PROVIDER-OAUTH-1's generic panel,
+  // testid user-oauth-*) render side by side for the same provider — see
+  // docs/delivery/evidence/RUN-20260818T0223Z/FEAT-PROVIDER/
+  // 09-deploy-merge-resolution.md §3.2/§3.3. They MUST NOT share their
+  // paste-back step/code state: triggering one must never flip the other's
+  // paste-back UI open. Regression-proven by mutation in
+  // 10-resolution-security-review.md §3 (collapsing userOauthStep/
+  // userOauthCode back onto the shared oauthStep/oauthCode pair leaves the
+  // whole 45-test frontend battery green) — these two tests close that gap.
+
+  it("advancing the GENERIC connect flow does not flip the mint panel into paste-back mode", async () => {
+    startUserProviderOAuth.mockResolvedValue({
+      authorizeUrl: "https://platform.claude.com/oauth/code/callback?client_id=abc&state=xyz",
+      flow: "code_relay",
+      provider: "anthropic",
+    });
+    vi.spyOn(window, "open").mockReturnValue({
+      location: { href: "" },
+      close: vi.fn(),
+      closed: false,
+    } as unknown as Window);
+
+    render(
+      <ProviderConfigModal
+        provider={provider()}
+        onClose={noop}
+        onSaved={asyncNoop}
+        onNotice={noop}
+        scope="user"
+      />,
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("user-oauth-connect"));
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId("user-oauth-code-input")).toBeTruthy();
+    });
+
+    // The GENERIC panel's own paste box opened — the MINT panel's must not,
+    // and the mint panel's own start endpoint must never have been touched.
+    expect(screen.queryByTestId("anthropic-oauth-user-code-input")).toBeNull();
+    expect(startUserAnthropicOAuth).not.toHaveBeenCalled();
+  });
+
+  it("advancing the MINT connect flow does not flip the generic panel into paste-back mode", async () => {
+    startUserAnthropicOAuth.mockResolvedValue({
+      authorizeUrl: "https://claude.com/cai/oauth/authorize?state=FAKESTATE",
+    });
+    vi.spyOn(window, "open").mockReturnValue(null);
+
+    render(
+      <ProviderConfigModal
+        provider={provider()}
+        onClose={noop}
+        onSaved={asyncNoop}
+        onNotice={noop}
+        scope="user"
+      />,
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId("anthropic-oauth-user-connect"));
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId("anthropic-oauth-user-code-input")).toBeTruthy();
+    });
+
+    // The MINT panel's own paste box opened — the GENERIC panel's must not,
+    // and the generic panel's own start endpoint must never have been touched.
+    expect(screen.queryByTestId("user-oauth-code-input")).toBeNull();
+    expect(startUserProviderOAuth).not.toHaveBeenCalled();
   });
 });

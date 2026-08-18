@@ -594,3 +594,177 @@ def test_exchange_unknown_or_api_key_only_provider_404(client, auth_headers, _cl
         headers=auth_headers,
     )
     assert resp.status_code == 404, resp.text
+
+
+# ===========================================================================
+# 5. Regression guard — neither per-user route may sync
+#    CLAUDE_CODE_OAUTH_TOKEN into the operator-facing repo-root .env
+#    (RUN-20260818T0223Z deploy-merge resolution, P1 fix — see
+#    docs/delivery/evidence/RUN-20260818T0223Z/FEAT-PROVIDER/
+#    09-deploy-merge-resolution.md §2.4 and the follow-up adversarial review
+#    at 10-resolution-security-review.md §1c, which proved by mutation that
+#    NOTHING in the mandated + recommended battery (128 tests) caught this
+#    call being reintroduced into user_provider_oauth_callback/_exchange).
+#
+#    Mirrors test_user_anthropic_oauth_mint.py::test_user_save_does_not_
+#    sync_oauth_token_into_deployment_env's byte-identical-after pattern:
+#    pre-write the isolated env file with a fake OPERATOR token line
+#    (overriding the autouse _isolate_env_file fixture's own tmp_path target
+#    for this one test), run the route, assert the file is untouched
+#    byte-for-byte afterwards — not merely "does not exist", so a bug that
+#    APPENDS or rewrites the line (rather than creating a fresh file) is
+#    caught too. Every test below also asserts the credential really did
+#    land as `authMode == "oauth_token"` in UserProviderCredential, so a
+#    vacuous pass (the sync-guarded branch never actually being reached) is
+#    ruled out.
+# ===========================================================================
+
+
+def test_callback_anthropic_app_callback_oauth_token_never_syncs_operator_env(
+    client, auth_headers, test_user_id, monkeypatch, tmp_path, _clean_provider_oauth_state,
+):
+    """The app-hosted callback is reachable for Anthropic once an operator
+    registers a client (see test_start_anthropic_app_callback_when_operator_
+    configured_client) — and Anthropic's descriptor is `token_auth_mode ==
+    "oauth_token"` regardless of flow, which is the exact condition the
+    removed sync call was guarded on. Must still never touch the operator's
+    restart-survival CLAUDE_CODE_OAUTH_TOKEN line."""
+    env_file = tmp_path / "operator.env"
+    original = "CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-OPERATORkeepme\n"
+    env_file.write_text(original)
+    monkeypatch.setenv("AETHER_ENV_FILE_PATH", str(env_file))
+
+    monkeypatch.setenv("ANTHROPIC_OAUTH_CLIENT_ID", "operator-registered-client-id")
+    monkeypatch.setenv(
+        "ANTHROPIC_OAUTH_REDIRECT_URI",
+        "https://example-app.test/api/agents/user/providers/anthropic/oauth/callback",
+    )
+    start = client.post("/agents/user/providers/anthropic/oauth/start", headers=auth_headers)
+    assert start.status_code == 200, start.text
+    assert start.json()["flow"] == "app_callback"
+    state = _state_from_start(start.json())
+
+    from app.services import anthropic_oauth
+
+    def _fake_post_token(body):
+        return {
+            "access_token": FAKE_ANTHROPIC_ACCESS,
+            "refresh_token": FAKE_ANTHROPIC_REFRESH,
+            "expires_in": 31536000,
+        }
+
+    monkeypatch.setattr(anthropic_oauth, "_post_token", _fake_post_token)
+
+    callback = client.get(
+        "/agents/user/providers/anthropic/oauth/callback",
+        params={"code": "FAKECODE", "state": state},
+    )
+    assert callback.status_code == 200, callback.text
+    assert '"connected": true' in callback.text or '"connected":true' in callback.text
+
+    from app.repositories.user_provider_credential import UserProviderCredentialRepository
+
+    mine = UserProviderCredentialRepository().get_secret(test_user_id, "anthropic")
+    assert mine is not None, "precondition: the credential must actually have been stored"
+    assert mine["authMode"] == "oauth_token", (
+        "precondition: this must be the exact oauth_token branch the removed "
+        "sync call was guarded on — otherwise this test would pass vacuously"
+    )
+
+    assert env_file.read_text() == original, (
+        "the app-hosted callback must NEVER touch the operator's "
+        "CLAUDE_CODE_OAUTH_TOKEN .env line, even for an oauth_token credential"
+    )
+    assert FAKE_ANTHROPIC_ACCESS not in env_file.read_text()
+
+
+def test_exchange_anthropic_code_relay_oauth_token_never_syncs_operator_env(
+    client, auth_headers, test_user_id, monkeypatch, tmp_path, _clean_provider_oauth_state,
+):
+    """The code_relay exchange (Anthropic's default flow, no operator
+    override needed) must never touch the operator's restart-survival
+    CLAUDE_CODE_OAUTH_TOKEN line either."""
+    env_file = tmp_path / "operator.env"
+    original = "CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-OPERATORkeepme\n"
+    env_file.write_text(original)
+    monkeypatch.setenv("AETHER_ENV_FILE_PATH", str(env_file))
+
+    start = client.post("/agents/user/providers/anthropic/oauth/start", headers=auth_headers)
+    assert start.status_code == 200, start.text
+    assert start.json()["flow"] == "code_relay"
+    state = _state_from_start(start.json())
+
+    from app.services import anthropic_oauth
+
+    def _fake_post_token(body):
+        return {
+            "access_token": FAKE_ANTHROPIC_ACCESS,
+            "refresh_token": FAKE_ANTHROPIC_REFRESH,
+            "expires_in": 31536000,
+        }
+
+    monkeypatch.setattr(anthropic_oauth, "_post_token", _fake_post_token)
+
+    exchange = client.post(
+        "/agents/user/providers/anthropic/oauth/exchange",
+        json={"pastedCode": f"FAKECODE#{state}"},
+        headers=auth_headers,
+    )
+    assert exchange.status_code == 200, exchange.text
+
+    from app.repositories.user_provider_credential import UserProviderCredentialRepository
+
+    mine = UserProviderCredentialRepository().get_secret(test_user_id, "anthropic")
+    assert mine is not None, "precondition: the credential must actually have been stored"
+    assert mine["authMode"] == "oauth_token", (
+        "precondition: this must be the exact oauth_token branch the removed "
+        "sync call was guarded on — otherwise this test would pass vacuously"
+    )
+
+    assert env_file.read_text() == original, (
+        "the code_relay exchange must NEVER touch the operator's "
+        "CLAUDE_CODE_OAUTH_TOKEN .env line, even for an oauth_token credential"
+    )
+    assert FAKE_ANTHROPIC_ACCESS not in env_file.read_text()
+
+
+def test_callback_openrouter_api_key_never_syncs_operator_env(
+    client, auth_headers, test_user_id, monkeypatch, tmp_path, _clean_provider_oauth_state,
+):
+    """OpenRouter's descriptor is `token_auth_mode == "api_key"`, so the
+    removed sync call's guard (`token_auth_mode == "oauth_token"`) never
+    fires for it either way — recorded here as a "where applicable" companion
+    to the two Anthropic tests above, not a mutation-killer for this specific
+    defect (openrouter is never oauth_token mode), so a future change that
+    widens the guard's condition still has a regression test watching it."""
+    env_file = tmp_path / "operator.env"
+    original = "CLAUDE_CODE_OAUTH_TOKEN=sk-ant-oat01-OPERATORkeepme\n"
+    env_file.write_text(original)
+    monkeypatch.setenv("AETHER_ENV_FILE_PATH", str(env_file))
+
+    start = client.post("/agents/user/providers/openrouter/oauth/start", headers=auth_headers)
+    assert start.status_code == 200, start.text
+    state = _state_from_start(start.json())
+
+    from app.services import openrouter_oauth
+
+    monkeypatch.setattr(openrouter_oauth, "_post_exchange", lambda body: {"key": FAKE_OR_KEY})
+
+    callback = client.get(
+        "/agents/user/providers/openrouter/oauth/callback",
+        params={"code": "FAKEOPENROUTERCODE", "state": state},
+    )
+    assert callback.status_code == 200, callback.text
+    assert '"connected": true' in callback.text or '"connected":true' in callback.text
+
+    from app.repositories.user_provider_credential import UserProviderCredentialRepository
+
+    mine = UserProviderCredentialRepository().get_secret(test_user_id, "openrouter")
+    assert mine is not None, "precondition: the credential must actually have been stored"
+    assert mine["authMode"] == "api_key"
+
+    assert env_file.read_text() == original, (
+        "an openrouter connect must never touch the operator's "
+        "CLAUDE_CODE_OAUTH_TOKEN .env line"
+    )
+    assert FAKE_OR_KEY not in env_file.read_text()
