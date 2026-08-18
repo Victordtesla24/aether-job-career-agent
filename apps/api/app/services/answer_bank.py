@@ -293,7 +293,17 @@ _CONCEPT_WORK_RIGHTS = Concept(
     # SPECIFICS question (sensitive), not the stable yes/no work-rights one.
     # "right"+"work" also appears in skills/fit questions ("right skills to
     # work in a fast-paced team") — those are not authorisation to work.
-    none_of=("sponsorship", "sponsor", "subclass", "visa", "expiry", "expires", "skill", "skills", "fit"),
+    none_of=(
+        "sponsorship",
+        "sponsor",
+        "subclass",
+        "visa",
+        "expiry",
+        "expires",
+        "skill",
+        "skills",
+        "fit",
+    ),
 )
 
 #: Order is meaningful: the FIRST concept that matches wins, so the sensitive
