@@ -301,6 +301,63 @@ describe("SettingsPage — Job Board Sync is real, not a fake setTimeout (MV-set
     fireEvent.click(syncAllBtn);
     expect(runScoutAgentMock).not.toHaveBeenCalled();
   });
+
+  it("shows an inline (not hover-only) notice naming the missing profile field(s), visible on first render", async () => {
+    // FEAT-JOBBOARD notice restored R3 (lane/feat-jobboard-r2 rebase onto
+    // origin/main@a32ea3a6/PR23): pre-dates the default-on catalog rework and
+    // was dropped by the rebase; PR23's catalog fix (never an empty board
+    // list) is a different, complementary problem from this one — WHY Sync
+    // All is disabled — so it does not supersede this notice.
+    fetchSettingsMock.mockResolvedValue(SETTINGS_MISSING_PROFILE);
+    fetchCareerDataMock.mockResolvedValue(CAREER_DATA);
+    fetchSubscriptionMock.mockResolvedValue(SUBSCRIPTION);
+
+    await renderOnIntegrations();
+
+    const notice = screen.getByTestId("jobboard-missing-profile-notice");
+    expect(notice.getAttribute("role")).toBe("status");
+    const text = notice.textContent ?? "";
+    expect(text).toMatch(/target role and location/i);
+    expect(text).toMatch(/not set on your profile yet/i);
+    expect(text).toMatch(/expect 0 jobs discovered/i);
+
+    const cta = screen.getByTestId("jobboard-profile-cta");
+    fireEvent.click(cta);
+    await waitFor(() => screen.getByTestId("settings-profile"));
+  });
+
+  it("does not show the missing-profile notice once target role and location are both set", async () => {
+    fetchSettingsMock.mockResolvedValue(SETTINGS);
+    fetchCareerDataMock.mockResolvedValue(CAREER_DATA);
+    fetchSubscriptionMock.mockResolvedValue(SUBSCRIPTION);
+
+    await renderOnIntegrations();
+
+    expect(screen.queryByTestId("jobboard-missing-profile-notice")).toBeNull();
+  });
+});
+
+describe("SettingsPage — real discovery cadence in the Integrations legend (GAP-P7-DISCOVERY-002, closes R2 delta review P0 Finding 1)", () => {
+  it("names the real mechanism and cadence, conditioned on plan + complete profile — never a bare unverifiable claim", async () => {
+    fetchSettingsMock.mockResolvedValue(FULL_CATALOG_SETTINGS);
+    fetchCareerDataMock.mockResolvedValue(CAREER_DATA);
+    fetchSubscriptionMock.mockResolvedValue(SUBSCRIPTION);
+
+    await renderOnIntegrations();
+
+    const section = screen.getByTestId("settings-integrations");
+    const text = section.textContent ?? "";
+    // The R2 copy this replaces cited a nonexistent `aether-discovery.timer`
+    // systemd unit (R2 delta review P0 Finding 1) — this legend must never
+    // reference that unit again.
+    expect(text).not.toMatch(/aether-discovery\.timer/i);
+    expect(text).toMatch(/every 30 minutes/i);
+    expect(text).toMatch(/discovery worker/i);
+    // Honestly conditioned — never a claim that applies unconditionally to
+    // every viewer regardless of their own plan/profile state.
+    expect(text).toMatch(/active plan/i);
+    expect(text).toMatch(/complete profile/i);
+  });
 });
 
 describe("SettingsPage — Job Board Integrations default-on catalog", () => {

@@ -551,6 +551,18 @@ export default function SettingsClient({
   // than firing a call we know the honest fallback would have to guess at.
   const jobBoardSyncReady = profile.targetRole.trim().length > 0 && profile.location.trim().length > 0;
 
+  // FEAT-JOBBOARD (restored R3 — this inline notice pre-dates PR23's
+  // default-on catalog rework and was dropped when lane/feat-jobboard-r2 was
+  // rebased onto origin/main@a32ea3a6; PR23's catalog fix (never an empty
+  // board list) is a different, complementary problem from this one — WHY
+  // Sync All is disabled — so it does not supersede this notice). Which
+  // profile field(s) are missing, in profile-form order — drives both the
+  // honest "why 0 jobs" copy below and its Profile CTA.
+  const missingProfileFields: string[] = [
+    profile.targetRole.trim() ? null : "target role",
+    profile.location.trim() ? null : "location",
+  ].filter((v): v is string => v !== null);
+
   // PAY-R3-06: the current plan's price, cross-referenced from the public
   // plan catalog by id + billing interval. `null` when the catalog hasn't
   // loaded (or failed to), or when the current plan/interval isn't found
@@ -1413,6 +1425,35 @@ export default function SettingsClient({
                     {jobBoardSyncError}
                   </p>
                 ) : null}
+                {/* FEAT-JOBBOARD (restored R3): the honest reason discovery
+                    finds nothing — rendered INLINE (not hover-only, see the
+                    Sync All `title` above which stays as a bonus for mouse
+                    users) so it is visible on first render, including on
+                    touch devices. Only the missing field(s) are named, and
+                    the CTA switches straight to the Profile tab rather than
+                    linking off-page. */}
+                {!jobBoardSyncReady ? (
+                  <p
+                    role="status"
+                    data-testid="jobboard-missing-profile-notice"
+                    className="mb-3 rounded-xl border border-aether-amber/25 bg-aether-amber/10 p-3 text-[11px] text-aether-muted"
+                  >
+                    <i className="fa-solid fa-circle-info mr-1.5 text-aether-amber" aria-hidden="true" />
+                    {missingProfileFields.length === 2
+                      ? "Target role and location are"
+                      : `${missingProfileFields[0].charAt(0).toUpperCase()}${missingProfileFields[0].slice(1)} is`}{" "}
+                    not set on your profile yet, so job discovery has nothing to search for — expect 0 jobs
+                    discovered until then, and Sync All stays disabled.{" "}
+                    <button
+                      type="button"
+                      data-testid="jobboard-profile-cta"
+                      onClick={() => setActive("profile")}
+                      className="font-semibold text-aether-coral hover:underline"
+                    >
+                      Set {missingProfileFields.join(" and ")} in Profile
+                    </button>
+                  </p>
+                ) : null}
                 <div className="space-y-2.5">
                   {data.integrations.length === 0 ? (
                     <p
@@ -1452,7 +1493,25 @@ export default function SettingsClient({
                 </div>
                 <p className="mt-3 text-[10px] text-aether-muted-dim">
                   <i className="fa-solid fa-circle-info mr-1.5" aria-hidden="true" />
-                  Job boards are synced together — per-source sync isn&rsquo;t available yet.
+                  Job boards are synced together — per-source sync isn&rsquo;t available yet.{" "}
+                  {/* GAP-P7-DISCOVERY-002 (R3, closes R2 delta review P0 Finding 1):
+                      the REAL mechanism and cadence — a genuine ARQ cron on the
+                      live worker process (discovery_sweep_cron,
+                      apps/api/app/workers/discovery_sweep.py, registered in
+                      apps/api/app/workers/settings.py, every 30 minutes at
+                      :03/:33). R2 previously claimed this on a nonexistent
+                      `aether-discovery.timer` systemd unit; that gap is what
+                      this cron closes. Deliberately conditioned on an active
+                      plan AND a complete profile (the same two facts
+                      `jobBoardSyncReady` and `subscription.entitlement.entitled`
+                      already gate the Sync All button and the profile notice
+                      on, both visible on this same card) so this sentence
+                      never overclaims for an account the sweep would not
+                      actually serve — the exact fabricated-integration-state
+                      the R2 delta review's Finding 2 warned against. */}
+                  Subscribers with an active plan and a complete profile (target role and location) are
+                  also searched automatically every 30 minutes by Aether&rsquo;s discovery worker — no
+                  manual Sync required.
                 </p>
               </section>
 
