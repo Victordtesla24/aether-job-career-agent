@@ -13,6 +13,7 @@ import html
 import json
 
 from app.services.sales_branding import BRAND, brand_logo_url
+from app.services.stripe_gateway import app_base_url
 
 ARTIFACT_KIND = "poster"
 PRODUCT_NAME = "Aether Career Job Agent"
@@ -85,7 +86,7 @@ def render_business_card_svg() -> str:
     merge fields — this is a template, not a fabricated sample person.
     """
     g = BRAND
-    url = "5cb5f0620.abacusai.cloud"
+    url = app_base_url().removeprefix("https://").removeprefix("http://")
     return f'''<svg xmlns="http://www.w3.org/2000/svg" width="1050" height="600" viewBox="0 0 1050 600" role="img" aria-labelledby="card-title card-desc">
   <title id="card-title">Aether Career Job Agent business card</title>
   <desc id="card-desc">Obsidian ground, gilt wordmark, merge-field contact lines.</desc>

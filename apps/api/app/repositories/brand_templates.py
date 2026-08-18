@@ -11,6 +11,7 @@ from typing import Any
 
 from app.db import get_connection, new_id, rows_to_dicts
 from app.services.brand_documents import DOCUMENT_KINDS
+from app.services.stripe_gateway import app_base_url
 
 _EDITABLE_KIND = "auto_reply"
 # Absolute HTTPS endpoint that visibly carries the unsubscribe action. This is
@@ -65,7 +66,7 @@ def default_template(kind: str) -> dict[str, str]:
         ),
         "footer": (
             "Aether Career Job Agent — Operated by Vikram Sarkar\n"
-            "https://5cb5f0620.abacusai.cloud/unsubscribe"
+            f"{app_base_url()}/unsubscribe"
         ),
     }
 

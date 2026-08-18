@@ -216,6 +216,32 @@ def test_app_base_url_rejects_retired_abacus_host(monkeypatch):
     assert sg.app_base_url() == "https://aether-dev.srv1356245.hstgr.cloud"
 
 
+def test_brand_chrome_rejects_retired_abacus_host(monkeypatch):
+    """ADM-001: Brand-tab preview is the live send — the mark must not 404."""
+    from app.services.brand_artifacts import render_business_card_svg
+    from app.services.brand_documents import _chrome
+    from app.services.sales_branding import brand_logo_url, render_sales_outreach_html
+    from app.services.stripe_gateway import app_base_url
+
+    monkeypatch.delenv("APP_BASE_URL", raising=False)
+    monkeypatch.delenv("AETHER_PUBLIC_URL", raising=False)
+    live = app_base_url()
+    assert brand_logo_url() == f"{live}/brand/aether-mark.png"
+    assert "abacusai.cloud" not in brand_logo_url()
+
+    html = render_sales_outreach_html("Hello", "Hello there\n\n--\nfooter")
+    assert "abacusai.cloud" not in html
+    assert f"{live}/brand/aether-mark.png" in html
+
+    doc = _chrome("Tax invoice", "<p>body</p>", "footnote")
+    assert "abacusai.cloud" not in doc
+    assert live in doc
+
+    card = render_business_card_svg()
+    assert "abacusai.cloud" not in card
+    assert "aether.srv1356245.hstgr.cloud" in card
+
+
 def test_personalize_template_is_deterministic():
     assert personalize_template("Hi {{name}},", "Jane Doe") == "Hi Jane,"
     assert personalize_template("Hi {{name}},", None) == "Hi there,"

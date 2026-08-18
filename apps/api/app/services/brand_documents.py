@@ -32,12 +32,12 @@ from typing import Any, Optional
 
 from app.repositories.billing import gst_breakdown
 from app.services.sales_branding import BRAND, brand_logo_url
+from app.services.stripe_gateway import app_base_url
 
 #: Business identity — identical facts to the sales agent's ratified
 #: compliance footer (agents/sales_agent.py COMPLIANCE_FOOTER). Single place.
 BUSINESS_NAME = "Aether Career Job Agent"
 BUSINESS_OPERATOR = "Operated by Vikram Sarkar"
-BUSINESS_URL = "https://5cb5f0620.abacusai.cloud"
 _UNSUBSCRIBE_URL = re.compile(
     r"https://[^\s<>\"']+/[^\s<>\"，。]*unsubscribe[^\s<>\"，。]*",
     re.IGNORECASE,
@@ -214,14 +214,15 @@ def _chrome(
     and identity block as the sales email wrapper."""
     g = BRAND
     title_html = _esc(title)
+    product_url = app_base_url()
     footer_html = (
         _render_footer_override(footer_override)
         if footer_override is not None
         else (
             f'{BUSINESS_NAME} — {BUSINESS_OPERATOR}<br>\n'
-            f'           <a href="{BUSINESS_URL}" '
+            f'           <a href="{product_url}" '
             f'style="color:{g["goldAccessible"]};\n'
-            f'              text-decoration:none;">{BUSINESS_URL}</a>'
+            f'              text-decoration:none;">{product_url}</a>'
         )
     )
     return f"""<!DOCTYPE html>
