@@ -57,5 +57,5 @@ jobs:
             echo "::error::DATABASE_URL_TEST is not set — refusing to report success for a suite that did not run"
             exit 1
           fi
-          pip install -r requirements.txt
+          pip install -r requirements.txt "pytest>=9,<10"
           python -m pytest tests/ -q
