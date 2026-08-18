@@ -9,18 +9,28 @@ triggered it automatically. It only ran when a human POSTed
 tick, once a day, that runs the SAME code path for every user who could
 possibly receive a digest.
 
-HONEST SCOPE — this cron closes the "nothing schedules it" gap. It does NOT,
-and must NOT, make the digest email actually LEAVE the building on its own:
+HONEST SCOPE (phase 1) — this cron closed the "nothing schedules it" gap.
 ``NotificationAgent.run()`` queues a ``kind="notification_digest"``
 ``ApprovalRequest`` (``outreach_support.queue_email_approval`` — "nothing is
-sent here"), and that approval sits PENDING until the user (or an admin)
-calls ``POST /approvals/{id}/execute``. There is no auto-approve / auto-send
-setting anywhere in the approvals system for any kind, and this cron does not
-invent one — that would be a policy decision for the product owner, not
-something a scheduler should silently assume. So today, this cron makes the
-digest get COMPOSED and QUEUED automatically, every day, for every eligible
-user; the send itself remains a one-click manual approval, exactly as it is
-for a manually-triggered run.
+sent here"); before phase 2 below that approval sat PENDING until the user
+(or an admin) called ``POST /approvals/{id}/execute`` — there was no
+auto-approve / auto-send setting anywhere in the approvals system for any
+kind, and phase 1 deliberately did not invent one.
+
+PHASE 2 — STRICTLY-SCOPED AUTO-SEND (FEAT-EMAIL-BRAND, RUN-20260818T0223Z,
+Owner directive 2026-08-18: "sending automated email about my daily job
+application summary on behalf of Aether Career Agent Web-App"). Immediately
+after a digest is queued, this cron calls
+``app.routers.approvals.auto_execute_notification_digest`` — which approves
+and sends it automatically, but ONLY when the recipient PROVABLY belongs to
+the same user (matches one of their own currently-connected, OAuth-verified
+Gmail addresses) and the kill-switch ``AETHER_DIGEST_AUTO_SEND`` (default
+TRUE) is on. Any other approval kind, or any recipient that is not provably
+self-mail, is left PENDING exactly as phase 1 left it — see that function's
+docstring for the full guarantee, and
+docs/delivery/evidence/RUN-20260818T0223Z/05-decision-memos/
+FEAT-EMAIL-BRAND-autosend.md for the policy rationale and reversal cost. This
+is NOT a general auto-send: nothing else in the approvals system is touched.
 
 Mirrors the manual trigger EXACTLY (``app.routers.agents``, mode
 ``"notification"``): same callable resolution, same pause check
@@ -126,13 +136,36 @@ def _skip_reason(exc: "Exception") -> str:
     return f"error_{type(exc).__name__}"
 
 
+def _attempt_auto_send(approval_id: str, user_id: str) -> dict[str, Any] | None:
+    """Best-effort call into the strictly-scoped auto-send (phase 2). Never
+    raises: an unexpected failure here must degrade to "left pending", not
+    kill the cron tick for every other user. ``auto_execute_notification_
+    digest`` itself already returns ``None`` (never raises) for every honest
+    non-eligible case — this wrapper only guards against a genuinely
+    unexpected exception (e.g. a DB fault) escaping it."""
+    from app.routers.approvals import auto_execute_notification_digest
+
+    try:
+        return auto_execute_notification_digest(approval_id, user_id)
+    except Exception:  # noqa: BLE001 — a failed auto-send must not sink the tick
+        logger.exception(
+            "digest cron %s: auto-send attempt raised unexpectedly — "
+            "approval left as-is", user_id,
+        )
+        return None
+
+
 async def notification_digest_cron(ctx: Any) -> dict[str, Any]:
     """ARQ cron: run one notification-digest attempt per Gmail-connected user,
     once a day (21:00 UTC — see module docstring for the offset rationale).
 
     Honest per-user outcomes, never silently dropped:
+    * ``auto_sent`` — a ``notification_digest`` was queued AND auto-sent (the
+      strictly-scoped phase-2 self-mail auto-send fired);
     * ``enqueued`` — a real ``notification_digest`` approval was queued (or
-      refreshed, if one was already pending) for the user to send;
+      refreshed, if one was already pending) but NOT auto-sent (flag off,
+      recipient not provably self-mail, or the auto-send attempt failed) —
+      it sits exactly where phase 1 left it, waiting for manual approval;
     * ``no_activity`` — the agent ran and genuinely found nothing new since
       the user's last SENT digest (``NotificationAgent`` itself refuses to
       queue an empty "update" email — that would be fabricated activity);
@@ -155,6 +188,7 @@ async def notification_digest_cron(ctx: Any) -> dict[str, Any]:
 
     users = _eligible_user_ids()
     enqueued = 0
+    auto_sent = 0
     outcomes: dict[str, int] = {}
 
     def _tally(label: str) -> None:
@@ -173,7 +207,14 @@ async def notification_digest_cron(ctx: Any) -> dict[str, Any]:
             continue
         if result.get("approvalId"):
             enqueued += 1
-            _tally("enqueued")
+            sent = await asyncio.to_thread(
+                _attempt_auto_send, result["approvalId"], user_id
+            )
+            if sent:
+                auto_sent += 1
+                _tally("auto_sent")
+            else:
+                _tally("enqueued")
         elif result.get("nothingToReport"):
             _tally("no_activity")
         elif not result.get("gmailConnected"):
@@ -182,8 +223,11 @@ async def notification_digest_cron(ctx: Any) -> dict[str, Any]:
             _tally("queued_without_approval")
 
     logger.info(
-        "digest cron: %d user(s) eligible, %d enqueued (%s)",
-        len(users), enqueued,
+        "digest cron: %d user(s) eligible, %d enqueued, %d auto-sent (%s)",
+        len(users), enqueued, auto_sent,
         ", ".join(f"{k}={v}" for k, v in sorted(outcomes.items())) or "no outcomes",
     )
-    return {"eligible": len(users), "enqueued": enqueued, "outcomes": outcomes}
+    return {
+        "eligible": len(users), "enqueued": enqueued, "autoSent": auto_sent,
+        "outcomes": outcomes,
+    }

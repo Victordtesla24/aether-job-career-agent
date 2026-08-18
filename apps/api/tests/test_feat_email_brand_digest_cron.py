@@ -5,13 +5,11 @@ has always composed a correctly BRANDED email, but nothing ever triggered it
 — ``apps/api/app/workers/settings.py::_cron_jobs()`` registered no digest
 cron, so it only ran when a human POSTed ``/agents/run mode=notification``.
 
-Covers:
+Covers (phase 1, cron scheduling/eligibility):
 * the cron is registered on ``WorkerSettings`` at 21:00 UTC, minute :11;
 * the kill-switch (``AETHER_DIGEST_CRON_ENABLED=false``) is an honest no-op;
 * an eligible Gmail-connected user with real activity gets a
-  ``notification_digest`` approval QUEUED — never auto-sent (there is no
-  auto-approve/auto-send semantic for any approval kind; the send stays a
-  one-click manual approval, mirroring the manual trigger exactly);
+  ``notification_digest`` approval QUEUED;
 * a user with nothing new is honestly counted, not silently skipped;
 * a user with the ``notification`` agent paused is honestly skipped, not run;
 * a user without an active paid subscription is honestly skipped (the
@@ -23,9 +21,36 @@ Covers:
 * ``GmailAccountRepository.list_connected_user_ids`` returns exactly the
   distinct connected user ids.
 
-Fail-before: ``app.workers.digest_cron`` does not exist, and
+Covers (phase 2, FEAT-EMAIL-BRAND, RUN-20260818T0223Z — Owner directive
+2026-08-18, strictly-scoped auto-send; see
+docs/delivery/evidence/RUN-20260818T0223Z/05-decision-memos/
+FEAT-EMAIL-BRAND-autosend.md):
+* a digest addressed to the user's OWN connected Gmail is auto-approved +
+  auto-sent, rendered through the SAME ``email_branding.
+  build_notification_digest_bodies`` a manual execute uses (branding markers
+  asserted present in the sent HTML);
+* a recipient that is NOT provably self-mail is left pending, honestly
+  logged, and Gmail send is never called — even with the flag on;
+* ANY approval kind other than ``notification_digest`` is never auto-executed
+  — even with the flag on and a genuinely self-mail recipient (defense in
+  depth inside ``auto_execute_notification_digest`` itself, not just "the
+  cron never calls it for other kinds");
+* the kill-switch ``AETHER_DIGEST_AUTO_SEND=false`` restores the phase-1
+  pending-only behaviour exactly.
+
+NOTE ON A REMOVED PIN: the phase-1 test
+``test_digest_cron_never_auto_sends_only_queues_for_manual_approval`` pinned
+"the cron must never call Gmail send directly" as an ABSOLUTE. That absolute
+is no longer true by Owner directive (2026-08-18) and is REPLACED here by the
+two invariants that now bound auto-send precisely: never a non-digest kind,
+never a non-self recipient. This is a deliberate, directed policy change —
+see the commit body and the decision memo — not a silent weakening.
+
+Fail-before (phase 1): ``app.workers.digest_cron`` does not exist, and
 ``WorkerSettings.cron_jobs`` carries no job whose coroutine is
 ``notification_digest_cron``.
+Fail-before (phase 2): ``app.routers.approvals.auto_execute_notification_digest``
+does not exist.
 """
 from __future__ import annotations
 
@@ -140,6 +165,29 @@ def _approval_status(user_id: str) -> str | None:
             return row[0] if row else None
 
 
+def _approval_row(user_id: str) -> dict | None:
+    """The most recent ``notification_digest`` approval's id/status/execution
+    marker/payload — used by the phase-2 auto-send tests to assert the row
+    ends in the SAME "approved + executionCompletedAt stamped" state a manual
+    Approve-then-Execute click leaves."""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT "id","status"::text,"executionCompletedAt","payload"'
+                ' FROM "ApprovalRequest" WHERE "userId" = %s'
+                ' AND "payload"->>\'kind\' = \'notification_digest\''
+                ' ORDER BY "createdAt" DESC LIMIT 1',
+                (user_id,),
+            )
+            row = cur.fetchone()
+    if row is None:
+        return None
+    return {
+        "id": row[0], "status": row[1], "executionCompletedAt": row[2],
+        "payload": row[3],
+    }
+
+
 def _set_agent_enabled(client, auth_headers, ui_key: str, enabled: bool) -> None:
     """Pause/re-enable an agent through the REAL PATCH endpoint — the exact
     same write path the Agents-page per-agent toggle uses."""
@@ -212,9 +260,14 @@ def test_list_connected_user_ids_excludes_disconnected_users(user_id):
 def test_digest_cron_queues_a_real_digest_for_an_eligible_user(
     client, auth_headers, user_id, billing_seeded, gmail_connected, monkeypatch
 ):
+    """Scope note: auto-send is explicitly held OFF here so this test pins
+    ONLY the phase-1 concern (does the cron correctly queue a digest) —
+    phase-2 auto-send is pinned separately below, deliberately, with the flag
+    ON (its own default)."""
     from app.workers.digest_cron import notification_digest_cron
 
     monkeypatch.setenv("AETHER_DIGEST_CRON_ENABLED", "true")
+    monkeypatch.setenv("AETHER_DIGEST_AUTO_SEND", "false")
     _seed_activity(client, auth_headers, user_id)
 
     result = asyncio.run(notification_digest_cron({}))
@@ -224,25 +277,148 @@ def test_digest_cron_queues_a_real_digest_for_an_eligible_user(
     assert _approval_status(user_id) == "pending"
 
 
-def test_digest_cron_never_auto_sends_only_queues_for_manual_approval(
+# ===========================================================================
+# Phase 2 — strictly-scoped auto-send (FEAT-EMAIL-BRAND, Owner directive
+# 2026-08-18). See docs/delivery/evidence/RUN-20260818T0223Z/
+# 05-decision-memos/FEAT-EMAIL-BRAND-autosend.md for the policy rationale.
+# ===========================================================================
+
+
+def test_digest_auto_send_sends_branded_email_to_self_recipient(
     client, auth_headers, user_id, billing_seeded, gmail_connected, monkeypatch
 ):
-    """The central honesty check: the cron must never leave the approval in
-    any state that implies a send happened. Nothing here calls Gmail."""
+    """(a) A digest addressed to the user's OWN connected Gmail is
+    auto-approved + auto-sent, rendered through the SAME branded HTML
+    (``email_branding.build_notification_digest_bodies``) a manual
+    Approve-then-Execute click would produce — proving there is no second
+    send path."""
     from app.workers.digest_cron import notification_digest_cron
 
     monkeypatch.setenv("AETHER_DIGEST_CRON_ENABLED", "true")
+    monkeypatch.setenv("AETHER_DIGEST_AUTO_SEND", "true")
+    captured: dict = {}
+
+    def fake_send(self, **kwargs):  # noqa: ANN001, ARG001
+        captured.update(kwargs)
+        return {"id": "gmail-auto-1", "threadId": "T1"}
+
+    monkeypatch.setattr("app.services.gmail_service.GmailService.send", fake_send)
+    _seed_activity(client, auth_headers, user_id)
+
+    result = asyncio.run(notification_digest_cron({}))
+
+    assert result["autoSent"] >= 1
+    assert result["outcomes"].get("auto_sent", 0) >= 1
+    assert captured["to"] == gmail_connected
+    html = captured.get("html_body") or ""
+    # Aether design-system markers (design/aether-design-system): the gilt
+    # wordmark block and the primary gilt token `#C9A84C`.
+    assert "AETHER" in html
+    assert "#c9a84c" in html.lower()
+
+    row = _approval_row(user_id)
+    assert row is not None
+    assert row["status"] == "approved"
+    assert row["executionCompletedAt"] is not None
+    assert row["payload"].get("autoExecutedBy") == "digest_cron"
+    assert row["payload"].get("autoExecutedAt")
+
+
+def test_digest_auto_send_refuses_a_non_self_recipient(
+    user_id, billing_seeded, gmail_connected, monkeypatch
+):
+    """(b) A ``notification_digest`` approval whose ``to`` does not
+    (case-insensitively) match one of the user's own connected Gmail
+    addresses is left PENDING, honestly, even with the flag on. Constructs
+    the approval directly (rather than via the full cron/NotificationAgent
+    path) to pin the guard itself — ``NotificationAgent`` always sets ``to``
+    to the user's own connected address by construction, so a mismatch can
+    only arise from a stale payload or a reconnect race; this proves the
+    re-verification at send time catches it either way."""
+    from app.repositories.approval import ApprovalRepository
+    from app.routers.approvals import auto_execute_notification_digest
+
+    monkeypatch.setenv("AETHER_DIGEST_AUTO_SEND", "true")
 
     def _fail_if_called(*args, **kwargs):  # noqa: ANN001, ARG001
-        pytest.fail("the digest cron must never call Gmail send directly")
+        pytest.fail("must never send to a recipient that is not provably self-mail")
+
+    monkeypatch.setattr(
+        "app.services.gmail_service.GmailService.send", _fail_if_called
+    )
+    approval = ApprovalRepository().create(
+        user_id, "email_send",
+        {
+            "kind": "notification_digest", "to": "someone-else@example.com",
+            "subject": "Your Aether digest", "body": "Status updates inside.",
+        },
+    )
+
+    sent = auto_execute_notification_digest(approval["id"], user_id)
+
+    assert sent is None
+    row = _approval_row(user_id)
+    assert row["status"] == "pending"
+    assert "autoExecutedBy" not in (row["payload"] or {})
+
+
+def test_digest_auto_send_never_executes_other_approval_kinds(
+    user_id, billing_seeded, gmail_connected, monkeypatch
+):
+    """(c) ONLY ``kind == "notification_digest"`` may ever be auto-executed —
+    an ``email_send`` approval of any other kind (a drafted reply, recruiter
+    outreach, a reference request) stays exactly manual-only, even with the
+    flag on AND a genuinely self-mail recipient. Enforced INSIDE
+    ``auto_execute_notification_digest`` itself (defense in depth), not just
+    by the cron never calling it for other kinds."""
+    from app.repositories.approval import ApprovalRepository
+    from app.routers.approvals import auto_execute_notification_digest
+
+    monkeypatch.setenv("AETHER_DIGEST_AUTO_SEND", "true")
+
+    def _fail_if_called(*args, **kwargs):  # noqa: ANN001, ARG001
+        pytest.fail("must never auto-send a non-notification_digest approval kind")
+
+    monkeypatch.setattr(
+        "app.services.gmail_service.GmailService.send", _fail_if_called
+    )
+    approval = ApprovalRepository().create(
+        user_id, "email_send",
+        {
+            "kind": "email", "to": gmail_connected,
+            "subject": "Re: your application", "body": "A drafted reply.",
+        },
+    )
+
+    sent = auto_execute_notification_digest(approval["id"], user_id)
+
+    assert sent is None
+    row = ApprovalRepository().get_by_id(approval["id"], user_id)
+    assert row["status"] == "pending"
+
+
+def test_digest_auto_send_disabled_leaves_approval_pending(
+    client, auth_headers, user_id, billing_seeded, gmail_connected, monkeypatch
+):
+    """(d) ``AETHER_DIGEST_AUTO_SEND=false`` restores the phase-1
+    pending-only behaviour exactly — Gmail send is never even attempted."""
+    from app.workers.digest_cron import notification_digest_cron
+
+    monkeypatch.setenv("AETHER_DIGEST_CRON_ENABLED", "true")
+    monkeypatch.setenv("AETHER_DIGEST_AUTO_SEND", "false")
+
+    def _fail_if_called(*args, **kwargs):  # noqa: ANN001, ARG001
+        pytest.fail("auto-send must be fully inert when the flag is off")
 
     monkeypatch.setattr(
         "app.services.gmail_service.GmailService.send", _fail_if_called
     )
     _seed_activity(client, auth_headers, user_id)
 
-    asyncio.run(notification_digest_cron({}))
+    result = asyncio.run(notification_digest_cron({}))
 
+    assert result["autoSent"] == 0
+    assert result["outcomes"].get("auto_sent", 0) == 0
     assert _approval_status(user_id) == "pending"
 
 
