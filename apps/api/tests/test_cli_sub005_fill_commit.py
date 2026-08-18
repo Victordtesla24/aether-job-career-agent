@@ -41,6 +41,7 @@ network, zero real employer.
 from __future__ import annotations
 
 import base64
+from html import escape as _html_attr_escape
 from typing import Any
 
 import pytest
@@ -1263,3 +1264,201 @@ def test_converge_presubmit_state_refuses_a_chain_one_deeper_than_the_bound() ->
     with pytest.raises(ManualStepRequired) as exc_info:
         _run_terminating_chain(_MAX_CONVERGENCE_PASSES + 1)
     assert exc_info.value.reason == "unplanned_required_field"
+
+
+# ---------------------------------------------------------------------------
+# 10. CLI-SUB-005-R5 (adversarial FAIL,
+#     RUN-20260818T0223Z/SUB-005-R4/08-adversarial-final.md): a required
+#     field living ONLY inside an <iframe> was structurally invisible to
+#     _uncommitted_live_required_fields on every pass, because its only
+#     input is parse_form_schema(page.content()) — a single top-level
+#     document. R5 closes this two ways per
+#     05-decision-memos/SUB-005-and-COV-3-rulings.md: (a) extend the
+#     re-derivation across every reachable Playwright frame
+#     (_converge_presubmit_state), and (b) a CONSERVATIVE REFUSE-BACKSTOP
+#     (_verify_no_unverifiable_form_surface) that refuses over ANY
+#     form-shaped control no parser call anywhere can classify, or any
+#     frame that cannot even be read — making soundness independent of
+#     parser vocabulary. Ported here from the reviewer's own
+#     adversarial/attack5_iframe_live_reveal.py (identical outer form, same
+#     plan — "name" is the only planned field, exactly what
+#     build_form_fill_plan would have produced from the static snapshot
+#     before the iframe widget populated).
+# ---------------------------------------------------------------------------
+
+_IFRAME_OUTER_TEMPLATE = """
+<title>iframe-embedded-widget</title>
+<form onsubmit="event.preventDefault();
+    document.body.innerHTML = '<h1>Thank you for applying</h1>';">
+  <div data-field-path="name">
+    <label class="_required_abc123">Full name</label>
+    <input id="name" name="name" type="text">
+  </div>
+  <iframe id="survey-widget" srcdoc="{inner}"></iframe>
+  <button type="submit">Submit Application</button>
+</form>
+"""
+
+# The iframe's OWN document: a required Ashby-shaped question that starts
+# OPTIONAL and is flipped required by a script inside the SAME iframe
+# document once its own onload fires — the exact "live requiredness toggle"
+# class R4 was built to catch, just one document boundary deeper. No
+# standard-profile analogue and no answer bank match — genuinely
+# unanswerable, so the only honest outcome is a refusal.
+_IFRAME_INNER_REQUIRED_UNANSWERABLE = """
+<div data-field-path="consent_survey">
+  <label>Diversity survey</label>
+  <input id="consent_survey" name="consent_survey" type="text">
+</div>
+<script>
+  document.getElementById('consent_survey')
+    .closest('[data-field-path]')
+    .querySelector('label')
+    .className = '_required_abc123';
+</script>
+"""
+
+# The SAME class of iframe-embedded, live-only required field, but one the
+# profile CAN answer — via the kind="email" fallback _answer_for already
+# uses for any field whose control is type="email", regardless of its name.
+_IFRAME_INNER_REQUIRED_ANSWERABLE = """
+<div data-field-path="confirm_email">
+  <label class="_required_abc123">Confirm your email</label>
+  <input id="confirm_email" name="confirm_email" type="email">
+</div>
+"""
+
+
+def _iframe_form(inner_html: str) -> str:
+    # The inner document's own markup is full of double-quoted attributes
+    # (id="...", data-field-path="...") which would otherwise prematurely
+    # terminate the OUTER srcdoc="..." attribute at the first one — HTML
+    # entity-escape it exactly the way a browser expects an attribute VALUE
+    # to be escaped, so the real inner document survives intact.
+    return _IFRAME_OUTER_TEMPLATE.format(inner=_html_attr_escape(inner_html, quote=True))
+
+
+def _name_only_plan() -> dict[str, Any]:
+    return {
+        "fields": [
+            {
+                "name": "name",
+                "label": "Full name",
+                "kind": "text",
+                "required": True,
+                "scope": '[data-field-path="name"]',
+                "value": "Jordan Blake",
+                "options": [],
+            },
+        ]
+    }
+
+
+def test_live_submitter_never_submits_over_an_unanswerable_iframe_required_field(
+    tmp_path,
+) -> None:
+    """THE R4->R5 ADVERSARIAL-REVIEW BREAK, ported exactly from
+    adversarial/attack5_iframe_live_reveal.py: on the unfixed R4 branch this
+    returned submitted:true, confirmation:"Thank you for applying",
+    unplannedFilled:[] — the iframe field was never attempted, never
+    verified, never raised as a manual step, because page.content() cannot
+    see inside an <iframe srcdoc> at all. With no profile/answer-bank able
+    to answer "Diversity survey", the R5 per-frame convergence must resolve
+    or refuse it — never guess, never submit."""
+    from app.services.apply_executor import playwright_form_submitter
+
+    with pytest.raises(ManualStepRequired) as exc_info:
+        playwright_form_submitter(
+            application_id="sub005r5-iframe-unanswerable",
+            channel="ashby",
+            page_html="",
+            apply_url=_data_url(_iframe_form(_IFRAME_INNER_REQUIRED_UNANSWERABLE)),
+            plan=_name_only_plan(),
+            resume_pdf_bytes=b"%PDF-1.4 fake",
+            cover_letter_text="Dear Hiring Manager,",
+            evidence_dir=str(tmp_path),
+            profile={},
+            answer_bank=None,
+        )
+    err = exc_info.value
+    assert err.reason == "unplanned_required_field"
+    assert err.question is not None and "Diversity survey" in err.question
+
+
+def test_live_submitter_resolves_and_submits_an_answerable_iframe_required_field(
+    tmp_path,
+) -> None:
+    """Guard against over-refusal: the SAME class of iframe-embedded,
+    live-only required field, when it CAN genuinely be answered, is
+    discovered by the per-frame re-derivation, filled and verified INSIDE
+    the iframe's own document (never the top page), and the submission
+    proceeds — proving the R5 frame extension resolves a legitimately
+    answerable iframe field exactly like any other newly discovered one,
+    instead of either submitting blind or refusing a form that could
+    genuinely be completed."""
+    from app.services.apply_executor import playwright_form_submitter
+
+    outcome = playwright_form_submitter(
+        application_id="sub005r5-iframe-answerable",
+        channel="ashby",
+        page_html="",
+        apply_url=_data_url(_iframe_form(_IFRAME_INNER_REQUIRED_ANSWERABLE)),
+        plan=_name_only_plan(),
+        resume_pdf_bytes=b"%PDF-1.4 fake",
+        cover_letter_text="Dear Hiring Manager,",
+        evidence_dir=str(tmp_path),
+        profile={"email": "jordan@example.com"},
+        answer_bank=None,
+    )
+    assert outcome["submitted"] is True
+    assert outcome["confirmation"] and "thank you" in str(outcome["confirmation"]).lower()
+    assert "confirm_email" in outcome["filled"]
+    assert "confirm_email" in outcome["unplannedFilled"]
+
+
+_UNCLASSIFIABLE_CONTROL_FORM = """
+<title>unclassifiable-widget</title>
+<form onsubmit="event.preventDefault();
+    document.body.innerHTML = '<h1>Thank you for applying</h1>';">
+  <div data-field-path="name">
+    <label class="_required_abc123">Full name</label>
+    <input id="name" name="name" type="text">
+  </div>
+  <div role="combobox" aria-expanded="false" class="team-picker">Pick a team</div>
+  <button type="submit">Submit Application</button>
+</form>
+"""
+
+
+def test_unclassifiable_custom_control_refuses_via_backstop(tmp_path) -> None:
+    """SUB-005-R5 CONSERVATIVE REFUSE-BACKSTOP: a custom ARIA widget
+    (``role="combobox"``) with NO underlying ``<input>``/``<select>``/
+    ``<textarea>`` and no ``[data-field-path]``/``id``/``name`` any channel
+    parser could ever key off of — exactly the class
+    RUN-20260818T0223Z/SUB-005-R4/08-adversarial-final.md named as a
+    SEPARATE, unverified instance of the same root cause as the iframe
+    finding ("parser vocabulary is the ceiling on what the safety net can
+    ever see"). No parser call ever turns this into a field entry at all —
+    not top-document convergence, not frame convergence, since it is never
+    required by ANY parser's own rules (it cannot be, because it is never a
+    field to that parser). Only the backstop's raw structural census can
+    ever see it — and it must refuse on the mere unclassifiable presence:
+    unknown ⇒ manual refusal, never unknown ⇒ submit."""
+    from app.services.apply_executor import playwright_form_submitter
+
+    with pytest.raises(ManualStepRequired) as exc_info:
+        playwright_form_submitter(
+            application_id="sub005r5-unclassifiable-control",
+            channel="ashby",
+            page_html="",
+            apply_url=_data_url(_UNCLASSIFIABLE_CONTROL_FORM),
+            plan=_name_only_plan(),
+            resume_pdf_bytes=b"%PDF-1.4 fake",
+            cover_letter_text="Dear Hiring Manager,",
+            evidence_dir=str(tmp_path),
+            profile={},
+            answer_bank=None,
+        )
+    err = exc_info.value
+    assert err.reason == "unverifiable_form_surface"
+    assert err.question is not None and "combobox" in err.question.lower()

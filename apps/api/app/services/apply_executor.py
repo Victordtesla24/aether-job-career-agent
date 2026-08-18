@@ -1041,6 +1041,26 @@ _MAX_RESCAN_PASSES = 3
 # headroom without ever letting a genuinely unbounded one loop forever.
 _MAX_CONVERGENCE_PASSES = 6
 
+# CLI-SUB-005-R5 (adversarial FAIL,
+# RUN-20260818T0223Z/SUB-005-R4/08-adversarial-final.md): a required field
+# living only inside an <iframe> was invisible to every pass of
+# _uncommitted_live_required_fields, because that function's only input is
+# parse_form_schema(root.content()) — a single document. These back the
+# CONSERVATIVE REFUSE-BACKSTOP (_verify_no_unverifiable_form_surface) that
+# makes soundness independent of what any one parser call can recognize: a
+# raw structural census of form-shaped controls, checked against what
+# parse_form_schema actually turned into a field — not a re-run of any one
+# channel's own rules. Mirrors the exclusions every existing parser already
+# applies (a hidden reCAPTCHA token, the intl-tel-input library's own
+# internal state field) — those are deliberate non-questions, not unknown
+# surfaces, and flagging them would be noise that trains someone to ignore
+# this gate.
+_CENSUS_EXCLUDED_INPUT_TYPES = {"hidden", "submit", "button", "reset", "image", "search"}
+_CENSUS_INTERACTIVE_ROLES = {
+    "combobox", "radio", "checkbox", "listbox", "switch", "textbox",
+    "spinbutton", "slider", "menuitemradio", "menuitemcheckbox",
+}
+
 
 def _wait(page: Any, ms: int) -> None:
     """Best-effort settle. Unit-test fakes may not implement the clock."""
@@ -1048,6 +1068,44 @@ def _wait(page: Any, ms: int) -> None:
         page.wait_for_timeout(ms)
     except Exception:  # noqa: BLE001 — a fake page without a clock waits zero
         pass
+
+
+def _reachable_frames(page: Any) -> list[Any]:
+    """Every child frame currently attached to ``page``, main frame excluded.
+
+    CLI-SUB-005-R5: re-read FRESH by the caller on every pass — a frame can
+    attach, navigate or detach between passes exactly like any other live DOM
+    mutation, so a snapshot taken once would go stale the same way the pre-R4
+    name-ledger did. A page-like object with no frame concept at all (this
+    repo's own unit-test fakes, which predate frame support) reports zero
+    frames rather than erroring: there is nothing beyond the top document it
+    already represents, never an unknown surface to refuse over.
+    """
+    try:
+        frames = list(page.frames)
+    except Exception:  # noqa: BLE001 — no `.frames` at all is zero frames, not an error
+        return []
+    main = getattr(page, "main_frame", None)
+    reachable: list[Any] = []
+    for frame in frames:
+        if frame is main:
+            continue
+        try:
+            if frame.is_detached():
+                continue
+        except Exception:  # noqa: BLE001 — can't tell; leave it to the caller's own read
+            pass
+        reachable.append(frame)
+    return reachable
+
+
+def _frame_label(frame: Any) -> str:
+    """A human-readable pointer at one frame, for a manual-step message."""
+    try:
+        url = str(frame.url or "")
+    except Exception:  # noqa: BLE001 — an unreadable frame has no url either
+        url = ""
+    return f"embedded frame ({url})" if url else "an embedded frame"
 
 
 def _first_present(page: Any, selectors: list[str]) -> Any | None:
@@ -1784,9 +1842,33 @@ def _uncommitted_live_required_fields(
     plan_fields: list[dict[str, Any]],
     documents: dict[str, str],
 ) -> list[dict[str, Any]]:
-    """The COMPLETE set of fields the LIVE DOM marks required RIGHT NOW that
-    are not, right now, committed — a TOTAL re-derivation, never a delta
-    against a ledger of names or flags seen on some earlier pass.
+    """Every field the channel's OWN schema parser (:func:`parse_form_schema`)
+    can recognize as required, right now, in ``page``'s content (the top
+    document, or — since CLI-SUB-005-R5 — a single frame's content, passed
+    here as ``page``) that is not, right now, committed. A TOTAL
+    re-derivation over what THAT parser call can see, never a delta against
+    a ledger of names or flags seen on some earlier pass.
+
+    CLI-SUB-005-R5 (adversarial FAIL,
+    RUN-20260818T0223Z/SUB-005-R4/08-adversarial-final.md): the previous
+    revision of this docstring called this "the COMPLETE set of fields the
+    LIVE DOM marks required" and "a fact only the LIVE DOM holds" — language
+    this review proved false as written. :func:`parse_form_schema` runs over
+    ``page.content()``, one document's serialized HTML; it does not descend
+    into ``<iframe>`` documents, so a required field that exists only inside
+    one was invisible here no matter how many times this re-parsed. This
+    function does NOT close that gap by itself, and no longer claims to:
+    :func:`_converge_presubmit_state` now calls it once per reachable
+    Playwright frame as well as the top document (closing the iframe
+    instance of the class), and :func:`_verify_no_unverifiable_form_surface`
+    is the CONSERVATIVE BACKSTOP that makes the overall submit-safety
+    property hold independent of parser vocabulary — any form-shaped control
+    on any reachable surface that no parser call anywhere in this path can
+    classify, or any frame whose content cannot even be read, refuses
+    instead of submitting. What THIS function alone guarantees is exact and
+    narrower: every field ITS OWN parser call recognizes as required, on the
+    one root it was given, is proven committed or reported uncommitted —
+    never silently skipped by a stale ledger.
 
     CLI-SUB-005-R4 (adversarial re-review FAIL,
     RUN-20260818T0223Z/SUB-005-R3/08-adversarial-rereview.md, finding #1):
@@ -1965,6 +2047,20 @@ def _resolve_uncommitted_live_required_once(
     return resolved
 
 
+def _plan_entry_for(
+    name: str, *sources: dict[str, dict[str, Any]]
+) -> dict[str, Any] | None:
+    """The first known plan entry for ``name`` across one or more plans — the
+    top document's and, since CLI-SUB-005-R5, each frame's own — checked in
+    the order given, never merged: the same ``name`` string appearing in two
+    genuinely different documents is a coincidence, not the same field."""
+    for source in sources:
+        entry = source.get(name)
+        if entry is not None:
+            return entry
+    return None
+
+
 def _converge_presubmit_state(
     page: Any,
     channel: str,
@@ -1974,10 +2070,11 @@ def _converge_presubmit_state(
     profile: dict[str, Any] | None,
     answer_bank: Callable[[dict[str, Any]], Any] | None,
 ) -> list[str]:
-    """Fixed point over a TOTAL re-derivation of live-required-field state —
-    the ONLY thing between the last fill and the submit click, and the last
-    thing it ever does is that SAME re-derivation, read-only, with zero
-    mutation after it.
+    """Fixed point over a TOTAL re-derivation of live-required-field state,
+    across the top document AND every reachable Playwright frame — the ONLY
+    thing between the last fill and the submit click, and the last thing it
+    ever does is that SAME re-derivation, read-only, with zero mutation
+    after it.
 
     CLI-SUB-005-R4 (adversarial re-review FAIL,
     RUN-20260818T0223Z/SUB-005-R3/08-adversarial-rereview.md): R3 folded a
@@ -2030,13 +2127,40 @@ def _converge_presubmit_state(
       many resolving passes can keep up is exactly the case a manual step
       exists for.
 
-    Returns the names of every field resolved because it had NO planned
-    value yet (truly new to the plan, or known-but-turned-required-live) —
-    never a field that was only refilled after a wipe, which was already
-    planned and already accounted for in the caller's ``filled``.
+    CLI-SUB-005-R5 (adversarial FAIL,
+    RUN-20260818T0223Z/SUB-005-R4/08-adversarial-final.md): R4's "TOTAL
+    re-derivation" was total only over the TOP-LEVEL document —
+    :func:`parse_form_schema` runs on ``page.content()``, which does not
+    descend into ``<iframe>`` documents, so a required field revealed only
+    inside an iframe was invisible on every pass, forever. This function now
+    re-derives EACH :func:`_reachable_frames` frame's own uncommitted-required
+    state (re-read fresh every pass, exactly like the top document) the
+    IDENTICAL way it re-derives the top document's — against a SEPARATE,
+    per-frame plan (a frame was never part of the original static snapshot,
+    so every field it reveals starts unplanned there, just like an unplanned
+    top-document field does), resolved or refused through the exact same
+    :func:`_resolve_uncommitted_live_required_once` path. Convergence is now
+    "the top document AND every reachable frame each report nothing
+    uncommitted" — a resolving pass anywhere (top or any frame) still counts
+    once against the SAME bound, and the free confirming pass is still the
+    one where NOTHING anywhere changed.
+
+    This still is not an ABSOLUTE claim: a frame whose content cannot be
+    read at all, or a control no parser call anywhere in this path can
+    recognize, is exactly what :func:`_verify_no_unverifiable_form_surface`
+    exists to catch as a LAST, CONSERVATIVE gate right before the submit
+    click — this function's own guarantee stays scoped to what its parser
+    calls can see, on every surface it can enumerate.
+
+    Returns the names of every field resolved (top document or any frame)
+    because it had NO planned value yet (truly new to the plan, or
+    known-but-turned-required-live) — never a field that was only refilled
+    after a wipe, which was already planned and already accounted for in the
+    caller's ``filled``.
     """
     resolving_passes = 0
     resolved: list[str] = []
+    frame_plan_fields: dict[int, list[dict[str, Any]]] = {}
     while True:
         _wait(page, _PRESUBMIT_SETTLE_MS)
         # TOTAL, read-only re-derivation — see _uncommitted_live_required_fields.
@@ -2045,17 +2169,44 @@ def _converge_presubmit_state(
         uncommitted = _uncommitted_live_required_fields(
             page, channel, plan_fields, documents
         )
-        if not uncommitted:
+        # CLI-SUB-005-R5: the SAME re-derivation, once per reachable frame,
+        # against that frame's OWN plan — never the top document's, since a
+        # frame field was never in the original static snapshot.
+        frame_batches: list[
+            tuple[Any, list[dict[str, Any]], list[dict[str, Any]]]
+        ] = []
+        for frame in _reachable_frames(page):
+            frame_fields = frame_plan_fields.setdefault(id(frame), [])
+            frame_uncommitted = _uncommitted_live_required_fields(
+                frame, channel, frame_fields, documents
+            )
+            if frame_uncommitted:
+                frame_batches.append((frame, frame_fields, frame_uncommitted))
+
+        if not uncommitted and not frame_batches:
             return resolved
 
         resolving_passes += 1
         if resolving_passes > _MAX_CONVERGENCE_PASSES:
+            combined = list(uncommitted)
+            for _frame, _frame_fields, batch in frame_batches:
+                combined.extend(batch)
             plan_by_name = {str(field["name"]): field for field in plan_fields}
+            frame_plan_by_name = {
+                str(field["name"]): field
+                for fields_for_frame in frame_plan_fields.values()
+                for field in fields_for_frame
+            }
             still_unanswered = [
                 field
-                for field in uncommitted
-                if plan_by_name.get(str(field["name"])) is None
-                or plan_by_name[str(field["name"])].get("value") is None
+                for field in combined
+                if (
+                    entry := _plan_entry_for(
+                        str(field["name"]), plan_by_name, frame_plan_by_name
+                    )
+                )
+                is None
+                or entry.get("value") is None
             ]
             if still_unanswered:
                 raise ManualStepRequired(
@@ -2070,7 +2221,7 @@ def _converge_presubmit_state(
                     ),
                 )
             labels = "; ".join(
-                str(field.get("label") or field["name"]) for field in uncommitted
+                str(field.get("label") or field["name"]) for field in combined
             )
             raise ManualStepRequired(
                 "form_fill_failed",
@@ -2084,16 +2235,179 @@ def _converge_presubmit_state(
                 question=labels,
             )
 
-        resolved.extend(
-            _resolve_uncommitted_live_required_once(
-                page,
-                plan_fields,
-                documents,
-                uncommitted,
-                profile=profile,
-                answer_bank=answer_bank,
+        if uncommitted:
+            resolved.extend(
+                _resolve_uncommitted_live_required_once(
+                    page,
+                    plan_fields,
+                    documents,
+                    uncommitted,
+                    profile=profile,
+                    answer_bank=answer_bank,
+                )
             )
+        for frame, frame_fields, batch in frame_batches:
+            resolved.extend(
+                _resolve_uncommitted_live_required_once(
+                    frame,
+                    frame_fields,
+                    documents,
+                    batch,
+                    profile=profile,
+                    answer_bank=answer_bank,
+                )
+            )
+
+
+def _unclassifiable_controls(html: str, channel: str) -> list[str]:
+    """Form-shaped controls in ``html`` that :func:`parse_form_schema`
+    (``channel``'s own dialect) cannot turn into a field entry AT ALL — a
+    raw structural DOM census, not a re-run of any one parser's rules, so it
+    catches what NO current or future channel dialect happens to recognize: a
+    control with neither an ``id`` nor a ``name`` and no
+    ``[data-field-path]`` ancestor, a custom ARIA widget with no underlying
+    native control, a ``contenteditable`` question box with none either.
+    This is the structural counterpart to the iframe gap
+    (RUN-20260818T0223Z/SUB-005-R4/08-adversarial-final.md): that review's
+    own "other angles" section separately named a Greenhouse-shaped
+    contenteditable widget with no wrapped ``<input>`` as the SAME root
+    cause one level shallower ("parser vocabulary is the ceiling on what the
+    safety net can ever see") — this closes that class too, not just the
+    iframe instance of it.
+
+    A control already accounted for by ``g-recaptcha-response``'s name, an
+    ``iti-``-prefixed id (the international-phone-input library's own
+    internal state field), or any of the input types every parser already
+    treats as non-data-entry is excluded here for the identical reason the
+    parsers exclude them: a hidden reCAPTCHA token or a widget's own
+    bookkeeping is not a question a human applicant answers, and flagging it
+    would not be conservative — it would be noise that trains someone to
+    ignore this gate.
+    """
+    soup = _soup(html)
+    try:
+        schema = parse_form_schema(html, channel=channel)
+    except Exception:  # noqa: BLE001 — an unparseable page IS the finding
+        return ["the page's own schema could not be parsed"]
+    covered = {str(field["name"]) for field in schema}
+
+    def _covered(node: Any) -> bool:
+        node_id = str(node.get("id") or "")
+        node_name = str(node.get("name") or "")
+        if node_id and node_id in covered:
+            return True
+        if node_name and node_name in covered:
+            return True
+        wrapper = node.find_parent(attrs={"data-field-path": True})
+        if wrapper is not None and str(wrapper.get("data-field-path") or "") in covered:
+            return True
+        return False
+
+    findings: list[str] = []
+    flagged: set[int] = set()
+
+    def _flag(node: Any, why: str) -> None:
+        if id(node) in flagged:
+            return
+        flagged.add(id(node))
+        findings.append(why)
+
+    for control in soup.find_all(["input", "select", "textarea"]):
+        control_type = str(control.get("type") or "").lower()
+        if control_type in _CENSUS_EXCLUDED_INPUT_TYPES:
+            continue
+        if str(control.get("aria-hidden") or "").lower() == "true":
+            continue
+        control_id = str(control.get("id") or "")
+        control_name = str(control.get("name") or "")
+        if control_name == "g-recaptcha-response" or control_id.startswith("iti-"):
+            continue
+        if not _covered(control):
+            _flag(control, f"unclassified <{control.name}> control")
+
+    for node in soup.find_all(attrs={"role": True}):
+        if node.name in {"input", "select", "textarea"}:
+            continue
+        role = str(node.get("role") or "").lower()
+        if role not in _CENSUS_INTERACTIVE_ROLES:
+            continue
+        if node.find(["input", "select", "textarea"]) is not None:
+            continue  # a native control inside it is censused on its own
+        if not _covered(node):
+            _flag(node, f'unclassified [role="{role}"] control')
+
+    for node in soup.find_all(attrs={"contenteditable": True}):
+        if str(node.get("contenteditable") or "").lower() == "false":
+            continue
+        if node.find(["input", "select", "textarea"]) is not None:
+            continue
+        if not _covered(node):
+            _flag(node, "unclassified contenteditable control")
+
+    return findings
+
+
+def _verify_no_unverifiable_form_surface(page: Any, channel: str) -> None:
+    """CLI-SUB-005-R5 CONSERVATIVE REFUSE-BACKSTOP — the decisive invariant.
+
+    Immediately before :func:`_activate_submit`: every reachable surface
+    (the top document and every :func:`_reachable_frames` frame, re-read
+    fresh here) must be READABLE, and everything on it that LOOKS like a
+    control a human applicant could interact with must be something
+    :func:`parse_form_schema` actually turned into a field — never assumed
+    empty of meaning just because no parser call happened to recognize it.
+
+    RUN-20260818T0223Z/SUB-005-R4/08-adversarial-final.md proved
+    :func:`_uncommitted_live_required_fields` (top-document-only at the
+    time) could never see a required field embedded in an iframe, no matter
+    how many times it re-parsed — a residual
+    ``05-decision-memos/SUB-005-and-COV-3-rulings.md`` accepted as bounded IN
+    KIND ("the safety net can only see what parse_form_schema can see") and
+    ordered closed two ways: (a) extend the re-derivation across frames
+    (:func:`_converge_presubmit_state`, above) and (b) THIS function — a
+    backstop that no longer depends on any parser recognizing a control AT
+    ALL. Unknown ⇒ manual refusal. Never unknown ⇒ submit.
+
+    This is not a claim that the census below is a total enumeration of
+    every ATS convention that will ever exist — it cannot be, by the exact
+    argument that produced it. It is a claim that nothing shaped like a
+    control on any surface this function could read goes unaccounted for,
+    and that a surface it could NOT read is refused rather than assumed
+    clean.
+    """
+    unreadable: list[str] = []
+    unclassifiable: list[str] = []
+    try:
+        html = page.content()
+    except Exception:  # noqa: BLE001 — an unreadable top document IS the finding
+        html = None
+    if html is None:
+        unreadable.append("the application page itself")
+    else:
+        unclassifiable.extend(_unclassifiable_controls(html, channel))
+    for frame in _reachable_frames(page):
+        try:
+            frame_html = frame.content()
+        except Exception:  # noqa: BLE001 — an unreadable frame IS the finding
+            unreadable.append(_frame_label(frame))
+            continue
+        unclassifiable.extend(
+            f"{_frame_label(frame)}: {finding}"
+            for finding in _unclassifiable_controls(frame_html, channel)
         )
+    if not unreadable and not unclassifiable:
+        return
+    details = "; ".join(unreadable + unclassifiable)
+    raise ManualStepRequired(
+        "unverifiable_form_surface",
+        (
+            "This application page has a part Aether could not fully read "
+            "and account for before submitting — rather than guess whether "
+            "it held a required question, it stopped and left the form "
+            "untouched: " + details
+        ),
+        question=details,
+    )
 
 
 def _resume_suffix(data: bytes) -> str:
@@ -2254,6 +2568,16 @@ def playwright_form_submitter(
                             profile=profile,
                             answer_bank=answer_bank,
                         )
+                        # CLI-SUB-005-R5 CONSERVATIVE REFUSE-BACKSTOP — see
+                        # _verify_no_unverifiable_form_surface. Runs AFTER
+                        # convergence has resolved everything it CAN see,
+                        # still strictly before the submit click below: the
+                        # decisive check that nothing shaped like a control,
+                        # on any readable or unreadable surface, was left
+                        # unaccounted for. Read-only, like everything above
+                        # it — the "no DOM mutation before the submit click"
+                        # guarantee in the comment above still holds.
+                        _verify_no_unverifiable_form_surface(page, channel)
                     except ManualStepRequired:
                         page.screenshot(path=str(screenshot), full_page=True)
                         raise
