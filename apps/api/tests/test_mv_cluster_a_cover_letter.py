@@ -140,20 +140,32 @@ class TestEnforceFirstPersonHookGrammar:
     ordinary job-title NOUN inside the deterministic hook clause, not as a
     reference to the candidate. For the seeded admin account
     (name == targetRole == "Administrator") this corrupts
-    "...as an Administrator is a direct match..." into
-    "...as an I am a direct match..." -- a live, shipped, grammatically
-    broken opening sentence (MV-approval-modal-009's exact repro)."""
+    "...as an Administrator led me to..." into
+    "...as an I am led me to..." -- a live, shipped, grammatically
+    broken opening sentence (MV-approval-modal-009's exact repro).
+
+    AUD-COV-1 (RUN-20260818T0223Z): the fixture strings below were updated
+    from the pre-fix literal ("... is a direct match for the <role> role at
+    <company>.") to the current deterministic role/company clause ("... led
+    me to the <role> role at <company>."). Rationale: this is a wording-
+    coupled Tier-1 test per AUD-COV-1/01-scout-reproduction.log -- it feeds a
+    hardcoded hook string straight into ``enforce_first_person`` (not through
+    ``build_body``), so it would have kept PASSING mechanically with the old
+    literal even after the opener fix, but would then be pinning defect-era
+    text rather than the real production sentence shape. Updating it keeps
+    the name/job-title-noun grammar-collision regression this test guards
+    meaningful against the code as it actually ships today."""
 
     def test_administrator_name_role_collision_corrupts_hook(self):
         hook = (
-            "My background as an Administrator is a direct match for the "
+            "My background as an Administrator led me to the "
             "Innovation Product Manager role at harvey."
         )
         rewritten = enforce_first_person(hook, "Administrator")
         assert "as an I am" not in rewritten, (
             f"enforce_first_person corrupted the grammatical hook: {rewritten!r}"
         )
-        assert "as an Administrator is a direct match" in rewritten, (
+        assert "as an Administrator led me to" in rewritten, (
             "the job-title noun 'Administrator' must not be rewritten when it "
             f"is not a third-person reference to the candidate: {rewritten!r}"
         )
@@ -161,10 +173,13 @@ class TestEnforceFirstPersonHookGrammar:
     def test_normal_name_hook_is_left_untouched(self):
         """Control: a signer name that does not collide with any word in the
         hook must never trigger a rewrite (documents the expected, already
-        non-broken behaviour the fix must preserve)."""
+        non-broken behaviour the fix must preserve).
+
+        AUD-COV-1: fixture updated to the current opener wording -- see the
+        class docstring's rationale."""
         hook = (
-            "My background as a Senior Technical Program Manager is a direct "
-            "match for the Platform Engineer role at Culture Amp."
+            "My background as a Senior Technical Program Manager led me to "
+            "the Platform Engineer role at Culture Amp."
         )
         rewritten = enforce_first_person(hook, "Vikram Sarkar")
         assert rewritten == hook, f"unrelated name must never rewrite the hook: {rewritten!r}"
@@ -278,12 +293,22 @@ class TestRefineDuplicatesStructure:
     def test_refine_duplicates_salutation_hook_and_signoff(
         self, client, auth_headers, monkeypatch
     ):
+        """AUD-COV-1 (RUN-20260818T0223Z): ``echoed`` and ``hook_phrase`` below
+        were updated from the pre-fix literal ("... is a direct match for the
+        <role> role at <company>.") to the current deterministic role/company
+        clause ("... led me to the <role> role at <company>."). Rationale:
+        this is the single test most directly coupled to both build_body's
+        opener text AND strip_letter_scaffolding's matching dedup regex (see
+        AUD-COV-1/01-scout-reproduction.log Tier 1 #1) -- it must exercise
+        the REAL current opener shape end-to-end, not defect-era text, or it
+        stops proving the dedup regex actually matches what build_body now
+        emits."""
         body, job = _make_letter(client, auth_headers)
         me = client.get("/auth/me", headers=auth_headers).json()
         signer = me.get("name") or ""
 
         echoed = (
-            f"My background is a direct match for the {job['title']} role at "
+            f"My background led me to the {job['title']} role at "
             f"{job['company']}. I would be a strong fit for this position.\n\n"
             f"Dear Hiring Team at {job['company']},\n\n"
             "I already own sprint cadence and delivery outcomes across "
@@ -316,7 +341,7 @@ class TestRefineDuplicatesStructure:
             f"expected exactly ONE sign-off, found {letter.count('Sincerely,')}: "
             f"{letter!r}"
         )
-        hook_phrase = f"direct match for the {job['title']} role at {job['company']}"
+        hook_phrase = f"led me to the {job['title']} role at {job['company']}"
         assert letter.count(hook_phrase) == 1, (
             f"expected the hook sentence to appear exactly once, found "
             f"{letter.count(hook_phrase)}: {letter!r}"

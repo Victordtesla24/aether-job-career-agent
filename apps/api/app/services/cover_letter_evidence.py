@@ -64,6 +64,7 @@ def build_guard_corpora(
     career_corpus: str = "",
     story_evidence: str = "",
     corpus_evidence: str = "",
+    company_facts: str = "",
 ) -> GuardCorpora:
     """Assemble both corpora for one cover-letter draft.
 
@@ -74,6 +75,17 @@ def build_guard_corpora(
     (MV-cover-letter-studio-003). It is passed in rather than sanitized here so
     each caller keeps using the single sanitized value it also feeds to the
     prompt and to the §9 risk vocabulary — one sanitization, one string.
+
+    ``company_facts`` (AUD-COV-3, optional): the SANITIZED text of a real,
+    fetched company fact (``app.services.company_facts.fetch_company_facts``)
+    the letter may cite. Treated EXACTLY like ``sanitized_description`` — it
+    answers "does this entity exist in this context?" for the
+    FabricationGuard (so a cited fact is not flagged as fabricated) but is
+    never §9 claim evidence, same reasoning as the job description: a fact
+    ABOUT THE COMPANY is not evidence the CANDIDATE personally has anything,
+    and a personal claim grounded only in fetched company vocabulary is a
+    fabrication about the candidate exactly like one grounded only in JD
+    vocabulary.
 
     The three evidence units are optional because they genuinely can be empty:
     a user with no ingested career data, no Story Bank entries or no evidence
@@ -91,6 +103,7 @@ def build_guard_corpora(
                 job_title,
                 company,
                 sanitized_description,
+                company_facts,
                 letter_date,
                 signer,
                 position,
