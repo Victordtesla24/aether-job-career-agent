@@ -92,6 +92,50 @@ const QuestionnaireSchema = z.object({
 
 export type Questionnaire = z.infer<typeof QuestionnaireSchema>;
 
+const SeedRemainingSchema = z.object({
+  concept: z.string(),
+  question: z.string(),
+  sensitivity: z.string(),
+});
+
+/**
+ * SETUP-1 — how far the bank can already act, as counts of stored rows.
+ *
+ * There is no blended "autonomy score" here on purpose (see
+ * `answer_bank.readiness_summary`): every field is a count of something that
+ * exists, so the UI states facts instead of scoring them.
+ */
+const ReadinessSchema = z.object({
+  seedTotal: z.number(),
+  seedCovered: z.number(),
+  seedRemaining: z.array(SeedRemainingSchema).default([]),
+  /** The factual subset that decides whether a submission can go out alone. */
+  essentialTotal: z.number(),
+  essentialCovered: z.number(),
+  setupComplete: z.boolean(),
+  liveAnswers: z.number(),
+  expiredAnswers: z.number(),
+  autoAnswerable: z.number(),
+  gatedAnswers: z.number(),
+  /** Recorded occurrences of the bank answering instead of stopping to ask. */
+  timesAnswered: z.number(),
+  /** Answers a real application taught the agent — the learning loop's output. */
+  learnedFromApplications: z.number(),
+  /** Applications standing on an unanswered question right now. */
+  applicationsWaiting: z.number(),
+  autoAnswerThreshold: z.number(),
+});
+
+export type AnswerBankReadiness = z.infer<typeof ReadinessSchema>;
+
+export async function fetchAnswerBankReadiness(
+  options: RequestOptions = {},
+): Promise<AnswerBankReadiness> {
+  return ReadinessSchema.parse(
+    await apiRequest<unknown>("/answer-bank/readiness", options),
+  );
+}
+
 const QuestionnaireResultSchema = z.object({
   banked: z.number(),
   skipped: z.number(),

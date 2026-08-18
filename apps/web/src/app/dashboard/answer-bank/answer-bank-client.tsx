@@ -25,17 +25,15 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import ScreeningQuestionnaire from "../../../components/answer-bank/ScreeningQuestionnaire";
 import {
   PROVENANCE_LABELS,
   SENSITIVITY_LABELS,
   deleteAnswer,
   expireAnswer,
   fetchAnswerBank,
-  fetchQuestionnaire,
-  submitQuestionnaire,
   updateAnswer,
   type AnswerBankItem,
-  type Questionnaire,
 } from "../../../lib/api/answer-bank";
 import {
   BANK_FILTERS,
@@ -44,7 +42,6 @@ import {
   statusLabel,
   statusTone,
   summarise,
-  unansweredConcepts,
   usageSummary,
   type BankFilter,
 } from "./answer-bank-lib";
@@ -289,25 +286,20 @@ function ItemRow({
 
 export default function AnswerBankClient() {
   const [items, setItems] = useState<AnswerBankItem[]>([]);
-  const [questionnaire, setQuestionnaire] = useState<Questionnaire | null>(null);
-  const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [filter, setFilter] = useState<BankFilter>("all");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [savingSeed, setSavingSeed] = useState(false);
-  const [seedResult, setSeedResult] = useState<string | null>(null);
-  const [showQuestionnaire, setShowQuestionnaire] = useState(false);
+  const [openQuestionnaire, setOpenQuestionnaire] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [bank, seed] = await Promise.all([fetchAnswerBank(), fetchQuestionnaire()]);
+      const bank = await fetchAnswerBank();
       setItems(bank.items);
-      setQuestionnaire(seed);
       // The set-up panel opens by itself only while the bank is genuinely
       // empty — once the user has answers, it is a thing they choose to open.
-      setShowQuestionnaire(bank.items.length === 0);
+      if (bank.items.length === 0) setOpenQuestionnaire(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : "The Answer Bank could not be loaded.");
     } finally {
@@ -321,32 +313,6 @@ export default function AnswerBankClient() {
 
   const summary = useMemo(() => summarise(items), [items]);
   const visible = useMemo(() => applyFilter(items, filter), [items, filter]);
-  const remaining = useMemo(
-    () =>
-      questionnaire
-        ? unansweredConcepts(questionnaire.questions, questionnaire.answeredConcepts).length
-        : 0,
-    [questionnaire],
-  );
-
-  const saveSeed = useCallback(async () => {
-    const answers = Object.entries(drafts)
-      .map(([question, answer]) => ({ question, answer: answer.trim() }))
-      .filter((entry) => entry.answer.length > 0);
-    if (answers.length === 0) return;
-    setSavingSeed(true);
-    setSeedResult(null);
-    try {
-      const result = await submitQuestionnaire(answers);
-      setSeedResult(result.detail);
-      setDrafts({});
-      await load();
-    } catch (err) {
-      setSeedResult(err instanceof Error ? err.message : "Those answers did not save.");
-    } finally {
-      setSavingSeed(false);
-    }
-  }, [drafts, load]);
 
   return (
     <div className="space-y-5">
@@ -390,100 +356,15 @@ export default function AnswerBankClient() {
         <Stat label="Times used" value={summary.timesUsed} />
       </div>
 
-      {/* ---- Set-up questionnaire ------------------------------------- */}
-      {questionnaire ? (
-        <section
-          data-testid="bank-questionnaire"
-          className="rounded-[14px] border border-white/10 bg-white/[0.02] p-5"
-        >
-          <header className="mb-3 flex flex-wrap items-start justify-between gap-x-4 gap-y-2">
-            <div className="min-w-0">
-              <p className="mono text-[10px] font-semibold uppercase tracking-[0.08em] text-aether-muted-dim">
-                Set-up
-              </p>
-              <h2 className="text-[15px] font-semibold">The questions employers ask most</h2>
-              <p className="mt-0.5 text-[13px] leading-[1.5] text-aether-muted">
-                Answer these once and applications stop waiting on you for them.{" "}
-                {remaining > 0
-                  ? `${remaining} still unanswered.`
-                  : "All answered — nothing left here."}
-              </p>
-            </div>
-            <button
-              type="button"
-              data-testid="bank-questionnaire-toggle"
-              onClick={() => setShowQuestionnaire((prev) => !prev)}
-              className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-aether-muted transition hover:bg-white/10 hover:text-white"
-            >
-              {showQuestionnaire ? "Hide" : "Answer them"}
-            </button>
-          </header>
-
-          {showQuestionnaire ? (
-            <>
-              <ul className="space-y-3">
-                {questionnaire.questions.map((question) => {
-                  const answered = questionnaire.answeredConcepts.includes(question.concept);
-                  return (
-                    <li key={question.concept} data-testid={`seed-${question.concept}`}>
-                      <label
-                        htmlFor={`seed-input-${question.concept}`}
-                        className="flex flex-wrap items-center gap-2 text-[13px] text-white"
-                      >
-                        {question.question}
-                        {answered ? (
-                          <span className="text-[10px] text-aether-green">✓ answered</span>
-                        ) : null}
-                        {!question.autoAnswerable ? (
-                          <span className="rounded border border-aether-yellow/40 px-1.5 py-0.5 text-[10px] text-aether-yellow">
-                            asks you first
-                          </span>
-                        ) : null}
-                      </label>
-                      <input
-                        id={`seed-input-${question.concept}`}
-                        data-testid={`seed-input-${question.concept}`}
-                        type="text"
-                        value={drafts[question.question] ?? ""}
-                        placeholder={question.placeholder}
-                        onChange={(e) =>
-                          setDrafts((prev) => ({ ...prev, [question.question]: e.target.value }))
-                        }
-                        className="mt-1 w-full rounded-md border border-white/15 bg-black/30 px-2.5 py-1.5 text-[12px] text-white placeholder:text-aether-muted-dim focus:border-[#818CF8]/60 focus:outline-none"
-                      />
-                      <p className="mt-1 text-[11px] leading-snug text-aether-muted-dim">
-                        {question.helper}
-                      </p>
-                    </li>
-                  );
-                })}
-              </ul>
-              <div className="mt-4 flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  data-testid="bank-questionnaire-save"
-                  disabled={savingSeed}
-                  onClick={() => void saveSeed()}
-                  className="rounded-lg bg-aether-violet px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-aether-violet/80 disabled:opacity-50"
-                >
-                  {savingSeed ? "Saving…" : "Save my answers"}
-                </button>
-                <span className="text-[11px] text-aether-muted-dim">
-                  Leave anything blank to keep answering it per application.
-                </span>
-              </div>
-              {seedResult ? (
-                <p
-                  data-testid="bank-questionnaire-result"
-                  className="mt-2 text-[11px] text-aether-muted"
-                >
-                  {seedResult}
-                </p>
-              ) : null}
-            </>
-          ) : null}
-        </section>
-      ) : null}
+      {/* ---- Set-up questionnaire -------------------------------------
+          One shared component with the Settings → Screening Answers panel
+          (`components/answer-bank/ScreeningQuestionnaire`). It owns its own
+          fetch and save; this page only tells it whether to start expanded
+          (it does while the bank is genuinely empty) and refreshes the list
+          below once answers are banked. */}
+      <section className="rounded-[14px] border border-white/10 bg-white/[0.02] p-5">
+        <ScreeningQuestionnaire defaultOpen={openQuestionnaire} onSaved={() => void load()} />
+      </section>
 
       {/* ---- The bank -------------------------------------------------- */}
       <section className="rounded-[14px] border border-white/10 bg-white/[0.02] p-5">
