@@ -11,14 +11,26 @@ exactly what the server saw.
   GET /logs/<stream>/follow  live stream (SSE)       (?tail=50)
   GET /health                liveness
   GET /guardian/<env>        latest guardian report (JSON)
+  GET /manifest              environment manifest, volatile fields re-probed live
+  GET /briefing              the same manifest as an agent-readable markdown briefing
 
 Read-only by construction: it opens files 'rb' and shells out only to
 `journalctl`. Bound to loopback; Traefik terminates TLS and authenticates.
 """
 from __future__ import annotations
-import json, os, subprocess, threading, time
+import importlib.util, json, os, subprocess, threading, time
+from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+
+# The probe lives in manifest.py and is imported rather than reimplemented, so
+# the live endpoint and the generated file can never disagree about what
+# "observed" means. install.sh puts both files in place together.
+_MANIFEST_PY = Path("/opt/aether-guardian/manifest.py")
+_spec = importlib.util.spec_from_file_location("aether_manifest", _MANIFEST_PY)
+_manifest = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_manifest)
+manifest_probe = _manifest.probe
 from urllib.parse import urlparse, parse_qs
 
 PORT = 9400
@@ -86,8 +98,25 @@ class H(BaseHTTPRequestHandler):
 
         if parts[0] == "manifest":
             f = Path("/etc/aether/environments.json")
-            if f.exists(): return self._send(200, f.read_bytes(), "application/json")
-            return self._send(503, b'{"error":"manifest not generated yet"}\n', "application/json")
+            if not f.exists():
+                return self._send(503, b'{"error":"manifest not generated yet"}\n', "application/json")
+            # Served with every volatile field re-observed NOW. The file on disk
+            # is at most one guardian cycle old, and an agent that asks this
+            # endpoint whether a service is up must not be handed a fifteen
+            # minute old "active" for a service that died fourteen minutes ago.
+            try:
+                doc = json.loads(f.read_text())
+                for env in doc.get("environments", []):
+                    env["observed"] = manifest_probe(env)
+                doc["served_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+                doc.setdefault("observations", {})["source"] = (
+                    "re-probed at request time by the logstream, not read from the cached file")
+                body = (json.dumps(doc, indent=2) + "\n").encode()
+            except Exception as exc:                     # fall back to the cached file, and say so
+                body = (json.dumps({"warning": "live re-probe failed; serving the cached manifest",
+                                    "error": str(exc)[:200],
+                                    "cached": json.loads(f.read_text())}, indent=2) + "\n").encode()
+            return self._send(200, body, "application/json")
 
         if parts[0] == "briefing":
             f = Path("/etc/aether/ENVIRONMENTS.md")
