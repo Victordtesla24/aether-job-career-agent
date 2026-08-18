@@ -1361,6 +1361,27 @@ The following environment variables must be defined in .env:
 - `AETHER_ALLOWED_INTERNAL_EMAIL_DOMAINS` (Comma-separated domains bypassing paywall; currently aether.local)
 - `CLAUDE_CODE_OAUTH_TOKEN` (Claude Code API token for agent integration)
 
+**Agent Directives cadence (AUD-AGENT-3, ADR-AGI-2 P1):**
+- `AETHER_AGI_DIRECTIVES_ENABLED` (Boolean, code default `false`/unset. Gates
+  BOTH halves of the Stage-1 rules loop: (1) whether an issued
+  `AgentDirective` actually amends the policy an agent obeys
+  (`app/routers/agents.py::agent_directives_enabled`), and (2) — as of
+  AUD-AGENT-3 — whether the new daily ARQ cron
+  (`app/workers/agent_directives_sweep.agent_directives_cron`, registered in
+  `app/workers/settings.py::_cron_jobs`, runs inside the already-deployed
+  `aether-worker.service`) evaluates any user at all. Before this item, the
+  cron did not exist and the flag was never set in prod, which is why
+  `AgentDirective` carried 0 rows ever
+  (docs/delivery/evidence/RUN-20260818T0223Z/AUD-AGENT-3/01-scout-reproduction.log).
+  **Deploy step (not performed by this change — the .env is never edited by
+  an agent):** add `AETHER_AGI_DIRECTIVES_ENABLED=true` to prod `.env`, then
+  `sudo systemctl restart aether-worker.service` inside a claimed deploy
+  window (the worker's start script sources `.env` once at process start —
+  see §2 "Worker Service" above — so a bare `.env` edit alone does not take
+  effect until the process restarts). No new systemd unit is needed: the
+  cron is picked up by the worker process that already runs
+  `board_sweep_cron` / `apply_sweep_cron` on the same mechanism.
+
 ### .env File Format
 
 ```
