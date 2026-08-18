@@ -56,14 +56,41 @@ from pathlib import Path
 
 import pytest
 
-from app.db import new_id
+from app.db import ensure_user_profile_columns, new_id
 from app.repositories.approval import ApprovalRepository
+from app.services.application_submission import user_match_threshold
 
 _TESTS_DIR = Path(__file__).resolve().parent
 _REPO_ROOT = _TESTS_DIR.parents[2]
 _APPLY_PAGE_FIXTURES = _TESTS_DIR / "fixtures" / "apply_pages"
 _EXECUTOR_TESTS = _TESTS_DIR / "test_u5b_apply_executor.py"
 _TRACKER_LIB = _REPO_ROOT / "apps" / "web" / "src" / "components" / "applications" / "tracker-lib.ts"
+
+
+def _above_this_users_real_match_threshold(conn, user_id: str) -> float:
+    """The fitScore every job this file seeds must clear.
+
+    Reads THIS user's real, live ``agentConfig`` straight off the ``User``
+    row (exactly what ``apply_sweep.sweep_pending_transmissions`` reads via
+    its own ``_load_user``) and runs it through the SAME public function the
+    sweep's D2 match-threshold gate calls --
+    ``app.services.application_submission.user_match_threshold`` -- so this
+    fixture can never drift from whatever the real seeded default actually
+    is (a fresh user's ``agentConfig`` currently arrives via a Postgres
+    column default of ``{"autoApply": false, "approvalGate": true,
+    "matchThreshold": 80}``, AUD-UX-1, not any hardcoded assumption in this
+    test file). A fitScore hardcoded against a stale assumption (formerly
+    78.0, calibrated against a retired "default 50" belief) silently routes
+    every seeded application to ``skippedBelowThreshold`` before
+    ``_attempt_transmission`` is ever reached -- see
+    docs/delivery/evidence/RUN-20260818T0223Z/SUB-011/03-reverse-red.md.
+    """
+    ensure_user_profile_columns()
+    with conn.cursor() as cur:
+        cur.execute('SELECT "agentConfig" FROM "User" WHERE "id" = %s', (user_id,))
+        row = cur.fetchone()
+    config = row[0] if row else None
+    return user_match_threshold(config) + 5.0
 
 
 @pytest.fixture()
@@ -88,7 +115,7 @@ def _make_job(conn, user_id: str, *, source_url: str | None = None) -> str:
                 source_url
                 if source_url is not None
                 else f"https://jobs.ashbyhq.com/xero/{job_id}/application",
-                78.0,
+                _above_this_users_real_match_threshold(conn, user_id),
             ),
         )
     conn.commit()
