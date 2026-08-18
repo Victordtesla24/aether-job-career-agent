@@ -725,6 +725,41 @@ class GmailService:
         except Exception as exc:  # noqa: BLE001
             raise GmailError(f"Gmail thread list failed: {exc}") from exc
 
+    def get_thread_messages(self, gmail_thread_id: str) -> list[dict[str, Any]]:
+        """Every message on one Gmail thread, oldest first.
+
+        Sync persists only the latest message on ``EmailThread.messages``.
+        Thread history is fetched on demand so the inbox payload stays bounded.
+        """
+        try:
+            svc = self._client()
+            full = (
+                svc.users()
+                .threads()
+                .get(userId="me", id=gmail_thread_id, format="full")
+                .execute()
+            )
+            out: list[dict[str, Any]] = []
+            for msg in full.get("messages") or []:
+                payload = msg.get("payload") or {}
+                headers = payload.get("headers") or []
+                display, addr = _split_address(_header(headers, "From"))
+                date_header = _header(headers, "Date")
+                out.append(
+                    {
+                        "from": display,
+                        "fromEmail": addr,
+                        "body": _decode_body(payload) or msg.get("snippet") or "",
+                        "receivedAt": date_header,
+                        "gmailMessageId": msg.get("id") or "",
+                    }
+                )
+            return out
+        except GmailError:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            raise GmailError(f"Gmail thread history failed: {exc}") from exc
+
     def _new_authorized_http(self, credentials: Any) -> Any:
         """A FRESH ``AuthorizedHttp`` (its own ``httplib2.Http`` connection pool)
         for ONE worker thread.

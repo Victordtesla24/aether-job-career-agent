@@ -652,7 +652,13 @@ def email_inbox(
                        ) AS total,
                        count(*) FILTER (
                          WHERE classification IN ('priority', 'followup')
-                       ) AS recruiter_emails
+                       ) AS recruiter_emails,
+                       count(*) FILTER (
+                         WHERE classification = 'auto'
+                       ) AS automated,
+                       count(*) FILTER (
+                         WHERE classification = 'personal'
+                       ) AS personal_hidden
                 FROM "EmailThread"
                 WHERE "userId" = %s
                 """,
@@ -700,7 +706,13 @@ def email_inbox(
                            ) AS total,
                            count(*) FILTER (
                              WHERE classification IN ('priority', 'followup')
-                           ) AS recruiter_emails
+                           ) AS recruiter_emails,
+                           count(*) FILTER (
+                             WHERE classification = 'auto'
+                           ) AS automated,
+                           count(*) FILTER (
+                             WHERE classification = 'personal'
+                           ) AS personal_hidden
                     FROM "EmailThread"
                     WHERE "userId" = %s
                     """,
@@ -711,6 +723,8 @@ def email_inbox(
 
     total = int((totals_row[0] if totals_row else 0) or 0)
     recruiter_emails = int((totals_row[1] if totals_row else 0) or 0)
+    automated_count = int((totals_row[2] if totals_row and len(totals_row) > 2 else 0) or 0)
+    personal_hidden = int((totals_row[3] if totals_row and len(totals_row) > 3 else 0) or 0)
 
     messages = []
     for _recency, t, latest, verdict in scored:
@@ -766,6 +780,11 @@ def email_inbox(
             "intelligence": _inbox_intelligence(t.get("aiInsights")),
             "draftReply": str(t.get("draftReply") or ""),
             "unread": unread,
+            "messageCount": (
+                len(t.get("messages") or [])
+                if isinstance(t.get("messages"), list)
+                else 1
+            ),
         })
 
     activity = _email_activity_stats(uid)
@@ -851,6 +870,8 @@ def email_inbox(
             "sentApproved": activity["sentApproved"],
             "followUpsSent": activity["followUpsSent"],
             "avgResponseHrs": None,
+            "automatedCount": automated_count,
+            "personalHidden": personal_hidden,
         },
         "followUps": follow_ups,
         "messages": messages,

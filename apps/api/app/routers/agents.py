@@ -1935,7 +1935,15 @@ def _interview_prep_will_call_llm(params: dict[str, Any]) -> bool:
 #: refuses). All three are decidable from the params alone, so they are never
 #: even reserved.
 _EMAIL_AGENT_NO_LLM_MODES = frozenset(
-    {"send", "apply_labels", "job_alerts", "job-alerts"}
+    {
+        "send",
+        "apply_labels",
+        "job_alerts",
+        "job-alerts",
+        "mark_read",
+        "trash_automated",
+        "thread_history",
+    }
 )
 
 #: The ONLY ``emailAgent`` mode that actually opens an ``ApprovalRequest``.
@@ -3945,6 +3953,18 @@ class EmailAgentRequest(BaseModel):
     #: Explicit lighter-model retry after a provider 429. Never a free-form
     #: model id — ADR-ML-3 forbids the client choosing an arbitrary substitute.
     light_retry: bool = False
+    # --- mark_read / apply_labels (bulk) ---------------------------------
+    #: Bulk target set for ``mark_read``/``apply_labels`` — many threads in
+    #: ONE call (e.g. "mark all visible read", "label all visible"). Falls
+    #: back to ``thread_id`` (singular) when omitted.
+    thread_ids: list[str] | None = None
+    #: ``apply_labels`` mode — Gmail label NAMES to add (resolved/created via
+    #: ``ensure_label``).
+    add: list[str] | None = None
+    #: ``apply_labels`` mode — Gmail label IDs to remove.
+    remove: list[str] | None = None
+    #: ``apply_labels`` mode — target one Gmail message id directly.
+    message_id: str | None = None
 
 
 @router.post("/email/run")

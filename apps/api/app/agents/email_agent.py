@@ -29,7 +29,13 @@ Modes (``run(user_id, mode=...)``):
                   and apply URL were not all genuinely read out of the email.
 - ``insights``  — produce the AI-intelligence view-model (score + breakdown +
                   summary) the Email Center's intelligence panel renders.
-- ``apply_labels`` — apply/remove Gmail labels on a thread's latest message.
+- ``apply_labels`` — apply/remove Gmail labels on a thread's latest message
+                  (optional ``thread_ids`` for a bulk apply).
+- ``mark_read`` — remove Gmail ``UNREAD`` from career threads (never an LLM call).
+- ``trash_automated`` — Gmail-trash threads the career filter already classed
+                  as automated/alert mail, then mark them ``trashed``. Never
+                  sends. Never touches human recruiter threads.
+- ``thread_history`` — fetch the real Gmail thread (every message), on demand.
 - ``send``      — NEVER sends directly: it creates a *pending* ``email_send``
                   ApprovalRequest. The human approves, then the approvals
                   ``/execute`` route performs the real Gmail send.
@@ -117,7 +123,8 @@ _REPLY_SYSTEM = (
     "present in the candidate's resume and the incoming email. Never invent "
     "skills, employers, titles, metrics, or availability. Keep it professional "
     "and specific. No subject line, body only. Respond with JSON: "
-    '{"body": "<reply>"}'
+    '{"body": "<reply>", "tone": {"enthusiasm": 0-100, "formality": 0-100, '
+    '"detail": 0-100}}'
 )
 
 _INSIGHTS_SYSTEM = (
@@ -156,6 +163,10 @@ class EmailAgentResult:
     #: Recruiter threads that received a persisted review-only draft this run.
     #: Never a send count — outbound mail stays behind the approval gate.
     drafted: int = 0
+    marked_read: int = 0
+    trashed: int = 0
+    tone: Optional[dict[str, Any]] = None
+    thread_messages: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass
@@ -250,16 +261,19 @@ class EmailAgent:
     def _threads(self, user_id: str) -> list[dict[str, Any]]:
         from app.services.gmail_service import (
             ensure_email_thread_agent_columns,
+            ensure_email_thread_gmail_columns,
             ensure_email_thread_last_message_column,
         )
 
         ensure_email_thread_last_message_column()
         ensure_email_thread_agent_columns()
+        ensure_email_thread_gmail_columns()
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     'SELECT id, subject, messages, classification,'
-                    ' "gmailThreadId", "lastMessageAt", "createdAt",'
+                    ' "gmailThreadId", "gmailMessageId", labels,'
+                    ' "gmailAccountId", "lastMessageAt", "createdAt",'
                     ' "draftReply" FROM "EmailThread"'
                     ' WHERE "userId" = %s'
                     " AND COALESCE(classification, '') <> 'personal'"
@@ -272,7 +286,8 @@ class EmailAgent:
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    'SELECT id, subject, messages, "gmailThreadId", "gmailMessageId"'
+                    'SELECT id, subject, messages, "gmailThreadId", "gmailMessageId",'
+                    ' "gmailAccountId"'
                     ' FROM "EmailThread" WHERE id = %s AND "userId" = %s',
                     (thread_id, user_id),
                 )
@@ -358,9 +373,41 @@ class EmailAgent:
             return self._insights(user_id, params)
         if mode == "apply_labels":
             return self._apply_labels(user_id, params)
+        if mode == "mark_read":
+            return self._mark_read(user_id, params)
+        if mode == "trash_automated":
+            return self._trash_automated(user_id)
+        if mode == "thread_history":
+            return self._thread_history(user_id, params)
         if mode == "send":
             return self._send(user_id, params)
         raise EmailAgentError(f"Unknown email agent mode '{mode}'")
+
+    def _update_thread_fields(
+        self, user_id: str, thread_id: str, **fields: Any
+    ) -> None:
+        if not fields:
+            return
+        allowed = {"labels": '"labels"', "classification": "classification"}
+        assignments = []
+        values: list[Any] = []
+        for key, value in fields.items():
+            column = allowed.get(key)
+            if not column:
+                continue
+            assignments.append(f"{column} = %s")
+            values.append(value)
+        if not assignments:
+            return
+        values.extend([thread_id, user_id])
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    f'UPDATE "EmailThread" SET {", ".join(assignments)}'
+                    ' WHERE id = %s AND "userId" = %s',
+                    tuple(values),
+                )
+            conn.commit()
 
     # --------------------------------------------------------------- triage
     def _sync_career_mailboxes(self, user_id: str) -> int:
@@ -867,7 +914,7 @@ class EmailAgent:
             )
             message = "Draft ready — review and approve before sending."
         try:
-            draft, flagged = self._draft_once(prompt, corpus, "default", params)
+            draft, flagged, tone = self._draft_once(prompt, corpus, "default", params)
         except LLMUnavailableError as exc:
             return EmailAgentResult(
                 mode=mode,
@@ -884,7 +931,7 @@ class EmailAgent:
                 "using ONLY words that appear in the resume or the incoming email."
             )
             try:
-                draft, flagged = self._draft_once(
+                draft, flagged, tone = self._draft_once(
                     retry_prompt, corpus, "retry", params
                 )
             except (LLMFixtureMissingError, LLMUnavailableError):
@@ -906,6 +953,7 @@ class EmailAgent:
             draft=draft,
             flagged=flagged,
             drafted=1 if draft else 0,
+            tone=tone,
             message=message,
         )
 
@@ -915,7 +963,7 @@ class EmailAgent:
         corpus: str,
         fixture_key: str,
         params: dict[str, Any] | None = None,
-    ) -> tuple[str, list[str]]:
+    ) -> tuple[str, list[str], dict[str, int] | None]:
         raw = self._llm.complete_json(
             "email_reply",
             _REPLY_SYSTEM,
@@ -925,7 +973,18 @@ class EmailAgent:
             fixture_key=fixture_key,
         )
         draft = str(raw.get("body") or "").strip()
-        return draft, self._guard.check(draft, corpus)
+        return draft, self._guard.check(draft, corpus), self._coerce_tone(raw.get("tone"))
+
+    @classmethod
+    def _coerce_tone(cls, raw: Any) -> dict[str, int] | None:
+        if not isinstance(raw, dict):
+            return None
+        tone: dict[str, int] = {}
+        for key in ("enthusiasm", "formality", "detail"):
+            score = cls._coerce_score(raw.get(key))
+            if score is not None:
+                tone[key] = score
+        return tone or None
 
     # ------------------------------------------------------------- insights
     def _insights(self, user_id: str, params: dict[str, Any]) -> EmailAgentResult:
@@ -978,6 +1037,7 @@ class EmailAgent:
             message="Intelligence computed.",
         )
 
+
     # --------------------------------------------------------- apply_labels
     def _apply_labels(self, user_id: str, params: dict[str, Any]) -> EmailAgentResult:
         if not self._is_connected(user_id):
@@ -988,23 +1048,164 @@ class EmailAgent:
                 llm_called=False,
                 message="Connect Gmail to manage labels.",
             )
-        thread_id = params.get("thread_id")
-        add_names = params.get("add") or []
-        remove_ids = params.get("remove") or []
-        thread = self._thread(user_id, thread_id) if thread_id else {}
-        message_id = params.get("message_id") or thread.get("gmailMessageId")
-        if not message_id:
+        add_names = list(params.get("add") or [])
+        remove_ids = list(params.get("remove") or [])
+        thread_ids: list[str] = []
+        for raw in params.get("thread_ids") or []:
+            if isinstance(raw, str) and raw.strip():
+                thread_ids.append(raw.strip())
+        if params.get("thread_id"):
+            thread_ids.append(str(params["thread_id"]))
+        message_ids: list[str] = []
+        if params.get("message_id"):
+            message_ids.append(str(params["message_id"]))
+        for tid in thread_ids:
+            try:
+                thread = self._thread(user_id, tid)
+            except LookupError:
+                continue
+            mid = thread.get("gmailMessageId")
+            if mid:
+                message_ids.append(str(mid))
+        seen: set[str] = set()
+        unique_ids: list[str] = []
+        for mid in message_ids:
+            if mid in seen:
+                continue
+            seen.add(mid)
+            unique_ids.append(mid)
+        if not unique_ids:
             raise EmailAgentError("apply_labels requires message_id or a synced thread")
         gmail = self._gmail_for(user_id)
         add_ids = [gmail.ensure_label(name) for name in add_names]
-        gmail.modify_labels(message_id, add=add_ids, remove=remove_ids)
+        for mid in unique_ids:
+            gmail.modify_labels(mid, add=add_ids, remove=remove_ids)
         return EmailAgentResult(
             mode="apply_labels",
             connected=True,
-            llm_called=False,  # a Gmail label mutation — no model involved
-            thread_id=thread_id,
+            llm_called=False,
+            thread_id=params.get("thread_id"),
             labels_applied=list(add_names),
-            message=f"Applied {len(add_names)} label(s).",
+            message=f"Applied {len(add_names)} label(s) to {len(unique_ids)} message(s).",
+        )
+
+    def _mark_read(self, user_id: str, params: dict[str, Any]) -> EmailAgentResult:
+        if not self._is_connected(user_id):
+            return EmailAgentResult(
+                mode="mark_read",
+                connected=False,
+                degraded=True,
+                llm_called=False,
+                message="Connect Gmail to mark messages read.",
+            )
+        wanted = {
+            str(x) for x in (params.get("thread_ids") or []) if isinstance(x, str) and x
+        }
+        marked = 0
+        for thread in self._threads(user_id):
+            tid = str(thread.get("id") or "")
+            if wanted and tid not in wanted:
+                continue
+            labels = list(thread.get("labels") or [])
+            if not any(str(x).upper() == "UNREAD" for x in labels):
+                continue
+            mid = thread.get("gmailMessageId")
+            if not mid:
+                continue
+            gmail = self._gmail_for(user_id, account_id=thread.get("gmailAccountId"))
+            gmail.modify_labels(str(mid), remove=["UNREAD"])
+            remaining = [x for x in labels if str(x).upper() != "UNREAD"]
+            try:
+                self._update_thread_fields(user_id, tid, labels=remaining)
+            except Exception:  # noqa: BLE001
+                logger.exception("email_agent_mark_read_persist_failed thread_id=%s", tid)
+            marked += 1
+        return EmailAgentResult(
+            mode="mark_read",
+            connected=True,
+            llm_called=False,
+            marked_read=marked,
+            message=(
+                f"Marked {marked} thread{'s' if marked != 1 else ''} read."
+                if marked
+                else "No unread career threads to mark."
+            ),
+        )
+
+    def _trash_automated(self, user_id: str) -> EmailAgentResult:
+        if not self._is_connected(user_id):
+            return EmailAgentResult(
+                mode="trash_automated",
+                connected=False,
+                degraded=True,
+                llm_called=False,
+                message="Connect Gmail to trash automated mail.",
+            )
+        from app.services.career_email_filter import classify_thread
+
+        trashed = 0
+        for thread in self._threads(user_id):
+            if str(thread.get("classification") or "") == "trashed":
+                continue
+            if classify_thread(thread).category != "auto":
+                continue
+            tid = str(thread.get("id") or "")
+            mid = thread.get("gmailMessageId")
+            if mid:
+                gmail = self._gmail_for(user_id, account_id=thread.get("gmailAccountId"))
+                gmail.trash(str(mid))
+            if tid:
+                try:
+                    self._update_thread_fields(user_id, tid, classification="trashed")
+                except Exception:  # noqa: BLE001
+                    logger.exception(
+                        "email_agent_trash_automated_persist_failed thread_id=%s", tid
+                    )
+            trashed += 1
+        return EmailAgentResult(
+            mode="trash_automated",
+            connected=True,
+            llm_called=False,
+            trashed=trashed,
+            message=(
+                f"Moved {trashed} automated thread{'s' if trashed != 1 else ''} to Trash."
+                if trashed
+                else "No automated or spam threads to trash."
+            ),
+        )
+
+    def _thread_history(self, user_id: str, params: dict[str, Any]) -> EmailAgentResult:
+        if not self._is_connected(user_id):
+            return EmailAgentResult(
+                mode="thread_history",
+                connected=False,
+                degraded=True,
+                llm_called=False,
+                message="Connect Gmail to load thread history.",
+            )
+        thread_id = params.get("thread_id")
+        if not thread_id:
+            raise EmailAgentError("thread_history requires thread_id")
+        thread = self._thread(user_id, thread_id)
+        gmail_tid = thread.get("gmailThreadId")
+        if not gmail_tid:
+            return EmailAgentResult(
+                mode="thread_history",
+                connected=True,
+                llm_called=False,
+                thread_id=str(thread_id),
+                thread_messages=[],
+                message="This thread has no Gmail history to load.",
+            )
+        gmail = self._gmail_for(user_id, account_id=thread.get("gmailAccountId"))
+        messages = gmail.get_thread_messages(str(gmail_tid))
+        return EmailAgentResult(
+            mode="thread_history",
+            connected=True,
+            llm_called=False,
+            thread_id=str(thread_id),
+            thread_messages=list(messages or []),
+            message=f"{len(messages or [])} message(s) in this thread.",
         )
 
     # ------------------------------------------------------------------ send
