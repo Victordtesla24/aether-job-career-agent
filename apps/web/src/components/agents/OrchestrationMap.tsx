@@ -3,12 +3,12 @@
 /**
  * Agent Orchestration workflow map(s) — S-UI §4.1 TAB 1 (the hero).
  *
- * Renders `GET /agents/orchestration-map`: every catalog agent placed into one
- * or more DEFINED end-to-end workflow maps (the backend ships 3 —
- * application-pipeline / learning-loop / enrichment — per
- * `apps/api/app/routers/agents.py::_ORCHESTRATION_MAPS`), each agent showing
- * its stage, its real-vs-planned status, the metrics it consumes, its
- * threshold responsibilities, its last-run policy tier and its trend.
+ * Renders `GET /agents/orchestration-map`: every catalog agent placed into the
+ * Career Search Operating Loop (the backend ships one map —
+ * `career-operating-loop` — per `apps/api/app/routers/agents.py::_ORCHESTRATION_MAPS`).
+ * Each agent shows its stage, real-vs-planned status, the metrics it consumes,
+ * its threshold responsibilities, its team role and neighbours, its last-run
+ * policy tier and its trend.
  *
  * DISTINCT from `components/agents/Orchestration.tsx` (the task-queue /
  * performance / error-log widget) — this is the workflow GRAPH, not the live
@@ -353,6 +353,22 @@ function NodeDetail({
             <span className="mt-0.5 block">
               <span className="text-aether-muted-dim">Trend: </span>
               {trend ?? "—"}
+            </span>
+            <span className="mt-0.5 block">
+              <span className="text-aether-muted-dim">Team role: </span>
+              {agent.teamRole?.trim() ? agent.teamRole : "—"}
+            </span>
+            <span className="mt-0.5 block">
+              <span className="text-aether-muted-dim">Depends on: </span>
+              {agent.dependsOn && agent.dependsOn.length > 0
+                ? agent.dependsOn.join(", ")
+                : "—"}
+            </span>
+            <span className="mt-0.5 block">
+              <span className="text-aether-muted-dim">Supports: </span>
+              {agent.supports && agent.supports.length > 0
+                ? agent.supports.join(", ")
+                : "—"}
             </span>
             {/* Binding constraint (U-AX-V4): lastRunAt as RELATIVE time, with
                 the absolute stamp kept beside it — a relative label alone is
@@ -1325,7 +1341,7 @@ function MapGraph({
       <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-1.5 border-t border-hairline pt-3.5 text-[11px] leading-[1.5] text-aether-muted-dim">
         <span className="flex items-center gap-2">
           <span
-            className="h-1.5 w-1.5 rounded-full bg-aether-coral shadow-[0_0_8px_1px_rgba(255,107,53,0.8)]"
+            className="h-1.5 w-1.5 rounded-full bg-gold shadow-[0_0_8px_1px_rgba(201,168,76,0.8)]"
             aria-hidden="true"
           />
           live run — the only thing that moves

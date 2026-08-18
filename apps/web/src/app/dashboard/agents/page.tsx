@@ -565,7 +565,7 @@ export default function AgentsPage() {
     return row ? { key: row.key, name: row.name, model: row.model } : null;
   }, [catalog]);
 
-  // P1-B — "Run everything": ONE server-recorded plan over all three workflows.
+  // P1-B — "Run everything": ONE server-recorded plan over the operating loop.
   // Deliberately NOT folded into `busy`/`pipeline` above: that pair models a
   // SYNCHRONOUS call this tab is holding open, while a plan runs on the queue
   // and outlives this tab. The hook watches the recorded plan row instead, and

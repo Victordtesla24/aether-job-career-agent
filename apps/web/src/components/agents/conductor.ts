@@ -2,10 +2,7 @@
  * P1-B CONDUCTOR — the pure logic behind the Conductor band.
  *
  * ADR-AGI-3 Decision 2, with the owner's 2026-08-14 addendum: the Supervisor
- * stops being a stage-node inside one map and becomes the CONDUCTOR of all
- * THREE workflows, and the UI has to show that. Everything renderable about
- * that claim is derived here, in one module with no JSX, so each rule can be
- * tested as a rule rather than inferred from a screenshot.
+ * is the CONDUCTOR of the operating loop, and the UI has to show that.
  *
  * THE HONESTY RULES THIS MODULE ENCODES (they are why it exists):
  *
@@ -26,7 +23,7 @@
  *     (llm_client.resolve_provider): a `/` in the id is an OpenRouter id, a
  *     bare `claude-*` is direct Anthropic. Nothing here re-decides billing; it
  *     only names what the server would do.
- *  5. WORKFLOW NAMES COME FROM THE PAYLOAD. The three maps are named by
+ *  5. WORKFLOW NAMES COME FROM THE PAYLOAD. Maps are named by
  *     GET /agents/orchestration-map, so a backend that renames or re-groups a
  *     workflow moves this UI with it, and a card the maps do not place is
  *     DISCLOSED rather than dropped into whichever group looked closest.
@@ -53,7 +50,7 @@ export const CONDUCTOR_HEADING = "Conductor";
  * edges.
  */
 export const CONDUCTOR_MANDATE =
-  "One supervisor schedules every run across all three workflows below — in " +
+  "One supervisor schedules every run on the operating loop below — in " +
   "dependency order, deduping cards that share a backend, holding exclusive " +
   "slots where the database demands one, and reserving budget per step rather " +
   "than for the whole plan.";

@@ -1010,3 +1010,16 @@ Rules of engagement unchanged: locks (git/deploy/test), runbook deploys, append-
 **Does not touch:** networking CRM, sales/branding/admin, PR #19 close-out.
 **Deploy:** push onto `origin/main`; delete `fix/email-center-llm` after land. No PR.
 
+---
+
+## SESSION ORCH-TEAM — 2026-08-18T04:40Z — Agent workflow map team-value
+
+**By:** Cursor Grok session. Isolated worktree `.claude/worktrees/feat-agent-team-workflow` on `feat/agent-team-workflow-map`, rebased onto current `origin/main` after NW-ADV and EC-FIX landed.
+**Scope claimed:**
+- `apps/api/app/routers/agents.py` — `_ORCHESTRATION_MAPS` (one Career Search Operating Loop), honest `_AGENT_METRIC_VISIBILITY`, `_AGENT_TEAM` + map payload fields, `_pipeline_core` consumes `sup_out.get("plan")`, catalog tips for recruiterOutreach / reference Story Bank only
+- `apps/api/app/agents/outreach_support.py` (`grounded_candidate_text`), `recruiter_outreach_agent.py`, `reference_agent.py`
+- `apps/web/src/components/agents/OrchestrationMap.tsx` (team popover + gilt live-run legend), `conductor.ts` mandate copy, `workflow-linkage.ts` provenance line, `agentPolicy.ts` team fields
+- Tests: `test_orch_adv_operating_loop.py`, `test_orch_adv_story_grounded_outreach.py`, `orch-adv-operating-loop.test.ts`; `test_aud_agent4_honest_counts.py` looks up the map that contains `matchScoring`
+**Does not touch:** `email_agent.py`, `llm_client.py`, Email Center, `sales_agent.py`, networking CRM, `ats_engine.py`, `apply_sweep.py`, PR #19
+**Deploy:** push this branch then merge to `origin/main`; delete `feat/agent-team-workflow-map` after land. Do not close foreign PR #19.
+
