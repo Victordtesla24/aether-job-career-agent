@@ -319,7 +319,7 @@ def test_quota_exhaustion_oat01_does_not_fall_through_to_api_key(monkeypatch):
     )
     monkeypatch.setattr(
         "app.services.llm_client.resolve_user_credential",
-        lambda provider, user_id=None, agent_key=None: oauth_cred,
+        lambda provider, user_id=None, agent_key=None, *, require_auth_modes=None: oauth_cred,
     )
 
     calls: list[dict] = []
@@ -458,21 +458,34 @@ def test_billing_audit_records_auth_mode_api_key(
     client, auth_headers, test_user_id, monkeypatch, _clean_provider_credentials
 ):
     """REGRESSION: an api_key credential yields ``authMode == 'api_key'`` in the
-    run billing audit."""
+    run billing audit.
+
+    Originally exercised this on an Anthropic/Claude model. Superseded by
+    MODEL-SUB-QUOTA (eb948e87, 2026-08-17, OWNER DIRECTIVE): a Claude model can
+    now ONLY ever bill via ``oauth_token`` (``CLAUDE_AUTH_MODES``) — an
+    Anthropic api_key credential is never eligible to serve one, so
+    ``provider='anthropic', authMode='api_key'`` can no longer occur (see
+    ``test_billing_audit_of_a_claude_run_names_the_subscription_not_a_users_api_key``
+    in test_model_sub_quota.py for that now-current, intentionally different
+    behaviour). This regression's actual concern — the audit surfaces an
+    api_key credential's authMode correctly — is untouched by that policy on
+    the OpenRouter path, so it is repointed there instead of asserting a
+    scenario the code now correctly refuses.
+    """
     from app.routers.agents import _billing_audit
 
     _clear_anthropic_env(monkeypatch)
-    monkeypatch.setenv("AETHER_MODEL_REASONING", "claude-opus-4-8")
+    monkeypatch.setenv("AETHER_MODEL_REASONING", "deepseek/deepseek-v4-pro")
 
     put = client.put(
-        "/agents/providers/anthropic/credential",
-        json={"authMode": "api_key", "secret": API03_KEY},
+        "/agents/providers/openrouter/credential",
+        json={"authMode": "api_key", "secret": "sk-or-test-billing-audit-key"},
         headers=auth_headers,
     )
     assert put.status_code == 200, put.text
 
     audit, provider = _billing_audit(test_user_id, "coverLetter")
-    assert provider == "anthropic"
+    assert provider == "openrouter"
     assert audit["authMode"] == "api_key"
 
 
