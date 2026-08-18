@@ -80,7 +80,7 @@ _MONTHS = {
     "december": 12, "dec": 12,
 }
 _ABSOLUTE_DATE = re.compile(
-    r"\b(\d{1,2})\s+("
+    r"\b(\d{1,2})(?:st|nd|rd|th)?\s+("
     + "|".join(_MONTHS)
     + r")(?:\s+(\d{4}))?\b",
     re.IGNORECASE,
@@ -90,13 +90,34 @@ _WEEKDAYS = {
     "friday": 4, "saturday": 5, "sunday": 6,
 }
 
+# Do not require ``\b`` before ``@``: a space and ``@`` are both non-word,
+# so ``Project Manager @ Next Business Energy`` never matched (live miss).
 _AT_COMPANY = re.compile(
-    r"\b(?:at|@)\s+([A-Z][A-Za-z0-9&'-]+(?:\s+[A-Z][A-Za-z0-9&'-]+){0,4})\b"
+    r"(?:@|\bat)\s+([A-Z][A-Za-z0-9&'-]+(?:\s+[A-Z][A-Za-z0-9&'-]+){0,4})\b"
+)
+_WITH_COMPANY = re.compile(
+    r"\bwith\s+([A-Z][A-Za-z0-9&'-]+(?:\s+[A-Z][A-Za-z0-9&'-]+){1,4})\b"
+)
+_PAREN_ROLE = re.compile(
+    r"\(([A-Za-z][A-Za-z0-9][^@\n]{3,80}?)\s*@"
 )
 _ROLE = re.compile(
     r"(?:the\s+role\s+is|role:|interview\s+for)\s+"
     r"([^,\n]{6,120})",
     re.IGNORECASE,
+)
+_CONSUMER_EMAIL_DOMAINS = frozenset(
+    {
+        "gmail.com",
+        "googlemail.com",
+        "outlook.com",
+        "hotmail.com",
+        "live.com",
+        "yahoo.com",
+        "icloud.com",
+        "me.com",
+        "msn.com",
+    }
 )
 _LOCATION_OFFICE = re.compile(
     r"\bat\s+our\s+([A-Za-z][A-Za-z\s-]{2,40}\s+office)\b",
@@ -238,7 +259,11 @@ def parse_interview_thread(
                 cleaned = re.sub(r"\s+", " ", q).strip()
                 if cleaned and not _is_quoted_question(cleaned):
                     _add_unique(questions, cleaned)
-        co = _detect_company(blob, emails + [str(msg.get("fromEmail") or "")])
+        co = _detect_company(
+            blob,
+            emails + [str(msg.get("fromEmail") or "")],
+            subject=subject,
+        )
         if co:
             company = co
         role = _detect_title(blob, company)
@@ -403,44 +428,53 @@ def _is_recruiter_domain(email: str) -> bool:
     return any(domain == d or domain.endswith("." + d) for d in _RECRUITER_DOMAINS)
 
 
-def _detect_company(text: str, emails: list[str]) -> str | None:
+def _clean_company_name(raw: str) -> str | None:
+    name = re.sub(r"\s+", " ", (raw or "")).strip(" .,")
+    if not name or name[0].isdigit():
+        return None
+    if name.lower() in {"google meet", "microsoft teams"}:
+        return None
+    if _is_recruiter_company(name):
+        return None
+    return name
+
+
+def _company_rank(name: str, subject: str) -> tuple[bool, int, int]:
+    in_subject = name.lower() in (subject or "").lower()
+    return (in_subject, len(name.split()), len(name))
+
+
+def _detect_company(
+    text: str, emails: list[str], *, subject: str = ""
+) -> str | None:
     found: list[str] = []
-    for match in _AT_COMPANY.finditer(text or ""):
-        name = re.sub(r"\s+", " ", match.group(1)).strip(" .,")
-        if not name or name[0].isdigit():
-            continue
-        if name.lower() in {"google meet", "microsoft teams"}:
-            continue
-        if _is_recruiter_company(name):
-            continue
-        found.append(name)
+    for pattern in (_AT_COMPANY, _WITH_COMPANY):
+        for match in pattern.finditer(text or ""):
+            name = _clean_company_name(match.group(1))
+            if name:
+                found.append(name)
     if not found:
         for email in emails:
             if not email or "@" not in email or _is_recruiter_domain(email):
                 continue
             domain = email.rsplit("@", 1)[-1].lower()
             slug = domain.split(".")[0]
-            for name in found or []:
-                if re.sub(r"[^a-z0-9]", "", name.lower()) == re.sub(r"[^a-z0-9]", "", slug):
-                    return name
-            # Prefer a body mention whose letters match the employer domain.
             compact = re.sub(r"[^a-z0-9]", "", (text or "").lower())
             if slug and slug in compact:
-                # Recover the capitalised form from the body.
                 recovered = _recover_company_from_slug(text, slug)
                 if recovered:
                     return recovered
-    if found:
-        # Prefer the name whose slug matches a non-recruiter sender.
-        for email in emails:
-            if not email or "@" not in email or _is_recruiter_domain(email):
-                continue
-            slug = email.rsplit("@", 1)[-1].split(".")[0].lower()
-            for name in found:
-                if re.sub(r"[^a-z0-9]", "", name.lower()) == re.sub(r"[^a-z0-9]", "", slug):
-                    return name
-        return found[-1]
-    return None
+        return None
+    for email in emails:
+        if not email or "@" not in email or _is_recruiter_domain(email):
+            continue
+        slug = email.rsplit("@", 1)[-1].split(".")[0].lower()
+        for name in found:
+            if re.sub(r"[^a-z0-9]", "", name.lower()) == re.sub(
+                r"[^a-z0-9]", "", slug
+            ):
+                return name
+    return max(found, key=lambda name: _company_rank(name, subject))
 
 
 def _recover_company_from_slug(text: str, slug: str) -> str | None:
@@ -452,10 +486,19 @@ def _recover_company_from_slug(text: str, slug: str) -> str | None:
 
 
 def _detect_title(text: str, company: str | None) -> str | None:
+    title = None
     match = _ROLE.search(text or "")
-    if not match:
+    if match:
+        title = match.group(1)
+    else:
+        paren = _PAREN_ROLE.search(text or "")
+        if paren:
+            title = paren.group(1)
+    if not title:
         return None
-    title = re.sub(r"\s+", " ", match.group(1)).strip(" .")
+    title = re.sub(r"\s+", " ", title).strip(" .")
+    title = re.sub(r"^(?:the|an|a)\s+", "", title, flags=re.IGNORECASE)
+    title = re.sub(r"\s+position with\s+.*$", "", title, flags=re.IGNORECASE)
     title = re.sub(r"\s+[—–-]\s*$", "", title).strip()
     if company and title.lower() == company.lower():
         return None
@@ -483,11 +526,24 @@ def _emails_from_message(msg: dict[str, Any]) -> list[str]:
     return emails
 
 
+def _is_consumer_email(email: str) -> bool:
+    domain = email.rsplit("@", 1)[-1].lower() if "@" in email else ""
+    return domain in _CONSUMER_EMAIL_DOMAINS
+
+
 def _prefer_employer_email(emails: list[str]) -> str | None:
-    for email in reversed(emails):
-        if not _is_recruiter_domain(email):
+    cleaned = [e.strip() for e in emails if e and "@" in e]
+    if not cleaned:
+        return None
+    professional = [e for e in cleaned if not _is_consumer_email(e)]
+    pool = professional or cleaned
+    for email in reversed(pool):
+        if not _is_recruiter_domain(email) and not _is_consumer_email(email):
             return email
-    return emails[-1] if emails else None
+    for email in reversed(pool):
+        if _is_recruiter_domain(email):
+            return email
+    return pool[-1]
 
 
 def _name_for_email(messages: list[dict[str, Any]], email: str | None) -> str | None:

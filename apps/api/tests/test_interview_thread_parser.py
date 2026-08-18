@@ -115,6 +115,99 @@ def test_video_link_detected_from_meet_url():
     assert local.hour == 14
 
 
+def test_at_sign_company_in_subject_is_next_business_energy():
+    """Live miss: 'Project Manager @ Next Business Energy' never matched.
+
+    ``_AT_COMPANY`` required a word boundary before ``@``. A space and ``@``
+    are both non-word, so the confirmation email that Interview Center must
+    show yielded company=None and ingest invented a NAB row from a résumé
+    quote instead.
+    """
+    offer = parse_interview_thread(
+        [
+            {
+                "from": "John Black",
+                "fromEmail": "john.black@robertwalters.com.au",
+                "createdAt": datetime(2026, 8, 18, 11, 36, tzinfo=_MEL),
+                "body": (
+                    "Hi Adan & Vikram,\n\n"
+                    "This email confirms your in-person interview for the "
+                    "Project Manager position with Next Business Energy.\n\n"
+                    "This will be Wednesday 19th August at 10:00am.\n\n"
+                    "The location will be confirmed tomorrow, but it will be "
+                    "in Docklands.\n"
+                ),
+            }
+        ],
+        subject="Interview: Adan & Vikram (Project Manager @ Next Business Energy",
+    )
+    assert offer.is_interview is True
+    assert offer.company == "Next Business Energy"
+    assert offer.title is not None
+    assert "project manager" in offer.title.lower()
+    assert "next business energy" not in offer.title.lower()
+    assert offer.interview_type == "onsite"
+    local = offer.scheduled_at.astimezone(_MEL)
+    assert local.date().isoformat() == "2026-08-19"
+    assert local.hour == 10
+    assert offer.location is not None
+    assert "docklands" in offer.location.lower()
+    assert offer.contact_email == "john.black@robertwalters.com.au"
+    assert offer.contact_name and "john" in offer.contact_name.lower()
+
+
+def test_quoted_resume_at_nab_does_not_override_trail_employer():
+    """A pasted CV line 'at NAB' must not beat '@ Next Business Energy'."""
+    offer = parse_interview_thread(
+        [
+            {
+                "from": "John Black",
+                "fromEmail": "john.black@robertwalters.com.au",
+                "createdAt": datetime(2026, 8, 6, 15, 52, tzinfo=_MEL),
+                "body": (
+                    "Please call me back ASAP regarding a second interview "
+                    "with Next Business Energy.\n\n"
+                    "On Thu, 6 Aug 2026 Vikram wrote:\n"
+                    "Project Manager | Retail Systems Transformation at NAB\n"
+                    "sarkar.vikram@gmail.com | Melbourne, VIC\n"
+                ),
+            }
+        ],
+        subject="RE: Project Manager - Next Business Energy - Authority to Represent",
+    )
+    assert offer.company == "Next Business Energy"
+    assert offer.contact_email == "john.black@robertwalters.com.au"
+
+
+def test_ordinal_date_beats_unrelated_tomorrow():
+    """'19th August' must win over 'confirmed tomorrow' in the same body.
+
+    Without ordinal support the parser treated '19th August' as unmatched and
+    then took 'tomorrow' from the location sentence, which is the interview
+    day only when the message happens to be dated the 18th.
+    """
+    offer = parse_interview_thread(
+        [
+            {
+                "from": "John Black",
+                "fromEmail": "john.black@robertwalters.com.au",
+                "createdAt": datetime(2026, 8, 6, 15, 52, tzinfo=_MEL),
+                "body": (
+                    "This email confirms your in-person interview for the "
+                    "Project Manager position with Next Business Energy.\n"
+                    "This will be Wednesday 19th August at 10:00am.\n"
+                    "The location will be confirmed tomorrow, but it will be "
+                    "in Docklands.\n"
+                ),
+            }
+        ],
+        subject="Interview: Adan & Vikram (Project Manager @ Next Business Energy",
+    )
+    local = offer.scheduled_at.astimezone(_MEL)
+    assert local.date().isoformat() == "2026-08-19"
+    assert local.hour == 10
+
+
 def test_non_interview_thread_is_not_an_offer():
     offer = parse_interview_thread(
         [

@@ -388,6 +388,70 @@ def test_evidenced_invite_creates_job_and_application_when_none_exist(
     assert itype[0] == "onsite"
 
 
+def test_at_sign_confirmation_creates_next_business_energy_not_nab(
+    db_session, test_user_id
+):
+    """The production confirmation uses '@ Next Business Energy', not 'at'."""
+    import json as json_lib
+    import uuid
+    from datetime import datetime as dt
+    from zoneinfo import ZoneInfo
+
+    from app.routers.interviews import _ensure_interview_tables
+    from app.services.interview_ingest import ingest_inbound_for_user
+
+    _ensure_interview_tables()
+    resume_id = uuid.uuid4().hex
+    with db_session.cursor() as cur:
+        cur.execute(
+            'INSERT INTO "Resume" ("id","userId","version","sections","formatHash",'
+            '"updatedAt") VALUES (%s,%s,1,%s,%s,NOW())',
+            (resume_id, test_user_id, json_lib.dumps({"summary": "PM"}), "hash-at"),
+        )
+    db_session.commit()
+    melbourne = ZoneInfo("Australia/Melbourne")
+    thread = {
+        "id": "et-nbe-at",
+        "subject": "Interview: Adan & Vikram (Project Manager @ Next Business Energy",
+        "gmailThreadId": "1a01283b30f89f5d",
+        "lastMessageAt": dt(2026, 8, 18, 11, 36, tzinfo=melbourne),
+        "messages": [
+            {
+                "from": "John Black",
+                "fromEmail": "john.black@robertwalters.com.au",
+                "createdAt": dt(2026, 8, 18, 11, 36, tzinfo=melbourne),
+                "body": (
+                    "This email confirms your in-person interview for the "
+                    "Project Manager position with Next Business Energy.\n"
+                    "This will be Wednesday 19th August at 10:00am.\n"
+                    "The location will be in Docklands.\n"
+                    "Project Manager | Retail Systems Transformation at NAB\n"
+                    "sarkar.vikram@gmail.com\n"
+                ),
+            }
+        ],
+    }
+    ingest_inbound_for_user(test_user_id, [thread], force_calendar=False)
+    with db_session.cursor() as cur:
+        cur.execute(
+            'SELECT j.company, j.title FROM "Application" a '
+            'JOIN "Job" j ON j.id = a."jobId" '
+            'WHERE a."userId" = %s',
+            (test_user_id,),
+        )
+        row = cur.fetchone()
+        cur.execute(
+            'SELECT "contactEmail" FROM "InterviewSchedule" WHERE "userId" = %s',
+            (test_user_id,),
+        )
+        contact = cur.fetchone()
+    assert row is not None
+    assert row[0] == "Next Business Energy"
+    assert "nab" not in row[0].lower()
+    assert "project manager" in row[1].lower()
+    assert contact[0] == "john.black@robertwalters.com.au"
+
+
 def test_career_calendar_event_is_detected():
     from app.services.interview_ingest import is_career_calendar_event
 

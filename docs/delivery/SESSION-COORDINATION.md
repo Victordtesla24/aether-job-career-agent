@@ -1332,5 +1332,12 @@ deploy can proceed; not a production UI change.
 ## SESSION IC-VISIBLE — 2026-08-18T18:25Z — Interview Center empty / wrong employer
 
 **By:** Cursor Grok session. Isolated worktree `/root/dev/aether-wt-ic-visible` on `feat/interview-center-nbe` from `origin/main` (`36fc2665`).
-**Why:** Production Interview Center showed nothing until Email Center was fetched. The Next Business Energy confirmation uses `@ Next Business Energy`, which the parser missed, so ingest created a NAB job from a quoted résumé line.
-**Scope claimed:** parser, ingest, GET /interviews + GET /workspaces/interviews/prep. Worktree only. No hand-restart.
+**Why:** Production Interview Center showed nothing until Email Center was fetched. The John Black / Adan / Next Business Energy confirmation (`Interview: Adan & Vikram (Project Manager @ Next Business Energy`, Wednesday 19 August 10:00, Docklands) never created an NBE application because `_AT_COMPANY` requires a word boundary before `@` (space + `@` has none). Ingest then created a Job from a quoted résumé line (`Project Manager | Retail Systems Transformation at NAB`) and assembled the pack for NAB, dated 6 August 15:55, with the candidate's Gmail as interviewer.
+**Scope claimed:**
+- `apps/api/app/services/interview_thread_parser.py` — `@ Company` and `with Company`; prefer the trail employer over a résumé `at NAB`; do not prefer a consumer Gmail over the recruiter
+- `apps/api/app/services/interview_ingest.py` — Interview Center GET ingests stored career threads; email-sourced Job company/title follow the parsed offer
+- `apps/api/app/routers/interviews.py` — list interviews runs stored-mailbox ingest first
+- `apps/api/app/routers/workspaces.py` — prep GET does the same
+- Tests: `test_interview_thread_parser.py`, `test_interview_ingest.py`, `test_workspaces.py`
+**Does not touch:** ATS, apply executor, llm_client, sales, design tokens.
+**Deploy:** merge to `origin/main` → VPS Delivery. No hand-restart. Delete branch after land. No standing PR.

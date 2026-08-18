@@ -138,6 +138,17 @@ def _session_from_application(app: dict[str, Any]) -> dict[str, Any]:
 def interview_prep(current_user: CurrentUser) -> dict[str, Any]:
     """Interview Center payload derived from real Application + AgentRun records."""
     uid = current_user["id"]
+    try:
+        from app.services.interview_ingest import ingest_stored_mailbox
+        from app.services.interview_prep_pipeline import generate_prep_after_ingest
+
+        results = ingest_stored_mailbox(uid)
+        if results:
+            generate_prep_after_ingest(uid, results)
+    except Exception:  # noqa: BLE001 — prep GET must still return a payload
+        logger.warning(
+            "interview mailbox ingest on prep failed user=%s", uid, exc_info=True
+        )
     interview_app = _active_interview_application(uid)
 
     with get_connection() as conn:

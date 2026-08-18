@@ -102,13 +102,20 @@ def _find_matching_application(
     sender_name: str,
     body: str,
 ) -> dict[str, Any] | None:
+    from app.services.interview_thread_parser import parse_interview_thread
+
     hay = _norm(" ".join((subject, sender_name, sender_email, body)))
     domain = _sender_domain(sender_email)
+    offer = parse_interview_thread(
+        [{"body": body, "from": sender_name, "fromEmail": sender_email}],
+        subject=subject,
+    )
+    parsed_company = _norm(offer.company or "")
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 """
-                SELECT a.id, a.status, j.company, j.title
+                SELECT a.id, a.status, j.company, j.title, j.description, j.source
                 FROM "Application" a
                 JOIN "Job" j ON j.id = a."jobId"
                 WHERE a."userId" = %s
@@ -123,6 +130,18 @@ def _find_matching_application(
         title = str(row.get("title") or "")
         if _company_matches(company, hay, domain):
             return row
+        if parsed_company and len(parsed_company) >= 3:
+            job_hay = _norm(
+                " ".join(
+                    (
+                        str(row.get("company") or ""),
+                        str(row.get("title") or ""),
+                        str(row.get("description") or ""),
+                    )
+                )
+            )
+            if parsed_company in job_hay:
+                return row
         title_n = _norm(title)
         if len(title_n) >= 8 and title_n in hay:
             return row
@@ -212,6 +231,9 @@ def ingest_interview_invite(
             contact_email=who_email,
         )
         promote_application_to_interview(user_id, existing["applicationId"])
+        _align_email_sourced_job(
+            user_id, existing["applicationId"], subject=subject, body=body
+        )
         return IngestResult(
             promoted=True,
             application_id=existing["applicationId"],
@@ -284,6 +306,7 @@ def ingest_interview_invite(
     promoted = promote_application_to_interview(user_id, app_id)
     if not promoted and str(matched.get("status") or "") in _ALREADY_INTERVIEW:
         promoted = True
+    _align_email_sourced_job(user_id, app_id, subject=subject, body=body)
     return IngestResult(
         promoted=promoted,
         application_id=app_id,
@@ -441,6 +464,113 @@ def ingest_inbound_for_user(
                 exc_info=True,
             )
     return results
+
+
+_mailbox_ingest_fp: dict[str, tuple[int, str, str]] = {}
+_mailbox_ingest_lock = threading.Lock()
+
+
+def _mailbox_fingerprint(threads: list[dict[str, Any]]) -> tuple[int, str, str]:
+    if not threads:
+        return (0, "", "")
+    latest = max(str(t.get("lastMessageAt") or t.get("createdAt") or "") for t in threads)
+    newest_id = max(str(t.get("id") or "") for t in threads)
+    return (len(threads), latest, newest_id)
+
+
+def ingest_stored_mailbox(user_id: str) -> list[IngestResult]:
+    """Ingest EmailThread rows already on disk. Used by Interview Center GET.
+
+    Does not call Gmail. Calendar listing still respects the existing TTL
+    inside ``ingest_inbound_for_user``. Skips when the stored mailbox has
+    not changed since the last successful ingest for this user, so a
+    realtime poll does not re-parse two hundred threads — and so a GET
+    that ran against an empty mailbox does not hide a thread inserted
+    moments later.
+    """
+    try:
+        threads = _load_career_threads(user_id)
+        fingerprint = _mailbox_fingerprint(threads)
+        with _mailbox_ingest_lock:
+            if _mailbox_ingest_fp.get(user_id) == fingerprint:
+                return []
+        results = ingest_inbound_for_user(user_id, threads, force_calendar=False)
+        with _mailbox_ingest_lock:
+            _mailbox_ingest_fp[user_id] = fingerprint
+        return results
+    except Exception:  # noqa: BLE001 — Interview Center GET must still list
+        logger.warning(
+            "stored mailbox interview ingest failed user=%s", user_id, exc_info=True
+        )
+        return []
+
+
+def _load_career_threads(user_id: str) -> list[dict[str, Any]]:
+    from app.services.gmail_service import (
+        ensure_email_thread_agent_columns,
+        ensure_email_thread_gmail_columns,
+        ensure_email_thread_last_message_column,
+    )
+
+    ensure_email_thread_last_message_column()
+    ensure_email_thread_agent_columns()
+    ensure_email_thread_gmail_columns()
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT id, subject, messages, classification,'
+                ' "gmailThreadId", "gmailMessageId", labels,'
+                ' "gmailAccountId", "lastMessageAt", "createdAt",'
+                ' "draftReply" FROM "EmailThread"'
+                ' WHERE "userId" = %s'
+                " AND COALESCE(classification, '') <> 'personal'"
+                ' ORDER BY COALESCE("lastMessageAt", "createdAt") DESC LIMIT 200',
+                (user_id,),
+            )
+            return rows_to_dicts(cur)
+
+
+def _align_email_sourced_job(
+    user_id: str,
+    application_id: str,
+    *,
+    subject: str,
+    body: str,
+) -> None:
+    """Correct an email-created Job when the parser now has a better employer."""
+    from app.services.interview_thread_parser import parse_interview_thread
+
+    offer = parse_interview_thread(
+        [{"body": body, "from": "", "fromEmail": ""}],
+        subject=subject,
+    )
+    company = (offer.company or "").strip()
+    title = (offer.title or "").strip()
+    if len(company) < 3:
+        return
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                UPDATE "Job" j SET
+                    company = %s,
+                    title = CASE WHEN %s <> '' THEN %s ELSE j.title END,
+                    location = COALESCE(%s, j.location),
+                    "updatedAt" = now()
+                FROM "Application" a
+                WHERE a.id = %s AND a."userId" = %s
+                  AND j.id = a."jobId" AND j.source = 'email'
+                """,
+                (
+                    company,
+                    title if len(title) >= 6 else "",
+                    title if len(title) >= 6 else "",
+                    offer.location,
+                    application_id,
+                    user_id,
+                ),
+            )
+        conn.commit()
 
 
 def _refresh_interview_row(
