@@ -68,12 +68,31 @@ build_and_restart() {
   ( set +u; . "$EXPORTS"; set -u; pnpm build )
   # shellcheck disable=SC2086
   systemctl restart $UNITS
-  sleep 18
+  sleep 8
+}
+
+wait_for_smoke() {
+  # Sentence-transformer weights load after uvicorn binds. Prod 2026-08-18T20:25Z
+  # returned health=000 at 18s, then rollback hit the same race. Wait until
+  # both API and web answer 200, bounded.
+  local waited=0
+  local delay=5
+  local budget=90
+  while [ "$waited" -lt "$budget" ]; do
+    if smoke; then
+      echo "[$ENV] smoke test PASSED after ${waited}s"
+      return 0
+    fi
+    sleep "$delay"
+    waited=$((waited + delay))
+  done
+  echo "[$ENV] smoke test FAILED after ${waited}s"
+  return 1
 }
 
 build_and_restart "$PINNED_REF"
 
-if smoke; then
+if wait_for_smoke; then
   echo "[$ENV] smoke test PASSED"
   exit 0
 fi
@@ -82,7 +101,7 @@ echo "[$ENV] smoke test FAILED"
 if [ "$ROLLBACK" = "--rollback-on-failure" ]; then
   echo "[$ENV] rolling back to $PREV"
   build_and_restart "$PREV"
-  if smoke; then
+  if wait_for_smoke; then
     echo "[$ENV] ROLLED BACK successfully to $PREV — production is serving the previous good commit"
     # The deploy failed; the pipeline must say so even though the rollback worked.
     exit 1

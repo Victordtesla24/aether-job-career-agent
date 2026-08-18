@@ -1338,6 +1338,12 @@ because `mon020-async-sync.test.tsx` waitFor(8000) exceeded vitest's 5000ms
 test timeout. Raising those two cases to 15s so the Chrome-launch commit can
 deploy. Not a Jobs product change.
 
+**Continuation 2026-08-18T20:27Z:** VPS Delivery `32177314169` verify/dev/test
+passed; prod smoke hit `API health = 000` at 18s (weights still loading) and
+rollback hit the same race. Live `/opt/aether-guardian/deploy_env.sh` now waits
+up to 90s for health. Rerunning the failed prod job only. Prod currently
+serves `3e209501` (autofill skip). Chrome launch is not live yet.
+
 ---
 
 ## SESSION IC-VISIBLE — 2026-08-18T18:25Z — Interview Center empty / wrong employer
