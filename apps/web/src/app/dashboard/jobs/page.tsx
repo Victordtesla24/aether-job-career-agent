@@ -659,6 +659,25 @@ export default function JobsPage() {
     return { total: all.length, scored, unscored: all.length - scored, newToday, sources };
   }, [jobs]);
 
+  // CR-P1-2 (RUN-20260818T0223Z commercial-readiness audit) — the header
+  // subtitle used to be a fixed string claiming every listed role was
+  // "scored against your résumé", rendered unconditionally even when the
+  // honest `jobs-stats` footnote directly beneath it said 0 of N were
+  // scored. The two lines must never disagree, so the subtitle is derived
+  // from the exact same `stats` the footnote reads, never a separate claim.
+  const jobsSubtitle = useMemo(() => {
+    if (stats.total === 0) {
+      return "Sync your job boards to find roles matched to your profile.";
+    }
+    if (stats.scored === 0) {
+      return `${stats.total} role${stats.total === 1 ? "" : "s"} discovered — none scored against your résumé yet.`;
+    }
+    if (stats.scored < stats.total) {
+      return `${stats.scored} of ${stats.total} roles scored against your résumé so far — your agents are still working through the rest.`;
+    }
+    return "Every role below was discovered by your agents and scored against your résumé.";
+  }, [stats]);
+
   // Source bar: real per-source counts from the loaded jobs, most jobs first.
   const sourceCards = useMemo(() => {
     const bySource = new Map<string, number>();
@@ -1049,7 +1068,12 @@ export default function JobsPage() {
           stats line moves into the header's reserved `footnote` slot, which
           renders it at 11px full-opacity instead of 10px/70% — D-ζ: the census
           of what has and has not been scored is a truth claim, and it gets MORE
-          legible in a redesign, never less. Copy verbatim. */}
+          legible in a redesign, never less.
+          CR-P1-2 (RUN-20260818T0223Z): the subtitle used to be a fixed
+          string claiming every role was "scored against your résumé" even
+          when `jobs-stats` said 0 were. `jobsSubtitle` is now derived from
+          the identical `stats` object so the headline and the footnote can
+          never contradict each other. */}
       <section className="atmos-hero">
         <PageHeader
           title={
@@ -1057,7 +1081,7 @@ export default function JobsPage() {
               <span className="text-gradient-brand">Job</span> Discovery
             </>
           }
-          subtitle="Every role below was discovered by your agents and scored against your résumé."
+          subtitle={<span data-testid="jobs-header-subtitle">{jobsSubtitle}</span>}
           action={
             <button
               type="button"
