@@ -8,12 +8,12 @@ provenance (``seek-alert``, …) is never a board row.
 """
 from __future__ import annotations
 
-from typing import Any, Mapping, Optional
+from typing import Any, Mapping, Optional, Sequence
 
 
 def build_integration_rows(
     *,
-    availability: list[Mapping[str, Any]],
+    availability: Sequence[Mapping[str, Any]],
     live_sources: Mapping[str, Any],
     job_counts: Mapping[str, Mapping[str, Any]],
     display_names: Mapping[str, str],
@@ -67,7 +67,7 @@ def build_integration_rows(
 
 
 def job_counts_from_source_rows(
-    source_rows: list[Mapping[str, Any]],
+    source_rows: Sequence[Mapping[str, Any]],
     *,
     known_sources: frozenset[str],
 ) -> dict[str, dict[str, Any]]:
@@ -86,7 +86,7 @@ def job_counts_from_source_rows(
 
 def merge_last_sync_from_status(
     job_counts: dict[str, dict[str, Any]],
-    status_rows: list[Mapping[str, Any]],
+    status_rows: Sequence[Mapping[str, Any]],
 ) -> None:
     """If a scout ran but persisted 0 jobs, still surface lastSyncAt when useful.
 
