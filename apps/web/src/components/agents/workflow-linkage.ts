@@ -294,8 +294,8 @@ const HOP = {
     kind: "reads",
     mechanism:
       "StoryRepository; each answer sketch grounded ONLY in the one cited story",
-    evidence: "apps/api/app/agents/interview_prep_agent.py:67,223-226,292",
-    discoveryEvidence: "apps/api/app/agents/interview_prep_agent.py:67,223-226",
+    evidence: "apps/api/app/agents/interview_prep_agent.py:67,239,308",
+    discoveryEvidence: "apps/api/app/agents/interview_prep_agent.py:67,239",
     anchors: [
       "from app.repositories.story import StoryRepository",
       "def _story_text(",
@@ -371,7 +371,7 @@ const HOP = {
     // EC-ADV 429-degrade inserted `_persist_filter_classifications` above the
     // scored UPDATE and shifted these lines — re-resolved against the live tree.
     // RUN-20260818T0223Z: batch-2 merge shifted this further; re-resolved again.
-    evidence: "apps/api/app/agents/email_agent.py:593-594",
+    evidence: "apps/api/app/agents/email_agent.py:603",
     discoveryEvidence: "apps/api/app/agents/email_agent.py:365-382",
     anchors: ['UPDATE "EmailThread" SET "classification" = %s,'],
     status: "live",
@@ -450,7 +450,7 @@ const HOP = {
     // EC-ADV 429-degrade + light-retry shifted `_job_alerts` — re-resolved
     // against HEAD so provenance CI stays honest (PROFILE-PHOTO Delivery unblock).
     // RUN-20260818T0223Z: batch-2 merge shifted it again; re-resolved once more.
-    evidence: "apps/api/app/agents/email_agent.py:701,781,796,810,820",
+    evidence: "apps/api/app/agents/email_agent.py:711,791,806,820,830",
     discoveryEvidence: "apps/api/app/agents/email_agent.py:410-420,505-518",
     anchors: [
       "def _job_alerts(",
@@ -517,7 +517,7 @@ const HOP = {
     to: "agent.interviewPrep",
     kind: "reads",
     mechanism: "questions predicted from the real posting + requirements",
-    evidence: "apps/api/app/agents/interview_prep_agent.py:66,256,362",
+    evidence: "apps/api/app/agents/interview_prep_agent.py:66,272,394",
     discoveryEvidence: "apps/api/app/agents/interview_prep_agent.py:66",
     anchors: [
       "from app.repositories.job import JobRepository",
