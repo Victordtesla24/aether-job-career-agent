@@ -116,6 +116,47 @@ describe("pipelineCompletionNotice", () => {
     expect(n.href).toBe("/dashboard/cover-letters");
   });
 
+  it("reports the AUD-COV-2 low-fit skip honestly instead of 'no jobs matched'", () => {
+    const message =
+      "No cover letter was auto-generated for this role: it scored 15 against " +
+      "your profile, below your match threshold of 50. Adjust your match " +
+      "threshold, or generate one yourself from the Cover Letter studio.";
+    const n = pipelineCompletionNotice({
+      status: "completed",
+      approvalRequired: false,
+      message,
+      steps: [
+        { agent: "scout", output: { persisted: 2 } },
+        { agent: "fitScorer", output: { scored: 3 } },
+        {
+          agent: "matcher",
+          output: { matched: 4, top_job_title: "Senior PM", top_company: "Deputy" },
+        },
+        { agent: "tailor", output: { changes: 7 } },
+        {
+          agent: "coverLetter",
+          output: {
+            skipped: true,
+            reason: "below_match_threshold",
+            fitScore: 15,
+            matchThreshold: 50,
+            message,
+          },
+        },
+      ],
+    });
+    // A job WAS matched and the résumé WAS tailored — the pre-AUD-COV-2 code
+    // would have fallen through to "no jobs matched yet", which is false.
+    expect(n.kind).toBe("info");
+    expect(n.text).toContain("4 jobs matched");
+    expect(n.text).toContain("7 changes");
+    expect(n.text).toContain("Senior PM @ Deputy");
+    expect(n.text).toContain("below your match threshold of 50");
+    expect(n.text).not.toContain("no jobs matched yet");
+    expect(n.text).not.toContain("cover letter drafted");
+    expect(n.href).toBe("/dashboard/cover-letters");
+  });
+
   it("guides the user to Jobs when no jobs matched", () => {
     const n = pipelineCompletionNotice({
       status: "completed",

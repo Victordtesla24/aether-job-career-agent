@@ -106,6 +106,18 @@ export default function CoverLettersPage() {
     model: CoverLetterRejection;
     retry: () => void;
   } | null>(null);
+  // AUD-COV-2: the backend's low-fit disclosure for the letter this screen
+  // just generated on the user's explicit request. Autopilot refuses to
+  // auto-generate for a job below her own matchThreshold; when SHE asks, the
+  // letter is written and this sentence must travel with it, because the
+  // letter's own opener reads as a confident match. Null for every letter
+  // that clears her bar. Bound to the letter id it describes so it is shown
+  // ONLY while that letter is the open one — a warning about letter A hanging
+  // over letter B would be its own dishonesty.
+  const [fitDisclosure, setFitDisclosure] = useState<{
+    letterId: string;
+    text: string;
+  } | null>(null);
 
   /** Route a caught agent-run/refine error to the rejection panel or the generic alert. */
   const handleAgentError = (e: unknown, fallbackMessage: string, retry: () => void) => {
@@ -156,12 +168,21 @@ export default function CoverLettersPage() {
   const applyCoverLetterResult = async (result: CoverLetterRunResult) => {
     if (result.missingResume || result.coverLetterUnavailable || !result.cover_letter_id) {
       setRejection(null);
+      // AUD-COV-2: no letter exists to disclose anything about.
+      setFitDisclosure(null);
       setError(result.message ?? "Add your resume before generating a cover letter.");
       return;
     }
     await load(result.cover_letter_id);
     setError(null);
     setRejection(null);
+    // AUD-COV-2: set from THIS run's result every time (not only when
+    // non-empty), so a good-fit regenerate clears a previous letter's warning
+    // instead of leaving it attached to a letter it does not describe.
+    const disclosure = result.fit_disclosure ?? "";
+    setFitDisclosure(
+      disclosure ? { letterId: result.cover_letter_id, text: disclosure } : null,
+    );
   };
 
   useEffect(() => {
@@ -402,6 +423,20 @@ export default function CoverLettersPage() {
           className="rounded-xl border border-state-danger/30 bg-state-danger/10 p-3 text-sm text-state-danger"
         >
           {error}
+        </p>
+      ) : null}
+
+      {/* AUD-COV-2: the letter WAS generated (the user asked for it explicitly),
+          so this is a warning beside a real artefact — never a refusal, and
+          never spliced into the letter body an employer reads. Rendered only
+          while the letter it describes is the open one. */}
+      {fitDisclosure && expanded === fitDisclosure.letterId ? (
+        <p
+          role="status"
+          data-testid="cover-letter-fit-disclosure"
+          className="rounded-xl border border-state-warn/30 bg-state-warn/10 p-3 text-sm text-state-warn"
+        >
+          {fitDisclosure.text}
         </p>
       ) : null}
 

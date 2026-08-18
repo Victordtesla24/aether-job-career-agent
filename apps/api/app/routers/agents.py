@@ -3910,6 +3910,12 @@ def run_cover_letter(
         # support). Identical to Application.coverLetterQuality, so the studio
         # shows the same numbers before and after a reload.
         "quality": output.get("quality", {}),
+        # AUD-COV-2: the honest low-fit disclosure for an EXPLICITLY requested
+        # letter on a role below the caller's own matchThreshold (or unscored).
+        # Empty string when the job clears the bar. Whitelisted here because
+        # this response is a whitelist — omitting it would drop the one signal
+        # that makes the explicit path honest rather than merely permitted.
+        "fit_disclosure": output.get("fit_disclosure", ""),
     }
 
 
@@ -4070,6 +4076,13 @@ def _pipeline_core(
     # could exceed the HTTP edge's ~100 s ceiling and surface as a 524 (D1).
     from app.agents.cover_letter_agent import FabricationError, StructuralError
     from app.agents.tailor_agent import NoChangesApplied
+    from app.services.application_submission import (
+        job_fit_score,
+        load_agent_config,
+        low_fit_skip_message,
+        meets_match_threshold,
+        user_match_threshold,
+    )
     from app.services.llm_client import shared_budget
 
     with shared_budget(budget_seconds):
@@ -4095,6 +4108,34 @@ def _pipeline_core(
                 "run_id": getattr(exc, "run_id", None),
             }
         steps.append({"agent": "tailor", "output": tailor_out})
+        # AUD-COV-2: this job was chosen BY the matcher, not by the user, so
+        # the cover step below is AUTO-generation and obeys the same fit bar
+        # the board sweep does. Below the user's own matchThreshold — or
+        # unscored — Aether does not write a letter whose §10.2 opener asserts
+        # a "direct match". The tailored résumé above is kept (it makes no
+        # claim about fit), and the honest skip is reported as this step's
+        # output rather than a silently missing step.
+        pipeline_threshold = user_match_threshold(load_agent_config(user_id))
+        pipeline_fit = job_fit_score(user_id, top_job_id)
+        if not meets_match_threshold(pipeline_fit, pipeline_threshold):
+            skip_message = low_fit_skip_message(pipeline_fit, pipeline_threshold)
+            steps.append({
+                "agent": "coverLetter",
+                "output": {
+                    "skipped": True,
+                    "reason": "below_match_threshold",
+                    "fitScore": pipeline_fit,
+                    "matchThreshold": pipeline_threshold,
+                    "message": skip_message,
+                },
+            })
+            return {
+                "status": "completed",
+                "steps": steps,
+                "top_job_id": top_job_id,
+                "approvalRequired": False,
+                "message": skip_message,
+            }
         try:
             letter_out = _dispatch(
                 user_id, "coverLetter", {"job_id": top_job_id},

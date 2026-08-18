@@ -294,12 +294,17 @@ def resolve_job_apply_recipient(
 _DEFAULT_MATCH_THRESHOLD = 50.0
 
 
-def _load_agent_config(user_id: str) -> dict[str, Any]:
+def load_agent_config(user_id: str) -> dict[str, Any]:
     """The ``User.agentConfig`` blob the Settings screen writes, or ``{}``.
 
     ``{}`` for a missing user, a NULL column, or a non-object value — every
     read of it below treats absence as the SAFE default (``autoApply`` off,
     ``approvalGate`` on, threshold at the audit default).
+
+    AUD-COV-2: PUBLIC because the auto-GENERATION gate (board sweep, pipeline,
+    cover-letter agent) needs the same blob the auto-APPLY gate below reads.
+    One reader means the two halves of "gate on real fit" cannot disagree
+    about what a given user's bar is.
     """
     from app.db import ensure_user_profile_columns
 
@@ -366,7 +371,92 @@ def meets_match_threshold(fit_score: Any, threshold: float) -> bool:
     return score >= threshold
 
 
-def _job_fit_score(user_id: str, job_id: str) -> Any:
+def format_score(value: Any) -> str:
+    """A score rendered the way the product shows it: ``72`` not ``72.0``."""
+    number = float(value)
+    return str(int(number)) if number == int(number) else f"{number:.1f}"
+
+
+def low_fit_disclosure(fit_score: Any, threshold: float) -> str:
+    """The honest sentence that must accompany a letter for a role the user's
+    own bar does not clear — ``""`` when the job DOES clear it.
+
+    AUD-COV-2. Automated generation is barred outright for these roles (see
+    ``workers.board_sweep`` / ``routers.agents._pipeline_core``), but an
+    EXPLICIT, user-initiated request is still honoured: the user is entitled
+    to apply anywhere they like. What Aether may not do is hand them a letter
+    that opens by asserting a "direct match" while silently knowing the fit
+    evidence says otherwise. This string is that missing disclosure. It is
+    METADATA travelling beside the letter — it is deliberately never spliced
+    into the letter body a real employer reads, and it does not alter the
+    §10.2 opener (that wording is AUD-COV-1's separate concern).
+    """
+    if meets_match_threshold(fit_score, threshold):
+        return ""
+    bar = format_score(threshold)
+    if fit_score is None or isinstance(fit_score, bool):
+        return (
+            "Fit not verified: this role has not been fit-scored against your "
+            f"profile, so nothing here confirms it meets your match threshold "
+            f"of {bar}. You asked for this letter explicitly — autopilot would "
+            "not have generated it. Check its claims against the posting "
+            "before you send it."
+        )
+    try:
+        score = format_score(fit_score)
+    except (TypeError, ValueError):
+        return (
+            "Fit not verified: this role's fit score could not be read, so "
+            f"nothing here confirms it meets your match threshold of {bar}. "
+            "You asked for this letter explicitly — autopilot would not have "
+            "generated it. Check its claims against the posting before you "
+            "send it."
+        )
+    return (
+        f"Low fit: this role scored {score} against your profile, below your "
+        f"match threshold of {bar}. You asked for this letter explicitly — "
+        "autopilot would not have generated it. Check its claims against the "
+        "posting before you send it."
+    )
+
+
+def low_fit_skip_message(fit_score: Any, threshold: float) -> str:
+    """Why an AUTOMATED path declined to generate for this job — ``""`` when it
+    would not have declined at all.
+
+    AUD-COV-2's other half. ``low_fit_disclosure`` speaks to a user who asked
+    for the letter; this speaks to a user who did not, and is what the board
+    sweep persists on its honest skip row and the pipeline returns as its
+    coverLetter step output. ONE builder for both so the autopilot and the
+    pipeline can never explain the same decision two different ways.
+    """
+    if meets_match_threshold(fit_score, threshold):
+        return ""
+    bar = format_score(threshold)
+    if fit_score is None or isinstance(fit_score, bool):
+        cause = (
+            "it has not been fit-scored yet, so nothing shows it meets your "
+            f"match threshold of {bar}"
+        )
+    else:
+        try:
+            cause = (
+                f"it scored {format_score(fit_score)} against your profile, "
+                f"below your match threshold of {bar}"
+            )
+        except (TypeError, ValueError):
+            cause = (
+                "its fit score could not be read, so nothing shows it meets "
+                f"your match threshold of {bar}"
+            )
+    return (
+        f"No cover letter was auto-generated for this role: {cause}. Adjust "
+        "your match threshold, or generate one yourself from the Cover Letter "
+        "studio."
+    )
+
+
+def job_fit_score(user_id: str, job_id: str) -> Any:
     """This user's own ``Job.fitScore`` for ``job_id`` — ``None`` if unscored
     or the job row is gone (both of which the threshold gate treats as BELOW)."""
     with get_connection() as conn:
@@ -387,7 +477,7 @@ def is_autonomous_submission_enabled(user_id: str) -> bool:
     touched the setting has ``autoApply`` false and ``approvalGate`` true, so
     this returns False and nothing can be sent without a human decision.
     """
-    config = _load_agent_config(user_id)
+    config = load_agent_config(user_id)
     return auto_apply_enabled(config) and not bool(config.get("approvalGate", True))
 
 
@@ -572,14 +662,14 @@ def maybe_autonomous_transmit(
     ``{"queued": ...}``-shaped error dict, because an outbound-mail problem
     must not fail the user's Apply click and must not be reported as a send.
     """
-    config = _load_agent_config(user_id)
+    config = load_agent_config(user_id)
     if not (auto_apply_enabled(config) and not bool(config.get("approvalGate", True))):
         return None
     # D6 — the match threshold gates the AUTONOMOUS fire, before anything is
     # resolved or claimed, so a blocked send leaves the card fully intact.
     payload = approval.get("payload")
     job_id = str(payload.get("job_id") or "") if isinstance(payload, dict) else ""
-    fit_score = _job_fit_score(user_id, job_id) if job_id else None
+    fit_score = job_fit_score(user_id, job_id) if job_id else None
     threshold = user_match_threshold(config)
     if not meets_match_threshold(fit_score, threshold):
         logger.info(

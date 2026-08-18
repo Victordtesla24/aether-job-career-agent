@@ -26,6 +26,11 @@ from app.repositories.cover_letter import CoverLetterRepository
 from app.repositories.job import JobRepository
 from app.repositories.story import StoryRepository
 from app.repositories.user import UserRepository
+from app.services.application_submission import (
+    load_agent_config,
+    low_fit_disclosure,
+    user_match_threshold,
+)
 from app.services.career_data import build_career_corpus
 from app.services.cover_letter_evidence import build_guard_corpora
 from app.services.cover_letter_quality import (
@@ -1246,6 +1251,23 @@ class CoverLetterResult:
     flagged: list[str] = field(default_factory=list)
     cover_letter_unavailable: bool = False
     message: str = ""
+    #: AUD-COV-2: the honest low-fit disclosure that must travel WITH a letter
+    #: written for a role the user's own ``agentConfig.matchThreshold`` does
+    #: not clear (or that has never been fit-scored). Empty string — the
+    #: overwhelmingly common case — when the job clears the bar.
+    #:
+    #: Automated generation is barred outright for these roles (the board
+    #: sweep and the pipeline both gate on the same rule), so this field is
+    #: reached only by an EXPLICIT, user-initiated request. Aether honours that
+    #: request — the user is entitled to apply anywhere — but it must not hand
+    #: back a letter whose §10.2 opener asserts a "direct match" while the fit
+    #: evidence it holds says otherwise, and say nothing.
+    #:
+    #: It is METADATA about the letter, deliberately NOT part of
+    #: ``cover_letter``: nothing here alters a single character of the text a
+    #: real employer receives, and the opener's wording is AUD-COV-1's
+    #: separate concern.
+    fit_disclosure: str = ""
     #: W-TAILOR-CONVERGE item 4: the deterministic quality breakdown of the
     #: SHIPPED letter plus the per-pass history behind it — the SAME dict
     #: persisted to ``Application.coverLetterQuality``, so the response and a
@@ -1641,6 +1663,15 @@ class CoverLetterAgent:
         job = self._jobs.get_by_id(job_id, user_id)
         if job is None:
             raise LookupError(f"Job {job_id} not found for user")
+
+        # AUD-COV-2. Computed from the job row already read, against the user's
+        # OWN bar, through the same two helpers the auto-apply gate uses — so
+        # "poor fit" means exactly one thing across generation and submission.
+        # Empty for a job that clears the bar; see ``CoverLetterResult
+        # .fit_disclosure`` for why it never touches the letter text.
+        fit_disclosure = low_fit_disclosure(
+            job.get("fitScore"), user_match_threshold(load_agent_config(user_id))
+        )
 
         # OUTBOUND artifact: ground ONLY on the caller's own résumé and REFUSE
         # when they have none — never emit the bundled operator résumé into a
@@ -2127,6 +2158,12 @@ class CoverLetterAgent:
                 # "Approve anyway — N dimensions below floor" gate and the
                 # Studio panel quote one computation, not two.
                 "qualityGate": letter_quality["qualityGate"],
+                # AUD-COV-2: the reviewer deciding whether to SEND this letter
+                # sees the same honest low-fit statement the generating call
+                # got back. Present (empty string) on every payload rather
+                # than conditionally, so a missing key can never be read as
+                # "fit was fine".
+                "fitDisclosure": fit_disclosure,
                 **build_approval_extras(letter, job, corpus),
             },
             application_id=stored["id"],
@@ -2147,5 +2184,6 @@ class CoverLetterAgent:
             approval_status=approval["status"],
             flagged=[],
             quality=letter_quality,
+            fit_disclosure=fit_disclosure,
         )
 

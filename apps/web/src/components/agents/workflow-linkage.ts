@@ -279,7 +279,7 @@ const HOP = {
     // `[story_evidence] if story_evidence else []` / `claim_evidence = " ".join(`
     // literals this hop used to cite were the asymmetry E3 closed — they no
     // longer exist here by construction, not by drift.
-    evidence: "apps/api/app/agents/cover_letter_agent.py:1709,1758,1762",
+    evidence: "apps/api/app/agents/cover_letter_agent.py:1740,1789,1793",
     discoveryEvidence: "apps/api/app/agents/cover_letter_agent.py:1557,1558-1563",
     anchors: [
       "story_evidence = build_story_evidence(",
@@ -402,9 +402,10 @@ const HOP = {
     // shift agents.py); anchors unchanged. The provenance re-anchor pass
     // revalidates every citation before the landing gates. AUD-AGENT-4 round 2
     // added `honest_map_counts` above these lines and shifted them again, and
-    // MODEL-SUB-QUOTA round 3 added imports + a config guard above those —
-    // re-resolved against the live tree after both merges, same anchors.
-    evidence: "apps/api/app/routers/agents.py:4008,4040",
+    // MODEL-SUB-QUOTA round 3 (merged alongside this R1-integrity land) added
+    // imports + a config guard above those — re-resolved against the live tree
+    // after both merges, same anchors.
+    evidence: "apps/api/app/routers/agents.py:4014,4046",
     discoveryEvidence: "apps/api/app/routers/agents.py:3380",
     anchors: [
       "def _pipeline_core(",
