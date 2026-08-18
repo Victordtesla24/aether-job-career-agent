@@ -1130,3 +1130,16 @@ Rules of engagement unchanged: locks (git/deploy/test), runbook deploys, append-
 - Tests: `test_email_agent.py`, `test_ml_w4c_email_agent_quota.py`, `email-center-wiring.test.ts`, `agents-feedback.test.ts`
 **Does not touch:** `llm_client.py`, `workspaces.py` networking/avatar routes, sales/admin, insights/draft 429 (no deterministic substitute), MV-006 wireframe chrome, unpushed `feat/ec-adv`.
 **Deploy:** push onto `origin/main`; delete `feat/ec-adv-429` after land. No PR.
+
+---
+
+## SESSION UPO-1 — 2026-08-18T09:35Z — per-user provider subscription OAuth mint
+
+**By:** Cursor Grok session. Isolated worktree `/root/dev/aether-wt-provider-oauth` on `feat/provider-subscription-oauth` from `origin/main` @ `8243a35c`.
+**Why:** Add Provider in Manage Agents (customer scope) only offered a manual paste of `claude setup-token`. Customers need in-app Anthropic subscription sign-in that fills the OAuth token field, then Save.
+**Scope claimed:**
+- `apps/api/app/routers/agents.py` — `POST /agents/user/providers/anthropic/oauth/start|exchange` (CurrentUser; mint-and-return; no deployment write)
+- `apps/web/src/components/agents/ProviderConfigModal.tsx`, `AnthropicOAuthPanel.tsx`, `api.ts`
+- Tests: `test_user_anthropic_oauth_mint.py`, `user-provider-oauth.test.tsx`, f01 guard update
+**Does not touch:** `llm_client.py`, applications timeline, email, networking, sales, ats_engine, profile avatar.
+**Deploy:** push → CI → merge `main` → `aether-autodeploy.timer`. Claimed deploy window starts on `origin/main` land. Delete `feat/provider-subscription-oauth` after verify. No standing PR.

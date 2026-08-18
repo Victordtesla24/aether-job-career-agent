@@ -18,8 +18,9 @@
  *    instead, and no byte of the operator's hint reaches the DOM;
  *  - an admin (the operator) still gets the deployment-wide panel unchanged;
  *  - the customer's credential modal writes the PER-USER store, and the
- *    Connect-with-Anthropic control (which writes the deployment-wide row, and
- *    is admin-only server-side) is not offered to them at all.
+ *    deployment-wide Connect-with-Anthropic control (which writes the shared
+ *    row, and is admin-only server-side) is not offered to them — they get
+ *    the per-user mint instead (UPO-1).
  */
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -217,7 +218,7 @@ describe("F-01 — the operator's provider credentials are not shipped to custom
     expect(putProviderCredentialMock).not.toHaveBeenCalled();
   });
 
-  it("does not offer a customer the deployment-wide Connect-with-Anthropic control", async () => {
+  it("gives a customer the per-user token mint, never the deployment-wide control", async () => {
     fetchMeMock.mockResolvedValue({ id: "u-cust", email: "c@example.com", name: "", isAdmin: false });
     fetchUserProviderCatalogMock.mockResolvedValue([
       { ...CUSTOMER_OPENROUTER, id: "anthropic", name: "Anthropic Claude", auth: "API Key" },
@@ -229,5 +230,7 @@ describe("F-01 — the operator's provider credentials are not shipped to custom
 
     await waitFor(() => expect(screen.getByTestId("provider-config-modal")).toBeTruthy());
     expect(screen.queryByTestId("anthropic-oauth-connect")).toBeNull();
+    expect(screen.queryByTestId("anthropic-oauth-reconnect")).toBeNull();
+    expect(screen.getByTestId("anthropic-oauth-user-connect")).toBeTruthy();
   });
 });

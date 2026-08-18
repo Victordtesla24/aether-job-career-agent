@@ -6459,12 +6459,12 @@ def put_user_credential(
         )
     except credential_vault.CredentialVaultError as exc:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
-    if stored_mode == "oauth_token":
-        # Sync CLAUDE_CODE_OAUTH_TOKEN to the repo-root .env (GAP-P7-DEF-A §3.3);
-        # best-effort, DB row is source of truth, token never logged.
-        from app.services import env_file_writer
-
-        env_file_writer.sync_oauth_token_env(stored_secret)
+    # Do NOT sync CLAUDE_CODE_OAUTH_TOKEN here. That env var is the operator's
+    # restart-survival copy of the DEPLOYMENT-WIDE credential (GAP-P7-DEF-A
+    # §3.3) and is written only by ``PUT /agents/providers/{id}/credential``
+    # and ``anthropic_oauth.persist_tokens``. Syncing a customer's token into
+    # it would re-bill every bare ``claude-*`` run — including cron — to this
+    # user, which is the F-01 failure mode the per-user store exists to prevent.
     # GAP-NEW-001: verify round-trip so the badge is truthful (best-effort).
     try:
         ok, _token, _detail = verify_user_credential(provider, user_id)
@@ -6532,6 +6532,28 @@ def _oauth_vault_ready_or_503() -> None:
         )
 
 
+def _begin_anthropic_oauth(user_id: str) -> str:
+    """Mint a PKCE pair + single-use state for ``user_id``; return the authorize URL.
+
+    Shared step 1 of BOTH Connect-with-Anthropic scopes (the operator flow
+    below and the per-user mint at ``/user/providers/anthropic/oauth/start``).
+    The two differ only in what step 2 does with the resulting token, never in
+    how the authorization is started, so this is deliberately one implementation.
+
+    The verifier is persisted server-side and NEVER leaves the process. Fails
+    closed with 503 when the vault key is absent: without it the credential
+    this flow leads to cannot be stored encrypted, so starting the flow would
+    only strand the user at its final step.
+    """
+    from app.services import anthropic_oauth
+
+    _oauth_vault_ready_or_503()
+    verifier, challenge = anthropic_oauth.generate_pkce()
+    state = anthropic_oauth.generate_state()
+    AnthropicOAuthStateRepository().create(state, user_id, verifier)
+    return anthropic_oauth.build_authorize_url(challenge, state)
+
+
 @router.post("/providers/anthropic/oauth/start")
 def anthropic_oauth_start(current_user: AdminUser) -> dict[str, Any]:
     """Begin the Connect-with-Anthropic flow: return the authorize URL.
@@ -6540,19 +6562,10 @@ def anthropic_oauth_start(current_user: AdminUser) -> dict[str, Any]:
     a flow whose step 2 (``/exchange``) writes the DEPLOYMENT-WIDE
     ``ProviderCredential('anthropic')`` row — see
     ``anthropic_oauth.persist_tokens``. It is the same shared store the manual
-    paste writes, so the whole flow is gated as one family.
-
-    Generates a server-side PKCE verifier + opaque single-use state, persists
-    them (the verifier NEVER leaves the server), and returns Anthropic's own
-    authorize URL. 503 when the vault key is absent (fail closed).
+    paste writes, so the whole flow is gated as one family. Customers begin the
+    per-user mint at ``POST /agents/user/providers/anthropic/oauth/start``.
     """
-    from app.services import anthropic_oauth
-
-    _oauth_vault_ready_or_503()
-    verifier, challenge = anthropic_oauth.generate_pkce()
-    state = anthropic_oauth.generate_state()
-    AnthropicOAuthStateRepository().create(state, current_user["id"], verifier)
-    return {"authorizeUrl": anthropic_oauth.build_authorize_url(challenge, state)}
+    return {"authorizeUrl": _begin_anthropic_oauth(current_user["id"])}
 
 
 def _parse_pasted_oauth_code(pasted: str) -> tuple[str, str]:
@@ -6572,6 +6585,57 @@ def _parse_pasted_oauth_code(pasted: str) -> tuple[str, str]:
     return code, state
 
 
+def _mint_anthropic_token(pasted_code: str, user_id: str) -> dict[str, Any]:
+    """Redeem a pasted ``code#state`` for a token set. PERSISTS NOTHING.
+
+    Shared step 2 of BOTH Connect-with-Anthropic scopes: validation, CSRF/state
+    binding and upstream error mapping are identical whether the caller is the
+    operator (who then persists deployment-wide) or a customer (who receives
+    the token to store against their OWN row). Only what happens to the
+    returned dict differs, so only that lives in the two routes.
+
+    Returns the normalised ``{access_token, refresh_token, expires_at, scope}``.
+
+    Honest failures — never a fake success, never another user's session:
+      * 422 malformed paste, or an upstream CODE-REJECTION (a real HTTP
+        response reached us with a non-2xx status: a stale, mistyped or
+        replayed code). ML-adv-002: this is a 4xx rather than a 502 because an
+        intermediary may replace a 502 body with a generic page and hide the
+        actionable detail; 4xx bodies pass through untouched.
+      * 400 unknown / expired / already-used state.
+      * 403 the state was started by a different user.
+      * 502 a genuine network/gateway failure where no response arrived at all,
+        including an unexpected 2xx shape — the defensive parse in
+        ``anthropic_oauth._normalize_token_response`` never fakes success.
+    """
+    from app.services import anthropic_oauth
+
+    code, state = _parse_pasted_oauth_code(pasted_code)
+    _oauth_vault_ready_or_503()
+    row = AnthropicOAuthStateRepository().consume(state)
+    if row is None:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Authorization state is unknown, expired, or already used — restart "
+            "Connect with Anthropic.",
+        )
+    if row.get("userId") != user_id:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "This authorization was started by a different user.",
+        )
+    try:
+        return anthropic_oauth.exchange_code(code, row["codeVerifier"], state)
+    except anthropic_oauth.OAuthExchangeError as exc:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY
+            if exc.upstream_status is not None
+            else status.HTTP_502_BAD_GATEWAY,
+            "Anthropic rejected the authorization code — restart Connect with "
+            "Anthropic.",
+        ) from exc
+
+
 @router.post("/providers/anthropic/oauth/exchange")
 def anthropic_oauth_exchange(
     body: AnthropicOAuthExchangeBody, current_user: AdminUser
@@ -6586,52 +6650,15 @@ def anthropic_oauth_exchange(
     connected last. The per-user ``AnthropicOAuthState`` owner check below is a
     CSRF/state binding, not an authorization gate.
 
-    422 malformed paste, or an honest upstream CODE-REJECTION — a real HTTP
-    response reached us with a non-2xx status (e.g. Anthropic 400 invalid_grant
-    for a stale/mistyped/expired pasted code); 400 unknown/expired/replayed
-    state; 403 state started by a different user; 502 a genuine network/gateway
-    failure — NO response reached us at all (incl. an unexpected 2xx response
-    shape — defensive parse, never a fake success). ML-adv-002: a rejection is
-    surfaced as 422 (not 502) because Cloudflare replaces 502 bodies with a
-    generic page, hiding the app's actionable detail; 4xx bodies pass through
-    untouched. On success the access token is stored deployment-wide
-    (oauth_token) and the refresh material per-user; the masked provider status
-    object is returned (no token).
+    Validation, state binding and upstream error mapping live in the shared
+    ``_mint_anthropic_token`` (see its docstring for the full status contract);
+    the line after it is what makes this route the OPERATOR's. On success the
+    access token is stored deployment-wide (oauth_token) and the refresh
+    material per-user; the masked provider status object is returned (no token).
     """
     from app.services import anthropic_oauth
 
-    code, state = _parse_pasted_oauth_code(body.pastedCode)
-    _oauth_vault_ready_or_503()
-    row = AnthropicOAuthStateRepository().consume(state)
-    if row is None:
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            "Authorization state is unknown, expired, or already used — restart "
-            "Connect with Anthropic.",
-        )
-    if row.get("userId") != current_user["id"]:
-        raise HTTPException(
-            status.HTTP_403_FORBIDDEN,
-            "This authorization was started by a different user.",
-        )
-    try:
-        tok = anthropic_oauth.exchange_code(code, row["codeVerifier"], state)
-    except anthropic_oauth.OAuthExchangeError as exc:
-        # A real HTTP response reached us with a non-2xx status: Anthropic
-        # honestly REJECTED the code/grant (bad, expired, or replayed) — this
-        # is a client-side mistake (the operator's pasted code), not a gateway
-        # failure, so it must be a 4xx that Cloudflare passes through intact.
-        if exc.upstream_status is not None:
-            raise HTTPException(
-                status.HTTP_422_UNPROCESSABLE_ENTITY,
-                "Anthropic rejected the authorization code — restart Connect with "
-                "Anthropic.",
-            ) from exc
-        raise HTTPException(
-            status.HTTP_502_BAD_GATEWAY,
-            "Anthropic rejected the authorization code — restart Connect with "
-            "Anthropic.",
-        ) from exc
+    tok = _mint_anthropic_token(body.pastedCode, current_user["id"])
     try:
         anthropic_oauth.persist_tokens(current_user["id"], tok)
     except credential_vault.CredentialVaultError as exc:
@@ -6664,6 +6691,78 @@ def anthropic_oauth_refresh(current_user: AdminUser) -> dict[str, Any]:
     except credential_vault.CredentialVaultError as exc:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, str(exc)) from exc
     return _provider_status_object("anthropic", current_user["id"])
+
+
+# ---------------------------------------------------------------------------
+# Per-user "Connect with Anthropic" subscription-token MINT (UPO-1).
+#
+# The operator routes above are admin-gated because their exchange overwrites
+# the deployment-wide ``ProviderCredential('anthropic')`` row every bare
+# ``claude-*`` run bills against (F-01). That left an ordinary customer with no
+# in-app way to obtain a Claude subscription token at all — the per-user dialog
+# offered only a manual paste of a token the customer had to mint themselves
+# with ``claude setup-token`` on their own machine.
+#
+# These two routes are the per-user twin. They reuse the SAME authorize and
+# redeem helpers, and differ in exactly one respect: the exchange PERSISTS
+# NOTHING. It returns the freshly minted token to the customer who just
+# authenticated, so the dialog can populate its OAuth-token field; the
+# customer then clicks Save, which stores it through the existing
+# ``PUT /agents/user/providers/{provider}/credential`` path. Keeping Save as
+# the single write path is what makes a non-admin route safe here — there is
+# no deployment-wide side effect to escalate into.
+# ---------------------------------------------------------------------------
+
+
+@router.post("/user/providers/anthropic/oauth/start")
+def user_anthropic_oauth_start(current_user: CurrentUser) -> dict[str, Any]:
+    """Begin the customer's own Connect-with-Anthropic flow.
+
+    Open to any AUTHENTICATED user: nothing this route touches is shared. It
+    persists only a short-lived PKCE state row bound to the caller, and returns
+    Anthropic's own authorize URL for the caller to approve with their OWN
+    Claude Pro/Max account. 503 when the vault key is absent (fail closed —
+    see ``_begin_anthropic_oauth``).
+    """
+    return {"authorizeUrl": _begin_anthropic_oauth(current_user["id"])}
+
+
+@router.post("/user/providers/anthropic/oauth/exchange")
+def user_anthropic_oauth_exchange(
+    body: AnthropicOAuthExchangeBody, response: Response, current_user: CurrentUser
+) -> dict[str, Any]:
+    """Redeem the pasted ``code#state`` and RETURN the minted token to its owner.
+
+    This is the only response in the application that carries a live
+    credential, so it is deliberately narrow:
+
+    * The token returned belongs to the caller — it was minted seconds earlier
+      from an authorization the caller personally approved on Anthropic's own
+      pages, against their own subscription. It is the same value they would
+      otherwise paste in by hand from ``claude setup-token``, so this widens no
+      trust boundary; it removes a manual step.
+    * ``Cache-Control: no-store`` so no browser, proxy or bfcache retains it.
+    * Nothing is written: not the deployment-wide ``ProviderCredential`` row
+      (that would re-bill the whole deployment to this customer), and not the
+      ``AnthropicOAuthToken`` refresh store (that would make the operator's
+      auto-refresh hook rotate a session this flow does not own). Save is the
+      single write path.
+    * The refresh token is deliberately NOT returned: it is refresh material
+      for the operator flow and has no use in a browser.
+
+    Status contract: see ``_mint_anthropic_token``.
+    """
+    tok = _mint_anthropic_token(body.pastedCode, current_user["id"])
+    access = tok["access_token"]
+    expires_at = tok.get("expires_at")
+    response.headers["Cache-Control"] = "no-store"
+    return {
+        "token": access,
+        "authMode": "oauth_token",
+        "secretHint": credential_vault.secret_hint(access),
+        "expiresAt": _iso_or_none(expires_at),
+        "scope": tok.get("scope"),
+    }
 
 
 @router.get("/stats")

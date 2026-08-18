@@ -28,6 +28,14 @@ vi.mock("../../components/agents/api", () => ({
   putProviderCredential: (...args: unknown[]) => putCredentialMock(...args),
   deleteProviderCredential: (...args: unknown[]) => deleteCredentialMock(...args),
   verifyProvider: (...args: unknown[]) => verifyMock(...args),
+  startAnthropicOAuth: vi.fn(),
+  exchangeAnthropicOAuth: vi.fn(),
+  refreshAnthropicOAuth: vi.fn(),
+  startUserAnthropicOAuth: vi.fn(),
+  exchangeUserAnthropicOAuth: vi.fn(),
+  putUserProviderCredential: vi.fn(),
+  deleteUserProviderCredential: vi.fn(),
+  verifyUserProvider: vi.fn(),
 }));
 
 // eslint-disable-next-line import/first

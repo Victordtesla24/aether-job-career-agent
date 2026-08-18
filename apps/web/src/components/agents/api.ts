@@ -573,6 +573,65 @@ export async function exchangeAnthropicOAuth(
 }
 
 /**
+ * Begin the PER-USER Connect-with-Anthropic flow (UPO-1): POST
+ * /agents/user/providers/anthropic/oauth/start.
+ *
+ * The per-user twin of {@link startAnthropicOAuth}. The deployment-wide route
+ * is admin-only because its exchange overwrites the shared credential every
+ * bare `claude-*` run bills against (F-01), so a customer calling it could only
+ * ever get a 403; this one is open to any signed-in user because nothing it
+ * touches is shared.
+ */
+export async function startUserAnthropicOAuth(
+  o: RequestOptions = {},
+): Promise<AnthropicOAuthStart> {
+  return AnthropicOAuthStartSchema.parse(
+    await apiRequest<unknown>("/agents/user/providers/anthropic/oauth/start", {
+      ...o,
+      method: "POST",
+    }),
+  );
+}
+
+/**
+ * A subscription token freshly minted for the signed-in user (UPO-1).
+ *
+ * Unlike every other credential response in this client, this one carries the
+ * real `token`: it was minted seconds earlier from an authorization the caller
+ * personally approved on Anthropic's own pages, and is returned exactly once so
+ * the dialog can fill its OAuth-token field instead of making the customer run
+ * `claude setup-token` by hand. The server marks it `Cache-Control: no-store`
+ * and persists nothing — saving it stays an explicit, separate action.
+ */
+export const MintedAnthropicTokenSchema = z.object({
+  token: z.string(),
+  authMode: z.enum(["api_key", "subscription_oauth", "oauth_token"]),
+  secretHint: z.string().nullish(),
+  expiresAt: z.string().nullish(),
+  scope: z.string().nullish(),
+});
+export type MintedAnthropicToken = z.infer<typeof MintedAnthropicTokenSchema>;
+
+/**
+ * Complete the per-user flow: POST the pasted `code#state` to
+ * /agents/user/providers/anthropic/oauth/exchange and receive the minted
+ * token. Storing it is a separate call to {@link putUserProviderCredential},
+ * which keeps Save as the single credential write path.
+ */
+export async function exchangeUserAnthropicOAuth(
+  pastedCode: string,
+  o: RequestOptions = {},
+): Promise<MintedAnthropicToken> {
+  return MintedAnthropicTokenSchema.parse(
+    await apiRequest<unknown>("/agents/user/providers/anthropic/oauth/exchange", {
+      ...o,
+      method: "POST",
+      body: { pastedCode },
+    }),
+  );
+}
+
+/**
  * Renew the stored Anthropic subscription session: POST
  * /agents/providers/anthropic/oauth/refresh. Rotates the access + refresh token
  * server-side and returns the masked provider row. On an honest refresh failure

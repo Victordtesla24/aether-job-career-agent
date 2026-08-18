@@ -25,15 +25,18 @@ import {
   deleteProviderCredential,
   deleteUserProviderCredential,
   exchangeAnthropicOAuth,
+  exchangeUserAnthropicOAuth,
   putProviderCredential,
   putUserProviderCredential,
   refreshAnthropicOAuth,
   startAnthropicOAuth,
+  startUserAnthropicOAuth,
   verifyProvider,
   verifyUserProvider,
   type Provider,
   type ProviderAuthMode,
 } from "./api";
+import AnthropicOAuthPanel from "./AnthropicOAuthPanel";
 import { normalizeCredentialSecret, providerSourceBadge, type ProviderSourceBadge } from "./logic";
 import { providerCredentialErrorNotice, type Notice } from "../../lib/agents-feedback";
 
@@ -45,10 +48,11 @@ interface AuthModeOption {
 }
 
 /** The credential shape a given provider accepts. Every provider — Anthropic
- * included — takes an API key. Consumer in-app Claude subscription OAuth was
- * removed for compliance (GAP-AUTH-001); the supported Anthropic auth is a
- * Console API key (sk-ant-api…) or a pasted Claude Code OAuth token
- * (sk-ant-oat01-…). Only the latter serves Claude runs (MODEL-SUB-QUOTA). */
+ * included — takes an API key. Anthropic also accepts a Claude Code OAuth
+ * token (sk-ant-oat01-…): customers mint one in-app via Click here for
+ * subscription token (UPO-1); operators use the deployment Connect flow.
+ * Manual paste remains an honest fallback. Only the OAuth token serves
+ * Claude runs (MODEL-SUB-QUOTA). */
 function authModeOptions(providerId: string): AuthModeOption[] {
   if (providerId === "anthropic") {
     return [
@@ -61,7 +65,7 @@ function authModeOptions(providerId: string): AuthModeOption[] {
       {
         value: "oauth_token",
         label: "Claude Code OAuth Token",
-        hint: "Paste the token from `claude setup-token` (starts sk-ant-oat01-…). Runs on Anthropic models bill against your Claude Pro/Max subscription quota.",
+        hint: "Use Click here for subscription token above, or paste a token from `claude setup-token` (starts sk-ant-oat01-…). Runs on Anthropic models bill against your Claude Pro/Max subscription quota.",
         placeholder: "sk-ant-oat01-…",
       },
     ];
@@ -324,21 +328,40 @@ export default function ProviderConfigModal({
     setError(null);
     onNotice({ kind: "info", text: "Opening Anthropic sign-in in a new tab…" });
     await runConnect(async () => {
-      const { authorizeUrl } = await startAnthropicOAuth();
+      const { authorizeUrl } = userScope
+        ? await startUserAnthropicOAuth()
+        : await startAnthropicOAuth();
       window.open(authorizeUrl, "_blank", "noopener");
+      if (userScope) setMode("oauth_token");
       setOauthStep("await_code");
     });
   };
 
-  // Connect-with-Anthropic step 2: exchange the pasted one-time code#state for a
-  // subscription token (server-side). The raw code is cleared once submitted.
+  // Connect-with-Anthropic step 2. The raw code is cleared once submitted.
+  // Deployment: the server stores the token and we refresh the masked view.
+  // User (UPO-1): the server stored nothing and handed the token back, so we
+  // put it in the secret field. Save remains the only write path.
   const completeAnthropic = async () => {
     const code = oauthCode.trim();
     if (!code || busy) return;
     setBusy("connecting");
     setError(null);
-    onNotice({ kind: "info", text: `Connecting ${view.name}…` });
+    onNotice({ kind: "info", text: `Retrieving your ${view.name} subscription token…` });
     await runConnect(async () => {
+      if (userScope) {
+        const minted = await exchangeUserAnthropicOAuth(code);
+        setMode("oauth_token");
+        setSecret(minted.token);
+        setOauthCode("");
+        setOauthStep("idle");
+        onNotice({
+          kind: "success",
+          text: `${view.name} subscription token retrieved${
+            minted.secretHint ? ` (${minted.secretHint})` : ""
+          }. Press Save to store it.`,
+        });
+        return;
+      }
       const updated = await exchangeAnthropicOAuth(code);
       setView((v) => (v ? { ...v, ...updated } : updated));
       setOauthCode("");
@@ -480,15 +503,24 @@ export default function ProviderConfigModal({
           ) : null}
         </div>
 
-        {/* Connect-with-Anthropic writes the DEPLOYMENT-WIDE
-            ProviderCredential('anthropic') row (anthropic_oauth.persist_tokens),
-            and its three routes are admin-only on the server (F-01 /
-            ADR-F01-PROVIDER-CREDENTIAL-AUTHZ). Never offer a customer a control
-            that can only 403 — in the per-user scope they paste their own key
-            below instead. */}
-        {view.id === "anthropic" && !userScope ? (
-          <div className="mb-4 rounded-lg border border-aether-indigo/25 bg-aether-indigo/5 p-3">
-            {anthropicNeedsReauth ? (
+        {/* Both scopes authorise on Anthropic's own pages; they differ in what
+            happens to the resulting token. The DEPLOYMENT flow writes the
+            shared ProviderCredential('anthropic') row server-side and its
+            routes are admin-only (F-01), so a customer must never be offered
+            it — the per-user flow mints a token into the field below instead,
+            and Save stores it against the customer's own row. */}
+        {view.id === "anthropic" ? (
+          <AnthropicOAuthPanel
+            scope={userScope ? "user" : "deployment"}
+            step={oauthStep}
+            code={oauthCode}
+            onCodeChange={setOauthCode}
+            onConnect={() => void connectAnthropic()}
+            onComplete={() => void completeAnthropic()}
+            busy={busy !== null}
+            connecting={busy === "connecting"}
+          >
+            {!userScope && anthropicNeedsReauth ? (
               <div
                 data-testid="anthropic-oauth-needs-reauth"
                 role="alert"
@@ -510,76 +542,7 @@ export default function ProviderConfigModal({
                 </button>
               </div>
             ) : null}
-            <button
-              type="button"
-              data-testid="anthropic-oauth-connect"
-              onClick={() => void connectAnthropic()}
-              disabled={busy !== null}
-              className="flex w-full items-center justify-center gap-2 rounded-lg bg-aether-indigo px-4 py-2.5 text-xs font-semibold text-white shadow-lg shadow-aether-indigo/25 transition hover:opacity-90 disabled:opacity-50"
-            >
-              <i className="fa-solid fa-arrow-up-right-from-square text-[10px]" aria-hidden="true" />
-              {busy === "connecting" && oauthStep === "idle"
-                ? "Opening Anthropic…"
-                : "Connect with Anthropic (subscription)"}
-            </button>
-            <p className="mt-2 text-[11px] leading-relaxed text-aether-muted">
-              Opens Anthropic&apos;s sign-in page in a new tab. Approve access to your
-              Claude Pro/Max account, then paste the one-time code Anthropic shows you.
-              Your token is created on the server — you never copy the token yourself.
-            </p>
-            {/* ML-agents-003 (ADR-ML-5): the authorize URL is the correct
-                subscription flow — Anthropic may interpose a brief security
-                check on the sign-in page. Set the expectation so an operator
-                doesn't read it as a broken/wrong link. */}
-            <p
-              data-testid="anthropic-oauth-security-hint"
-              className="mt-1.5 flex items-start gap-1.5 text-[10px] leading-relaxed text-aether-muted-dim"
-            >
-              <i
-                className="fa-solid fa-shield-halved mt-0.5 shrink-0 text-[10px]"
-                aria-hidden="true"
-              />
-              <span>
-                You may see a brief Anthropic security check — that&apos;s
-                expected; complete it to continue.
-              </span>
-            </p>
-            {oauthStep === "await_code" ? (
-              <div className="mt-3">
-                <label
-                  htmlFor="anthropic-oauth-code"
-                  className="mb-1.5 block text-[11px] font-medium uppercase tracking-wide text-aether-muted-dim"
-                >
-                  Paste the code from Anthropic
-                </label>
-                <div className="flex items-center gap-2">
-                  <input
-                    id="anthropic-oauth-code"
-                    data-testid="anthropic-oauth-code-input"
-                    type="text"
-                    value={oauthCode}
-                    onChange={(e) => setOauthCode(e.target.value)}
-                    placeholder="code#state"
-                    autoComplete="off"
-                    spellCheck={false}
-                    className="w-full rounded-lg border border-white/10 bg-white/5 px-3 py-2.5 text-xs text-white outline-none focus:border-aether-indigo/50"
-                  />
-                  <button
-                    type="button"
-                    data-testid="anthropic-oauth-complete"
-                    onClick={() => void completeAnthropic()}
-                    disabled={busy !== null || oauthCode.trim() === ""}
-                    className="shrink-0 rounded-lg bg-aether-indigo px-3 py-2.5 text-xs font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
-                  >
-                    {busy === "connecting" ? "Connecting…" : "Finish connecting"}
-                  </button>
-                </div>
-              </div>
-            ) : null}
-            <p className="mt-2 text-[10px] text-aether-muted-dim">
-              or paste a token manually below (honest fallback)
-            </p>
-          </div>
+          </AnthropicOAuthPanel>
         ) : null}
 
         {options.length > 1 ? (
@@ -702,7 +665,7 @@ export default function ProviderConfigModal({
               className="flex items-center gap-2 rounded-lg bg-aether-indigo px-4 py-2 text-xs font-semibold text-white shadow-lg shadow-aether-indigo/25 transition hover:opacity-90 disabled:opacity-50"
             >
               <i className="fa-solid fa-floppy-disk text-[10px]" aria-hidden="true" />
-              {busy === "saving" ? "Saving…" : "Save credential"}
+              {busy === "saving" ? "Saving…" : "Save"}
             </button>
           </div>
         </div>
