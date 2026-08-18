@@ -295,7 +295,7 @@ const HOP = {
     mechanism:
       "StoryRepository; each answer sketch grounded ONLY in the one cited story",
     evidence: "apps/api/app/agents/interview_prep_agent.py:67,239,308",
-    discoveryEvidence: "apps/api/app/agents/interview_prep_agent.py:67,239",
+    discoveryEvidence: "apps/api/app/agents/interview_prep_agent.py:67,223-226",
     anchors: [
       "from app.repositories.story import StoryRepository",
       "def _story_text(",
