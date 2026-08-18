@@ -238,6 +238,37 @@ const ExcludedSchema = z.object({
 });
 export type AdminExcludedBlock = z.infer<typeof ExcludedSchema>;
 
+const FailedRuns24hSchema = z.object({
+  failed: OptNum,
+  total: OptNum,
+  rate: OptNum,
+  windowHours: OptNum,
+  sampleSize: OptNum,
+  insufficientData: InsufficientData,
+});
+export type AdminFailedRuns24hBlock = z.infer<typeof FailedRuns24hSchema>;
+
+const SalesAiSchema = z.object({
+  enabled: z.boolean().nullish().catch(null).transform((v) => (typeof v === "boolean" ? v : null)),
+  dryRun: z.boolean().nullish().catch(null).transform((v) => (typeof v === "boolean" ? v : null)),
+  emailsSent: OptNum,
+  dryRunLogged: OptNum,
+  repliesObserved: OptNum,
+  replyRate: OptNum,
+  leads: OptNum,
+  linkedinDraftsQueued: OptNum,
+  llmCostUsd30d: OptNum,
+  cannotAttributeSignups: z
+    .boolean()
+    .nullish()
+    .catch(null)
+    .transform((v) => (typeof v === "boolean" ? v : null)),
+  cannotAttributeReason: OptStr,
+  sampleSize: OptNum,
+  insufficientData: InsufficientData,
+});
+export type AdminSalesAiBlock = z.infer<typeof SalesAiSchema>;
+
 export const AdminExecutiveMetricsSchema = z.object({
   asOf: OptStr,
   windowDays: OptNum,
@@ -255,6 +286,8 @@ export const AdminExecutiveMetricsSchema = z.object({
   funnel: optionalBlock(FunnelSchema),
   costVsRevenue: optionalBlock(CostVsRevenueSchema),
   topReferrers: optionalBlock(TopReferrersSchema),
+  failedRuns24h: optionalBlock(FailedRuns24hSchema),
+  salesAi: optionalBlock(SalesAiSchema),
   excluded: optionalBlock(ExcludedSchema),
 });
 export type AdminExecutiveMetrics = z.infer<typeof AdminExecutiveMetricsSchema>;

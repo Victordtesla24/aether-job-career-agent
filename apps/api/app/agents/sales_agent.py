@@ -54,6 +54,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable
@@ -81,23 +82,77 @@ from app.services.sales_branding import (
     render_sales_outreach_html,
     strip_exclamation_marks,
 )
-from app.services.stripe_gateway import StripeNotConfiguredError
+from app.services.stripe_gateway import StripeNotConfiguredError, app_base_url
 
 logger = logging.getLogger("aether.sales_agent")
 
 AGENT_KEY = "salesAgent"
 
-#: Server-side compliance footer (Spam Act 2003: sender identification +
-#: functional unsubscribe). Appended to EVERY outbound sales email by
-#: :func:`append_compliance_footer` — it is not part of any editable template,
-#: so no template edit can strip it.
-COMPLIANCE_FOOTER = (
-    "\n\n--\n"
-    "Aether Career Agent — operated by Vikram Sarkar\n"
-    "https://5cb5f0620.abacusai.cloud\n"
-    "You received this email because you contacted us or hold an Aether "
-    "account. Reply 'unsubscribe' to stop receiving these emails."
+#: Query param stamped on generated marketing URLs so orchestrator analytics
+#: can see Sales AI traffic without claiming a signup join that does not exist.
+SALES_AI_UTM = "utm_source=aether_sales_agent"
+_RETIRED_PRODUCT_URL_RE = re.compile(
+    r"https?://(?:www\.)?(?:5cb5f0620\.)?abacusai\.cloud",
+    re.IGNORECASE,
 )
+
+
+def compliance_footer() -> str:
+    """Spam Act 2003 footer. Built at call time so the product URL is live."""
+    return (
+        "\n\n--\n"
+        "Aether Career Agent — operated by Vikram Sarkar\n"
+        f"{app_base_url()}\n"
+        "You received this email because you contacted us or hold an Aether "
+        "account. Reply 'unsubscribe' to stop receiving these emails."
+    )
+
+
+def rewrite_retired_product_urls(text: str) -> str:
+    """Replace decommissioned Abacus hosts with the live product origin."""
+    live = app_base_url()
+    return _RETIRED_PRODUCT_URL_RE.sub(live, text or "")
+
+
+def with_tracked_product_url(text: str) -> str:
+    """Stamp ``utm_source=aether_sales_agent`` on the first live product URL."""
+    live = app_base_url()
+    blob = text or ""
+    if SALES_AI_UTM in blob:
+        return blob
+    idx = blob.find(live)
+    if idx < 0:
+        return blob
+    end = idx + len(live)
+    while end < len(blob) and blob[end] not in " \n\t<>\"'":
+        end += 1
+    url = blob[idx:end]
+    if "utm_source=" in url:
+        return blob
+    sep = "&" if "?" in url else "?"
+    return blob[:idx] + url + sep + SALES_AI_UTM + blob[end:]
+
+
+def grounded_facts() -> str:
+    """The only numbers and URL the model is allowed to cite."""
+    url = app_base_url()
+    return (
+        "Product: Aether Career Job Agent — an AI job-search agent.\n"
+        f"URL: {url}\n"
+        "What it does: sources roles from licensed job APIs (no scraping; listings no\n"
+        "older than 30 days); deterministic fit scoring shows WHY a role matches;\n"
+        "resume tailoring and cover letters are grounded in the user's own resume and\n"
+        "story bank, with an anti-fabrication entailment guard that reverts any claim\n"
+        "not provable from the user's real history; every outbound action (every\n"
+        "application, every email) waits in a human approval queue — nothing is sent\n"
+        "without the user's explicit yes; Gmail triage handles inbox noise.\n"
+        "Pricing (AUD, GST-inclusive): Free plan A$0 — 5 agent runs/month, no card\n"
+        "required; Starter A$19/month or A$179/year; Pro A$39/month or A$359/year;\n"
+        f"Power A$69/month or A$649/year. Launch promo code {AGENT_PROMO_CODE} is "
+        f"{int(AGENT_PROMO_PERCENT)} percent off once and stays inactive until a "
+        "human activates it.\n"
+        "Founder: Vikram Sarkar, a software engineer who built it for his own search.\n"
+    )
 
 #: Phrases that permanently suppress a sender (checked case-insensitively in
 #: subject + body of inbound mail).
@@ -212,26 +267,9 @@ AGENT_PROMO_CODE = "AETHERAGENT20"
 AGENT_PROMO_PERCENT = 20.0
 AGENT_PROMO_MAX_REDEMPTIONS = 100
 
-#: The ONLY facts the content-generation prompts may draw on — every line is
-#: verifiable against the production app itself. No metrics, testimonials or
-#: user counts appear here because none exist to cite.
-GROUNDED_FACTS = """\
-Product: Aether Career Job Agent — an AI job-search agent.
-URL: https://5cb5f0620.abacusai.cloud
-What it does: sources roles from licensed job APIs (no scraping; listings no
-older than 30 days); deterministic fit scoring shows WHY a role matches;
-resume tailoring and cover letters are grounded in the user's own resume and
-story bank, with an anti-fabrication entailment guard that reverts any claim
-not provable from the user's real history; every outbound action (every
-application, every email) waits in a human approval queue — nothing is sent
-without the user's explicit yes; Gmail triage handles inbox noise.
-Pricing (AUD, GST-inclusive): Free plan A$0 — 5 agent runs/month, no card
-required; Starter A$19/month; Pro A$39/month or A$359/year; Power A$69/month.
-Founder: Vikram Sarkar, a software engineer who built it for his own search.
-"""
-
 #: Human-authored product update for consented network contacts. Prices and
-#: features are copied from GROUNDED_FACTS — this is not LLM output.
+#: features are copied from :func:`grounded_facts` — this is not LLM output.
+#: The retired Abacus host is rewritten at use time (ADM-001).
 NETWORK_NURTURE_TEMPLATE = (
     "Hi {{name}},\n\n"
     "A short update on Aether Career Agent, the job-search product I have been "
@@ -245,6 +283,7 @@ NETWORK_NURTURE_TEMPLATE = (
     "https://5cb5f0620.abacusai.cloud\n\n"
     "Vik\nAether Career Agent"
 )
+
 
 
 # --------------------------------------------------------------------- flags
@@ -319,9 +358,10 @@ def sales_agent_live_scope() -> str:
 def append_compliance_footer(body: str) -> str:
     """Server-side footer appender — the compliance gate for EVERY send."""
     body = strip_exclamation_marks(body or "").rstrip()
-    if COMPLIANCE_FOOTER.strip() in body:
+    footer = compliance_footer()
+    if footer.strip() in body:
         return body
-    return body + COMPLIANCE_FOOTER
+    return body + footer
 
 
 def personalize_template(template: str, name: str | None) -> str:
@@ -723,6 +763,24 @@ class SalesAgent:
             subject = msg.get("subject") or header.get("subject") or ""
             text = msg.get("text") or ""
             thread_id = msg.get("threadId") or header.get("threadId")
+            blob = f"{subject}\n{text}".lower()
+            # Unsubscribe first: an opt-out on a mailed thread is never a reply.
+            if _contains_any(blob, UNSUBSCRIBE_PHRASES):
+                self._handle_unsubscribe(
+                    sender_email, mid, thread_id, subject, result
+                )
+                continue
+            if thread_id and self.repo.thread_already_sent(thread_id):
+                if not self._is_original_inbound_signal(sender_email, mid):
+                    self._observe_inbound_reply(
+                        sender_email=sender_email,
+                        message_id=mid,
+                        thread_id=thread_id,
+                        subject=subject,
+                        text=text,
+                        result=result,
+                    )
+                continue
             kind = self._classify_inbound(subject, text)
             provenance = "phrase"
             if kind is None:
@@ -996,6 +1054,50 @@ class SalesAgent:
         watermark["backlogTopEpoch"] = top
         self.repo.set_watermark(account_id, watermark)
 
+    def _is_original_inbound_signal(self, sender_email: str, message_id: str) -> bool:
+        """True when this Gmail id is the consent evidence that created the lead.
+
+        Re-walking that original inbound must not be counted as a reply.
+        """
+        if not message_id:
+            return False
+        lead = self.repo.get_lead_by_email(sender_email)
+        if lead is None:
+            return False
+        evidence = str(lead.get("consentEvidence") or "")
+        return message_id in evidence
+
+    def _observe_inbound_reply(
+        self,
+        *,
+        sender_email: str,
+        message_id: str,
+        thread_id: str | None,
+        subject: str,
+        text: str,
+        result: dict[str, Any],
+    ) -> None:
+        """INSERT outcome=replied. Never UPDATE the sent row (that drops emailsSent)."""
+        lead = self.repo.get_lead_by_email(sender_email)
+        if lead is None:
+            return
+        try:
+            self.repo.record_outreach(
+                channel="email",
+                outcome="replied",
+                lead_id=lead["id"],
+                gmail_message_id=message_id,
+                gmail_thread_id=thread_id,
+                subject=subject,
+                body=(text or "")[:2000] or None,
+                recipient=sender_email,
+                detail="inbound reply observed on a thread already mailed",
+            )
+        except DuplicateSendError:
+            return
+        self.repo.set_lead_status(lead["id"], "replied")
+        result["repliesObserved"] = int(result.get("repliesObserved") or 0) + 1
+
     def _handle_unsubscribe(
         self,
         sender_email: str,
@@ -1089,6 +1191,7 @@ class SalesAgent:
         body, mode = self._llm_personalize(
             campaign["templateBody"], sender_name, inbound_text, model
         )
+        body = rewrite_retired_product_urls(body)
         body = append_compliance_footer(body)
         reply_subject = strip_exclamation_marks(
             subject if subject.lower().startswith("re:") else f"Re: {subject}".strip()
@@ -1259,7 +1362,9 @@ class SalesAgent:
                 source="existing_user",
             )
             body = append_compliance_footer(
-                personalize_template(campaign["templateBody"], cand.get("name"))
+                rewrite_retired_product_urls(
+                    personalize_template(campaign["templateBody"], cand.get("name"))
+                )
             )
             subject = strip_exclamation_marks(campaign["name"])
             if dry_run:
@@ -1315,7 +1420,7 @@ class SalesAgent:
         sites the owner linked, so they are UNTRUSTED TEXT. They are wrapped
         and labelled as reference DATA, and the system prompt is told never to
         follow instructions found inside them. Returns ``""`` when the owner
-        has ingested nothing — the draft then relies on GROUNDED_FACTS alone
+        has ingested nothing — the draft then relies on grounded_facts() alone
         rather than inventing a biography.
         """
         if not admin_id:
@@ -1413,7 +1518,7 @@ class SalesAgent:
         user_prompt = (
             f"BRIEF (follow this):\n{campaign['templateBody']}\n\n"
             f"VERIFIED PRODUCT FACTS (the only facts you may state):\n"
-            f"{GROUNDED_FACTS}\n"
+            f"{grounded_facts()}\n"
         )
         if career_context:
             user_prompt += (
@@ -1455,6 +1560,7 @@ class SalesAgent:
             self.repo.release_linkedin_draft_slot(reservation_id)
             cadence["reason"] = "the model returned an empty draft — nothing queued"
             return
+        post = with_tracked_product_url(rewrite_retired_product_urls(post))
         rejection = self._grounding_guard(post)
         if rejection:
             self.repo.release_linkedin_draft_slot(reservation_id)
@@ -1637,7 +1743,9 @@ class SalesAgent:
             if email in recently_emailed:
                 continue
             body = append_compliance_footer(
-                personalize_template(NETWORK_NURTURE_TEMPLATE, cand.get("name"))
+                rewrite_retired_product_urls(
+                    personalize_template(NETWORK_NURTURE_TEMPLATE, cand.get("name"))
+                )
             )
             self.repo.record_outreach(
                 channel="email",
@@ -1673,7 +1781,7 @@ class SalesAgent:
 
         Every artifact is REAL LLM output through the same dynamically-routed
         model as the pipeline (:func:`resolve_model`) and is grounded ONLY in
-        :data:`GROUNDED_FACTS`; a post-generation guard rejects any output
+        :func:`grounded_facts`; a post-generation guard rejects any output
         containing a dollar amount outside the real price list or a
         percentage claim (we have no measured percentages to cite). On LLM
         failure the run is recorded as ``failed`` with the reason — nothing
@@ -1715,7 +1823,7 @@ class SalesAgent:
             result["modelSource"] = model_source
             from app.services.networking_insights import network_snapshot_for_prompt
 
-            facts = f"{GROUNDED_FACTS}\n\n{network_snapshot_for_prompt(admin_id)}"
+            facts = f"{grounded_facts()}\n\n{network_snapshot_for_prompt(admin_id)}"
             self._generate_campaigns(model=model, result=result, facts=facts)
             self._generate_promo(result=result)
             self._generate_linkedin_drafts(model=model, result=result, count=3, facts=facts)
@@ -1742,20 +1850,24 @@ class SalesAgent:
         measured percentage to cite); no invented user/customer counts."""
         import re  # noqa: PLC0415
 
-        allowed_amounts = {"0", "19", "39", "69", "359"}
+        allowed_amounts = {"0", "19", "39", "69", "179", "359", "649"}
         for amt in re.findall(r"\$\s?(\d[\d,]*)", text):
             if amt.replace(",", "") not in allowed_amounts:
                 return f"fabricated dollar amount ${amt}"
-        if re.search(r"\d+(?:\.\d+)?\s?%", text):
-            return "percentage claim — no measured percentage exists to cite"
+        allowed_percent = {str(int(AGENT_PROMO_PERCENT)), f"{AGENT_PROMO_PERCENT:g}"}
+        for match in re.finditer(r"(\d+(?:\.\d+)?)\s?%", text):
+            if match.group(1) not in allowed_percent:
+                return "percentage claim — no measured percentage exists to cite"
         if re.search(r"\b\d[\d,]*\+?\s+(?:users|customers|companies|candidates)\b",
                      text, re.IGNORECASE):
             return "invented user/customer count"
         return None
 
     def _generate_campaigns(
-        self, *, model: str, result: dict[str, Any], facts: str = GROUNDED_FACTS
+        self, *, model: str, result: dict[str, Any], facts: str | None = None
     ) -> None:
+        if facts is None:
+            facts = grounded_facts()
         specs = (
             (
                 "free_to_paid_nudge",
@@ -1796,6 +1908,7 @@ class SalesAgent:
             if not body:
                 result["errors"].append(f"{ctype}: LLM returned empty output")
                 continue
+            body = with_tracked_product_url(rewrite_retired_product_urls(body))
             reason = self._grounding_guard(body)
             if reason:
                 result["errors"].append(f"{ctype}: rejected by grounding guard — {reason}")
@@ -1865,8 +1978,10 @@ class SalesAgent:
 
     def _generate_linkedin_drafts(
         self, *, model: str, result: dict[str, Any], count: int = 3,
-        facts: str = GROUNDED_FACTS,
+        facts: str | None = None,
     ) -> None:
+        if facts is None:
+            facts = grounded_facts()
         campaign = self.repo.active_campaign_by_type("linkedin_draft")
         raw = self._llm_client().complete(
             "sales_agent_linkedin_batch",
@@ -1892,6 +2007,7 @@ class SalesAgent:
         )
         posts = [p.strip() for p in (raw or "").split("===") if p.strip()]
         for i, post in enumerate(posts[:count], start=1):
+            post = with_tracked_product_url(rewrite_retired_product_urls(post))
             reason = self._grounding_guard(post)
             if reason:
                 result["errors"].append(
@@ -1942,6 +2058,7 @@ class SalesAgent:
             "dryRunLogged": 0,
             "blocked": 0,
             "suppressed": 0,
+            "repliesObserved": 0,
             "linkedinDrafts": 0,
             "digest": False,
             "noSendingAccount": False,
@@ -2051,6 +2168,8 @@ def build_run_explanation(result: dict[str, Any]) -> str:
             f"({unverified[0]['epoch']}), so the scan window was HELD there "
             "instead of stepping over it — the next run retries that second"
         )
+    if result.get("repliesObserved"):
+        parts.append(f"{result['repliesObserved']} inbound reply(ies) observed")
     if result.get("errors"):
         parts.append(f"{len(result['errors'])} error(s) recorded")
     parts.append(

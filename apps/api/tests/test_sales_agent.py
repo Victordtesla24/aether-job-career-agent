@@ -194,6 +194,28 @@ def test_footer_is_appended_server_side_and_idempotent():
     assert append_compliance_footer(body) == body
 
 
+def test_compliance_footer_uses_live_product_url_not_retired_abacus():
+    from app.agents.sales_agent import compliance_footer
+    from app.services.stripe_gateway import app_base_url
+
+    body = append_compliance_footer("Hello there")
+    assert "5cb5f0620.abacusai.cloud" not in body
+    assert "abacusai.cloud" not in body
+    assert "aether.srv1356245.hstgr.cloud" in body
+    assert app_base_url() in compliance_footer()
+
+
+def test_app_base_url_rejects_retired_abacus_host(monkeypatch):
+    from app.services import stripe_gateway as sg
+
+    monkeypatch.delenv("APP_BASE_URL", raising=False)
+    assert sg.app_base_url() == "https://aether.srv1356245.hstgr.cloud"
+    monkeypatch.setenv("APP_BASE_URL", "https://5cb5f0620.abacusai.cloud")
+    assert sg.app_base_url() == "https://aether.srv1356245.hstgr.cloud"
+    monkeypatch.setenv("APP_BASE_URL", "https://aether-dev.srv1356245.hstgr.cloud/")
+    assert sg.app_base_url() == "https://aether-dev.srv1356245.hstgr.cloud"
+
+
 def test_personalize_template_is_deterministic():
     assert personalize_template("Hi {{name}},", "Jane Doe") == "Hi Jane,"
     assert personalize_template("Hi {{name}},", None) == "Hi there,"
@@ -362,6 +384,78 @@ def test_inbound_unsubscribe_permanently_suppresses(repo, sales_env, monkeypatch
     assert result["suppressed"] == 1
     assert repo.is_suppressed(sender) is True
     assert fake.sent == []  # an unsubscribe NEVER gets a reply
+
+
+def test_inbound_reply_on_a_sent_thread_is_observed_not_re_emailed(
+    repo, sales_env, monkeypatch
+):
+    """A 'thanks' on a thread we already mailed is a reply, not a new send.
+
+    The writer INSERTs outcome=replied and leaves the sent row in place so
+    emailsSent does not drop. The LLM is not called (cost). replyRate becomes
+    a real fraction once at least one sent thread exists.
+    """
+    sender = _email("reply")
+    thread = f"t-{uuid.uuid4().hex[:12]}"
+    inbound_id = f"m-{uuid.uuid4().hex[:12]}"
+    lead = repo.create_lead(
+        email=sender,
+        name="Pat",
+        consent_type="inbound_signal",
+        consent_evidence="gmail message prior-origin to sales-test@aether.local",
+        source="inbound_email",
+        source_thread_id=thread,
+    )
+    repo.record_outreach(
+        channel="email",
+        outcome="sent",
+        lead_id=lead["id"],
+        gmail_thread_id=thread,
+        gmail_message_id=f"sent-{uuid.uuid4().hex[:12]}",
+        recipient=sender,
+    )
+    sent_before = repo.overview()["emailsSent"]
+    fake = FakeGmail(
+        [
+            {
+                "id": inbound_id,
+                "threadId": thread,
+                "from": f"Pat <{sender}>",
+                "subject": "Re: how does Aether work?",
+                "text": "See you then.",
+            }
+        ]
+    )
+    agent = _agent_with(repo, fake, monkeypatch)
+    monkeypatch.setattr(agent, "_run_digest", lambda *args, **kwargs: None)
+    result = agent.run(trigger="manual", dry_run=False)
+    assert fake.sent == []
+    assert not any(s.get("to") == sender for s in fake.sent)
+    assert result["repliesObserved"] == 1
+    refreshed = repo.get_lead_by_email(sender)
+    assert refreshed is not None
+    assert refreshed["status"] == "replied"
+    rows, _ = repo.list_outreach(outcome="replied")
+    assert any(r["gmailMessageId"] == inbound_id for r in rows)
+    assert repo.thread_already_sent(thread) is True
+    ov = repo.overview()
+    assert ov["emailsSent"] == sent_before
+    assert ov["repliesObserved"] >= 1
+    assert ov["replyRate"] is not None
+    assert ov["replyRate"] > 0
+
+
+def test_strategy_route_is_a_handoff_not_a_second_agent(client, admin_headers, sales_env):
+    resp = client.get("/admin/sales-agent/strategy", headers=admin_headers)
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["cannotAttribute"] is True
+    assert "campaignId" in body["cannotAttributeReason"]
+    assert "5cb5f0620.abacusai.cloud" not in (body.get("productUrl") or "")
+    assert "aether.srv1356245.hstgr.cloud" in body["productUrl"]
+    assert isinstance(body["nextActions"], list)
+    assert body["nextActions"]
+    assert all(isinstance(a, str) and a.strip() for a in body["nextActions"])
 
 
 def test_live_mode_sends_exactly_once(repo, sales_env, monkeypatch):
@@ -659,6 +753,23 @@ def test_grounding_guard_rejects_fabrications():
     assert agent._grounding_guard("5 agent runs per month, free.") is None
 
 
+def test_grounding_guard_allows_yearly_prices_and_launch_promo():
+    agent = SalesAgent(repo=SalesRepository())
+    assert agent._grounding_guard("Starter is A$179/year; Power is A$649/year.") is None
+    assert agent._grounding_guard("Use AETHERAGENT20 for 20% off once.") is None
+    assert agent._grounding_guard("Save 35% today") is not None
+
+
+def test_rewrite_retired_product_urls_uses_live_host():
+    from app.agents.sales_agent import rewrite_retired_product_urls
+
+    out = rewrite_retired_product_urls(
+        "See https://5cb5f0620.abacusai.cloud/pricing for Starter."
+    )
+    assert "5cb5f0620.abacusai.cloud" not in out
+    assert "aether.srv1356245.hstgr.cloud/pricing" in out
+
+
 def test_campaign_preview_route_renders_branded_html(client, admin_headers):
     campaigns = client.get(
         "/admin/sales-agent/campaigns", headers=admin_headers
@@ -759,6 +870,10 @@ def test_generate_marketing_content_creates_inactive_campaigns_and_drafts(
     for c in result["campaignsCreated"]:
         assert c["active"] is False
     assert result["linkedinDrafts"] == 3
+    for c in result["campaignsCreated"]:
+        stored = next(row for row in repo.list_campaigns() if row["id"] == c["id"])
+        assert "5cb5f0620.abacusai.cloud" not in stored["templateBody"]
+        assert "aether.srv1356245.hstgr.cloud" in stored["templateBody"]
     # Idempotent by name: a second run skips, never duplicates.
     again = SalesAgent(repo=repo, llm=_FakeLLM()).generate_marketing_content()  # type: ignore[arg-type]
     assert not again["campaignsCreated"]
@@ -1137,12 +1252,21 @@ def test_run_now_and_generate_are_audit_logged(client, admin_headers, monkeypatc
     monkeypatch.setattr(
         sales_agent_module,
         "generate_sales_marketing_content",
-        lambda trigger: {"generated": True, "campaigns": [], "posts": []},
+        lambda trigger: {
+            "ran": True,
+            "campaignsCreated": [{"id": "c1"}, {"id": "c2"}],
+            "campaignsSkipped": [],
+            "linkedinDrafts": 3,
+            "promosCreated": [],
+            "errors": [],
+        },
     )
     gen = client.post("/admin/sales-agent/generate", headers=admin_headers)
     assert gen.status_code == 200, gen.text
     rows = _admin_audit_actions(actor_id)
-    assert any(r["action"] == "sales_marketing.generated" for r in rows)
+    gen_row = next(r for r in rows if r["action"] == "sales_marketing.generated")
+    assert gen_row["detail"]["campaignsCreated"] == 2
+    assert gen_row["detail"]["linkedinDrafts"] == 3
 
 
 def test_config_and_sending_account_updates_are_audit_logged(

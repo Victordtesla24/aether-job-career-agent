@@ -147,7 +147,7 @@ export function AdminShell({ children }: { children: React.ReactNode }) {
                 onClick={() => setMobileNavOpen(false)}
                 className={`rounded-md px-3 py-2 text-sm transition-colors ${
                   isActive(pathname, item.href)
-                    ? "bg-aether-indigo/20 text-aether-text"
+                    ? "bg-aether-coral/20 text-aether-text"
                     : "text-aether-muted hover:bg-white/5 hover:text-aether-text"
                 }`}
               >

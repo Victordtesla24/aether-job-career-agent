@@ -63,17 +63,24 @@ def _metrics(client, headers) -> dict:
     return r.json()
 
 
-def _seed_run(user_id: str, *, cost_usd: float = 0.01, days_ago: int = 0) -> None:
+def _seed_run(
+    user_id: str,
+    *,
+    cost_usd: float = 0.01,
+    days_ago: int = 0,
+    status: str = "completed",
+    agent_name: str = "scout",
+) -> None:
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 '''
                 INSERT INTO "AgentRun" ("id","userId","agentName","status","costUsd",
                     "startedAt","completedAt","createdAt")
-                VALUES (%s,%s,'scout','completed',%s, NOW(), NOW(),
+                VALUES (%s,%s,%s,%s,%s, NOW(), NOW(),
                         NOW() - make_interval(days => %s))
                 ''',
-                (new_id(), user_id, cost_usd, days_ago),
+                (new_id(), user_id, agent_name, status, cost_usd, days_ago),
             )
         conn.commit()
 
@@ -196,6 +203,8 @@ def test_executive_metrics_returns_every_block_the_dashboard_polls(client):
         "funnel",
         "costVsRevenue",
         "topReferrers",
+        "failedRuns24h",
+        "salesAi",
     ):
         assert key in body, f"missing block: {key}"
     assert body["currencies"] == {"revenue": "AUD", "llmCost": "USD"}
@@ -207,9 +216,31 @@ def test_every_metric_block_carries_its_own_insufficient_data_flag(client):
     headers, _ = _admin(client)
     body = _metrics(client, headers)
     for block in ("revenue", "signupsByDay", "runsByDay", "funnel", "costVsRevenue",
-                  "topReferrers"):
+                  "topReferrers", "failedRuns24h", "salesAi"):
         assert isinstance(body[block]["insufficientData"], bool), block
         assert isinstance(body[block]["sampleSize"], int), block
+
+
+def test_failed_runs_24h_counts_failed_not_completed(client):
+    headers, uid = _admin(client)
+    before = _metrics(client, headers)["failedRuns24h"]
+    _seed_run(uid, status="failed")
+    _seed_run(uid, status="completed")
+    after = _metrics(client, headers)["failedRuns24h"]
+    assert after["failed"] == before["failed"] + 1
+    assert after["total"] == before["total"] + 2
+    assert after["windowHours"] == 24
+
+
+def test_sales_ai_block_is_the_outreach_agent_not_human_resellers(client):
+    headers, _ = _admin(client)
+    block = _metrics(client, headers)["salesAi"]
+    assert "enabled" in block
+    assert "dryRun" in block
+    assert block["cannotAttributeSignups"] is True
+    assert "UTM" in block["cannotAttributeReason"]
+    assert "emailsSent" in block
+    assert "repliesObserved" in block
 
 
 # --------------------------------------------------------------------------- #

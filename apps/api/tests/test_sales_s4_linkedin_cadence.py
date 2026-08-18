@@ -194,7 +194,11 @@ def test_draft_is_generated_and_grounded_in_the_owners_career_profile(
     rows, _ = repo.list_outreach(
         channel="linkedin_draft", outcome="draft_queued", since=start, limit=5
     )
-    assert rows and rows[0]["body"] == DRAFT_TEXT
+    from app.agents.sales_agent import rewrite_retired_product_urls, with_tracked_product_url
+
+    expected = with_tracked_product_url(rewrite_retired_product_urls(DRAFT_TEXT))
+    assert rows and rows[0]["body"] == expected
+    assert "5cb5f0620.abacusai.cloud" not in (rows[0]["body"] or "")
     assert rows[0]["channel"] == "linkedin_draft"
     assert result["linkedinCadence"]["queuedLast7d"] == 0
 

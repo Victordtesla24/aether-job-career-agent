@@ -34,10 +34,24 @@ def webhook_secret() -> str | None:
     return os.environ.get("STRIPE_WEBHOOK_SECRET")
 
 
+#: Production origin. The Abacus VM was decommissioned 2026-08-17; a missing
+#: or retired ``APP_BASE_URL`` must never put that host into checkout, mail,
+#: or sales copy.
+LIVE_APP_BASE_URL = "https://aether.srv1356245.hstgr.cloud"
+_RETIRED_APP_HOST_MARKERS = ("5cb5f0620.abacusai.cloud", "abacusai.cloud")
+
+
 def app_base_url() -> str:
-    return os.environ.get(
-        "APP_BASE_URL", "https://5cb5f0620.abacusai.cloud"
-    ).rstrip("/")
+    """Public origin for checkout, mail and sales copy.
+
+    Honours an explicit non-retired ``APP_BASE_URL`` (dev/test hosts). A
+    missing value, or any value still pointing at the decommissioned Abacus
+    VM, resolves to the live Hostinger origin instead of a dead link.
+    """
+    raw = (os.environ.get("APP_BASE_URL") or "").strip().rstrip("/")
+    if not raw or any(marker in raw for marker in _RETIRED_APP_HOST_MARKERS):
+        return LIVE_APP_BASE_URL
+    return raw
 
 
 def _stripe() -> Any:

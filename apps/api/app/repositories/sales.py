@@ -759,14 +759,26 @@ class SalesRepository:
                     ' FROM "SalesOutreachLog"'
                 )
                 sent, replied, dry_run, drafts = cur.fetchone()
+                cur.execute(
+                    "SELECT COUNT(DISTINCT \"gmailThreadId\") "
+                    "FILTER (WHERE \"outcome\" = 'sent' AND \"channel\" = 'email')"
+                    ' FROM "SalesOutreachLog"'
+                )
+                sent_threads = int(cur.fetchone()[0])
+                cur.execute(
+                    "SELECT COUNT(DISTINCT \"gmailThreadId\") "
+                    "FILTER (WHERE \"outcome\" = 'replied')"
+                    ' FROM "SalesOutreachLog"'
+                )
+                replied_threads = int(cur.fetchone()[0])
                 cur.execute('SELECT COUNT(*) FROM "SalesLead"')
                 lead_count = int(cur.fetchone()[0])
-        # Honest: NOTHING in the codebase writes outcome='replied' today (the
-        # inbound handler only skips already-sent threads), so a reply rate is
-        # not observable at all — showing 0.0% would assert a measurement the
-        # system cannot make. Stays null until a real reply-detection writer
-        # exists; then restore (replied / sent) with the sent>0 guard.
-        reply_rate = None
+        # Distinct mailed threads in the denominator. repliesObserved stays
+        # the COUNT of replied rows. Rate is null until a real send exists —
+        # 0.0% with zero sends would invent a measurement.
+        reply_rate = (
+            (replied_threads / sent_threads) if sent_threads > 0 else None
+        )
         return {
             "signups": signups,
             "paidConversions": paid_conversions,
@@ -1030,7 +1042,7 @@ DEFAULT_CAMPAIGNS: tuple[tuple[str, str, str], ...] = (
         "tailors your resume to the ones you pick (every claim grounded in your "
         "own resume, never invented).\n\n"
         "If you get stuck or want a walkthrough, just reply to this email.\n\n"
-        "Vik\nAether Career Agent — https://5cb5f0620.abacusai.cloud",
+        "Vik\nAether Career Agent — https://aether.srv1356245.hstgr.cloud",
     ),
     (
         "Free → paid nudge",
@@ -1043,7 +1055,7 @@ DEFAULT_CAMPAIGNS: tuple[tuple[str, str, str], ...] = (
         "resume tailoring and interview prep. Annual billing saves ~2 months.\n\n"
         "Upgrade any time from Settings → Billing, or reply here with "
         "questions.\n\n"
-        "Vik\nAether Career Agent — https://5cb5f0620.abacusai.cloud/pricing",
+        "Vik\nAether Career Agent — https://aether.srv1356245.hstgr.cloud/pricing",
     ),
     (
         "Re-engagement check-in",
@@ -1054,7 +1066,7 @@ DEFAULT_CAMPAIGNS: tuple[tuple[str, str, str], ...] = (
         "If the setup felt unclear, reply to this email and I'll personally "
         "help you get your resume in and your first tailored application out. "
         "Your Free plan (5 runs/month) is still active.\n\n"
-        "Vik\nAether Career Agent — https://5cb5f0620.abacusai.cloud",
+        "Vik\nAether Career Agent — https://aether.srv1356245.hstgr.cloud",
     ),
     (
         "Demo request response",
@@ -1063,7 +1075,7 @@ DEFAULT_CAMPAIGNS: tuple[tuple[str, str, str], ...] = (
         "Thanks for the interest in seeing Aether in action — happy to help "
         "right away.\n\n"
         "The quickest option: create a free account at "
-        "https://5cb5f0620.abacusai.cloud (no card needed, 5 agent runs "
+        "https://aether.srv1356245.hstgr.cloud (no card needed, 5 agent runs "
         "included) and upload your resume — you'll see live job discovery, fit "
         "scoring and resume tailoring on your own data within minutes.\n\n"
         "If you'd rather a guided walkthrough, reply with a couple of times "
@@ -1074,7 +1086,7 @@ DEFAULT_CAMPAIGNS: tuple[tuple[str, str, str], ...] = (
         "LinkedIn draft — product story",
         "linkedin_draft",
         "Draft a LinkedIn post for the founder of Aether Career Agent "
-        "(https://5cb5f0620.abacusai.cloud). Ground rules: only claim features "
+        "(https://aether.srv1356245.hstgr.cloud). Ground rules: only claim features "
         "the product really has — licensed-API job discovery (no scraping), "
         "deterministic fit scoring, resume tailoring with an anti-fabrication "
         "entailment guard, human approval on every job application, Gmail "

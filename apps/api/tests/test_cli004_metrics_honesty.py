@@ -1,10 +1,11 @@
 """CLI-004 + CLI-006 — sales-agent overview metrics honesty.
 
-CLI-004 (MET-F-01): ``replyRate`` must be null while reply detection is
-unimplemented — no code path writes ``outcome='replied'``, so ANY numeric rate
-(including 0.0 with real sends on the books) asserts a measurement the system
-cannot make. The module's own contract (routers/sales_agent.py) promises
-"replyRate is null — not 0 — when it is genuinely not observable".
+CLI-004 (MET-F-01, updated ADM-004): ``replyRate`` is null only when no
+distinct sent email thread exists — there is then no denominator. Once a
+real send is on the books, inbound reply detection writes ``outcome='replied'``
+rows, so a numeric rate (including 0.0) is a measurement, not a fabrication.
+The module contract remains: null, not 0, when the rate is genuinely not
+observable.
 
 CLI-006 (MET-F-03): ``signups`` must count the same population as
 /admin/metrics/executive (non-deleted, non-admin) — the overview previously
@@ -18,10 +19,8 @@ import uuid
 from app.repositories.sales import SalesRepository
 
 
-def test_reply_rate_is_null_even_with_sends_on_the_books(repo_factory=None):
+def test_reply_rate_is_numeric_once_a_real_send_exists(repo_factory=None):
     repo = SalesRepository()
-    # Put a real 'sent' row on the books so the old fabricated-0.0 branch
-    # (replied/sent with sent>0) would produce 0.0, not null.
     thread = f"t-cli004-{uuid.uuid4().hex[:12]}"
     repo.record_outreach(
         channel="email",
@@ -32,10 +31,11 @@ def test_reply_rate_is_null_even_with_sends_on_the_books(repo_factory=None):
     )
     data = repo.overview()
     assert data["emailsSent"] >= 1
-    assert data["replyRate"] is None, (
-        "replyRate must be null while reply detection is unimplemented — "
-        "0.0 with sends on the books is a fabricated measurement"
+    assert data["replyRate"] is not None, (
+        "replyRate must be measurable once a sent thread exists — "
+        "ADM-004 observes replies, so 0.0 is a real zero, not a guess"
     )
+    assert 0.0 <= float(data["replyRate"]) <= 1.0
 
 
 def test_signups_excludes_admin_accounts_matching_executive_metrics(

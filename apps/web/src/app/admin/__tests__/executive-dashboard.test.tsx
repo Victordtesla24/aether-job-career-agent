@@ -176,6 +176,30 @@ function todayMetrics(): AdminExecutiveMetrics {
       sampleSize: 0,
       insufficientData: true,
     },
+    failedRuns24h: {
+      failed: 2,
+      total: 18,
+      rate: null,
+      windowHours: 24,
+      sampleSize: 18,
+      insufficientData: true,
+    },
+    salesAi: {
+      enabled: true,
+      dryRun: true,
+      emailsSent: 0,
+      dryRunLogged: 4,
+      repliesObserved: 0,
+      replyRate: null,
+      leads: 2,
+      linkedinDraftsQueued: 1,
+      llmCostUsd30d: 0,
+      cannotAttributeSignups: true,
+      cannotAttributeReason:
+        "User rows do not store campaignId or UTM, so signups cannot be attributed to Sales AI.",
+      sampleSize: 4,
+      insufficientData: true,
+    },
     excluded: { adminAccounts: 1, deletedAccounts: 0 },
   });
 }
@@ -368,6 +392,22 @@ describe("the operational strip", () => {
     const refs = await screen.findByTestId("admin-exec-referrers");
     expect(refs.getAttribute("data-measured")).toBe("false");
     expect(refs.textContent).toMatch(/no sales agent/i);
+  });
+
+  it("shows Sales AI as a distinct panel from human referrers", async () => {
+    render(<AdminExecutiveDashboardPage />);
+    const panel = await screen.findByTestId("admin-exec-sales-ai");
+    expect(panel.getAttribute("data-measured")).toBe("true");
+    expect(panel.textContent).toMatch(/Shadow/);
+    expect(panel.textContent).toMatch(/cannot be attributed/i);
+    expect(panel.querySelector("a")?.getAttribute("href")).toBe("/admin/sales-agent");
+  });
+
+  it("shows failed-run counts from the executive payload rather than a hardcoded empty", async () => {
+    render(<AdminExecutiveDashboardPage />);
+    const tile = await screen.findByTestId("admin-ops-failed-run-rate");
+    expect(tile.textContent).toMatch(/2 \/ 18/);
+    expect(tile.textContent).not.toMatch(/does not report a 24h-windowed/);
   });
 
   it("lists the most recent admin actions", async () => {
