@@ -333,6 +333,19 @@ def test_recruitment_agency_clause_is_not_a_synthetic_self_declaration():
 #: test schema SHOULD use a reserved domain), so that table is permanently and
 #: correctly "contaminated" here. Production coverage of ``User`` comes from
 #: ``scripts/audit_fixture_markers.py``, which scans every table including it.
+def _live_schema(conn) -> str:
+    """The schema the test connection is ACTUALLY pinned to.
+
+    TEST-PAR-1: a battery may run in the legacy shared ``aether_test`` or in
+    a per-wave ``aether_test_<wave>`` schema. Hard-coding ``aether_test``
+    here would make this audit scan a schema the rows were never written to
+    — silently vacuous in one direction and a false failure in the other.
+    """
+    with conn.cursor() as cur:
+        cur.execute("SELECT current_schema()")
+        return cur.fetchone()[0]
+
+
 _CONTENT_TABLES = [
     "AgentRun",
     "Application",
@@ -448,7 +461,8 @@ def _insert_realistic_clean_rows(conn, user_id: str) -> tuple[str, str, set[str]
 def test_clean_content_tables_yield_no_findings(client, auth_headers, db_session):
     """A realistic, entirely genuine dataset must produce ZERO findings.
 
-    Scoped to the rows this test creates: ``aether_test`` is a SHARED schema and
+    Scoped to the rows this test creates: the test schema is shared (legacy
+    ``aether_test``) or wave-private (``aether_test_<wave>``), and
     several of the tables scanned here (``BackgroundJob``, ``Offer``,
     ``OutreachTask``, ``InterviewSchedule``) are deliberately NOT in
     ``conftest._TABLES_TO_CLEAN``, so a global zero-assertion would be a flake
@@ -457,7 +471,7 @@ def test_clean_content_tables_yield_no_findings(client, auth_headers, db_session
     user_id = client._test_user_id
     _job_id, _resume_id, clean_ids = _insert_realistic_clean_rows(db_session, user_id)
     findings = scan_connection(
-        db_session, schema="aether_test", tables=_CONTENT_TABLES
+        db_session, schema=_live_schema(db_session), tables=_CONTENT_TABLES
     )
     wrongly_flagged = [f.as_dict() for f in findings if f.row_id in clean_ids]
     assert wrongly_flagged == [], (
@@ -588,7 +602,7 @@ def test_reintroduced_fixture_rows_are_caught_by_the_db_scan(
     db_session.commit()
 
     findings = scan_connection(
-        db_session, schema="aether_test", tables=_CONTENT_TABLES
+        db_session, schema=_live_schema(db_session), tables=_CONTENT_TABLES
     )
     caught = {(f.table, f.row_id, f.marker) for f in findings}
 

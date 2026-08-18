@@ -2,7 +2,8 @@
 
 Key responsibilities:
 - Point the app at the TEST database (``DATABASE_URL_TEST`` → ``aether_test``
-  schema) *before* the app/settings modules are imported.
+  or a per-wave ``aether_test_<wave>`` schema; see scripts/run-tests.sh and
+  scripts/test-schema.sh) *before* the app/settings modules are imported.
 - Provide a ``client`` (FastAPI TestClient), a ``db_session`` (raw psycopg2
   connection with per-test table cleanup), and ``auth_headers`` (a registered
   and logged-in test user's Authorization header).
@@ -160,7 +161,8 @@ os.environ.setdefault(
 #      ``DATABASE_URL_TEST``.
 #   2. Before truncating (and once, session-wide, before any fixture runs
 #      at all), a LIVE ``SELECT current_schema()`` against that exact
-#      connection is compared against the required ``aether_test`` name.
+#      connection is compared against the required isolated-test-schema
+#      shape (``aether_test`` or a per-wave ``aether_test_<wave>``).
 #      Anything else — including a legitimate-looking connection that
 #      somehow still resolves to ``aether`` — aborts the whole session
 #      (``pytest.exit(..., returncode=2)``) before any destructive SQL runs.
@@ -173,14 +175,30 @@ os.environ.setdefault(
 
 class ProdTruncationGuardError(RuntimeError):
     """Raised when the destructive test-truncation path would not be
-    confined to the isolated ``aether_test`` schema. Fail-closed: this is
-    raised (and the pytest session aborted) whenever safety cannot be
-    POSITIVELY proven, not only when it is positively disproven.
+    confined to an isolated ``aether_test``/``aether_test_<wave>`` schema.
+    Fail-closed: this is raised (and the pytest session aborted) whenever
+    safety cannot be POSITIVELY proven, not only when it is positively
+    disproven.
     """
 
 
-#: The only schema name ``_truncate_tables`` is ever allowed to target.
+#: The legacy shared test schema — still the default, still always allowed.
 _REQUIRED_TEST_SCHEMA = "aether_test"
+
+#: TEST-PAR-1 — the ONLY schema shape ``_truncate_tables`` may ever target:
+#: the legacy shared ``aether_test`` OR a per-wave ``aether_test_<wave>``
+#: provisioned by ``scripts/test-schema.sh``. Parallel waves each truncate
+#: inside their OWN schema, so concurrent batteries stop deleting each other's
+#: rows — the reason every run used to serialise on one lockfile.
+#:
+#: This WIDENS the guard by exactly one shape and no more. It stays anchored
+#: (``fullmatch``) and character-class restricted, so production (``aether``),
+#: ``public``, ``None`` and every look-alike (``xaether_test``,
+#: ``aether_test-pa``, ``aether_testPA``, ``aether_test;drop``) are refused
+#: exactly as before — the MV-system-003 property is unchanged: the target must
+#: be POSITIVELY proven to be an isolated test schema.
+#: Kept in lockstep with ``TEST_SCHEMA_REGEX`` in scripts/run-tests.sh.
+_TEST_SCHEMA_PATTERN = re.compile(r"aether_test(?:[_a-z0-9]+)?")
 
 #: Explicit, never-in-CI escape hatch (see module docstring above).
 _ALLOW_PROD_TRUNCATE_ENV = "AETHER_ALLOW_PROD_TRUNCATE"
@@ -222,18 +240,27 @@ def _assert_schema_is_safe_test_schema(
 ) -> None:
     """Pure guard logic — no DB I/O, no filesystem, no environment reads.
 
-    Raises :class:`ProdTruncationGuardError` unless ``resolved_schema`` is
-    exactly ``"aether_test"``. This is the function the MV-system-003
-    regression test exercises directly with synthetic values (including a
-    simulated ``"aether"`` production resolution) so the guard's decision
-    logic is proven without ever opening a real connection.
+    Raises :class:`ProdTruncationGuardError` unless ``resolved_schema`` is an
+    isolated test schema — the legacy shared ``"aether_test"`` or a per-wave
+    ``"aether_test_<wave>"`` (TEST-PAR-1), matched against
+    :data:`_TEST_SCHEMA_PATTERN` in full. This is the function the
+    MV-system-003 regression test exercises directly with synthetic values
+    (including a simulated ``"aether"`` production resolution) so the guard's
+    decision logic is proven without ever opening a real connection.
     """
     if allow_override:
         return
-    if resolved_schema != _REQUIRED_TEST_SCHEMA:
+    if not resolved_schema or not _TEST_SCHEMA_PATTERN.fullmatch(resolved_schema):
         raise ProdTruncationGuardError(
             "REFUSING TO RUN: test truncation would target schema "
-            f"{resolved_schema!r}, not {_REQUIRED_TEST_SCHEMA!r}. "
+            f"{resolved_schema!r}, which is not an isolated test schema "
+            f"({_REQUIRED_TEST_SCHEMA!r} or "
+            f"'{_REQUIRED_TEST_SCHEMA}_<wave>', pattern "
+            f"{_TEST_SCHEMA_PATTERN.pattern!r}). "
+            "A per-wave schema must exist before it can be targeted — "
+            "provision it with 'scripts/test-schema.sh provision <wave>' "
+            "(an unprovisioned search_path resolves to no schema at all, "
+            "which lands here). "
             "See docs/delivery/INCIDENT-PROD-DB-WIPE-2026-07-18.md. Set "
             f"{_ALLOW_PROD_TRUNCATE_ENV}=1 to consciously override "
             "(NEVER in CI/deploy)."
@@ -262,9 +289,9 @@ def _live_resolved_schema(dsn: str, options: str) -> str | None:
 
 def _run_prod_truncate_guard() -> None:
     """Session-start guard: resolve the truncation target and verify (live)
-    that it is the isolated ``aether_test`` schema, aborting the pytest
-    session otherwise. Fails closed — any error resolving the DSN,
-    connecting, or querying is treated as "not proven safe".
+    that it is an isolated ``aether_test``/``aether_test_<wave>`` schema,
+    aborting the pytest session otherwise. Fails closed — any error resolving
+    the DSN, connecting, or querying is treated as "not proven safe".
     """
     allow_override = os.environ.get(_ALLOW_PROD_TRUNCATE_ENV) == "1"
     if allow_override:
@@ -277,8 +304,9 @@ def _run_prod_truncate_guard() -> None:
     except Exception as exc:  # noqa: BLE001 - fail closed on ANY error
         raise ProdTruncationGuardError(
             "REFUSING TO RUN: could not verify the test-truncation target "
-            f"is the isolated 'aether_test' schema ({exc!r}). Failing "
-            "closed per docs/delivery/INCIDENT-PROD-DB-WIPE-2026-07-18.md."
+            "is an isolated 'aether_test'/'aether_test_<wave>' schema "
+            f"({exc!r}). Failing closed per "
+            "docs/delivery/INCIDENT-PROD-DB-WIPE-2026-07-18.md."
         ) from exc
     _assert_schema_is_safe_test_schema(resolved, allow_override=allow_override)
 
@@ -328,8 +356,9 @@ _TABLES_TO_CLEAN = (
 
 
 def _truncate_tables() -> None:
-    """Truncate the suite's tables — ONLY ever on the pinned ``aether_test``
-    connection built by :func:`_resolve_truncation_dsn`.
+    """Truncate the suite's tables — ONLY ever on the pinned isolated-test-
+    schema connection built by :func:`_resolve_truncation_dsn` (the legacy
+    shared ``aether_test`` or this wave's own ``aether_test_<wave>``).
 
     Deliberately does NOT use ``app.db.get_connection()`` (which derives its
     search_path from whatever ``DATABASE_URL`` is currently in the process
