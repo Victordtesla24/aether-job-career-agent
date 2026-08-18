@@ -379,7 +379,7 @@ export default function NetworkingPage() {
     <div className="space-y-6" data-testid="networking-crm">
       <PageHeader
         title={<span className="text-gradient-brand">Networking</span>}
-        subtitle="Recruiter and referral CRM — contacts stay current from Gmail and LinkedIn export."
+        subtitle="Your recruiter and referral CRM — people who can open doors for this job search, not Aether’s sales list."
         footnote={
           data.crmSummary.lastContactUpdatedAt ? (
             <span data-testid="networking-freshness">
@@ -486,6 +486,25 @@ export default function NetworkingPage() {
         </div>
         }
       />
+
+      <section
+        className="rounded-[14px] border border-white/10 bg-surface-1 px-4 py-3 text-sm text-aether-muted"
+        data-testid="networking-purpose"
+        aria-label="What Networking does"
+      >
+        <p>
+          <span className="font-semibold text-white">What this page does.</span> Import people from
+          Gmail or a LinkedIn Connections export, stage them through New → Warm → Active → Scheduled →
+          Placed, queue follow-ups, and ask Recruiter Outreach to draft a first-touch email. Drafts
+          go to{" "}
+          <Link href="/dashboard/approvals" className="text-sapphire-light underline hover:text-white">
+            Approvals
+          </Link>{" "}
+          and never send on their own. Response rate stays{" "}
+          <span className="text-state-neutral">not measured</span> until outreach is actually sent or
+          answered — we never invent a green 0%.
+        </p>
+      </section>
 
       {showAllContacts ? (
         <div
@@ -638,12 +657,21 @@ export default function NetworkingPage() {
             <Stat label="Contacts" value={String(contactCount)} />
             <Stat label="Active conversations" value={String(data.stats.activeConversations)} accent="text-sapphire-light" />
             <Stat label="Referrals in flight" value={String(data.stats.referralsInFlight)} accent="text-aether-violet" />
-            <Stat
+              <Stat
               label="Response rate"
               value={data.stats.responseRate === null ? "not measured" : `${data.stats.responseRate}%`}
-              accent={data.stats.responseRate === null ? "text-aether-muted" : "text-aether-green"}
+              accent={data.stats.responseRate === null ? "text-state-neutral" : "text-aether-green"}
             />
           </section>
+
+          <p className="text-xs text-aether-muted-dim" data-testid="pipeline-legend">
+            Pipeline stages: <span className="text-aether-muted">New</span> identified ·{" "}
+            <span className="text-aether-muted">Warm</span> first contact ·{" "}
+            <span className="text-aether-muted">Active</span> in conversation ·{" "}
+            <span className="text-aether-muted">Scheduled</span> meeting set ·{" "}
+            <span className="text-aether-muted">Placed</span> referral or outcome. Open a card to change
+            stage.
+          </p>
 
           <div className="grid gap-6 xl:grid-cols-3">
             {/* Contact pipeline */}
@@ -724,7 +752,9 @@ export default function NetworkingPage() {
                 <h2 className="mb-3 text-[15px] font-semibold">Outreach Queue</h2>
                 {data.outreachQueue.length === 0 ? (
                   <p className="text-xs text-aether-muted-dim" data-testid="outreach-queue-empty">
-                    No outreach queued yet.
+                    No outreach queued yet. Open a contact with an email and use{" "}
+                    <span className="text-aether-muted">Draft outreach</span> to create an
+                    approval-gated first-touch — nothing sends from this screen.
                   </p>
                 ) : (
                   <div className="space-y-3">
