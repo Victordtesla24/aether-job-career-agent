@@ -19,7 +19,10 @@ Covers (phase 1, cron scheduling/eligibility):
   can never be mailed to them, so the cron's eligibility query excludes them
   entirely — confirmed both via the repository query and via the cron body);
 * ``GmailAccountRepository.list_connected_user_ids`` returns exactly the
-  distinct connected user ids.
+  distinct connected user ids;
+* a SUSPENDED or SOFT-DELETED user is never counted eligible, queued, or
+  sent a digest, even at production-default flags (P0 fix,
+  RUN-20260818T0223Z adversarial review — `03-adversarial-review.md`).
 
 Covers (phase 2, FEAT-EMAIL-BRAND, RUN-20260818T0223Z — Owner directive
 2026-08-18, strictly-scoped auto-send; see
@@ -250,6 +253,90 @@ def test_list_connected_user_ids_excludes_disconnected_users(user_id):
 
     ids = GmailAccountRepository().list_connected_user_ids()
     assert user_id not in ids
+
+
+# ===========================================================================
+# Suspension / soft-delete exclusion — P0 fix (RUN-20260818T0223Z adversarial
+# review, `03-adversarial-review.md`). Account suspension (GAP-P6 §15) is
+# enforced ONLY at the HTTP auth-dependency layer
+# (apps/api/app/middleware/auth.py) — a suspended user gets a 403 on every
+# authenticated route. This cron calls app.routers.agents._dispatch directly
+# as a Python function, in-process, bypassing that layer entirely. The
+# reviewer live-reproduced: a suspended user with a connected Gmail account
+# and real activity was counted eligible, auto-approved, AND auto-executed —
+# a real branded email sent with zero human in the loop. Both tests below run
+# at PRODUCTION-DEFAULT flags (both kill-switches explicitly ON) to match the
+# exact conditions of the reported leak, and must FAIL against the
+# pre-fix query (captured in the evidence file) and PASS after it.
+# ===========================================================================
+
+
+def test_digest_cron_excludes_a_suspended_user(
+    client, auth_headers, user_id, billing_seeded, gmail_connected, monkeypatch
+):
+    """A suspended user (``User.suspended = true``, written through the exact
+    repository function ``POST /admin/users/{id}/suspend`` uses) must never
+    be counted eligible, queued, or sent a digest — even with both
+    kill-switches at their production default (ON)."""
+    from app.repositories.admin import set_suspended
+    from app.workers.digest_cron import notification_digest_cron
+
+    monkeypatch.setenv("AETHER_DIGEST_CRON_ENABLED", "true")
+    monkeypatch.setenv("AETHER_DIGEST_AUTO_SEND", "true")
+
+    def _fail_if_called(*args, **kwargs):  # noqa: ANN001, ARG001
+        pytest.fail("must never send digest email to a suspended user")
+
+    monkeypatch.setattr(
+        "app.services.gmail_service.GmailService.send", _fail_if_called
+    )
+    _seed_activity(client, auth_headers, user_id)
+    set_suspended(user_id, True)
+
+    result = asyncio.run(notification_digest_cron({}))
+
+    assert result["eligible"] == 0
+    assert result["enqueued"] == 0
+    assert result["autoSent"] == 0
+    assert _approval_count(user_id) == 0
+
+
+def test_digest_cron_excludes_a_soft_deleted_user(
+    client, auth_headers, user_id, billing_seeded, gmail_connected, monkeypatch
+):
+    """Independent of the suspended-flag test above: only ``deletedAt`` is
+    stamped here (NOT ``suspended``), isolating the eligibility query's own
+    ``deletedAt IS NULL`` clause so it is proven to exclude the row on its
+    own merits — the real ``admin.soft_delete_user`` write path sets BOTH
+    columns together ("suspension is the teeth"), which would leave this
+    specific clause untested by that path alone."""
+    from app.db import ensure_user_lifecycle_columns
+    from app.workers.digest_cron import notification_digest_cron
+
+    monkeypatch.setenv("AETHER_DIGEST_CRON_ENABLED", "true")
+    monkeypatch.setenv("AETHER_DIGEST_AUTO_SEND", "true")
+
+    def _fail_if_called(*args, **kwargs):  # noqa: ANN001, ARG001
+        pytest.fail("must never send digest email to a soft-deleted user")
+
+    monkeypatch.setattr(
+        "app.services.gmail_service.GmailService.send", _fail_if_called
+    )
+    _seed_activity(client, auth_headers, user_id)
+    ensure_user_lifecycle_columns()
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'UPDATE "User" SET "deletedAt" = now() WHERE "id" = %s', (user_id,)
+            )
+        conn.commit()
+
+    result = asyncio.run(notification_digest_cron({}))
+
+    assert result["eligible"] == 0
+    assert result["enqueued"] == 0
+    assert result["autoSent"] == 0
+    assert _approval_count(user_id) == 0
 
 
 # ===========================================================================

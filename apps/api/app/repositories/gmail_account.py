@@ -368,7 +368,7 @@ class GmailAccountRepository:
 
     def list_connected_user_ids(self, limit: int | None = None) -> list[str]:
         """Distinct user ids with AT LEAST ONE connected Gmail account AND a
-        still-existing ``User`` row, oldest connection first.
+        still-existing, still-LIVE ``User`` row, oldest connection first.
 
         FEAT-EMAIL-BRAND digest cron: the notification digest can only ever be
         mailed to the user's OWN connected Gmail address
@@ -389,14 +389,43 @@ class GmailAccountRepository:
         unhandled exception surfacing as a spurious cron failure at worst.
         Every other caller of this method wants the same guarantee, so it is
         not scoped to the digest cron alone.
+
+        SUSPENDED / SOFT-DELETED USERS ARE NOT ELIGIBLE (P0 fix,
+        RUN-20260818T0223Z adversarial review). Account suspension
+        (``GAP-P6 §15``) is enforced ONLY at the HTTP auth-dependency layer
+        (``apps/api/app/middleware/auth.py``) — a suspended user gets a 403
+        on every route. This cron calls ``app.routers.agents._dispatch``
+        directly as a Python function, in-process, so it bypasses that layer
+        entirely; without an explicit filter here a banned account would keep
+        receiving fully-automated digest email (composed AND, under phase 2's
+        auto-send, actually SENT) for as long as its Gmail stayed connected —
+        live-reproduced by the adversarial reviewer against this exact query.
+        Mirrors the two sibling automated/cron paths that already had to
+        solve this identical problem for themselves, same column semantics:
+        ``COALESCE(u."suspended", false) = false`` (``_sweep_eligible_users``,
+        ``apps/api/app/routers/agents.py``) and ``u."deletedAt" IS NULL``
+        (the free-plan lifecycle sweep, ``apps/api/app/agents/sales_agent.py``
+        — ADMIN-2.0 soft-delete: a hard delete is impossible because eight
+        child tables cascade off ``User.id``, so a deleted account's row
+        stays behind and must be excluded explicitly, not inferred from
+        absence).
         """
         self._ensure_table()
+        from app.db import ensure_admin_user_columns, ensure_user_lifecycle_columns
+
+        # Lazy DDL for the two columns this filter reads (ADR-TR-1) — a
+        # timer-triggered cron can reach this line before any /admin request
+        # has ever touched either column in this worker process.
+        ensure_admin_user_columns()
+        ensure_user_lifecycle_columns()
         with get_connection() as conn:
             with conn.cursor() as cur:
                 sql = (
                     'SELECT g."userId", MIN(g."createdAt") AS oldest'
                     ' FROM "GmailAccount" g'
                     ' JOIN "User" u ON u."id" = g."userId"'
+                    ' WHERE COALESCE(u."suspended", false) = false'
+                    '   AND u."deletedAt" IS NULL'
                     ' GROUP BY g."userId" ORDER BY oldest ASC'
                 )
                 params: tuple[Any, ...] = ()
