@@ -510,6 +510,15 @@ class TestD6AutonomousTransmitGated:
     ):
         from app.services.application_submission import maybe_autonomous_transmit
 
+        # RUN-20260818T0223Z AUTO-APPLY killswitch — added deliberately as a
+        # SAFETY TIGHTENING (not a weakening) per the AUTO-APPLY-enablement
+        # decision memo: maybe_autonomous_transmit now also requires the
+        # operator switch AETHER_APPLY_SWEEP_ENABLED to be on — the exact
+        # switch the sweep (Path A) already honoured — on top of every user
+        # gate this test exercises below. See
+        # TestOperatorKillSwitchGatesAutonomousTransmit for the switch-off
+        # coverage this addition requires.
+        monkeypatch.setenv("AETHER_APPLY_SWEEP_ENABLED", "true")
         _set_agent_config(
             user_id, {"autoApply": True, "approvalGate": False, "matchThreshold": 80}
         )
@@ -541,3 +550,175 @@ class TestD6AutonomousTransmitGated:
         assert calls == []
         status, _ = _approval_state(approval["id"])
         assert status == "pending"
+
+
+# ---------------------------------------------------------------------------
+# RUN-20260818T0223Z AUTO-APPLY killswitch — the second, previously ungated
+# autonomous-send path (docs/delivery/evidence/RUN-20260818T0223Z/AUTO-APPLY/
+# 01-enablement-investigation.md §1b; decision memo
+# 05-decision-memos/AUTO-APPLY-enablement.md, "SECOND, ungated live path").
+#
+# ``maybe_autonomous_transmit`` never checked ``AETHER_APPLY_SWEEP_ENABLED`` —
+# the operator kill-switch the sweep (Path A, ``workers.apply_sweep``) already
+# honoured. An operator turning the sweep off believed ALL autonomous sends
+# were stopped; email-channel autonomous sends kept firing regardless. These
+# tests pin ONE operator switch governing BOTH paths.
+# ---------------------------------------------------------------------------
+
+
+class TestOperatorKillSwitchGatesAutonomousTransmit:
+    def _queue_email_approval(
+        self, user_id: str, *, fit_score: float | None
+    ) -> dict[str, Any]:
+        from app.services.application_submission import queue_submission_approval
+
+        job_id = _make_job(
+            user_id,
+            fit_score=fit_score,
+            description=_MAILTO_DESCRIPTION,
+            source="adzuna",
+            source_url=f"https://example.com/{new_id()}",
+        )
+        resume_id = _make_resume(user_id, source_job_id=job_id)
+        app_id = _make_application(user_id, job_id, resume_id)
+        approval = queue_submission_approval(user_id, job_id, app_id, resume_id)
+        assert approval is not None
+        return approval
+
+    def _install_transmit_recorder(self, monkeypatch) -> list[dict]:
+        calls: list[dict] = []
+
+        def _fake_transmit(user, approval):  # noqa: ANN001
+            calls.append({"user": user, "approval": approval})
+            return {"status": "transmitted", "gmailMessageId": "gmail-msg-1"}
+
+        monkeypatch.setattr(
+            "app.services.application_submission.transmit_application",
+            _fake_transmit,
+        )
+        return calls
+
+    def test_switch_off_blocks_the_send_even_with_every_user_gate_passing(
+        self, db_session, user_id, monkeypatch, caplog
+    ):
+        """THE GAP: autoApply true, approvalGate false, fitScore above the
+        user's own threshold — every USER-side gate passes — but the operator
+        has the sweep switch off. No send may occur, and the refusal must be
+        honest: no fabricated success, no dropped application, no burned
+        approval. The card falls back to the normal approval-gated flow."""
+        import logging
+
+        from app.services.application_submission import maybe_autonomous_transmit
+
+        monkeypatch.delenv("AETHER_APPLY_SWEEP_ENABLED", raising=False)
+        _set_agent_config(
+            user_id, {"autoApply": True, "approvalGate": False, "matchThreshold": 50}
+        )
+        approval = self._queue_email_approval(user_id, fit_score=95.0)
+        calls = self._install_transmit_recorder(monkeypatch)
+
+        with caplog.at_level(logging.INFO):
+            result = maybe_autonomous_transmit(user_id, approval)
+
+        assert result is None, "operator switch OFF must not transmit"
+        assert calls == [], "the email provider must never be invoked"
+        status, executed_at = _approval_state(approval["id"])
+        assert status == "pending", "the approval must stay pending, not burned"
+        assert executed_at is None
+        assert any(
+            "disabled by operator" in record.message for record in caplog.records
+        ), "the refusal must be logged honestly, not silent"
+
+    def test_switch_off_with_explicit_string_false_also_blocks(
+        self, db_session, user_id, monkeypatch
+    ):
+        from app.services.application_submission import maybe_autonomous_transmit
+
+        monkeypatch.setenv("AETHER_APPLY_SWEEP_ENABLED", "false")
+        _set_agent_config(
+            user_id, {"autoApply": True, "approvalGate": False, "matchThreshold": 50}
+        )
+        approval = self._queue_email_approval(user_id, fit_score=95.0)
+        calls = self._install_transmit_recorder(monkeypatch)
+
+        result = maybe_autonomous_transmit(user_id, approval)
+
+        assert result is None
+        assert calls == []
+
+    def test_switch_on_transmits_when_every_other_gate_also_passes(
+        self, db_session, user_id, monkeypatch
+    ):
+        """Parity: with the operator switch ON, a fully-opted-in, above-
+        threshold user still autonomously transmits exactly as before."""
+        from app.services.application_submission import maybe_autonomous_transmit
+
+        monkeypatch.setenv("AETHER_APPLY_SWEEP_ENABLED", "true")
+        _set_agent_config(
+            user_id, {"autoApply": True, "approvalGate": False, "matchThreshold": 50}
+        )
+        approval = self._queue_email_approval(user_id, fit_score=95.0)
+        calls = self._install_transmit_recorder(monkeypatch)
+
+        result = maybe_autonomous_transmit(user_id, approval)
+
+        assert result is not None and result.get("status") == "transmitted"
+        assert len(calls) == 1
+        status, executed_at = _approval_state(approval["id"])
+        assert status == "approved"
+        assert executed_at is not None
+
+    def test_switch_off_still_respects_every_pre_existing_user_gate(
+        self, db_session, user_id, monkeypatch
+    ):
+        """Adding the operator switch must not become the ONLY gate: with the
+        switch on, a user who never opted in (or is below threshold) must
+        still be refused for their OWN reasons, unchanged."""
+        from app.services.application_submission import maybe_autonomous_transmit
+
+        monkeypatch.setenv("AETHER_APPLY_SWEEP_ENABLED", "true")
+        _set_agent_config(
+            user_id, {"autoApply": False, "approvalGate": True, "matchThreshold": 50}
+        )
+        approval = self._queue_email_approval(user_id, fit_score=95.0)
+        calls = self._install_transmit_recorder(monkeypatch)
+
+        result = maybe_autonomous_transmit(user_id, approval)
+
+        assert result is None
+        assert calls == []
+
+    def test_apply_sweep_delegates_to_the_same_single_source_of_truth(
+        self, monkeypatch
+    ):
+        """Path A (the sweep) must consult the EXACT SAME function as Path B
+        — not merely the same env var by coincidence — so the two code paths
+        can never silently disagree about whether autonomy is authorised."""
+        from app.services import application_submission
+        from app.workers import apply_sweep
+
+        sentinel_calls: list[bool] = []
+
+        def _fake_switch() -> bool:
+            sentinel_calls.append(True)
+            return False
+
+        monkeypatch.setattr(
+            application_submission, "autonomous_transmit_enabled", _fake_switch
+        )
+        assert apply_sweep.sweep_enabled() is False
+        assert sentinel_calls == [True], (
+            "apply_sweep.sweep_enabled() did not delegate to "
+            "application_submission.autonomous_transmit_enabled() — the two "
+            "paths are not reading a single source of truth"
+        )
+
+    def test_switch_reads_the_documented_env_var_directly(self, monkeypatch):
+        """No second, divergent env var was introduced — both paths still
+        read AETHER_APPLY_SWEEP_ENABLED, the pre-existing documented switch."""
+        from app.services.application_submission import autonomous_transmit_enabled
+
+        monkeypatch.delenv("AETHER_APPLY_SWEEP_ENABLED", raising=False)
+        assert autonomous_transmit_enabled() is False
+        monkeypatch.setenv("AETHER_APPLY_SWEEP_ENABLED", "true")
+        assert autonomous_transmit_enabled() is True

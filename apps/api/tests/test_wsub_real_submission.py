@@ -426,6 +426,15 @@ class TestApprovalGate:
     def test_explicit_autonomous_optin_transmits_and_records_the_authorisation(
         self, client, auth_headers, user_id, monkeypatch
     ):
+        # RUN-20260818T0223Z AUTO-APPLY killswitch — added deliberately as a
+        # SAFETY TIGHTENING (not a weakening), per the AUTO-APPLY-enablement
+        # decision memo: autonomous transmission now ALSO requires the
+        # operator switch AETHER_APPLY_SWEEP_ENABLED to be on — the same
+        # switch the sweep already honoured — on top of the user's own
+        # opt-in exercised below. See
+        # test_cli_d1d2_real_toggles.TestOperatorKillSwitchGatesAutonomousTransmit
+        # for the switch-off coverage this addition requires.
+        monkeypatch.setenv("AETHER_APPLY_SWEEP_ENABLED", "true")
         recorder = _SendRecorder()
         recorder.install(monkeypatch)
         _set_agent_config(
@@ -472,6 +481,45 @@ class TestApprovalGate:
 
         client.post(f"/jobs/{job_id}/apply", headers=auth_headers)
         assert recorder.calls == []
+
+    def test_operator_switch_off_falls_back_to_the_normal_approval_gated_flow(
+        self, client, auth_headers, user_id, monkeypatch
+    ):
+        """RUN-20260818T0223Z AUTO-APPLY killswitch, end-to-end via the real
+        Apply-click endpoint. Even a fully opted-in user (autoApply true,
+        approvalGate false) must NOT be auto-sent while the operator's
+        AETHER_APPLY_SWEEP_ENABLED switch is off — Apply-click must return
+        the SAME honest, non-autonomous "queued for approval" shape it
+        already returns for any other blocked gate: no fake 'transmitted',
+        no dropped application, an approvalId the user can still act on."""
+        recorder = _SendRecorder()
+        recorder.install(monkeypatch)
+        monkeypatch.delenv("AETHER_APPLY_SWEEP_ENABLED", raising=False)
+        _set_agent_config(
+            user_id, {"autoApply": True, "approvalGate": False, "matchThreshold": 80}
+        )
+        job_id = _make_job(user_id, description=_MAILTO_DESCRIPTION)
+        resume_id = _make_resume(user_id, source_job_id=job_id)
+        _make_application(user_id, job_id, resume_id, status="draft")
+
+        submission = client.post(
+            f"/jobs/{job_id}/apply", headers=auth_headers
+        ).json()["submission"]
+
+        assert recorder.calls == [], "no send may reach the provider"
+        assert submission["queued"] is True
+        assert submission.get("autonomous") is not True
+        assert submission.get("transmitted") is not True
+        assert "approvalId" in submission, "the card must still be reachable"
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    'SELECT "status", "executedAt" FROM "ApprovalRequest" WHERE "id" = %s',
+                    (submission["approvalId"],),
+                )
+                status_, executed_at = cur.fetchone()
+        assert status_ == "pending", "the approval must not be burned by a blocked switch"
+        assert executed_at is None
 
 
 # ---------------------------------------------------------------------------

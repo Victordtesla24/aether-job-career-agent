@@ -96,13 +96,23 @@ logger = logging.getLogger(__name__)
 def sweep_enabled() -> bool:
     """Kill-switch: ``AETHER_APPLY_SWEEP_ENABLED`` (code default OFF).
 
-    OFF by default because this is the one background job in the product that
-    can put a document in front of a real employer. It is turned on
-    deliberately, in the deployment's ``.env``, exactly like the board sweep.
+    OFF by default because this is ONE OF TWO paths in the product that can
+    put a document in front of a real employer with no human in the loop for
+    that specific send — the other is the immediate-fire autonomous email
+    path, ``application_submission.maybe_autonomous_transmit`` (reachable
+    from an Apply click, ``routers.jobs``). RUN-20260818T0223Z AUTO-APPLY
+    investigation, gap #2: that second path never checked this switch at
+    all, so this function now DELEGATES to
+    :func:`app.services.application_submission.autonomous_transmit_enabled`
+    — the single shared reader both paths call — rather than re-reading the
+    env var independently, so the sweep and the autonomous email path can
+    never silently disagree about whether an operator has authorised
+    autonomy. It is turned on deliberately, in the deployment's ``.env``,
+    exactly like the board sweep.
     """
-    return os.environ.get("AETHER_APPLY_SWEEP_ENABLED", "false").strip().lower() in (
-        "1", "true", "yes", "on",
-    )
+    from app.services.application_submission import autonomous_transmit_enabled
+
+    return autonomous_transmit_enabled()
 
 
 def sweep_stretch_seconds() -> float:

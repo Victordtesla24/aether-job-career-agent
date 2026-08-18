@@ -47,6 +47,7 @@ stays pending for the user's explicit decision instead.
 from __future__ import annotations
 
 import logging
+import os
 import re
 from typing import Any
 
@@ -330,6 +331,37 @@ def auto_apply_enabled(config: Any) -> bool:
     a JSON boolean.)
     """
     return isinstance(config, dict) and bool(config.get("autoApply"))
+
+
+def autonomous_transmit_enabled() -> bool:
+    """THE single operator-level kill switch for EVERY autonomous transmission.
+
+    RUN-20260818T0223Z AUTO-APPLY enablement investigation, gap #2
+    (docs/delivery/evidence/RUN-20260818T0223Z/AUTO-APPLY/
+    01-enablement-investigation.md §1b; decision memo
+    05-decision-memos/AUTO-APPLY-enablement.md): the sweep
+    (``app.workers.apply_sweep``) already refused to run unless an operator
+    deliberately turned ``AETHER_APPLY_SWEEP_ENABLED`` on — but
+    :func:`maybe_autonomous_transmit` below, the OTHER code path that can
+    fire a real send with no human in the loop for that specific
+    application, never checked it at all. An operator who believed turning
+    the sweep off stopped ALL autonomous sends was wrong: email-channel
+    autonomous sends kept firing on every Apply click for any user with
+    ``autoApply: true`` + ``approvalGate: false``, regardless of the switch.
+
+    This function is now THE one place both paths read that decision from.
+    ``app.workers.apply_sweep.sweep_enabled`` delegates to this exact
+    function rather than re-reading the env var independently, so the two
+    can never silently disagree. Deliberately reusing the existing,
+    documented ``AETHER_APPLY_SWEEP_ENABLED`` switch rather than inventing a
+    second, divergent env var — one operator knob governs every autonomous
+    send this product can make, not two that could drift apart.
+
+    Code default OFF, exactly like the sweep's own switch.
+    """
+    return os.environ.get("AETHER_APPLY_SWEEP_ENABLED", "false").strip().lower() in (
+        "1", "true", "yes", "on",
+    )
 
 
 def user_match_threshold(config: Any) -> float:
@@ -634,15 +666,23 @@ def queue_submission_approval(
 def maybe_autonomous_transmit(
     user_id: str, approval: dict[str, Any]
 ) -> dict[str, Any] | None:
-    """Send immediately IFF the user's OWN settings authorise an unattended send.
+    """Send immediately IFF the OPERATOR and the user's OWN settings both
+    authorise an unattended send.
 
-    THE EXACT CONTRACT (D6, audit wf_9a87f76f-eaa). An autonomous send fires
-    only when ALL of these hold, read from the same ``User.agentConfig`` the
-    Settings screen writes:
+    THE EXACT CONTRACT (D6, audit wf_9a87f76f-eaa; operator gate added by the
+    RUN-20260818T0223Z AUTO-APPLY killswitch fix). An autonomous send fires
+    only when ALL of these hold:
 
-    1. ``autoApply`` is true AND ``approvalGate`` is false (the explicit
+    1. ``autoApply`` is true AND ``approvalGate`` is false, read from the same
+       ``User.agentConfig`` the Settings screen writes (the explicit
        autonomous opt-in — both defaults are the safe ones);
-    2. the job's ``fitScore`` is a real number ``>=`` the user's
+    2. :func:`autonomous_transmit_enabled` is true — the operator's own
+       deployment-wide kill switch (``AETHER_APPLY_SWEEP_ENABLED``), the SAME
+       switch ``app.workers.apply_sweep`` already honoured. Before this gate
+       existed, a user's own opt-in was the ONLY thing standing between an
+       Apply click and a real send — an operator turning the sweep off did
+       not stop this path;
+    3. the job's ``fitScore`` is a real number ``>=`` the user's
        ``matchThreshold`` (default 80 when unset — AUD-UX-1). A NULL/missing score — or a
        payload with no resolvable job — is BELOW the bar: an unscored job is
        NEVER auto-fired.
@@ -668,9 +708,26 @@ def maybe_autonomous_transmit(
     config = load_agent_config(user_id)
     if not (auto_apply_enabled(config) and not bool(config.get("approvalGate", True))):
         return None
+    payload = approval.get("payload")
+    application_id = (
+        (payload or {}).get("application_id") if isinstance(payload, dict) else None
+    )
+    # RUN-20260818T0223Z AUTO-APPLY killswitch — THE operator switch, on top
+    # of the user's own opt-in above. Checked here (after the user gate, not
+    # before it) so this log line only fires for a send that would otherwise
+    # genuinely have gone out — a user who never opted in is silent here, as
+    # before. Nothing is claimed or resolved before this check, so a refusal
+    # leaves the approval card exactly as untouched as any other blocked gate.
+    if not autonomous_transmit_enabled():
+        logger.info(
+            "autonomous transmit disabled by operator (AETHER_APPLY_SWEEP_ENABLED "
+            "is off) for application %s — nothing was sent; the approval card "
+            "stays pending for an explicit human decision",
+            application_id,
+        )
+        return None
     # D6 — the match threshold gates the AUTONOMOUS fire, before anything is
     # resolved or claimed, so a blocked send leaves the card fully intact.
-    payload = approval.get("payload")
     job_id = str(payload.get("job_id") or "") if isinstance(payload, dict) else ""
     fit_score = job_fit_score(user_id, job_id) if job_id else None
     threshold = user_match_threshold(config)
@@ -679,7 +736,7 @@ def maybe_autonomous_transmit(
             "autonomous transmit withheld for application %s: fitScore %s is "
             "below the user's match threshold %s — the approval card stays "
             "pending for an explicit decision",
-            (payload or {}).get("application_id") if isinstance(payload, dict) else None,
+            application_id,
             "unscored" if fit_score is None else fit_score,
             threshold,
         )
