@@ -69,6 +69,10 @@ jobs:
     needs: verify
     runs-on: [self-hosted, hostinger-vps]
     timeout-minutes: 30
+    env:
+      GIT_CONFIG_COUNT: "1"
+      GIT_CONFIG_KEY_0: safe.directory
+      GIT_CONFIG_VALUE_0: "*"
     steps:
       - name: Deploy and smoke-test dev
         run: |
@@ -80,6 +84,10 @@ jobs:
     needs: deploy-dev
     runs-on: [self-hosted, hostinger-vps]
     timeout-minutes: 30
+    env:
+      GIT_CONFIG_COUNT: "1"
+      GIT_CONFIG_KEY_0: safe.directory
+      GIT_CONFIG_VALUE_0: "*"
     steps:
       - name: Deploy and smoke-test test
         run: |
@@ -92,6 +100,10 @@ jobs:
     runs-on: [self-hosted, hostinger-vps]
     timeout-minutes: 40
     environment: production
+    env:
+      GIT_CONFIG_COUNT: "1"
+      GIT_CONFIG_KEY_0: safe.directory
+      GIT_CONFIG_VALUE_0: "*"
     steps:
       - name: Deploy production with automatic rollback
         run: |
