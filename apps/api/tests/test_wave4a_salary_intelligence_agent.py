@@ -14,10 +14,40 @@ from __future__ import annotations
 import uuid
 
 import pytest
+from conftest import seed_search_target
 
 
 def _uid() -> str:
     return uuid.uuid4().hex
+
+
+@pytest.fixture(autouse=True)
+def _clear_market_benchmark_cache():
+    """The Adzuna market-benchmark cache (``_BENCH_CACHE``) is a MODULE-LEVEL
+    dict that outlives any single ``client``/app instance — without this, a
+    cached fetch keyed by role+location could leak between tests (in this
+    file, and from ``test_analytics.py``'s own use of the same module).
+    """
+    from app.agents import salary_intelligence_agent as sia
+
+    sia._BENCH_CACHE.clear()
+    yield
+    sia._BENCH_CACHE.clear()
+
+
+def _enable_live_adzuna(monkeypatch, fetch_fn):
+    """Point the agent's Adzuna fetch at ``fetch_fn`` — mocks the HTTP
+    transport boundary only (``live_http.fetch_json``, the module's imported
+    reference), exactly as ``test_analytics.py``'s helper of the same name
+    does for the "Market vs. You" panel that calls the same function.
+    """
+    from app.agents import salary_intelligence_agent as sia
+
+    monkeypatch.setenv("ADZUNA_APP_ID", "test-adzuna-app-id")
+    monkeypatch.setenv("ADZUNA_APP_KEY", "test-adzuna-app-key")
+    monkeypatch.delenv("AETHER_DISCOVERY_FIXTURE_DIR", raising=False)
+    monkeypatch.setattr(sia, "fetch_json", fetch_fn, raising=False)
+    return sia
 
 
 def _seed_job(
@@ -236,6 +266,99 @@ def test_is_scoped_to_the_caller(client, auth_headers, user_id, db_session):
     )
     body = _run(client, auth_headers).json()
     assert body["postings"] == 0
+
+
+# ---------------------------------------------------------------------------
+# AUD-AGENT-1(1): live Adzuna market-benchmark context, honestly merged
+# ---------------------------------------------------------------------------
+
+
+def test_salary_report_includes_live_benchmark_when_connected(
+    client, auth_headers, monkeypatch
+):
+    """AUD-AGENT-1(1): with a target role/location and live credentials, the
+    report carries the SAME real ``fetch_market_benchmark()`` fields
+    ``analytics.py``'s Market vs. You panel already uses (search count, mean
+    advertised salary, the 12-month trend, the histogram) — copied verbatim,
+    with honest sourcing that names the real provider and scope.
+    """
+    seed_search_target(
+        client, auth_headers, target_role="Business Analyst", location="Melbourne"
+    )
+    payload = {"count": 107, "mean": 147924.58, "results": []}
+    _enable_live_adzuna(monkeypatch, lambda url, timeout=10: payload)
+
+    body = _run(client, auth_headers).json()
+
+    assert body["benchmarkConnected"] is True
+    bench = body["benchmark"]
+    assert bench is not None
+    assert bench["postingsLast30d"] == 107
+    assert bench["meanAdvertisedSalary"] == 147924.58
+    assert bench["source"] == "adzuna"
+    assert bench["dataAsOf"]
+    note = body["benchmarkNote"]
+    assert "Adzuna" in note
+    assert "Business Analyst" in note
+
+
+def test_salary_report_honest_absence_without_target_role_or_location(
+    client, auth_headers
+):
+    """AUD-AGENT-1(1): a caller who never set a target role/location gets an
+    honest ``benchmarkConnected: False`` and ``benchmark: None`` — never a
+    fabricated or imputed market figure standing in for one.
+    """
+    body = _run(client, auth_headers).json()
+    assert body["benchmarkConnected"] is False
+    assert body["benchmark"] is None
+    assert body["benchmarkNote"]
+
+
+def test_salary_report_honest_absence_when_adzuna_unreachable(
+    client, auth_headers, monkeypatch
+):
+    """AUD-AGENT-1(1): a target role/location IS set, but the live provider
+    call fails — the report still degrades to the same honest absence rather
+    than raising or fabricating a number, and the own-corpus aggregation
+    (postings/groups) is entirely unaffected.
+    """
+    seed_search_target(
+        client, auth_headers, target_role="Business Analyst", location="Melbourne"
+    )
+
+    def _raise(url, timeout=10):
+        raise RuntimeError("ADZUNA_TEST_INJECTED_FAILURE: HTTP 503")
+
+    _enable_live_adzuna(monkeypatch, _raise)
+
+    body = _run(client, auth_headers).json()
+    assert body["benchmarkConnected"] is False
+    assert body["benchmark"] is None
+    assert body["postings"] == 0  # own-corpus aggregation still works honestly
+
+
+def test_salary_report_benchmark_absent_without_credentials(client, auth_headers, monkeypatch):
+    """AUD-AGENT-1(1): even with a target role/location set, absent Adzuna
+    credentials means NO network call is attempted at all (R10 parity with
+    the Market vs. You panel) — proven with a fetch stub that fails the test
+    outright if it is ever invoked.
+    """
+    seed_search_target(
+        client, auth_headers, target_role="Business Analyst", location="Melbourne"
+    )
+    from app.agents import salary_intelligence_agent as sia
+
+    def _must_not_be_called(url, timeout=10):
+        raise AssertionError("fetch_json must not be called without Adzuna credentials")
+
+    monkeypatch.delenv("ADZUNA_APP_ID", raising=False)
+    monkeypatch.delenv("ADZUNA_APP_KEY", raising=False)
+    monkeypatch.setattr(sia, "fetch_json", _must_not_be_called, raising=False)
+
+    body = _run(client, auth_headers).json()
+    assert body["benchmarkConnected"] is False
+    assert body["benchmark"] is None
 
 
 # ---------------------------------------------------------------------------

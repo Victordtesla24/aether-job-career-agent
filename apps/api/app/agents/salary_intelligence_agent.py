@@ -67,6 +67,7 @@ from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import urlencode
 
+from app.db import ensure_user_profile_columns, get_connection, rows_to_dicts
 from app.repositories.job import JobRepository
 from app.services.discovery.live_http import fetch_json
 from app.services.discovery.query_builder import ROLE_FAMILY_TERMS, build_scout_query
@@ -146,6 +147,40 @@ class SalaryIntelligenceReport:
         "benchmark, and currencies are never merged."
     )
     message: str = ""
+    # Live external market context (ADR D-0042's Adzuna AU benchmark, the SAME
+    # provider call ``analytics.py``'s "Market vs. You" panel already uses —
+    # see :func:`fetch_market_benchmark`). ``None``/``False`` is the honest
+    # "not connected" state (no credentials, no target role/location, or the
+    # provider call failed) — NEVER a fabricated or imputed figure standing in
+    # for it. When present, every field is the provider's own value, verbatim.
+    benchmarkConnected: bool = False
+    benchmark: dict[str, Any] | None = None
+    benchmarkNote: str = ""
+
+
+def _user_market_target(user_id: str) -> tuple[str, str]:
+    """The caller's OWN target role and location (``""`` for each unset).
+
+    Reads the same two profile columns ``analytics.py``'s ``_user_market_target``
+    derives the "Market vs. You" panel's benchmark from, so both surfaces
+    measure the same market for the same user. Substitutes NOTHING (F-02): a
+    caller who has not told us what they are looking for gets an honest "not
+    connected" benchmark, never somebody else's market.
+    """
+    ensure_user_profile_columns()
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT "targetRole", "location" FROM "User" WHERE id = %s',
+                (user_id,),
+            )
+            rows = rows_to_dicts(cur)
+    if not rows:
+        return "", ""
+    return (
+        (rows[0].get("targetRole") or "").strip(),
+        (rows[0].get("location") or "").strip(),
+    )
 
 
 def _int_or_none(value: Any) -> int | None:
@@ -166,6 +201,11 @@ class SalaryIntelligenceAgent:
     def run(self, user_id: str) -> SalaryIntelligenceReport:
         postings = self._jobs.list_by_user(user_id)
         report = SalaryIntelligenceReport(postings=len(postings))
+        # Live external market context is independent of whether the caller
+        # has any discovered postings yet — it reads the caller's OWN target
+        # role/location, not their postings — so it is attached on every
+        # path, including the honest-empty-state early return below.
+        self._attach_market_benchmark(report, user_id)
         if not postings:
             report.message = (
                 "No discovered postings yet — run Job Discovery first, then this "
@@ -217,6 +257,59 @@ class SalaryIntelligenceAgent:
         )
         report.message = self._message(report)
         return report
+
+    @staticmethod
+    def _attach_market_benchmark(report: SalaryIntelligenceReport, user_id: str) -> None:
+        """Merge the live Adzuna AU benchmark (:func:`fetch_market_benchmark`)
+        into ``report``, honestly.
+
+        Uses the caller's OWN ``targetRole``/``location`` profile columns —
+        the same target ``analytics.py``'s "Market vs. You" panel benchmarks —
+        so this card and that panel report the same external market for the
+        same user. ``fetch_market_benchmark`` itself returns ``None`` (no
+        network call attempted) when either target is unset, credentials are
+        absent, fixture mode is active, or the live call failed; every one of
+        those is surfaced here as the same honest ``benchmarkConnected=False``
+        rather than distinguished, imputed, or backfilled with a stand-in
+        number. When a benchmark IS returned, every field is copied verbatim —
+        nothing here derives, rounds, or estimates a value the provider did
+        not itself report.
+        """
+        role, location = _user_market_target(user_id)
+        benchmark = fetch_market_benchmark(role, location)
+        report.benchmarkConnected = benchmark is not None
+        if benchmark is None:
+            report.benchmarkNote = (
+                "No external market benchmark connected — this report is your "
+                "own disclosed postings only."
+                if role and location
+                else "No external market benchmark connected — set your target "
+                "role and location in Workspace Settings to compare against "
+                "the live market."
+            )
+            return
+        report.benchmark = {
+            "role": benchmark.role,
+            "location": benchmark.location,
+            "postingsLast30d": benchmark.postingsLast30d,
+            "meanAdvertisedSalary": benchmark.meanAdvertisedSalary,
+            "salaryTrend12m": benchmark.salaryTrend12m,
+            "salaryHistogram": benchmark.salaryHistogram,
+            "dataAsOf": benchmark.dataAsOf,
+            "source": benchmark.source,
+        }
+        searched = benchmark_query_terms(benchmark.role)
+        scope = (
+            benchmark.role
+            if len(searched) <= 1
+            else f"{benchmark.role} and {len(searched) - 1} related titles in "
+            "the same role family"
+        )
+        report.benchmarkNote = (
+            f"Live Adzuna Australia market benchmark for {scope} in "
+            f"{benchmark_region_label(benchmark.location)} — external market "
+            "data from your target role/location, not your own postings."
+        )
 
     @staticmethod
     def _message(report: SalaryIntelligenceReport) -> str:

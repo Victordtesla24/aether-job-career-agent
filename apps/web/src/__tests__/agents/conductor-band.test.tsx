@@ -332,6 +332,52 @@ describe("CONDUCTOR BAND — the model binding is live, the chain is disclosed",
 });
 
 // ---------------------------------------------------------------------------
+// AUD-AGENT-2: the binding chip and fallback chain must not imply the
+// supervisor's assigned model EXECUTES — today's sequencing is deterministic
+// (_PIPELINE_PLAN, a hardcoded constant; see
+// docs/delivery/evidence/RUN-20260818T0223Z/AUD-AGENT-2/01-scout-reproduction.log).
+// This is the SAME honesty rule the AgentConfigGrid card's tooltip already
+// discloses (ML-U1X-b, commit 63bb47088) — the fix here is bringing this
+// second, more prominent surface into line, not disabling the real,
+// tested override machinery (test_u1x_b_orchestrator_role.py).
+// ---------------------------------------------------------------------------
+
+describe("CONDUCTOR BAND — the binding chip and chain never imply execution", () => {
+  it("the chip's title discloses deterministic sequencing instead of claiming the model actually runs", () => {
+    render(<ConductorBand {...props()} />);
+    const chip = screen.getByTestId("conductor-model-chip");
+    const title = (chip.getAttribute("title") ?? "").toLowerCase();
+    expect(title).not.toContain("actually runs on");
+    expect(title).not.toContain("actually served");
+    expect(title).toMatch(/deterministic/);
+  });
+
+  it("the fallback chain's own visible disclosure states it is currently inert, not just an unread config", () => {
+    render(<ConductorBand {...props()} />);
+    const chain = screen.getByTestId("conductor-fallback-chain");
+    // Existing invariant (must still hold): the chain still names itself a
+    // chain and keeps the quota/exhaustion language.
+    expect(chain.textContent).toMatch(/quota|exhaust/i);
+    // New invariant: the SAME visible text — not a hover-only tooltip — says
+    // the chain does not currently engage, because the supervisor makes no
+    // model call today. This is the exact gap the scout log found: the one
+    // disclosure that existed lived only on a different card's tooltip, not
+    // on this more prominent panel.
+    expect(chain.textContent?.toLowerCase()).toMatch(/deterministic/);
+    expect(chain.textContent?.toLowerCase()).toMatch(/no model call|does not execute|never engages|inert/);
+  });
+
+  it("the chip is a passive label, not an editable model-selection control", () => {
+    render(<ConductorBand {...props()} />);
+    const chip = screen.getByTestId("conductor-model-chip");
+    expect(chip.tagName).not.toBe("BUTTON");
+    expect(chip.tagName).not.toBe("SELECT");
+    expect(within(chip).queryByRole("button")).toBeNull();
+    expect(within(chip).queryByRole("combobox")).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // 4. The status strip
 // ---------------------------------------------------------------------------
 
