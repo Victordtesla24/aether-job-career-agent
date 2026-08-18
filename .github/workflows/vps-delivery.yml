@@ -37,6 +37,16 @@ jobs:
         # the real guard against a corpus of deliberate violations and fails if
         # it does NOT flag them.
         run: python3 scripts/integrity/verify_guard_detects.py
+
+      - name: Guardian worktree regression tests
+        # The guardian owns every environment's git worktree. These tests build
+        # real repositories and run the real git binary against the shipped
+        # ops/guardian/guardian.py. They pin three defects that each left a
+        # worktree dirty in production on 2026-08-18: stdout stripping that cut
+        # a character off the first porcelain path, tar aborting on deleted or
+        # renamed paths, and `git stash push` rejecting the source side of a
+        # staged rename.
+        run: python3 ops/guardian/test_guardian_git.py
       - name: Install workspace
         run: pnpm install --frozen-lockfile
       - name: Lint
