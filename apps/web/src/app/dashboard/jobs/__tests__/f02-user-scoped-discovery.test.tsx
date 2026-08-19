@@ -100,6 +100,30 @@ function scoutRunBodies(): Array<Record<string, unknown>> {
     .map((call) => (call[1] as { body?: Record<string, unknown> })?.body ?? {});
 }
 
+/**
+ * Wait for the ENTIRE `runDiscoveryFor` promise chain — scout enqueue, the
+ * MON-020 poll, fit-scorer, and the post-run reload — to finish, not just
+ * the scout POST.
+ *
+ * `resolveRun`'s poll interval (`apps/web/src/lib/api/agents.ts`) is a REAL
+ * 3s `setTimeout`; this suite never fakes it. A test that returns as soon as
+ * the scout POST is recorded leaves that chain running in the background.
+ * `afterEach`'s `vi.clearAllMocks()` cannot cancel an already-scheduled
+ * timer, so on a slower host the leftover chain's poll and
+ * `/agents/fit-scorer/run` calls can land in a LATER test's
+ * `apiRequest.mock.calls` — exactly the false positive the "asks instead of
+ * searching" test below must never see. The Sync button's label reverting to
+ * "Sync Now" is the one signal that fires only after every awaited step in
+ * `runDiscoveryFor` — success or failure — has settled, so draining on it
+ * also covers the reload calls that follow the fit-scorer POST.
+ */
+async function waitForDiscoveryToSettle() {
+  await waitFor(
+    () => expect(screen.getByTestId("run-discovery-btn").textContent).toBe("Sync Now"),
+    { timeout: 10_000 },
+  );
+}
+
 async function defaultApiRequestImpl(path: string) {
   if (path.startsWith("/jobs?")) return JOBS_FIXTURE;
   if (/^\/jobs\/[^/]+\/insights$/.test(path)) {
@@ -168,7 +192,10 @@ describe("F-02 · the search is the signed-in user's own", () => {
       query: "Senior Data Scientist",
       location: "Sydney, Australia",
     });
-  });
+    // Drain the background poll/fit-scorer tail (see helper doc) before this
+    // test ends, so it cannot leak into a later test's apiRequest.mock.calls.
+    await waitForDiscoveryToSettle();
+  }, 10_000);
 
   it("never sends the hardcoded delivery-lead persona", async () => {
     await renderJobs();
@@ -180,13 +207,15 @@ describe("F-02 · the search is the signed-in user's own", () => {
     for (const persona of ["delivery lead", "product owner", "program manager", "business analyst"]) {
       expect(serialised).not.toContain(persona);
     }
-  });
+    await waitForDiscoveryToSettle();
+  }, 10_000);
 
   it("gives two different customers two different searches", async () => {
     await renderJobs();
     fireEvent.click(screen.getByTestId("run-discovery-btn"));
     await waitFor(() => expect(scoutRunBodies().length).toBe(1));
     const first = scoutRunBodies()[0];
+    await waitForDiscoveryToSettle();
 
     cleanup();
     vi.clearAllMocks();
@@ -211,7 +240,8 @@ describe("F-02 · the search is the signed-in user's own", () => {
 
     expect(second).toEqual({ query: "Registered Nurse", location: "Auckland, New Zealand" });
     expect(second).not.toEqual(first);
-  });
+    await waitForDiscoveryToSettle();
+  }, 20_000);
 
   it("states plainly what Sync Now will search for, and where it came from", async () => {
     await renderJobs();
@@ -236,6 +266,10 @@ describe("F-02 · empty profile is answered honestly, never substituted", () => 
 
   it("runs NO search when the user has told us nothing — it asks instead", async () => {
     await renderJobs();
+    // Defence-in-depth against leaked background calls from an EARLIER test
+    // (see `waitForDiscoveryToSettle`): only this test's own click should be
+    // able to add to `apiRequest.mock.calls` from here on.
+    apiRequest.mockClear();
 
     fireEvent.click(screen.getByTestId("run-discovery-btn"));
     // Give any (incorrect) fire-and-forget request a chance to be issued.
@@ -249,6 +283,7 @@ describe("F-02 · empty profile is answered honestly, never substituted", () => 
 
   it("says plainly that nothing is configured rather than implying a search happened", async () => {
     await renderJobs();
+    apiRequest.mockClear();
     fireEvent.click(screen.getByTestId("run-discovery-btn"));
     await waitFor(() => expect(screen.getByTestId("discovery-target-prompt")).toBeTruthy());
 
@@ -260,6 +295,7 @@ describe("F-02 · empty profile is answered honestly, never substituted", () => 
 
   it("searches exactly what the user types into the prompt", async () => {
     await renderJobs();
+    apiRequest.mockClear();
     fireEvent.click(screen.getByTestId("run-discovery-btn"));
     await waitFor(() => expect(screen.getByTestId("discovery-target-prompt")).toBeTruthy());
 
@@ -276,10 +312,14 @@ describe("F-02 · empty profile is answered honestly, never substituted", () => 
       query: "Senior Data Scientist",
       location: "Melbourne, Australia",
     });
-  });
+    // This test DOES trigger a real background run — drain it so it cannot
+    // leak into the next test's apiRequest.mock.calls.
+    await waitForDiscoveryToSettle();
+  }, 10_000);
 
   it("will not run on a half-filled prompt", async () => {
     await renderJobs();
+    apiRequest.mockClear();
     fireEvent.click(screen.getByTestId("run-discovery-btn"));
     await waitFor(() => expect(screen.getByTestId("discovery-target-prompt")).toBeTruthy());
 
@@ -295,6 +335,7 @@ describe("F-02 · empty profile is answered honestly, never substituted", () => 
   it("asks (never guesses) when the profile could not be loaded at all", async () => {
     fetchMe.mockRejectedValue(new Error("network down"));
     await renderJobs();
+    apiRequest.mockClear();
 
     fireEvent.click(screen.getByTestId("run-discovery-btn"));
     await waitFor(() => expect(screen.getByTestId("discovery-target-prompt")).toBeTruthy());
