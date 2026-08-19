@@ -33,6 +33,7 @@ vi.mock("../../../../lib/api/client", () => ({
   apiRequest: (...args: unknown[]) => apiRequest(...(args as [string])),
   apiBaseUrl: () => apiBaseUrl(),
   getToken: () => getToken(),
+  ApiError: class ApiError extends Error {},
   describeApiError: (e: unknown, fallback: string) =>
     e instanceof Error ? e.message : fallback,
 }));

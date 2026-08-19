@@ -33,6 +33,7 @@ vi.mock("../../../../lib/api/client", () => ({
   apiRequest: (...args: unknown[]) => apiRequest(...(args as [string])),
   apiBaseUrl: () => apiBaseUrl(),
   getToken: () => getToken(),
+  ApiError: class ApiError extends Error {},
   // MON-020: the page renders API failures through the shared friendly-error
   // helper (which strips a proxy's raw HTML error page). Pass-through here —
   // that helper has its own dedicated tests in lib/api/__tests__.
