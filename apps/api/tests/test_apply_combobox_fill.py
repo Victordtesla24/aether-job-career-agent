@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from app.services.apply_executor import _fill_value
+from app.services.apply_executor import _COMBOBOX_OPTION_SELECTOR, _fill_value
 
 
 class _Locator:
@@ -69,7 +69,7 @@ def test_combobox_commits_the_single_narrowed_candidate() -> None:
             '[id="question_11746985007"]': True,
             ":text-is": False,
             ":has-text": False,
-            '[role="option"], [class*="select__option"]': True,
+            _COMBOBOX_OPTION_SELECTOR: True,
         }
     )
     assert _fill_value(page, _FIELD, "Australia", {}) is True
@@ -83,7 +83,7 @@ def test_combobox_refuses_when_popup_is_ambiguous() -> None:
 
     class _AmbiguousPage(_Page):
         def locator(self, selector: str) -> _Locator:
-            if selector == '[role="option"], [class*="select__option"]':
+            if selector == _COMBOBOX_OPTION_SELECTOR:
                 return _ManyLocator(True, self, selector)
             return super().locator(selector)
 
@@ -129,7 +129,7 @@ class _FullListPage(_Page):
         self._texts = texts
 
     def locator(self, selector: str) -> _Locator:
-        if selector == '[role="option"], [class*="select__option"]':
+        if selector == _COMBOBOX_OPTION_SELECTOR:
             return _OptionListLocator(self, self._texts)
         return super().locator(selector)
 

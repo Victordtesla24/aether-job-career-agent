@@ -1459,6 +1459,18 @@ _VERIFY_SETTLE_FILE_MS = 1500  # file uploads may re-render the form
 _PRESUBMIT_SETTLE_MS = 500  # settle before the pre-submit commit gate
 _COMBOBOX_POPUP_POLLS = 10  # x 250ms — bounded wait for an async popup
 
+# RCA-greenhouse-combobox-iti-2026-08-19.md: Greenhouse job-boards pages also
+# mount intl-tel-input, whose hidden country <li role="option" class="iti__
+# country"> nodes satisfy a page-global `[role="option"]` probe immediately —
+# starving the wait for the REAL popup and burning the token-scoring cap on
+# country names instead of the widget's own options. Exclude ITI's option
+# nodes (by class and by its "iti-*" id prefix) everywhere this branch scans
+# for combobox popup options.
+_COMBOBOX_OPTION_SELECTOR = (
+    '[role="option"]:not(.iti__country):not([id^="iti-"]), '
+    '[class*="select__option"]:not(.iti__country):not([id^="iti-"])'
+)
+
 # CLI-SUB-005-R2 (adversarial review FAIL, 08-adversarial-review.md): bounded
 # re-scans of the LIVE DOM for a required field the plan's static snapshot
 # never saw. A refill pass can itself reveal a FURTHER conditional (a chain
@@ -1803,11 +1815,23 @@ def _fill_value(page: Any, field: dict[str, Any], value: Any, documents: dict[st
         except Exception:  # noqa: BLE001
             return False
         option_text = text_value.replace('"', '\\"')
+        # REVIEWER-combobox-iti.md (2026-08-19, FAIL): ':has-text' has no
+        # visibility filter and matches a hidden intl-tel-input country <li>
+        # just as freely as the real, visible option -- resolving `.first`
+        # to the hidden ITI node when the planned answer is a substring of
+        # the real option's text (e.g. "Australia" inside "I reside in
+        # Melbourne, Australia") but also the exact text of a hidden ITI
+        # country entry. Exclude the same '.iti__country' / '[id^="iti-"]'
+        # nodes _COMBOBOX_OPTION_SELECTOR already excludes everywhere else
+        # this branch scans for options. The `:not(...)` filters are chained
+        # AFTER `:text-is`/`:has-text` (order is immaterial to the CSS
+        # engine) so `[role="option"]:text-is`/`[role="option"]:has-text`
+        # remain intact literal prefixes.
         option_selectors = [
-            f'[role="option"]:text-is("{option_text}")',
-            f'[role="option"]:has-text("{option_text}")',
-            f'[class*="select__option"]:text-is("{option_text}")',
-            f'[class*="select__option"]:has-text("{option_text}")',
+            f'[role="option"]:text-is("{option_text}"):not(.iti__country):not([id^="iti-"])',
+            f'[role="option"]:has-text("{option_text}"):not(.iti__country):not([id^="iti-"])',
+            f'[class*="select__option"]:text-is("{option_text}"):not(.iti__country):not([id^="iti-"])',
+            f'[class*="select__option"]:has-text("{option_text}"):not(.iti__country):not([id^="iti-"])',
         ]
         option = _first_present(page, option_selectors)
         if option is None:
@@ -1819,7 +1843,7 @@ def _fill_value(page: Any, field: dict[str, Any], value: Any, documents: dict[st
             # Wait — bounded — for the popup to render before concluding.
             for _ in range(_COMBOBOX_POPUP_POLLS):
                 try:
-                    if page.locator('[role="option"], [class*="select__option"]').count() > 0:
+                    if page.locator(_COMBOBOX_OPTION_SELECTOR).count() > 0:
                         break
                 except Exception:  # noqa: BLE001
                     break
@@ -1836,7 +1860,7 @@ def _fill_value(page: Any, field: dict[str, Any], value: Any, documents: dict[st
         # answer (e.g. "Australia" -> "Australia (AU)") — commit it. Two or
         # more remaining candidates is a genuine ambiguity: refuse, honestly.
         try:
-            options = page.locator('[role="option"], [class*="select__option"]')
+            options = page.locator(_COMBOBOX_OPTION_SELECTOR)
             if options.count() == 1:
                 options.first.click(timeout=_ACTION_TIMEOUT_MS)
                 return True
@@ -1853,7 +1877,7 @@ def _fill_value(page: Any, field: dict[str, Any], value: Any, documents: dict[st
         # unfilled), never guess between an employer's options.
         try:
             target.fill("", timeout=_ACTION_TIMEOUT_MS)
-            options = page.locator('[role="option"], [class*="select__option"]')
+            options = page.locator(_COMBOBOX_OPTION_SELECTOR)
             count = min(options.count(), 50)
             answer_tokens = {t for t in re.findall(r"[a-z0-9]+", text_value.lower()) if len(t) > 1}
             best_idx, best_score, second_score = -1, 0, 0

@@ -1465,6 +1465,18 @@ fit-scorer. Do not invent a threshold-bypass flag. Explicit
 `_attempt_transmission` off the API loop remains the path for any
 below-threshold card the user (or this lock) has already approved.
 
+**Continuation 2026-08-19T21:10Z — Greenhouse combobox / ITI slice PASS; landing:**
+Lock B attempt 2 (19:18Z) filled nothing: all three Easygo Greenhouse
+job-boards cards ended `form_fill_failed` because `_fill_value` treated
+hidden intl-tel-input country `<li role="option">` as the popup.
+Independent test-author + fixer + reviewer loop (author ≠ reviewer):
+`_COMBOBOX_OPTION_SELECTOR` plus `:text-is`/`:has-text` ITI exclusion.
+Reviewer R2 **PASS**
+(`uat/reports/evidence/live-site-apply-lock-2026-08-19/REVIEWER-combobox-iti-2.md`).
+Not a Lock B VERIFIED-CLOSE. Next: land canonical `apply_executor.py` +
+the two combobox tests on `origin/main` for VPS Delivery. No hand-restart.
+Do not commit `prompt.md` / `AGENTS.md` / prod screenshots. Lock B still 0/3.
+
 
 ---
 

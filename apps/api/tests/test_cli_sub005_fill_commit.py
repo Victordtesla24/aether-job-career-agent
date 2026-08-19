@@ -2087,3 +2087,340 @@ def test_live_submitter_records_the_honest_synchronous_submission_ceiling_for_at
     assert outcome["submitted"] is True
     assert outcome["confirmation"] and "thank you" in str(outcome["confirmation"]).lower()
     assert "late_in_submit" not in outcome["filled"]
+
+
+# ---------------------------------------------------------------------------
+# 13. Greenhouse job-boards combobox starved by intl-tel-input (RCA, live
+#     production 2026-08-19: uat/reports/evidence/live-site-apply-lock-
+#     2026-08-19/RCA-greenhouse-combobox-iti-2026-08-19.md). Three Easygo
+#     Greenhouse job-boards postings (job-boards.greenhouse.io/easygo/jobs/
+#     5103198007 and two siblings) failed `_attempt_transmission` with
+#     `ManualStepRequired('form_fill_failed')` on "Please describe your
+#     right to work in Australia" / "current place of residence" /
+#     hybrid-relocate-office-days — all real `role="combobox"` /
+#     `select__input` controls `_kind_for` already classifies correctly.
+#
+#     Root cause per the RCA: `_fill_value`'s combobox branch discovers the
+#     popup with the PAGE-GLOBAL locator
+#     `[role="option"], [class*="select__option"]`. The same live page also
+#     mounts intl-tel-input, whose country list is hundreds of hidden
+#     `<li role="option" class="iti__country">` nodes. That satisfies
+#     `count() > 0` immediately (short-circuiting the async-popup wait on
+#     the WRONG list), and — because the ITI list is mounted earlier in the
+#     DOM than the Greenhouse popup, exactly as on the live page — it also
+#     exhausts the token-overlap fallback's own `min(options.count(), 50)`
+#     cap before a single real Greenhouse option is ever scored. The banked
+#     answer "Australian Citizen" should resolve to "I am an Australian/
+#     New Zealand Citizen" via the SAME >=2-token-overlap dominance rule
+#     that `test_apply_combobox_fill.py::
+#     test_combobox_commits_the_dominant_token_match_from_the_full_list`
+#     already proves works when nothing else pollutes the page — on the
+#     live-shaped DOM here it never gets the chance, and the fill returns
+#     an honest but wrong `False`.
+# ---------------------------------------------------------------------------
+
+# Real intl-tel-input country names (Afghanistan first, Australia included,
+# per the live evidence) — 57 entries, deliberately MORE than the executor's
+# own `min(options.count(), 50)` scoring cap, and mounted BEFORE the
+# Greenhouse popup in DOM order (the ITI widget initialises on page load;
+# the Greenhouse popup portal only appears once the field is clicked) —
+# exactly the live ordering the RCA's own probe observed.
+_ITI_COUNTRY_NAMES = [
+    "Afghanistan", "Albania", "Algeria", "Andorra", "Angola", "Anguilla",
+    "Antigua and Barbuda", "Argentina", "Armenia", "Aruba", "Australia",
+    "Austria", "Azerbaijan", "Bahamas", "Bahrain", "Bangladesh", "Barbados",
+    "Belarus", "Belgium", "Belize", "Benin", "Bermuda", "Bhutan", "Bolivia",
+    "Bosnia and Herzegovina", "Botswana", "Brazil", "Brunei", "Bulgaria",
+    "Burkina Faso", "Burundi", "Cambodia", "Cameroon", "Canada",
+    "Cape Verde", "Central African Republic", "Chad", "Chile", "China",
+    "Colombia", "Comoros", "Congo", "Costa Rica", "Croatia", "Cuba",
+    "Cyprus", "Czech Republic", "Denmark", "Djibouti", "Dominica",
+    "Dominican Republic", "Ecuador", "Egypt", "El Salvador",
+    "Equatorial Guinea", "Eritrea", "Estonia",
+]
+assert len(_ITI_COUNTRY_NAMES) > 50  # exceeds the executor's own scoring cap
+
+
+def _iti_country_list_html() -> str:
+    items = []
+    for idx, country in enumerate(_ITI_COUNTRY_NAMES):
+        code = f"c{idx}"
+        items.append(
+            '<li role="option" class="iti__country" '
+            f'id="iti-0__item-{code}" data-country-code="{code}">'
+            f'<span class="iti__country-name">{country}</span></li>'
+        )
+    # display:none on the container -- the RCA's own live-probe finding:
+    # "not visible" -- exactly how intl-tel-input hides its dropdown.
+    return (
+        '<ul class="iti__country-list" id="iti-0__country-listbox" '
+        'style="display:none">' + "".join(items) + "</ul>"
+    )
+
+
+_GREENHOUSE_COMBOBOX_VS_ITI_HTML = """
+<title>greenhouse-combobox-vs-iti</title>
+<div class="iti">
+  <label for="phone">Phone</label>
+  <input id="phone" type="tel">
+  __ITI_COUNTRY_LIST__
+</div>
+<div data-field-path="question_11746983007">
+  <label for="question_11746983007">Please describe your right to work in
+    Australia</label>
+  <input id="question_11746983007" role="combobox" class="select__input"
+         aria-required="true" aria-expanded="false">
+  <div id="gh-menu-wrapper"></div>
+</div>
+<script>
+(function () {
+  var input = document.getElementById('question_11746983007');
+  var wrapper = document.getElementById('gh-menu-wrapper');
+  var rendered = false;
+  function renderMenu() {
+    if (rendered) { return; }
+    rendered = true;
+    wrapper.innerHTML =
+      '<div class="select__menu" role="listbox">' +
+        '<div role="option" class="select__option" ' +
+          'data-option="au-citizen">I am an Australian/New Zealand ' +
+          'Citizen</div>' +
+        '<div role="option" class="select__option" ' +
+          'data-option="pr">I am a Permanent Resident</div>' +
+        '<div role="option" class="select__option" ' +
+          'data-option="visa-ok">I have a valid visa with no work ' +
+          'restrictions</div>' +
+        '<div role="option" class="select__option" ' +
+          'data-option="sponsor">I require visa sponsorship</div>' +
+      '</div>';
+    Array.prototype.forEach.call(
+      wrapper.querySelectorAll('.select__option'),
+      function (opt) {
+        opt.addEventListener('click', function () {
+          input.value = opt.textContent;
+          input.setAttribute('data-committed-option', opt.getAttribute('data-option'));
+          input.setAttribute('aria-expanded', 'false');
+        });
+      }
+    );
+    input.setAttribute('aria-expanded', 'true');
+  }
+  input.addEventListener('click', renderMenu);
+  input.addEventListener('focus', renderMenu);
+})();
+</script>
+""".replace("__ITI_COUNTRY_LIST__", _iti_country_list_html())
+
+
+def _work_rights_combobox_field() -> dict[str, Any]:
+    return {
+        "name": "question_11746983007",
+        "label": "Please describe your right to work in Australia",
+        "kind": "combobox",
+        "required": True,
+        "scope": "",
+        "options": [
+            "I am an Australian/New Zealand Citizen",
+            "I am a Permanent Resident",
+            "I have a valid visa with no work restrictions",
+            "I require visa sponsorship",
+        ],
+    }
+
+
+def test_combobox_fill_must_not_be_starved_by_the_hidden_iti_country_list() -> None:
+    """RCA-greenhouse-combobox-iti-2026-08-19.md, live production 2026-08-19:
+    a required Greenhouse job-boards combobox on the SAME page as intl-tel-
+    input's hidden country popup must still be filled — the popup probe has
+    to be scoped to THIS field's own listbox and exclude '.iti__country',
+    never starved by a page-global selector that counts (and, past the
+    50-item scoring cap, silently consumes) intl-tel-input's hidden country
+    list instead. On the unfixed executor this returns ``False`` and the
+    matching Greenhouse option is never clicked -- exactly the live
+    ``form_fill_failed`` ending for all three Easygo postings."""
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as runner:
+        browser = runner.chromium.launch(
+            headless=True,
+            args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
+        )
+        try:
+            page = browser.new_page()
+            page.set_content(
+                _GREENHOUSE_COMBOBOX_VS_ITI_HTML, wait_until="domcontentloaded"
+            )
+            filled = _fill_value(
+                page, _work_rights_combobox_field(), "Australian Citizen", {}
+            )
+            committed_option = page.evaluate(
+                "document.getElementById('question_11746983007')"
+                ".getAttribute('data-committed-option')"
+            )
+        finally:
+            browser.close()
+
+    assert filled is True, (
+        "the required 'right to work in Australia' combobox must be "
+        "filled -- the popup probe must be scoped to THIS field's own "
+        "listbox and must exclude '.iti__country', never starved by "
+        "intl-tel-input's hidden country popup mounted elsewhere on the "
+        "same page (RCA-greenhouse-combobox-iti-2026-08-19.md)"
+    )
+    assert committed_option == "au-citizen", (
+        f"expected the 'I am an Australian/New Zealand Citizen' option to "
+        f"be committed, got data-committed-option={committed_option!r} -- "
+        f"a correct fix must land on the Greenhouse option itself, never "
+        f"an intl-tel-input country entry, and never leave the field "
+        f"uncommitted"
+    )
+
+
+# ---------------------------------------------------------------------------
+# REVIEWER-combobox-iti.md (2026-08-19, FAIL): the fix above scoped the
+# POPUP-WAIT poll, the single-narrowed-candidate fallback and the
+# token-overlap scan to `_COMBOBOX_OPTION_SELECTOR` -- but `_fill_value`'s
+# FIRST literal-match probe (`option_selectors`, re-tried once more after the
+# popup-wait poll) still builds four raw `:text-is`/`:has-text` selectors with
+# no `.iti__country` exclusion at all. `:text-is` does not match a
+# `display:none` node's (empty) rendered text, so the shipped regression
+# above -- whose answer "Australian Citizen" is an EXACT match to nothing,
+# real or ITI -- never exercises this gap. `:has-text` has no such filter: it
+# matches hidden elements' text freely. So when the planned answer is a
+# SUBSTRING that also happens to be the EXACT text of a hidden ITI country
+# `<li>` (e.g. "Australia" for a residence combobox whose real, visible
+# option is phrased "I reside in Melbourne, Australia" -- an entirely
+# ordinary "City, Country" ATS phrasing, and "current place of residence" is
+# one of the three field types the RCA itself names),
+# `[role="option"]:has-text("Australia")` matches BOTH the hidden ITI node
+# (mounted first in DOM order, exactly as intl-tel-input initialises before
+# the Greenhouse popup portal exists) and the real option -- `_first_present`
+# returns `.first`, the hidden ITI node, `option.click()` times out against
+# it, and `_fill_value` returns `False` WITHOUT EVER reaching the
+# correctly-scoped popup-wait, single-candidate or token-score paths below.
+# ---------------------------------------------------------------------------
+
+_GREENHOUSE_RESIDENCE_COMBOBOX_VS_ITI_HTML = """
+<title>greenhouse-residence-combobox-vs-iti</title>
+<div class="iti">
+  <label for="phone2">Phone</label>
+  <input id="phone2" type="tel">
+  __ITI_COUNTRY_LIST__
+</div>
+<div data-field-path="question_11746984007">
+  <label for="question_11746984007">Current place of residence</label>
+  <input id="question_11746984007" role="combobox" class="select__input"
+         aria-required="true" aria-expanded="false">
+  <div id="gh-menu-wrapper-residence"></div>
+</div>
+<script>
+(function () {
+  var input = document.getElementById('question_11746984007');
+  var wrapper = document.getElementById('gh-menu-wrapper-residence');
+  var rendered = false;
+  function renderMenu() {
+    if (rendered) { return; }
+    rendered = true;
+    wrapper.innerHTML =
+      '<div class="select__menu" role="listbox">' +
+        '<div role="option" class="select__option" ' +
+          'data-option="melbourne-au">I reside in Melbourne, ' +
+          'Australia</div>' +
+        '<div role="option" class="select__option" ' +
+          'data-option="auckland-nz">I reside in Auckland, ' +
+          'New Zealand</div>' +
+        '<div role="option" class="select__option" ' +
+          'data-option="other">I reside elsewhere</div>' +
+      '</div>';
+    Array.prototype.forEach.call(
+      wrapper.querySelectorAll('.select__option'),
+      function (opt) {
+        opt.addEventListener('click', function () {
+          input.value = opt.textContent;
+          input.setAttribute('data-committed-option', opt.getAttribute('data-option'));
+          input.setAttribute('aria-expanded', 'false');
+        });
+      }
+    );
+    input.setAttribute('aria-expanded', 'true');
+  }
+  input.addEventListener('click', renderMenu);
+  input.addEventListener('focus', renderMenu);
+})();
+</script>
+""".replace("__ITI_COUNTRY_LIST__", _iti_country_list_html())
+
+
+def _residence_combobox_field() -> dict[str, Any]:
+    return {
+        "name": "question_11746984007",
+        "label": "Current place of residence",
+        "kind": "combobox",
+        "required": True,
+        "scope": "",
+        "options": [
+            "I reside in Melbourne, Australia",
+            "I reside in Auckland, New Zealand",
+            "I reside elsewhere",
+        ],
+    }
+
+
+def test_combobox_fill_must_not_resolve_has_text_to_the_hidden_iti_country_node() -> None:
+    """REVIEWER-combobox-iti.md (2026-08-19, FAIL): the planned answer
+    "Australia" is an EXACT match to a hidden intl-tel-input country <li>
+    ("Australia") mounted BEFORE the Greenhouse popup portal in DOM order,
+    and only a SUBSTRING of the real, visible Greenhouse option ("I reside
+    in Melbourne, Australia"). `_fill_value`'s first literal-match probe
+    (``option_selectors``) has no ``.iti__country`` exclusion:
+    ``:text-is("Australia")`` matches neither node (the ITI <li> is
+    ``display:none`` so Chromium computes empty rendered text for it; the
+    real option's text is not an EXACT match), so the walk falls through to
+    ``:has-text("Australia")`` -- which has no visibility filter and matches
+    BOTH nodes, resolving ``.first`` to the hidden, DOM-earlier ITI node.
+    Clicking that hidden node times out and ``_fill_value`` returns
+    ``False`` -- never reaching the correctly-scoped popup-wait,
+    single-candidate or token-score fallbacks that already exclude
+    '.iti__country'. This is the live-shaped 'current place of residence'
+    field the RCA itself names, reproduced against the CURRENTLY-PATCHED
+    executor (the scoping fix that closed the OTHER three call sites did
+    not touch this one)."""
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as runner:
+        browser = runner.chromium.launch(
+            headless=True,
+            args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
+        )
+        try:
+            page = browser.new_page()
+            page.set_content(
+                _GREENHOUSE_RESIDENCE_COMBOBOX_VS_ITI_HTML, wait_until="domcontentloaded"
+            )
+            filled = _fill_value(
+                page, _residence_combobox_field(), "Australia", {}
+            )
+            committed_option = page.evaluate(
+                "document.getElementById('question_11746984007')"
+                ".getAttribute('data-committed-option')"
+            )
+        finally:
+            browser.close()
+
+    assert filled is True, (
+        "the required 'current place of residence' combobox must be "
+        "filled -- the FIRST literal-match probe ('option_selectors') "
+        "must not resolve ':has-text(\"Australia\")' to the hidden "
+        "intl-tel-input country <li>, which times out on click and "
+        "returns False without ever reaching the correctly-scoped "
+        "popup-wait/single-candidate/token-score fallbacks below "
+        "(REVIEWER-combobox-iti.md, 2026-08-19)"
+    )
+    assert committed_option == "melbourne-au", (
+        f"expected the 'I reside in Melbourne, Australia' Greenhouse "
+        f"option to be committed, got "
+        f"data-committed-option={committed_option!r} -- a correct fix "
+        f"must land on the Greenhouse option itself, never an "
+        f"intl-tel-input country entry, and never leave the field "
+        f"uncommitted"
+    )
