@@ -10,8 +10,12 @@ run (Cluster E):
   version's ``approvalStatus``.
 - MV-resume-studio-003 (MEDIUM): when the fabrication/entailment guards reject
   EVERY proposed rewrite, the old code still created + BILLED a 0-diff "Tailored"
-  version indistinguishable from a real change. It now creates NO version, opens
-  NO approval, and refunds the run (honest no-op, never billed).
+  version indistinguishable from a real change. It now opens NO approval and
+  refunds the run (honest no-op, never billed) — it must never claim a rewrite
+  that never happened. SESSION LIVE-APPLY-LOCK (2026-08-19) additionally
+  requires an honest, unbilled CLONE of the base to be persisted for the job
+  (never labelled "Tailored"), so a job whose résumé is already a perfect
+  match can still be applied to.
 
 All tests run against the SYNC path (``AETHER_ASYNC_GENERATION=false``, the suite
 default); the async worker shares the same service + refund plumbing.
@@ -269,17 +273,28 @@ class TestNoSilentBilledNoOp:
         assert body["approvalRequired"] is False
         assert "not charged" in body["message"].lower()
 
-    def test_noop_creates_no_child_version(self, client, auth_headers, monkeypatch):
+    def test_noop_creates_no_billed_tailored_version(
+        self, client, auth_headers, monkeypatch
+    ):
+        """SESSION LIVE-APPLY-LOCK: the no-op run now persists an honest,
+        unbilled CLONE of the base (parentId set, sourceJobId = the job) so
+        that job can still be applied to — see
+        ``test_tailor_persistence_db.py::
+        test_no_changes_applied_still_persists_a_resume_row_for_apply`` for
+        the persistence contract itself. What this test still pins is the
+        MV-resume-studio-003 invariant: whatever child row exists must never
+        masquerade as a real "Tailored" rewrite."""
         job = _seed_job(client, auth_headers)
         self._force_noop(monkeypatch)
         client.post(
             "/agents/tailor/run", json={"job_id": job["id"]}, headers=auth_headers
         )
         resumes = client.get("/resumes", headers=auth_headers).json()
-        # Only the immutable base exists — no billed no-op "Tailored" version.
-        assert all(r["parentId"] is None for r in resumes), (
-            "a no-op run created a child version"
-        )
+        children = [r for r in resumes if r["parentId"] is not None]
+        for child in children:
+            assert "tailored" not in (child.get("label") or "").lower(), (
+                f"a no-op clone must never claim to be a rewrite; got {child}"
+            )
         assert not any(
             (r.get("label") or "").startswith("Tailored") for r in resumes
         )

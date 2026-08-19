@@ -1454,6 +1454,17 @@ Independent reviewer R2 **PASS**
 (`uat/reports/evidence/live-site-apply-lock-2026-08-19/REVIEWER-llm-429-R2.md`).
 Not a Lock B VERIFIED-CLOSE. Lock B still 0/3.
 
+**Continuation 2026-08-19T16:24Z — 429 SHA on origin/main; Delivery in flight:**
+`97591d0d` pushed to `origin/main`. Remote `feat/submission-live-apply`
+deleted (R8). Local branch now tracks `origin/main`. VPS Delivery
+`https://github.com/Victordtesla24/aether-job-career-agent/actions/runs/32275678566`
+in progress (Verify job Test step). Prod tree still `e3e40239`; units
+unchanged since 14:49:18/19 UTC. No hand-restart. Lock B still 0/3.
+Anthropic cover/tailor quota still expected until ~20:40Z. Do not unpause
+fit-scorer. Do not invent a threshold-bypass flag. Explicit
+`_attempt_transmission` off the API loop remains the path for any
+below-threshold card the user (or this lock) has already approved.
+
 
 ---
 

@@ -721,6 +721,80 @@ class TailoringAgent:
             fidelity = pending_fidelity(fidelity)
         return fidelity
 
+    def _persist_no_change_resume(
+        self,
+        user_id: str,
+        job_id: str,
+        job: Mapping[str, Any],
+        base: Mapping[str, Any],
+    ) -> None:
+        """SESSION LIVE-APPLY-LOCK: an honest no-op run (every proposed edit
+        rejected by the fabrication/entailment guards, ``net_changes == 0``)
+        must still leave a ``Resume`` row with ``sourceJobId == job_id``
+        behind — otherwise a job whose current résumé is *already a perfect
+        match* can never satisfy ``apply_to_job``'s "a tailored resume is
+        required" gate (``jobs._resume_for_apply`` / the promotion-time
+        repair in ``applications.submit_application`` both select on that
+        column, and neither ever finds a row for this job without it).
+
+        This is a CLONE, never a rewrite: ``sections``/``formatHash`` and any
+        stored original-upload bytes are copied verbatim from ``base``, and
+        the label says plainly that nothing changed (Australian English, no
+        exclamation marks — MV-resume-studio-003's whole point still holds).
+        It is created ``approved`` outright, because there is no rewrite for
+        a human to review — the run itself still raises ``NoChangesApplied``
+        immediately after this returns, so callers keep reporting
+        ``noChangesApplied: true`` and never a fake "tailored" success.
+
+        IDEMPOTENT (reviewer attack #5, LIVE-APPLY-LOCK): ``board_sweep_cron``
+        re-selects ANY ``screening``/``matched`` job with no ``Application``
+        row yet every 10 minutes, with no check for an existing ``Resume``,
+        and the no-op branch deliberately never advances ``Job.status`` (that
+        would falsely claim a rewrite happened). Without a guard here, every
+        sweep tick against the SAME perfect-match job would mint another
+        Resume row forever. So a Resume already carrying this job's
+        ``sourceJobId`` is reused as-is — no second INSERT, no re-copy of the
+        original bytes — and this method returns early.
+
+        ``get_tailored_for_job``/``get_original_file`` are looked up
+        defensively (``getattr``): the pure-unit test doubles for
+        :class:`ResumeRepository` used throughout this module's own no-op
+        tests predate this fix and do not implement them, and the honest
+        degrade for "we don't know whether a clone/original already exists"
+        is to proceed as if it does not — never a crash.
+        """
+        existing_lookup = getattr(self._resumes, "get_tailored_for_job", None)
+        if existing_lookup is not None and existing_lookup(user_id, job_id) is not None:
+            # A no-op clone (or an earlier real tailored version) already
+            # carries this job's sourceJobId — reuse it, never duplicate.
+            return
+        original_file: bytes | None = None
+        original_filename: str | None = None
+        original_content_type: str | None = None
+        get_original = getattr(self._resumes, "get_original_file", None)
+        if get_original is not None:
+            original = get_original(base["id"], user_id)
+            if original is not None:
+                original_file = original.get("originalFile")
+                original_filename = original.get("originalFilename")
+                original_content_type = original.get("originalContentType")
+        self._resumes.create(
+            user_id,
+            dict(base.get("sections") or {}),
+            base.get("formatHash"),
+            label=(
+                f"Unchanged for {job['title']} @ {job['company']} — "
+                "your résumé is already a strong match, no edits were needed"
+            ),
+            version=self._resumes.next_version(user_id),
+            parent_id=base.get("id"),
+            source_job_id=job_id,
+            approval_status="approved",
+            original_file=original_file,
+            original_filename=original_filename,
+            original_content_type=original_content_type,
+        )
+
     def run(
         self,
         user_id: str,
@@ -880,6 +954,7 @@ class TailoringAgent:
         # caller's _execute_reserved_run refunds on any exception). Honest
         # outcome: the résumé is unchanged and the user is not charged.
         if net_changes == 0:
+            self._persist_no_change_resume(user_id, job_id, job, base)
             raise NoChangesApplied(rejected=best["rejected"])
 
         # GAP-P6-TAIL-002: regenerate the persisted raw_text from the TAILORED
