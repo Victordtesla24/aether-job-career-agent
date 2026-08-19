@@ -44,6 +44,12 @@ import pytest
 
 ASHBY_URL = "https://jobs.ashbyhq.com/example-co/00000000-0000-4000-8000-00000000dead"
 DRY_RUN_EVIDENCE = "/tmp/u5d2-dry-run-e2e-evidence.png"
+#: Round-3 review (REVIEWER-FAIL, 2026-08-19): ASHBY_URL above is a LIVE
+#: ``https://`` apply_url, so ``execute_site_application`` now requires a
+#: matching Gmail receipt — not merely a submitted click — before it stamps
+#: ``transmittedAt``. This is the fake receipt id the injected
+#: ``receipt_poller`` hands back; no real inbox is ever touched.
+DRY_RUN_RECEIPT_ID = "u5d2-dry-run-e2e-receipt"
 
 
 def _uid() -> str:
@@ -119,12 +125,24 @@ def dry_run(monkeypatch):
             "destination": ASHBY_URL,
             "evidencePath": DRY_RUN_EVIDENCE,
             "confirmation": "dry run — nothing was sent to any employer",
+            "classification": "confirmed",
             "filled": [],
             "unfilled": [],
         }
 
+    def _stub_receipt_poller(*_a, **_k):
+        """The Gmail gate, stubbed the same way the browser is: a fake
+        message, so ``transmittedAt`` is earned honestly under the receipt
+        gate without this dry run touching a real inbox."""
+        return {
+            "messageId": DRY_RUN_RECEIPT_ID,
+            "from": "notifications@ashbyhq.com",
+            "subject": "Thank you for applying",
+        }
+
     def _dry_run_execute(*args, **kwargs):
         kwargs["submitter"] = _stub_submitter
+        kwargs["receipt_poller"] = _stub_receipt_poller
         return real_execute(*args, **kwargs)
 
     monkeypatch.setattr(apply_executor, "execute_site_application", _dry_run_execute)
@@ -233,12 +251,17 @@ def test_full_chain_agent_to_approval_to_execute_to_proof(
     body = executed.json()
     assert body["transmitted"] is True
     assert body["channel"] == "ashby"
-    assert body["transmissionRef"] == DRY_RUN_EVIDENCE
+    # ASHBY_URL is a live apply_url, so the ref now carries BOTH the click's
+    # own evidence AND the Gmail receipt id that actually earned the stamp
+    # (prompt.md §0) — not the bare evidence path alone.
+    assert DRY_RUN_EVIDENCE in body["transmissionRef"]
+    assert f"gmail:{DRY_RUN_RECEIPT_ID}" in body["transmissionRef"]
 
     # ---- 6. The PROOF is on the row, and the card reads it back.
     row = _application_row(db_session, app_id)
     assert row["transmittedAt"] is not None
-    assert row["transmissionRef"] == DRY_RUN_EVIDENCE
+    assert DRY_RUN_EVIDENCE in row["transmissionRef"]
+    assert f"gmail:{DRY_RUN_RECEIPT_ID}" in row["transmissionRef"]
     assert row["status"] == "submitted"
     assert row["manualStepReason"] is None
     assert row["submissionTruthState"] != "recorded_not_transmitted"

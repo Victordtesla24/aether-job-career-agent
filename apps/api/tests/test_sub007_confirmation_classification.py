@@ -222,6 +222,41 @@ def test_probe_reads_visible_validation_errors(open_page: Any) -> None:
     assert probe["submitEnabled"] is True
 
 
+def _make_site_apply_approval(user_id: str, app_id: str, job_id: str) -> str:
+    """A genuine U5d-2 SITE-APPLY approval — ``kind="submission"`` + an
+    automatable ``channel``, no ``recipient`` — matching
+    ``application_submission.is_site_apply_payload`` exactly, unlike
+    ``test_u5b_apply_executor._make_approval``'s legacy ``kind="site_apply"``
+    payload.
+
+    That legacy shape does NOT satisfy ``is_site_apply_payload`` (it checks
+    for ``kind == "submission"``), so ``ApprovalRepository._sync_application``
+    treats it as a pre-U5d-2 email card and promotes ``Application.status`` to
+    ``"submitted"`` on the ``approve()`` call ALONE — before
+    ``execute_site_application`` ever runs. That is a real, pre-existing
+    artefact of the shared fixture (nothing this suite is pinning), and it
+    would make every ``status != "submitted"`` assertion below fail for the
+    WRONG reason. Using the real payload shape here means those assertions
+    exercise ``execute_site_application``'s own honesty floor instead.
+    """
+    from app.repositories.approval import ApprovalRepository
+
+    approval = ApprovalRepository().create(
+        user_id,
+        "application_submit",
+        {
+            "kind": "submission",
+            "job_id": job_id,
+            "application_id": app_id,
+            "channel": "ashby",
+            "apply_url": "https://jobs.example.invalid/apply",
+        },
+        application_id=app_id,
+    )
+    ApprovalRepository().approve(approval["id"], user_id)
+    return approval["id"]
+
+
 def _before(**overrides: Any) -> dict[str, Any]:
     """A pre-click probe of a clean, armed form."""
     state: dict[str, Any] = {
@@ -687,12 +722,31 @@ def test_live_armed_to_disabled_submit_is_submitted_unconfirmed_end_to_end(
 # ---------------------------------------------------------------------------
 
 
+#: Round-3 review (2026-08-19, REVIEWER-FAIL): prompt.md §0 makes the
+#: candidate's own Gmail the ONLY stamp gate after a real Submit click on a
+#: LIVE ``apply_url``. A page phrase is not a send, and neither is a page
+#: phrase's ABSENCE a reason to skip the inbox: ``POST_SUBMIT_UNCONFIRMED``
+#: and ``POST_SUBMIT_UNKNOWN`` both mean "a click happened, no confirmation
+#: wording appeared" and both must go on to poll Gmail on a live URL, exactly
+#: like ``POST_SUBMIT_CONFIRMED`` does. Only ``POST_SUBMIT_REJECTED`` — the
+#: employer's OWN validation errors — is decided before Gmail is ever touched,
+#: because a rejected form has nothing for the inbox to confirm.
+#:
+#: Every row below uses the SAME empty poller (``lambda *a, **k: None``) so a
+#: single fixed behaviour proves BOTH facts at once: REJECTED must reach
+#: ``form_rejected`` withOUT ever depending on what the poller says, and
+#: UNCONFIRMED/UNKNOWN must reach ``awaiting_receipt`` (the poll ran, found
+#: nothing) rather than the pre-receipt-gate ``submitted_unconfirmed`` /
+#: ``no_confirmation`` reasons this test pinned before the gate existed. If a
+#: future change makes REJECTED reach the poller too, its result (``None``)
+#: would flip the reason to ``awaiting_receipt`` and this row would go red —
+#: that IS the regression detector the reviewer asked for.
 @pytest.mark.parametrize(
     "classification,expected_reason",
     [
-        (POST_SUBMIT_UNCONFIRMED, "submitted_unconfirmed"),
         (POST_SUBMIT_REJECTED, "form_rejected"),
-        (POST_SUBMIT_UNKNOWN, "no_confirmation"),
+        (POST_SUBMIT_UNCONFIRMED, "awaiting_receipt"),
+        (POST_SUBMIT_UNKNOWN, "awaiting_receipt"),
     ],
 )
 def test_an_unconfirmed_outcome_is_never_recorded_as_a_transmission(
@@ -706,11 +760,15 @@ def test_an_unconfirmed_outcome_is_never_recorded_as_a_transmission(
     """Defence in depth for the ledger's honesty floor. The submitter already
     raises on every non-confirmed ending; this pins that the recording site
     refuses one too, so no future submitter can hand back "submitted: true"
-    with an unconfirmed classification and have the row stamped as sent."""
+    with an unconfirmed classification and have the row stamped as sent.
+
+    ``receipt_poller`` is injected and always returns ``None`` so this test
+    never touches a real inbox — the empty poller is the fixture, not a
+    default the production code happens to fall back to.
+    """
     from test_u5b_apply_executor import (  # same tests dir — one seeded fixture set
         ASHBY_HTML,
         FULL_PROFILE_ASHBY,
-        _make_approval,
         _seed,
     )
 
@@ -719,7 +777,7 @@ def test_an_unconfirmed_outcome_is_never_recorded_as_a_transmission(
 
     user_id = test_user_id
     job_id, _resume_id, app_id = _seed(user_id)
-    approval_id = _make_approval(user_id, app_id, job_id, status="approved")
+    approval_id = _make_site_apply_approval(user_id, app_id, job_id)
 
     def _lying_submitter(**_kwargs: Any) -> dict[str, Any]:
         return {
@@ -746,19 +804,169 @@ def test_an_unconfirmed_outcome_is_never_recorded_as_a_transmission(
             evidence_dir=str(tmp_path),
             apply_url="https://jobs.example.invalid/apply",
             submitter=_lying_submitter,
+            receipt_poller=lambda *a, **k: None,
         )
     assert exc_info.value.reason == expected_reason
 
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
-                'SELECT "transmittedAt", "manualStepReason" FROM "Application" '
+                'SELECT "transmittedAt", "manualStepReason", "status" FROM "Application" '
                 'WHERE "id" = %s',
                 (app_id,),
             )
-            transmitted_at, manual_reason = cur.fetchone()
+            transmitted_at, manual_reason, status = cur.fetchone()
     assert transmitted_at is None, "an unconfirmed ending must never read as transmitted"
     assert manual_reason == expected_reason
+    assert status != "submitted", "a manual step must never be recorded as a claimed send"
+
+
+def test_a_rejected_form_is_not_saved_by_a_coincidental_gmail_hit(
+    client: Any,
+    auth_headers: Any,
+    test_user_id: str,
+    tmp_path: Any,
+) -> None:
+    """prompt.md §0: REJECTED is not a send. A message sitting in the
+    candidate's Gmail — even one that would otherwise look exactly like a
+    matching ATS receipt — proves nothing about a form the employer's OWN
+    validation refused. The poller here returns a receipt precisely to prove
+    it is never consulted for this classification."""
+    from test_u5b_apply_executor import (  # same tests dir — one seeded fixture set
+        ASHBY_HTML,
+        FULL_PROFILE_ASHBY,
+        _seed,
+    )
+
+    from app.db import get_connection
+    from app.services.apply_executor import ManualStepRequired, execute_site_application
+
+    user_id = test_user_id
+    job_id, _resume_id, app_id = _seed(user_id)
+    approval_id = _make_site_apply_approval(user_id, app_id, job_id)
+
+    def _lying_submitter(**_kwargs: Any) -> dict[str, Any]:
+        return {
+            "submitted": True,
+            "confirmation": None,
+            "classification": POST_SUBMIT_REJECTED,
+            "evidencePath": str(tmp_path / "shot.png"),
+            "destination": "https://jobs.example.invalid/apply",
+            "filled": [],
+            "unfilled": [],
+            "mode": "live",
+        }
+
+    def _receipt_poller_finds_a_message(*_a: Any, **_k: Any) -> dict[str, Any]:
+        return {
+            "messageId": "coincidental-hit",
+            "from": "notifications@ashbyhq.com",
+            "subject": "Thank you for applying",
+        }
+
+    with pytest.raises(ManualStepRequired) as exc_info:
+        execute_site_application(
+            user_id,
+            app_id,
+            approval_id,
+            page_html=ASHBY_HTML,
+            channel="ashby",
+            profile=FULL_PROFILE_ASHBY,
+            resume_pdf_bytes=b"%PDF-1.4 fake",
+            cover_letter_text="Dear Hiring Manager,",
+            evidence_dir=str(tmp_path),
+            apply_url="https://jobs.example.invalid/apply",
+            submitter=_lying_submitter,
+            receipt_poller=_receipt_poller_finds_a_message,
+        )
+    assert exc_info.value.reason == "form_rejected"
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT "transmittedAt", "manualStepReason", "status" FROM "Application" '
+                'WHERE "id" = %s',
+                (app_id,),
+            )
+            transmitted_at, manual_reason, status = cur.fetchone()
+    assert transmitted_at is None, "employer rejection is never overridden by a mailbox hit"
+    assert manual_reason == "form_rejected"
+    assert status != "submitted"
+
+
+def test_a_matching_gmail_receipt_after_an_unconfirmed_click_is_prompt_md_success(
+    client: Any,
+    auth_headers: Any,
+    test_user_id: str,
+    tmp_path: Any,
+) -> None:
+    """The ONE shape prompt.md §0 calls SUCCESS: a real Submit click, no
+    confirmation phrase on the page, and THEN a matching ATS receipt lands in
+    the candidate's own connected Gmail. This pins the contract the
+    parametrized test above no longer exercises on its own — a receipt that
+    DOES arrive must still stamp ``transmittedAt`` with a ``gmail:``-tagged
+    ``transmissionRef``. If this already passes on the current WIP, it still
+    belongs here: it is the positive half of the honesty floor, not just the
+    negative half."""
+    from test_u5b_apply_executor import (  # same tests dir — one seeded fixture set
+        ASHBY_HTML,
+        FULL_PROFILE_ASHBY,
+        _seed,
+    )
+
+    from app.db import get_connection
+    from app.services.apply_executor import execute_site_application
+
+    user_id = test_user_id
+    job_id, _resume_id, app_id = _seed(user_id)
+    approval_id = _make_site_apply_approval(user_id, app_id, job_id)
+
+    def _lying_submitter(**_kwargs: Any) -> dict[str, Any]:
+        return {
+            "submitted": True,
+            "confirmation": None,
+            "classification": POST_SUBMIT_UNCONFIRMED,
+            "evidencePath": str(tmp_path / "shot.png"),
+            "destination": "https://jobs.example.invalid/apply",
+            "filled": [],
+            "unfilled": [],
+            "mode": "live",
+        }
+
+    def _receipt_poller_finds_the_ats_receipt(*_a: Any, **_k: Any) -> dict[str, Any]:
+        return {
+            "messageId": "gmail-ok",
+            "from": "notifications@ashbyhq.com",
+            "subject": "Thank you for applying",
+        }
+
+    result = execute_site_application(
+        user_id,
+        app_id,
+        approval_id,
+        page_html=ASHBY_HTML,
+        channel="ashby",
+        profile=FULL_PROFILE_ASHBY,
+        resume_pdf_bytes=b"%PDF-1.4 fake",
+        cover_letter_text="Dear Hiring Manager,",
+        evidence_dir=str(tmp_path),
+        apply_url="https://jobs.example.invalid/apply",
+        submitter=_lying_submitter,
+        receipt_poller=_receipt_poller_finds_the_ats_receipt,
+    )
+    assert result["transmitted"] is True
+
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT "transmittedAt", "transmissionRef", "status" FROM "Application" '
+                'WHERE "id" = %s',
+                (app_id,),
+            )
+            transmitted_at, transmission_ref, status = cur.fetchone()
+    assert transmitted_at is not None, "a matching post-click receipt IS a transmission"
+    assert "gmail:gmail-ok" in str(transmission_ref)
+    assert status == "submitted"
 
 
 def test_a_disabled_control_is_recorded_as_disabled_not_as_a_missing_button(

@@ -337,6 +337,12 @@ class TestSweepUsesTheCanonicalForm:
     def test_a_resolvable_posting_is_navigated_at_the_canonical_url_and_disclosed(
         self, db_session, user_id, monkeypatch
     ):
+        """The sweep must resolve `gh_jid` to the canonical embed form and
+        hand that URL straight to the ONE Playwright session the live
+        submitter opens — it must NOT pre-fetch the page itself (that would
+        be a second browser session racing the submitter's own navigation).
+        ``page_html`` therefore reaches the executor empty; the submitter
+        navigates the canonical URL directly."""
         from app.db import ensure_application_apply_resolution_columns
         from app.services import apply_channel_resolver, apply_executor
         from app.workers import apply_sweep
@@ -344,7 +350,6 @@ class TestSweepUsesTheCanonicalForm:
         app_id, approval_id = _seed_approved(
             db_session, user_id, source_url=_EMPLOYER_URL
         )
-        opened: list[str] = []
         executed: list[dict] = []
 
         monkeypatch.setattr(
@@ -352,11 +357,14 @@ class TestSweepUsesTheCanonicalForm:
             "_default_greenhouse_fetch_html",
             _fetcher({_CANONICAL_URL: _EMBED_HTML}),
         )
-        monkeypatch.setattr(
-            apply_executor,
-            "fetch_apply_page",
-            lambda url: (opened.append(url), _EMBED_HTML)[1],
-        )
+
+        def _exploding_fetch(*args, **kwargs):
+            raise AssertionError(
+                "apply_sweep must not pre-fetch the page itself — that is a "
+                "second Playwright session competing with the submitter's own"
+            )
+
+        monkeypatch.setattr(apply_executor, "fetch_apply_page", _exploding_fetch)
         monkeypatch.setattr(
             apply_executor,
             "execute_site_application",
@@ -365,8 +373,16 @@ class TestSweepUsesTheCanonicalForm:
 
         apply_sweep._attempt_transmission(user_id, app_id, approval_id)
 
-        assert opened == [_CANONICAL_URL], "the browser must open the REAL form"
-        assert executed and executed[0]["apply_url"] == _CANONICAL_URL
+        assert executed, "execute_site_application must have been called"
+        call = executed[0]
+        assert call["apply_url"] == _CANONICAL_URL, (
+            "the live submitter's ONE browser session must be pointed at the "
+            "REAL (canonical) form, not the employer's formless gh_jid page"
+        )
+        assert not call.get("page_html"), (
+            "the sweep must not hand a pre-fetched page to the executor — the "
+            "live submitter opens the canonical URL itself in its own session"
+        )
 
         ensure_application_apply_resolution_columns()
         with db_session.cursor() as cur:

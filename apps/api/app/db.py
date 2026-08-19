@@ -2193,3 +2193,40 @@ def ensure_job_resolved_apply_url_columns() -> None:
             )
         conn.commit()
     _job_resolved_apply_url_columns_ready = True
+
+
+#: Guard so the additive ``Application.siteSubmittedAt`` column is only
+#: ensured once per worker process.
+_application_site_submitted_column_ready = False
+
+
+def ensure_application_site_submitted_column() -> None:
+    """Idempotently add ``Application.siteSubmittedAt`` (receipt-before-Submitted).
+
+    A live Apply click on the employer's site is an attempt, not a
+    transmission. This column records when that click happened so a later
+    Gmail-receipt poll can finish the row WITHOUT clicking Submit again.
+    NULL is the correct value for every historical row. Additive only.
+    """
+    global _application_site_submitted_column_ready
+    if _application_site_submitted_column_ready:
+        return
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT count(*) FROM information_schema.columns"
+                " WHERE table_name = 'Application'"
+                " AND table_schema = ANY(current_schemas(false))"
+                " AND column_name = 'siteSubmittedAt'"
+            )
+            row = cur.fetchone()
+            if row and row[0] == 1:
+                _application_site_submitted_column_ready = True
+                return
+            cur.execute("SELECT pg_advisory_xact_lock(%s)", (7420260823,))
+            cur.execute(
+                'ALTER TABLE "Application" '
+                'ADD COLUMN IF NOT EXISTS "siteSubmittedAt" timestamptz'
+            )
+        conn.commit()
+    _application_site_submitted_column_ready = True

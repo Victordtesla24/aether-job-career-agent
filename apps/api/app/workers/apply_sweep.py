@@ -82,6 +82,7 @@ from typing import Any
 from app.db import (
     ensure_application_apply_channel_column,
     ensure_application_manual_step_columns,
+    ensure_application_site_submitted_column,
     ensure_application_transmission_columns,
     ensure_job_resolved_apply_url_columns,
     ensure_user_profile_columns,
@@ -216,7 +217,8 @@ _PENDING_SELECT = f'''
            a."id" AS "applicationId",
            ar."id" AS "approvalId",
            COALESCE(ar."resolvedAt", ar."createdAt") AS "approvedAt",
-           j."fitScore" AS "fitScore"
+           j."fitScore" AS "fitScore",
+           a."siteSubmittedAt" AS "siteSubmittedAt"
     FROM "Application" a
     JOIN "ApprovalRequest" ar ON ar."applicationId" = a."id"
     LEFT JOIN "Job" j ON j."id" = a."jobId"
@@ -240,6 +242,7 @@ def pending_transmissions(user_id: str, limit: int | None = None) -> list[dict[s
     """
     ensure_application_transmission_columns()
     ensure_application_manual_step_columns()
+    ensure_application_site_submitted_column()
     sql = f'SELECT * FROM ({_PENDING_SELECT}) q ORDER BY q."approvedAt" ASC, q."applicationId"'
     params: tuple[Any, ...] = (user_id, user_id)
     if limit is not None:
@@ -260,6 +263,7 @@ def count_pending_transmissions(user_id: str) -> int:
     """
     ensure_application_transmission_columns()
     ensure_application_manual_step_columns()
+    ensure_application_site_submitted_column()
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -284,6 +288,7 @@ def users_with_pending_transmissions(limit: int | None = None) -> list[str]:
     ensure_application_transmission_columns()
     ensure_application_manual_step_columns()
     ensure_user_profile_columns()
+    ensure_application_site_submitted_column()
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -312,11 +317,14 @@ def users_with_pending_transmissions(limit: int | None = None) -> list[str]:
 def _load_application(user_id: str, application_id: str) -> dict[str, Any] | None:
     ensure_application_apply_channel_column()
     ensure_job_resolved_apply_url_columns()
+    ensure_application_transmission_columns()
+    ensure_application_site_submitted_column()
     with get_connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 'SELECT a."id", a."jobId", a."resumeId", a."coverLetter", a."applyChannel", '
-                'a."answers", j."sourceUrl", j."applyEmail", j."resolvedApplyUrl", '
+                'a."answers", a."manualStepReason", a."siteSubmittedAt", a."transmittedAt", '
+                'j."sourceUrl", j."applyEmail", j."resolvedApplyUrl", '
                 'j."title", j."company" '
                 'FROM "Application" a JOIN "Job" j ON j."id" = a."jobId" '
                 'WHERE a."id" = %s AND a."userId" = %s',
@@ -561,7 +569,7 @@ def _attempt_transmission(user_id: str, application_id: str, approval_id: str) -
     from app.services.apply_executor import (
         ManualStepRequired,
         execute_site_application,
-        fetch_apply_page,
+        finish_pending_receipt,
         record_apply_url_resolution,
         record_manual_step,
     )
@@ -572,6 +580,15 @@ def _attempt_transmission(user_id: str, application_id: str, approval_id: str) -
             "application_missing",
             "The application behind this approval no longer exists.",
         )
+    if application.get("siteSubmittedAt") and not application.get("transmittedAt"):
+        finish_pending_receipt(
+            user_id,
+            application_id,
+            approval_id,
+            company=str(application.get("company") or "") or None,
+            job_title=str(application.get("title") or "") or None,
+        )
+        return
     job_row = {
         "sourceUrl": application.get("sourceUrl"),
         "applyEmail": application.get("applyEmail"),
@@ -633,12 +650,11 @@ def _attempt_transmission(user_id: str, application_id: str, approval_id: str) -
         answers if isinstance(answers, dict) else None,
     )
     resume_pdf = _render_resume_pdf(user_id, application)
-    page_html = fetch_apply_page(apply_url)
     execute_site_application(
         user_id,
         application_id,
         approval_id,
-        page_html=page_html,
+        page_html="",
         channel=channel,
         profile=profile,
         resume_pdf_bytes=resume_pdf,
@@ -650,6 +666,7 @@ def _attempt_transmission(user_id: str, application_id: str, approval_id: str) -
         # and every usage audit row names the job it was used on.
         company=str(application.get("company") or "") or None,
         job_id=str(application.get("jobId") or "") or None,
+        job_title=str(application.get("title") or "") or None,
     )
 
 
@@ -861,14 +878,18 @@ def sweep_pending_transmissions(
         application_id = str(row["applicationId"])
         approval_id = str(row["approvalId"])
         summary["processed"] += 1
-        if _expire_stale_approval(user_id, application_id, row.get("approvedAt")):
+        if not row.get("siteSubmittedAt") and _expire_stale_approval(
+            user_id, application_id, row.get("approvedAt")
+        ):
             # The user's confirmation is too old to act on. The row is NOT
             # transmitted and NOT silently left prepared: it now carries an
             # honest, actionable state with a one-click way back.
             summary["stale_approval"] += 1
             continue
         fit_score = row.get("fitScore")
-        if not meets_match_threshold(fit_score, threshold):
+        if not row.get("siteSubmittedAt") and not meets_match_threshold(
+            fit_score, threshold
+        ):
             # D2: below the user's bar (or unscored) — nothing is fired,
             # nothing is burned, nothing is stamped. The row stays queued and
             # the user can still submit it explicitly from the board.

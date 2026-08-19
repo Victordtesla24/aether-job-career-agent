@@ -432,8 +432,18 @@ class TestExecuteRoutesToTheApplyEngine:
     def test_execute_reaches_the_site_engine_and_proves_the_transmission(
         self, db_session, user_id, client, auth_headers, monkeypatch
     ):
-        """DRY RUN through the REAL chain with an INJECTED submitter. The
-        browser seam never runs; the proof is read back off the row."""
+        """DRY RUN through the REAL chain with an INJECTED submitter AND an
+        injected Gmail receipt poller. The browser seam never runs, no real
+        inbox is touched, and the proof is read back off the row.
+
+        Round-3 review (REVIEWER-FAIL, 2026-08-19): the ASHBY_URL used to seed
+        this application is a LIVE ``https://`` apply_url, so
+        ``execute_site_application`` now requires a matching Gmail receipt
+        before it will stamp ``transmittedAt`` — a stubbed submitter alone is
+        no longer enough. ``transmissionRef`` is therefore no longer the bare
+        evidence path; it also carries the ``gmail:<messageId>`` tag that
+        proves the receipt (not the click) is what earned the stamp.
+        """
         job_id = _seed_job(db_session, user_id)
         resume_id = _seed_resume(db_session, user_id, source_job_id=job_id)
         app_id = _seed_application(db_session, user_id, job_id, resume_id)
@@ -442,21 +452,6 @@ class TestExecuteRoutesToTheApplyEngine:
         from app.services import apply_executor
         from app.workers import apply_sweep
 
-        monkeypatch.setattr(
-            apply_sweep, "fetch_apply_page", lambda url: "<form></form>", raising=False
-        )
-        monkeypatch.setattr(
-            apply_executor, "fetch_apply_page", lambda url: "<form></form>"
-        )
-        monkeypatch.setattr(
-            apply_executor, "build_form_fill_plan",
-            # Mirrors the real seam's signature and RETURN SHAPE (U5d-3 added
-            # the optional Answer Bank resolver and the audit list), so this
-            # stub cannot drift into testing a contract production never has.
-            lambda html, *, channel, profile, answer_bank=None: {
-                "fields": [], "unanswerable_required": [], "answerBankAudit": [],
-            },
-        )
         monkeypatch.setattr(apply_sweep, "_render_resume_pdf", lambda uid, app: b"%PDF-")
 
         real_execute = apply_executor.execute_site_application
@@ -468,8 +463,14 @@ class TestExecuteRoutesToTheApplyEngine:
                 "destination": ASHBY_URL,
                 "evidencePath": "/tmp/u5d2-dry-run-evidence.png",
                 "confirmation": "stubbed confirmation — nothing was sent",
+                "classification": "confirmed",
                 "filled": [],
                 "unfilled": [],
+            }
+            kwargs["receipt_poller"] = lambda *a, **k: {
+                "messageId": "u5d2-dry-run-receipt",
+                "from": "notifications@ashbyhq.com",
+                "subject": "Thank you for applying",
             }
             return real_execute(*args, **kwargs)
 
@@ -485,7 +486,11 @@ class TestExecuteRoutesToTheApplyEngine:
         assert body["transmitted"] is True
         row = _truth_row(db_session, app_id)
         assert row["transmittedAt"] is not None
-        assert row["transmissionRef"] == "/tmp/u5d2-dry-run-evidence.png"
+        # The click's own evidence AND the Gmail receipt id are both on the
+        # ref — a claimed transmission that dropped either half would be
+        # exactly the honesty regression prompt.md §0 forbids.
+        assert "/tmp/u5d2-dry-run-evidence.png" in row["transmissionRef"]
+        assert "gmail:u5d2-dry-run-receipt" in row["transmissionRef"]
         assert row["status"] == "submitted"
         # WRITE-TIME TRUTH MARKER: a proven transmission carries NO
         # recorded-not-transmitted marker.
@@ -595,6 +600,16 @@ class TestExecuteRoutesToTheApplyEngine:
     def test_manual_step_outcome_is_reported_honestly_not_as_a_submission(
         self, db_session, user_id, client, auth_headers, monkeypatch
     ):
+        """Round-3 review (REVIEWER-FAIL FAIL 2, 2026-08-19): production's
+        sweep now calls ``execute_site_application`` with ``page_html=""``
+        for a live apply_url, so there is no pre-flight
+        ``build_form_fill_plan`` call left to intercept — ``live=True`` skips
+        straight past it. CAPTCHA / login-wall detection now happens FROM THE
+        LIVE DOM inside the submitter, so this reproduces that shape: an
+        injected submitter (the seam the detection now lives behind) raises
+        ``ManualStepRequired`` instead of a stubbed ``build_form_fill_plan``.
+        Restoring ``fetch_apply_page`` would not help — it is never called on
+        this path either — so it is deliberately not patched here."""
         job_id = _seed_job(db_session, user_id)
         resume_id = _seed_resume(db_session, user_id, source_job_id=job_id)
         app_id = _seed_application(db_session, user_id, job_id, resume_id)
@@ -604,14 +619,24 @@ class TestExecuteRoutesToTheApplyEngine:
         from app.workers import apply_sweep
 
         monkeypatch.setattr(apply_sweep, "_render_resume_pdf", lambda uid, app: b"%PDF-")
-        monkeypatch.setattr(apply_executor, "fetch_apply_page", lambda url: "<html/>")
 
-        def _blocked(html, *, channel, profile, answer_bank=None):
-            raise apply_executor.ManualStepRequired(
-                "captcha", "This form is protected by a CAPTCHA."
-            )
+        real_execute = apply_executor.execute_site_application
 
-        monkeypatch.setattr(apply_executor, "build_form_fill_plan", _blocked)
+        def _captcha_blocked_execute(*args, **kwargs):
+            def _captcha_submitter(**_kw):
+                raise apply_executor.ManualStepRequired(
+                    "captcha", "This form is protected by a CAPTCHA."
+                )
+
+            kwargs["submitter"] = _captcha_submitter
+            return real_execute(*args, **kwargs)
+
+        monkeypatch.setattr(
+            apply_executor, "execute_site_application", _captcha_blocked_execute
+        )
+        monkeypatch.setattr(
+            apply_sweep, "execute_site_application", _captcha_blocked_execute, raising=False
+        )
 
         response = client.post(f"/approvals/{approval_id}/execute", headers=auth_headers)
 

@@ -1358,3 +1358,76 @@ serves `3e209501` (autofill skip). Chrome launch is not live yet.
 - Tests: `test_interview_thread_parser.py`, `test_interview_ingest.py`, `test_workspaces.py`
 **Does not touch:** ATS, apply executor, llm_client, sales, design tokens.
 **Deploy:** merge to `origin/main` → VPS Delivery. No hand-restart. Delete branch after land. No standing PR.
+
+---
+
+## SESSION LIVE-APPLY-LOCK — 2026-08-19T10:35Z — three genuine site applies with Gmail receipts
+
+**By:** Cursor orchestrator on `feat/submission-live-apply` tracking `origin/main` (`d57293c3`).
+**Mandate:** session lock. SUCCESS for one application is Gmail receipt via
+`apply_receipt_inbox.poll_application_receipt` then `Application.transmittedAt`.
+A Submit click, a page thank-you, or a kanban Submitted card is not SUCCESS.
+Lock B requires **three distinct** real employer-site applies for Vikram
+(`sarkar.vikram@gmail.com`), not three retries of one job.
+**Orchestrator does not author production apply-stack code and does not
+VERIFIED-CLOSE.** Author ≠ reviewer ≠ verifier. `qa-adversary` closes.
+
+**Files claimed (canonical seams only — no second apply stack):**
+- `apps/api/app/services/apply_executor.py`
+- `apps/api/app/services/apply_form_grounding.py` (untracked WIP)
+- `apps/api/app/services/apply_receipt_inbox.py` (untracked WIP)
+- `apps/api/app/workers/apply_sweep.py`
+- `apps/api/app/services/llm_client.py` (`apply_form` token ceiling only)
+- `apps/api/app/db.py` (`siteSubmittedAt` additive column)
+- matching tests under `apps/api/tests/test_apply_*.py`
+- evidence: `uat/reports/evidence/live-site-apply-lock-2026-08-19/`
+- this coordination note
+
+**Does not touch:** Interview Center (SESSION IC-VISIBLE); Seek automation;
+CAPTCHA/login-wall bypass; inventing visa/salary/pronouns.
+
+**Deploy window:** VPS Delivery after land on `origin/main`. No hand-restart of
+`aether-prod-*`. Production currently serves `3e209501` (measured); Chrome
+launch + smoke-wait live on `origin/main` (`d57293c3`) are **not** serving.
+Delete `feat/submission-live-apply` after land (R8). No standing PR.
+
+**Continuation 2026-08-19T11:05Z — prompt.md session lock (this run):**
+Executing `prompt.md` literally. SUCCESS = Gmail receipt then `transmittedAt`
+(§0). Lock B = three distinct real site applies, not three retries of Dovetail.
+Orchestrator does not author apply-stack code and does not VERIFIED-CLOSE.
+Author ≠ reviewer ≠ verifier. Evidence pack:
+`uat/reports/evidence/live-site-apply-lock-2026-08-19/`.
+Measured this run: Hostinger health 200; Abacus health 200; served SHA still
+`3e209501`; receipt-gate WIP is local/untracked (not on `origin/main`, not
+serving). VPS Delivery `32183563962` cancelled. Zero Lock-B receipts this run.
+
+**Continuation 2026-08-19T11:55Z — Lock A code PASS, pushing to origin/main:**
+Independent reviewer PASS on the receipt-gate tree (not VERIFIED-CLOSE;
+Lock B still 0/3). Integrity 0. Targeted pytest green. Next: commit the
+canonical apply-stack files only (not AGENTS.md memory notes, not
+prompt.md, not prod screenshots) and push `origin/main` for VPS Delivery.
+No hand-restart.
+
+
+---
+
+## SESSION IC-LOCK — 2026-08-19T11:35Z — Interview Center session lock
+
+**By:** Cursor orchestrator on isolated worktree `/root/dev/aether-wt-ic-lock` branch `feat/interview-center-lock` from `origin/main` (`d57293c3`).
+**Mandate:** Interview Center SUCCESS (§0 clauses 1–11): inbox ingest (matched + unmatched professional invitations), NBE-craft toolkit with live LLM, send-to-candidate Gmail with real message id, Melbourne +6 business-day purge, gilt UI. Orchestrator does not author production code and does not VERIFIED-CLOSE. Author ≠ reviewer ≠ verifier. `qa-adversary` closes.
+
+**Files claimed (canonical seams only — no second interview stack):**
+- `apps/api/app/routers/interviews.py`, `apps/api/app/routers/workspaces.py` (prep/pack/send only)
+- `apps/api/app/services/interview_ingest.py`, `interview_thread_parser.py`, `career_email_filter.py`, `interview_prep_pipeline.py`, `interview_prep_briefing.py`, `interview_pack.py`, `interview_pack_pdf.py`
+- `apps/api/app/agents/interview_prep_agent.py`
+- `apps/api/app/services/email_branding.py`, `brand_documents.py`
+- `apps/api/app/workers/settings.py` + NEW `apps/api/app/workers/interview_pack_purge.py`
+- `apps/web/src/app/dashboard/interviews/page.tsx`, `apps/web/src/lib/api/interviews.ts`, page tests
+- matching `apps/api/tests/test_interview_*.py`
+- evidence: `uat/reports/evidence/interview-center-lock-2026-08-19/`
+- this coordination note
+
+**Does not touch:** apply stack (`apply_executor`, `apply_form_grounding`, `apply_receipt_inbox`, `apply_sweep`), `llm_client.py`, `db.py`, Seek, CAPTCHA.
+
+**Deploy window:** VPS Delivery after land on `origin/main`. No hand-restart of units that would ship foreign apply WIP. Delete `feat/interview-center-lock` after land (R8). No standing PR.
+

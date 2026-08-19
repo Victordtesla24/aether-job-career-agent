@@ -55,8 +55,16 @@ from typing import Any, Callable, Iterable
 from app.db import (
     ensure_application_apply_resolution_columns,
     ensure_application_manual_step_columns,
+    ensure_application_site_submitted_column,
     ensure_application_transmission_columns,
     get_connection,
+)
+from app.services.apply_receipt_inbox import (
+    MANUAL_STEP_AWAITING_RECEIPT,
+    MANUAL_STEP_RECEIPT_GMAIL_UNAVAILABLE,
+    ReceiptMailboxUnavailable,
+    awaiting_receipt_detail,
+    poll_application_receipt,
 )
 
 logger = logging.getLogger(__name__)
@@ -785,6 +793,7 @@ def build_form_fill_plan(
     channel: str,
     profile: dict[str, Any],
     answer_bank: Callable[[dict[str, Any]], Any] | None = None,
+    form_llm: Callable[[dict[str, Any]], Any] | None = None,
 ) -> dict[str, Any]:
     """The exact set of values that will be typed into the employer's form.
 
@@ -846,6 +855,12 @@ def build_form_fill_plan(
             match = answer_bank(field)
             if match is not None:
                 answer = match.answer
+        if answer is None and form_llm is not None:
+            asked = question_text_for_field(field)
+            if classify_sensitivity(asked) != "sensitive":
+                llm_answer = form_llm(field)
+                if isinstance(llm_answer, str) and llm_answer.strip():
+                    answer = llm_answer.strip()
         entry = dict(field)
         entry["value"] = answer
         plan_fields.append(entry)
@@ -1133,6 +1148,7 @@ def _record_site_transmission(
                         WHEN "status" = 'draft'::"ApplicationStatus"
                             THEN 'submitted'::"ApplicationStatus"
                         ELSE "status" END,
+                    "siteSubmittedAt" = COALESCE("siteSubmittedAt", NOW()),
                     "updatedAt" = NOW()
                 WHERE "id" = %s AND "userId" = %s
                 ''',
@@ -1143,6 +1159,163 @@ def _record_site_transmission(
                 ),
             )
         conn.commit()
+
+
+def _is_live_apply_url(apply_url: str | None) -> bool:
+    return str(apply_url or "").startswith(("http://", "https://"))
+
+
+def _record_site_pending_receipt(
+    user_id: str,
+    application_id: str,
+    *,
+    reason: str,
+    detail: str,
+    evidence_path: str = "",
+) -> None:
+    """The site was submitted; Gmail has not yet confirmed the receipt.
+
+    Stamps ``siteSubmittedAt`` once (the first click) and never
+    ``transmittedAt``. A later poll can finish the row without opening the
+    employer form again.
+    """
+    ensure_application_transmission_columns()
+    ensure_application_manual_step_columns()
+    ensure_application_site_submitted_column()
+    extra = f" Evidence: {evidence_path}" if evidence_path else ""
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                '''
+                UPDATE "Application"
+                SET "siteSubmittedAt" = COALESCE("siteSubmittedAt", NOW()),
+                    "manualStepReason" = %s,
+                    "manualStepDetail" = %s,
+                    "manualStepAt" = NOW(),
+                    "updatedAt" = NOW()
+                WHERE "id" = %s AND "userId" = %s AND "transmittedAt" IS NULL
+                ''',
+                (reason, (detail + extra).strip(), application_id, user_id),
+            )
+        conn.commit()
+
+
+def finish_pending_receipt(
+    user_id: str,
+    application_id: str,
+    approval_id: str,
+    *,
+    company: str | None = None,
+    job_title: str | None = None,
+    form_email: str | None = None,
+    receipt_poller: Callable[..., dict[str, Any] | None] | None = None,
+) -> dict[str, Any]:
+    """Poll Gmail for a row already submitted on the employer's site.
+
+    Never launches a browser. The employer's Submit control was already
+    pressed; clicking it again would be a second application.
+    """
+    from app.repositories.approval import ApprovalRepository
+
+    ensure_application_transmission_columns()
+    ensure_application_site_submitted_column()
+    repo = ApprovalRepository()
+    approval = repo.get_by_id(approval_id, user_id)
+    if approval is None:
+        raise ApplyExecutorGuardError(
+            "approval_not_found",
+            "No approval for this application — nothing was submitted.",
+            http_status=404,
+        )
+    if approval.get("status") != "approved":
+        raise ApplyExecutorGuardError(
+            "not_approved",
+            "This application has not been approved for submission — nothing was submitted.",
+            http_status=409,
+        )
+    since = _site_submitted_epoch(user_id, application_id)
+    if since is None:
+        raise ManualStepRequired(
+            MANUAL_STEP_AWAITING_RECEIPT,
+            awaiting_receipt_detail(company=company, job_title=job_title, form_email=form_email),
+        )
+    if not repo.claim_execution(approval_id, user_id):
+        # A concurrent finisher won; do not click Submit and do not double-stamp.
+        raise ApplyExecutorGuardError(
+            "already_executed",
+            "This application was already submitted — nothing was submitted again.",
+            http_status=409,
+        )
+    poller = receipt_poller or poll_application_receipt
+    try:
+        receipt = poller(
+            user_id,
+            since_epoch=since,
+            company=company,
+            job_title=job_title,
+        )
+    except ReceiptMailboxUnavailable as exc:
+        repo.release_execution(approval_id, user_id)
+        detail = awaiting_receipt_detail(
+            company=company, job_title=job_title, form_email=form_email
+        )
+        _record_site_pending_receipt(
+            user_id,
+            application_id,
+            reason=MANUAL_STEP_RECEIPT_GMAIL_UNAVAILABLE,
+            detail=f"{detail} {exc}",
+        )
+        raise ManualStepRequired(MANUAL_STEP_RECEIPT_GMAIL_UNAVAILABLE, str(exc)) from exc
+    except Exception:
+        repo.release_execution(approval_id, user_id)
+        raise
+    if not receipt:
+        repo.release_execution(approval_id, user_id)
+        detail = awaiting_receipt_detail(
+            company=company, job_title=job_title, form_email=form_email
+        )
+        _record_site_pending_receipt(
+            user_id,
+            application_id,
+            reason=MANUAL_STEP_AWAITING_RECEIPT,
+            detail=detail,
+        )
+        raise ManualStepRequired(MANUAL_STEP_AWAITING_RECEIPT, detail)
+    ref = f"gmail:{receipt.get('messageId') or ''}"
+    _record_site_transmission(
+        user_id,
+        application_id,
+        destination=str(receipt.get("from") or company or ""),
+        channel="gmail-receipt",
+        ref=ref,
+    )
+    repo.complete_execution(approval_id, user_id)
+    return {
+        "transmitted": True,
+        "applicationId": application_id,
+        "approvalId": approval_id,
+        "channel": "gmail-receipt",
+        "receipt": receipt,
+    }
+
+
+def _site_submitted_epoch(user_id: str, application_id: str) -> float | None:
+    ensure_application_site_submitted_column()
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                'SELECT "siteSubmittedAt" FROM "Application" '
+                'WHERE "id" = %s AND "userId" = %s',
+                (application_id, user_id),
+            )
+            row = cur.fetchone()
+    stamped = row[0] if row else None
+    if stamped is None:
+        return None
+    if isinstance(stamped, datetime):
+        when = stamped if stamped.tzinfo else stamped.replace(tzinfo=timezone.utc)
+        return when.timestamp()
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -3414,6 +3587,8 @@ def playwright_form_submitter(
     answer_bank: Callable[[dict[str, Any]], Any] | None = None,
     user_id: str | None = None,
     company: str | None = None,
+    rebuild_plan: bool = False,
+    form_llm: Callable[[dict[str, Any]], Any] | None = None,
 ) -> dict[str, Any]:
     """Fill and submit the application in a REAL headless Chromium.
 
@@ -3490,6 +3665,14 @@ def playwright_form_submitter(
                         page.add_init_script(_HIDE_WEBDRIVER_INIT_JS)
                     page.goto(apply_url, wait_until="domcontentloaded", timeout=45000)
                     wait_for_application_form(page, live=True)
+                    if rebuild_plan:
+                        plan = build_form_fill_plan(
+                            page.content() or "",
+                            channel=channel,
+                            profile=profile or {},
+                            answer_bank=answer_bank,
+                            form_llm=form_llm,
+                        )
                 else:
                     # Replay: the DOM was captured elsewhere, so every
                     # subresource in it (CDN CSS, fonts, the employer's
@@ -3793,6 +3976,8 @@ def playwright_form_submitter(
         "unfilled": unfilled,
         "unplannedFilled": unplanned_filled,
         "mode": mode,
+        "plan": plan,
+        "submittedAt": time.time(),
     }
 
 
@@ -4061,11 +4246,14 @@ MANUAL_STEP_FORM_NOT_READY = "form_not_ready"
 
 #: Misses that mean "try the site again", not "the user must answer a question".
 #: ``unknown_required_question``, captcha, login walls and assisted channels
-#: stay terminal until the user acts.
+#: stay terminal until the user acts. ``awaiting_receipt`` retries the Gmail
+#: poll only — the employer's Submit control is never clicked a second time.
 RETRYABLE_MANUAL_REASONS: frozenset[str] = frozenset({
     MANUAL_STEP_SUBMIT_CONTROL_NOT_FOUND,
     MANUAL_STEP_SUBMIT_CLICK_FAILED,
     MANUAL_STEP_FORM_NOT_READY,
+    MANUAL_STEP_AWAITING_RECEIPT,
+    MANUAL_STEP_RECEIPT_GMAIL_UNAVAILABLE,
 })
 
 
@@ -5124,31 +5312,70 @@ def execute_site_application(
     answer_bank: Callable[[dict[str, Any]], Any] | None = None,
     company: str | None = None,
     job_id: str | None = None,
+    job_title: str | None = None,
+    receipt_poller: Callable[..., dict[str, Any] | None] | None = None,
+    form_llm: Callable[[dict[str, Any]], Any] | None = None,
 ) -> dict[str, Any]:
     """Apply on the employer's site behind an APPROVED approval — or refuse.
 
-    Order matters and is enforced here, not by callers:
+    Gate and claim are the same for every call: the approval must exist and
+    be ``approved`` (:class:`ApplyExecutorGuardError`, 404/409, zero side
+    effects), then ``claim_execution`` — the single-shot guard that stops a
+    second attempt from ever producing a second real submission. What
+    happens after the claim depends on whether ``apply_url`` is a live
+    http(s) posting or a replayed fixture, and — for a live URL — on whether
+    the caller handed us the page already.
 
-    1. **Gate.** The approval must exist and be ``approved``
-       (:class:`ApplyExecutorGuardError`, 404/409, zero side effects).
-    2. **Claim.** ``claim_execution`` — the EXISTING single-shot guard, reused
-       so a second attempt can never produce a second real submission.
-    3. **Plan.** A CAPTCHA, a login wall or an unanswerable required question
-       raises :class:`ManualStepRequired`; the reason, the employer's verbatim
-       question and (U5d-3) the question's STRUCTURE are persisted on the row
-       and the claim is RELEASED, so answering the question in the card makes
-       the application retryable.
-    4. **Submit + record.** Only a submitter that reports a real submission
-       stamps ``transmittedAt``/``transmissionChannel``/``transmissionRef``
-       (the evidence screenshot) and completes the approval.
+    **LIVE (``apply_url`` is http(s))**
+
+    1. If ``page_html`` is non-empty (the caller already fetched the page —
+       a captured DOM, a captcha/login-wall/dry-run test fixture), the
+       static pre-flight plan runs before ``submit()``: CAPTCHA, a login
+       wall or an unanswerable required question raises
+       :class:`ManualStepRequired` here, the claim is RELEASED and NOTHING
+       is opened in a browser. If ``page_html`` is empty (the production
+       sweep — see ``apps/api/app/workers/apply_sweep.py``), this step is
+       skipped entirely: this function never fetches a page itself, because
+       that would be a second Playwright session competing with the one the
+       submitter is about to open.
+    2. The submitter opens exactly ONE browser session, navigates once
+       (``page.goto``) and — when ``rebuild_plan`` is set for a live URL —
+       rebuilds the plan from that live DOM, so CAPTCHA/login/unknown-field
+       manual steps are still caught even when pre-flight was skipped.
+    3. If the submitter reports it did not click Submit, a manual step is
+       recorded and the claim released — never a transmission.
+    4. If the post-submit page reads as ``POST_SUBMIT_REJECTED``, that is
+       ``form_rejected``: a manual step, the claim released, and Gmail is
+       NEVER polled — the employer's own page said no, and no inbox message
+       changes that.
+    5. Otherwise (confirmed, unconfirmed, unknown or unclassified — a real
+       Submit click happened), ``siteSubmittedAt`` is the honest marker that
+       a click landed, and Gmail is polled for the employer's receipt. An
+       empty poll or an unreadable mailbox records ``awaiting_receipt`` /
+       ``receipt_gmail_unavailable`` — retryable without a second click,
+       ``transmittedAt`` still NULL. A matching receipt is the only thing
+       that stamps ``transmittedAt`` / ``transmissionChannel`` /
+       ``transmissionRef`` and completes the approval.
+
+    **REPLAY (no live ``apply_url``)**
+
+    The static pre-flight plan always runs against ``page_html``. The
+    submitter fills and screenshots the SAME page it was handed rather than
+    a live site, so there is no Gmail receipt to poll: a ``confirmed`` (or
+    unclassified) post-submit page phrase is the fixture's own stamp of
+    record. Every other classification — ``unconfirmed``, ``unknown``,
+    ``rejected`` — still records a manual step and never stamps
+    ``transmittedAt``; replay does not get a lower honesty floor than live.
 
     U5d-3: the Answer Bank is consulted while the plan is built, and every
     answer it supplies is recorded in ``AnswerBankUsage`` BEFORE the browser
-    runs. Recording at that point is the honest one: what the audit claims is
-    "this banked answer was put into this application's form", which becomes
-    true the moment the plan carries it — whether the site then confirms, times
-    out or shows a CAPTCHA. Waiting for a confirmed transmission would silently
-    lose the audit for exactly the attempts most worth auditing.
+    runs (and again for a live rebuild, once the plan reflects the real
+    DOM). Recording at that point is the honest one: what the audit claims
+    is "this banked answer was put into this application's form", which
+    becomes true the moment the plan carries it — whether the site then
+    confirms, times out or shows a CAPTCHA. Waiting for a confirmed
+    transmission would silently lose the audit for exactly the attempts
+    most worth auditing.
     """
     from app.repositories.approval import ApprovalRepository
 
@@ -5157,6 +5384,7 @@ def execute_site_application(
     # lazy DDL must not be ordered by which branch happens to run first.
     ensure_application_transmission_columns()
     ensure_application_manual_step_columns()
+    ensure_application_site_submitted_column()
     repo = ApprovalRepository()
     approval = repo.get_by_id(approval_id, user_id)
     if approval is None:
@@ -5186,23 +5414,47 @@ def execute_site_application(
     resolver = answer_bank
     if resolver is None:
         resolver = build_answer_bank_resolver(user_id, profile, company=company)
-    try:
-        plan = build_form_fill_plan(
-            page_html, channel=channel, profile=profile, answer_bank=resolver
+    live = _is_live_apply_url(apply_url)
+    llm_resolver = form_llm
+    if llm_resolver is None and live:
+        from app.services.apply_form_grounding import build_form_llm_resolver
+
+        llm_resolver = build_form_llm_resolver(user_id, profile, company=company)
+    plan: dict[str, Any] = {
+        "fields": [],
+        "unanswerable_required": [],
+        "answerBankAudit": [],
+    }
+    # A caller that HANDS US the page (a captured DOM, or a live apply_url the
+    # caller already fetched) gets the static pre-flight plan — the CAPTCHA /
+    # login-wall / unanswerable-required check — regardless of whether the
+    # URL is http(s). Only the production sweep, which passes page_html=""
+    # so as to open the browser exactly once, skips this: its one Playwright
+    # session builds the plan itself from the live DOM after a single
+    # ``page.goto`` (``rebuild_plan=live`` below). This function never fetches
+    # a page on its own — that would be a second browser session.
+    if str(page_html or "").strip():
+        try:
+            plan = build_form_fill_plan(
+                page_html,
+                channel=channel,
+                profile=profile,
+                answer_bank=resolver,
+                form_llm=llm_resolver,
+            )
+        except ManualStepRequired as exc:
+            record_manual_step(
+                user_id,
+                application_id,
+                exc.reason,
+                exc.question or exc.message,
+                questions=exc.fields or None,
+            )
+            repo.release_execution(approval_id, user_id)
+            raise
+        record_answer_bank_usage(
+            user_id, application_id, plan, job_id=job_id
         )
-    except ManualStepRequired as exc:
-        record_manual_step(
-            user_id,
-            application_id,
-            exc.reason,
-            exc.question or exc.message,
-            questions=exc.fields or None,
-        )
-        repo.release_execution(approval_id, user_id)
-        raise
-    record_answer_bank_usage(
-        user_id, application_id, plan, job_id=job_id
-    )
     submit = submitter or playwright_form_submitter
     try:
         outcome = submit(
@@ -5225,6 +5477,8 @@ def execute_site_application(
             # cannot be.
             user_id=user_id,
             company=company,
+            rebuild_plan=live,
+            form_llm=llm_resolver,
         )
     except ManualStepRequired as exc:
         record_manual_step(
@@ -5273,19 +5527,95 @@ def execute_site_application(
         repo.release_execution(approval_id, user_id)
         record_manual_step(user_id, application_id, reason, detail)
         raise ManualStepRequired(reason, detail)
+    used_plan = outcome.get("plan") if isinstance(outcome.get("plan"), dict) else plan
+    if live and used_plan:
+        record_answer_bank_usage(
+            user_id, application_id, used_plan, job_id=job_id
+        )
     classification = outcome.get("classification")
+    if classification == POST_SUBMIT_REJECTED:
+        reason = MANUAL_STEP_FORM_REJECTED
+        detail = (
+            "The employer's site rejected this application, so Aether recorded "
+            "a manual step instead of a submission. Check the evidence "
+            "screenshot and finish it on the site."
+        )
+        record_manual_step(user_id, application_id, reason, detail)
+        repo.release_execution(approval_id, user_id)
+        raise ManualStepRequired(reason, detail)
+    evidence_path = str(outcome.get("evidencePath") or "")
+    if live:
+        since = outcome.get("submittedAt")
+        try:
+            since_epoch = float(since) if since is not None else time.time()
+        except (TypeError, ValueError):
+            since_epoch = time.time()
+        poller = receipt_poller or poll_application_receipt
+        try:
+            receipt = poller(
+                user_id,
+                since_epoch=since_epoch,
+                company=company,
+                job_title=job_title,
+            )
+        except ReceiptMailboxUnavailable as exc:
+            detail = awaiting_receipt_detail(
+                company=company, job_title=job_title
+            )
+            _record_site_pending_receipt(
+                user_id,
+                application_id,
+                reason=MANUAL_STEP_RECEIPT_GMAIL_UNAVAILABLE,
+                detail=f"{detail} {exc}",
+                evidence_path=evidence_path,
+            )
+            repo.release_execution(approval_id, user_id)
+            raise ManualStepRequired(
+                MANUAL_STEP_RECEIPT_GMAIL_UNAVAILABLE, str(exc)
+            ) from exc
+        if not receipt:
+            detail = awaiting_receipt_detail(
+                company=company, job_title=job_title
+            )
+            _record_site_pending_receipt(
+                user_id,
+                application_id,
+                reason=MANUAL_STEP_AWAITING_RECEIPT,
+                detail=detail,
+                evidence_path=evidence_path,
+            )
+            repo.release_execution(approval_id, user_id)
+            raise ManualStepRequired(MANUAL_STEP_AWAITING_RECEIPT, detail)
+        ref = f"{evidence_path}|gmail:{receipt.get('messageId') or ''}"
+        _record_site_transmission(
+            user_id,
+            application_id,
+            destination=str(outcome.get("destination") or apply_url or channel),
+            channel=channel,
+            ref=ref,
+        )
+        repo.complete_execution(approval_id, user_id)
+        return {
+            "transmitted": True,
+            "applicationId": application_id,
+            "approvalId": approval_id,
+            "channel": channel,
+            "evidencePath": evidence_path,
+            "destination": outcome.get("destination"),
+            "mode": outcome.get("mode"),
+            "confirmation": outcome.get("confirmation"),
+            "classification": classification,
+            "receipt": receipt,
+            "fieldsFilled": outcome.get("filled") or [],
+            "fieldsNotFilled": outcome.get("unfilled") or [],
+            "unplannedFieldsFilled": outcome.get("unplannedFilled") or [],
+        }
     if classification is not None and classification not in (
         POST_SUBMIT_CONFIRMED,
         POST_SUBMIT_NOT_CLASSIFIED,
     ):
-        # SUB-007 honesty floor, enforced at the RECORDING site as well as
-        # inside the submitter. ``_record_site_transmission`` below is the one
-        # place that stamps ``transmittedAt``, so the rule "nothing is recorded
-        # as transmitted unless the page confirmed it" is checked here too,
-        # rather than resting on the submitter having raised. Any submitter
-        # that reports an unconfirmed ending and still returns writes a manual
-        # step with THAT ending's reason — never a transmission, and never an
-        # upgrade to one.
+        # SUB-007 honesty floor for replay / non-live paths. Live paths above
+        # require a Gmail receipt instead of a page phrase.
         reason = _MANUAL_STEP_FOR_CLASSIFICATION.get(
             str(classification), MANUAL_STEP_NO_CONFIRMATION
         )
@@ -5298,7 +5628,6 @@ def execute_site_application(
         record_manual_step(user_id, application_id, reason, detail)
         repo.release_execution(approval_id, user_id)
         raise ManualStepRequired(reason, detail)
-    evidence_path = str(outcome.get("evidencePath") or "")
     if outcome.get("mode") == "replay":
         # A replay filled and screenshotted a page that was handed to us rather
         # than one we opened live. Production never takes this path — the sweep
@@ -5327,9 +5656,6 @@ def execute_site_application(
         "destination": outcome.get("destination"),
         "mode": outcome.get("mode"),
         "confirmation": outcome.get("confirmation"),
-        # SUB-007: only a ``confirmed`` classification ever reaches here in
-        # live mode — every other post-submit ending raised ManualStepRequired
-        # above and wrote a manual step instead of a transmission.
         "classification": outcome.get("classification"),
         "fieldsFilled": outcome.get("filled") or [],
         "fieldsNotFilled": outcome.get("unfilled") or [],
