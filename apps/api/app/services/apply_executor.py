@@ -66,6 +66,7 @@ from app.services.apply_receipt_inbox import (
     awaiting_receipt_detail,
     poll_application_receipt,
 )
+from app.services.llm_client import LLMUnavailableError, QuotaExhaustedError
 
 logger = logging.getLogger(__name__)
 
@@ -858,7 +859,27 @@ def build_form_fill_plan(
         if answer is None and form_llm is not None:
             asked = question_text_for_field(field)
             if classify_sensitivity(asked) != "sensitive":
-                llm_answer = form_llm(field)
+                try:
+                    llm_answer = form_llm(field)
+                except (QuotaExhaustedError, LLMUnavailableError) as exc:
+                    # Production, 2026-08-19T14:59Z, apply_sweep_user job
+                    # 882acebed50d406ea9c9078adb46e013: a live-provider outage
+                    # on THIS question must never be recorded as
+                    # unknown_required_question — that reason means "a human
+                    # must answer this question", and a spent LLM quota / an
+                    # unavailable completer is not that. It is the same
+                    # transport-class miss ``form_not_ready`` already exists
+                    # for, so the sweep retries the whole page instead of
+                    # parking the application on a manual step no answer
+                    # would have fixed.
+                    raise ManualStepRequired(
+                        MANUAL_STEP_FORM_NOT_READY,
+                        (
+                            "Aether could not reach the AI provider needed to "
+                            "answer one of this form's questions right now. "
+                            "This will be retried automatically."
+                        ),
+                    ) from exc
                 if isinstance(llm_answer, str) and llm_answer.strip():
                     answer = llm_answer.strip()
         entry = dict(field)

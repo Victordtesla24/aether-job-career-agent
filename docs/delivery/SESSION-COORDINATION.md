@@ -1408,6 +1408,52 @@ canonical apply-stack files only (not AGENTS.md memory notes, not
 prompt.md, not prod screenshots) and push `origin/main` for VPS Delivery.
 No hand-restart.
 
+**Continuation 2026-08-19T13:56Z — push landed, deploy blocked then unblocked:**
+`2ff3b041` is on `origin/main`. VPS Delivery `32258231590` failed Verify:
+vitest unhandled rejection in `f02-user-scoped-discovery.test.tsx` (mock
+omitted `ApiError`; `page.tsx:820` uses `e instanceof ApiError`). Not an
+apply-stack defect. Follow-up `9cdc5f72` exports `ApiError` from the Jobs
+client mocks. Delivery `32261001576` in progress. Prod still `3e209501`.
+Lock B still 0/3. Planned distinct jobs after serving SHA includes
+receipt gate: Dubber Software Engineer, MongoDB Senior CSM, Xero Lead
+Engineer (not Principal; not Databricks; not Dovetail spam this cycle).
+
+**Continuation 2026-08-19T14:58Z — Lock A serving; Lock B re-armed and sweeping:**
+Prod tree `/root/prod/app` HEAD `e3e40239`. Units `aether-prod-api` /
+`aether-prod-worker` started 14:49:18/19 UTC, NRestarts=0. Both public
+health URLs 200. Receipt gate is serving.
+
+Queue was empty because the three intended jobs had
+`kind=cover_letter` `application_submit` rejects (Vikram, IP
+101.188.17.71) which `_sync_application` also closed on the Application
+row. Re-armed via the request-submission functions (draft restore +
+`queue_submission_approval` + `approve`) as `kind=submission` site-apply
+cards: Dubber `c961acebcb74ade39f824f338`, MongoDB
+`c9a46cf3b8bd0042a3e9b3bed`, Xero Lead `cb238ee8d523c5995e3a92866`.
+pending_n=3. Enqueued `apply_sweep_user` job
+`882acebed50d406ea9c9078adb46e013`. Did not POST `/approvals/{id}/execute`.
+Did not re-arm Databricks, OpenAI visa, Canonical, or Dovetail.
+Lock B still 0/3 until Gmail receipt + `transmittedAt`.
+
+**Continuation 2026-08-19T15:45Z — Lock B attempt 1 honest stop; 429 slice PASS:**
+Sweep job `882acebed50d406ea9c9078adb46e013` processed 3, transmitted 0,
+manual_step 3. Live Anthropic `apply_form` POST 429 then cooldown.
+None of Dubber / MongoDB / Xero Lead received `siteSubmittedAt` or
+`transmittedAt`. Honest blockers: Dubber criminal-check consent; MongoDB
+visa sponsorship + gender identity; Xero Lead pronouns + background
+check. Those three do not count toward Lock B.
+
+Fit-scorer UI cards remain user-disabled. Anthropic subscription quota
+exhausted (`retryAfter` ~17999s) — cover-letter and tailor pack generation
+for Easygo/Cursor candidates refused 429. No new tailored packs exist.
+
+LLM-429 slice (author ≠ reviewer): `QuotaExhaustedError` /
+`LLMUnavailableError` on `apply_form` now raise retryable
+`form_not_ready` instead of parking `unknown_required_question`.
+Independent reviewer R2 **PASS**
+(`uat/reports/evidence/live-site-apply-lock-2026-08-19/REVIEWER-llm-429-R2.md`).
+Not a Lock B VERIFIED-CLOSE. Lock B still 0/3.
+
 
 ---
 

@@ -23,6 +23,7 @@ from app.services.answer_bank import (
     classify_sensitivity,
     question_text_for_field,
 )
+from app.services.llm_client import LLMUnavailableError, QuotaExhaustedError
 
 logger = logging.getLogger(__name__)
 
@@ -127,7 +128,15 @@ def grounded_answer_from_model(
         return None
     try:
         raw = completer(asked, evidence)
-    except Exception as exc:  # noqa: BLE001 — a model miss is "no answer"
+    except (QuotaExhaustedError, LLMUnavailableError):
+        # A live-provider outage is NOT "the model looked and found nothing" —
+        # collapsing the two into the same None the honest refusal returns
+        # would park the application on unknown_required_question (a human
+        # must answer this) for a question the LLM never actually evaluated.
+        # Let the caller (build_form_fill_plan) turn this into a retryable
+        # manual step instead.
+        raise
+    except Exception as exc:  # noqa: BLE001 — an unclassified miss is "no answer"
         logger.info(
             "apply-form-grounding: completer failed (%s) — refusing to invent",
             type(exc).__name__,
