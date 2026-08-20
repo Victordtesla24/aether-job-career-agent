@@ -1439,12 +1439,13 @@ def test_unclassifiable_custom_control_refuses_via_backstop() -> None:
     ``playwright_form_submitter`` skips the live census on ``data:`` fixtures
     (SPA tests). The backstop itself still has to refuse this widget.
     """
+    from playwright.sync_api import sync_playwright
+
     from app.services.apply_executor import (
         ManualStepRequired,
         _unclassifiable_controls,
         _verify_no_unverifiable_form_surface,
     )
-    from playwright.sync_api import sync_playwright
 
     findings = _unclassifiable_controls(_UNCLASSIFIABLE_CONTROL_FORM, "ashby")
     assert any("combobox" in item.lower() for item in findings)
@@ -2423,4 +2424,123 @@ def test_combobox_fill_must_not_resolve_has_text_to_the_hidden_iti_country_node(
         f"must land on the Greenhouse option itself, never an "
         f"intl-tel-input country entry, and never leave the field "
         f"uncommitted"
+    )
+
+
+# ---------------------------------------------------------------------------
+# RCA-greenhouse-yesno-combobox-2026-08-19.md, live production 2026-08-19:
+# a Yes/No combobox's only content token per option is 'yes' or 'no' (length
+# 3) -- so the full-list token-overlap fallback's own '>=2 shared tokens'
+# dominance rule can NEVER match it, however unambiguous the answer's own
+# wording is. A banked relocation-style answer ("Yes, for Sydney, Melbourne
+# and United States") shares exactly ONE token ('yes') with the 'Yes'
+# option -- the SAME yes/no head rule `_match_choice_option` already uses
+# for radio/checkbox at ~1773 would resolve this instantly, but the
+# combobox branch never calls it. Greenhouse job-boards comboboxes render
+# their popup via a React portal, so `_parse_greenhouse` sees no static
+# <option>/radio/checkbox markup and the field's OWN `options` list is
+# empty -- exactly reproduced below.
+# ---------------------------------------------------------------------------
+
+_GREENHOUSE_YESNO_COMBOBOX_HTML = """
+<title>greenhouse-yesno-combobox</title>
+<div data-field-path="question_yesno1">
+  <label for="question_yesno1">Are you able to commit to at least 3 days in
+    office per week?</label>
+  <input id="question_yesno1" role="combobox" class="select__input"
+         aria-required="true" aria-expanded="false">
+  <div id="gh-menu-wrapper-yesno"></div>
+</div>
+<script>
+(function () {
+  var input = document.getElementById('question_yesno1');
+  var wrapper = document.getElementById('gh-menu-wrapper-yesno');
+  var rendered = false;
+  function renderMenu() {
+    if (rendered) { return; }
+    rendered = true;
+    wrapper.innerHTML =
+      '<div class="select__menu" role="listbox">' +
+        '<div role="option" class="select__option" ' +
+          'data-option="yes">Yes</div>' +
+        '<div role="option" class="select__option" ' +
+          'data-option="no">No</div>' +
+      '</div>';
+    Array.prototype.forEach.call(
+      wrapper.querySelectorAll('.select__option'),
+      function (opt) {
+        opt.addEventListener('click', function () {
+          input.value = opt.textContent;
+          input.setAttribute('data-committed-option', opt.getAttribute('data-option'));
+          input.setAttribute('aria-expanded', 'false');
+        });
+      }
+    );
+    input.setAttribute('aria-expanded', 'true');
+  }
+  input.addEventListener('click', renderMenu);
+  input.addEventListener('focus', renderMenu);
+})();
+</script>
+"""
+
+
+def _yesno_combobox_field() -> dict[str, Any]:
+    return {
+        "name": "question_yesno1",
+        "label": "Are you able to commit to at least 3 days in office per week?",
+        "kind": "combobox",
+        "required": True,
+        "scope": "",
+        # Greenhouse job-boards reality (RCA): the popup is a React portal,
+        # not static HTML, so `_parse_greenhouse` never sees any <option>/
+        # radio/checkbox markup for this control and its own options are [].
+        "options": [],
+    }
+
+
+def test_combobox_yesno_popup_commits_the_one_shared_token_yes_option() -> None:
+    """RCA-greenhouse-yesno-combobox-2026-08-19.md: the banked answer's
+    only shared token with either popup option is 'yes' (score 1), which
+    the full-list fallback's '>=2 shared tokens' dominance rule can never
+    satisfy against a single-word option -- so on the unfixed executor
+    this must return ``False`` and the required combobox stays empty,
+    exactly the live ``form_fill_failed`` ending for the Hybrid/relocate/
+    commit-3-days questions."""
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as runner:
+        browser = runner.chromium.launch(
+            headless=True,
+            args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
+        )
+        try:
+            page = browser.new_page()
+            page.set_content(
+                _GREENHOUSE_YESNO_COMBOBOX_HTML, wait_until="domcontentloaded"
+            )
+            filled = _fill_value(
+                page,
+                _yesno_combobox_field(),
+                "Yes, for Sydney, Melbourne and United States",
+                {},
+            )
+            committed_option = page.evaluate(
+                "document.getElementById('question_yesno1')"
+                ".getAttribute('data-committed-option')"
+            )
+        finally:
+            browser.close()
+
+    assert filled is True, (
+        "a banked answer whose only shared token with a Yes/No option is "
+        "'yes' must still commit the combobox -- the >=2-token dominance "
+        "rule can never match a single-token option on its own, so the "
+        "combobox branch must also try the same yes/no head match "
+        "'_match_choice_option' already uses for radio/checkbox "
+        "(RCA-greenhouse-yesno-combobox-2026-08-19.md)"
+    )
+    assert committed_option == "yes", (
+        f"expected the 'Yes' option to be committed, got "
+        f"data-committed-option={committed_option!r}"
     )

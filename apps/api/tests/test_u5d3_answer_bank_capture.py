@@ -84,6 +84,54 @@ def _form(question: str, *, name: str = "custom_q1", kind: str = "text") -> str:
     """
 
 
+# RCA-greenhouse-yesno-combobox-2026-08-19.md: a Greenhouse job-boards
+# required combobox with NO static <option>/radio/checkbox markup at all --
+# the popup is a React portal `_parse_greenhouse` never sees, so this field's
+# own parsed ``options`` come out empty, exactly as on the live posting.
+_GREENHOUSE_HYBRID_COMBOBOX_HTML = """
+<div>
+  <label for="question_hybrid1">Are you open to working in a Hybrid model
+    (3 days office)?</label>
+  <input id="question_hybrid1" name="question_hybrid1" role="combobox"
+         class="select__input" aria-required="true">
+</div>
+"""
+
+
+# REVIEWER-yesno-combobox.md finding 1/2: this combobox is NOT phrased as a
+# yes/no question -- its live widget options are citizenship/visa buckets
+# ("Australian Citizen", "Permanent Resident", "Requires Visa Sponsorship",
+# ...), not Yes/No -- but `_parse_greenhouse` never sees the React-portal
+# popup either, so its parsed ``options`` come out empty, exactly like the
+# Hybrid question above. The shipped fix cannot tell the two apart.
+_GREENHOUSE_WORKRIGHTS_COMBOBOX_HTML = """
+<div>
+  <label for="question_workrights1">Please describe your right to work in
+    Australia</label>
+  <input id="question_workrights1" name="question_workrights1" role="combobox"
+         class="select__input" aria-required="true">
+</div>
+"""
+
+
+# REVIEWER-yesno-combobox-2.md (BLOCKING): the REAL, live Discovery
+# "commit to 3 days" question -- captured verbatim in this fix chain's own
+# evidence (greenhouse-live/yesno-options-2026-08-19T2111Z.json,
+# `discovery[3]`) -- opens with an explanatory preamble sentence before its
+# own yes/no clause. Its own parsed ``options`` come out empty for the same
+# structural reason the Hybrid/work-rights comboboxes above do (the popup is
+# a React portal ``_parse_greenhouse`` never sees).
+_GREENHOUSE_DISCOVERY_COMMIT_COMBOBOX_HTML = """
+<div>
+  <label for="question_commit1">Although we understand flexibility, we have
+    decided to be an office-first organisation. Are you able to commit to
+    at least 3 days in office per week?</label>
+  <input id="question_commit1" name="question_commit1" role="combobox"
+         class="select__input" aria-required="true">
+</div>
+"""
+
+
 # ---------------------------------------------------------------------------
 # The plan consults the bank
 # ---------------------------------------------------------------------------
@@ -228,6 +276,209 @@ class TestPlanConsultsTheBank:
         assert fields[0]["name"] == "custom_q1"
         assert fields[0]["kind"] == "text"
         assert fields[0]["sensitivity"] == "factual"
+
+    def test_an_unmappable_bank_essay_does_not_starve_the_llm_on_a_yesno_combobox(self):
+        """RCA-greenhouse-yesno-combobox-2026-08-19.md: a Greenhouse
+        job-boards combobox's own parsed ``options`` are EMPTY (the popup is
+        a React portal `_parse_greenhouse` never sees) -- but the field is
+        still, in substance, a Yes/No question. The banked hybrid-preference
+        essay ("Hybrid - 2 days in office, Melbourne CBD") shares zero words
+        with either Yes or No, so it can never be honestly typed into this
+        widget -- and it must not out-rank ``form_llm``, which CAN restate
+        the same stored fact as a plain "Yes" the widget can actually commit.
+        On the current plan builder the bank match is used UNCONDITIONALLY
+        (``answer = match.answer``) and short-circuits the
+        ``if answer is None and form_llm is not None`` branch entirely, so
+        the LLM is never even consulted and the essay lands in the plan --
+        the live ``form_fill_failed`` ending for the Hybrid question."""
+        from app.services.answer_bank import AnswerBankMatch
+        from app.services.apply_executor import build_form_fill_plan
+
+        label = "Are you open to working in a Hybrid model (3 days office)?"
+
+        def _bank(field: dict) -> AnswerBankMatch | None:
+            if field["name"] != "question_hybrid1":
+                return None
+            return AnswerBankMatch(
+                item_id="itm_hybrid",
+                answer="Hybrid - 2 days in office, Melbourne CBD",
+                confidence=0.9,
+                method="concept",
+                question_as_seen=label,
+                banked_question=(
+                    "What is your preferred working arrangement (remote, "
+                    "hybrid or onsite)?"
+                ),
+                sensitivity="factual",
+                provenance="onboarding",
+            )
+
+        def _llm(field: dict) -> str:
+            assert field["name"] == "question_hybrid1", (
+                "the LLM must be asked about the SAME field the bank could "
+                "not honestly answer, never a different one"
+            )
+            return "Yes"
+
+        plan = build_form_fill_plan(
+            _GREENHOUSE_HYBRID_COMBOBOX_HTML,
+            channel="greenhouse",
+            profile=PROFILE,
+            answer_bank=_bank,
+            form_llm=_llm,
+        )
+        values = {field["name"]: field["value"] for field in plan["fields"]}
+        assert values["question_hybrid1"] == "Yes", (
+            f"a bank essay that cannot be mapped onto this Yes/No widget's "
+            f"options must not be stuffed into the plan's value -- expected "
+            f"the LLM's restated 'Yes', got {values['question_hybrid1']!r} "
+            f"(RCA-greenhouse-yesno-combobox-2026-08-19.md)"
+        )
+
+    def test_a_non_binary_workrights_bank_fact_survives_the_yesno_mapping_check(self):
+        """REVIEWER-yesno-combobox.md finding 1/2 (BLOCKING): the synthetic
+        ``["Yes", "No"]`` substitution at ``build_form_fill_plan``'s mapping
+        check (apply_executor.py:876-878) has no predicate on the field's
+        question text at all -- it fires for EVERY empty-options
+        checkbox/radio/select/combobox, not only ones actually phrased as a
+        yes/no question. A Greenhouse work-rights combobox parses with empty
+        ``options`` for the same structural reason the Hybrid question does
+        (the live popup is a React portal ``_parse_greenhouse`` never sees),
+        but its real widget options are citizenship/visa buckets, not
+        Yes/No. The bank's honest, user-authored fact ("Australian Citizen")
+        shares zero tokens with "Yes" or "No", so today's mapping check
+        discards it and hands the field to ``form_llm`` instead -- with NO
+        ``answerBankAudit`` row, an ADR-SUB-AUTON-1 honesty-floor violation.
+        ``form_llm`` is deliberately given a WRONG answer here ("I require
+        visa sponsorship") so this test cannot be satisfied by a fix that
+        merely prefers the LLM over the bank -- only a fix that lets the
+        bank's own fact through (because it legitimately maps onto the real
+        widget) can pass."""
+        from app.services.answer_bank import AnswerBankMatch
+        from app.services.apply_executor import build_form_fill_plan
+
+        label = "Please describe your right to work in Australia"
+
+        def _bank(field: dict) -> AnswerBankMatch | None:
+            if field["name"] != "question_workrights1":
+                return None
+            return AnswerBankMatch(
+                item_id="itm_workrights",
+                answer="Australian Citizen",
+                confidence=0.92,
+                method="concept",
+                question_as_seen=label,
+                banked_question="What is your right to work in Australia?",
+                sensitivity="factual",
+                provenance="onboarding",
+            )
+
+        def _llm(field: dict) -> str:
+            assert field["name"] == "question_workrights1", (
+                "the LLM must be asked about the SAME field the bank was "
+                "consulted for, never a different one"
+            )
+            return "I require visa sponsorship"
+
+        plan = build_form_fill_plan(
+            _GREENHOUSE_WORKRIGHTS_COMBOBOX_HTML,
+            channel="greenhouse",
+            profile=PROFILE,
+            answer_bank=_bank,
+            form_llm=_llm,
+        )
+        values = {field["name"]: field["value"] for field in plan["fields"]}
+        assert values["question_workrights1"] == "Australian Citizen", (
+            "a non-binary work-rights combobox's empty parsed options must "
+            "not be synthesised into ['Yes','No'] and used to discard an "
+            "honest, user-authored bank fact in favour of an unrelated LLM "
+            f"guess -- expected the bank's 'Australian Citizen', got "
+            f"{values['question_workrights1']!r} "
+            "(REVIEWER-yesno-combobox.md finding 1/2)"
+        )
+        audit_ids = [item["answerBankItemId"] for item in plan["answerBankAudit"]]
+        assert "itm_workrights" in audit_ids, (
+            "the discarded bank match left no answerBankAudit row at all -- "
+            "ADR-SUB-AUTON-1 honesty floor 3 requires every landed bank "
+            f"answer to be auditable; audit={plan['answerBankAudit']!r}"
+        )
+
+    def test_a_preamble_prefixed_yesno_question_still_sends_the_bank_essay_to_the_llm(
+        self,
+    ):
+        """REVIEWER-yesno-combobox-2.md (BLOCKING): the real, live Discovery
+        "commit to 3 days" question's own wording -- captured verbatim in
+        this fix chain's own evidence
+        (greenhouse-live/yesno-options-2026-08-19T2111Z.json,
+        `discovery[3]`) -- opens with an explanatory preamble sentence
+        before its own yes/no clause: "Although we understand flexibility,
+        we have decided to be an office-first organisation. Are you able
+        to commit to at least 3 days in office per week?"
+        ``_YES_NO_QUESTION_HEAD`` (apply_executor.py:800-804) is anchored
+        (``^\\s*``) to the very START of the label, so it never recognises
+        the mid-string "Are you" auxiliary as yes/no-phrased for this real
+        wording, even though a human reading the sentence plainly would.
+        With ``_is_yes_no_phrased`` returning False and the field's own
+        parsed ``options`` empty (Greenhouse React-portal combobox), the
+        mapping-check guard at ``build_form_fill_plan``
+        (apply_executor.py:908-916) never synthesises ``["Yes", "No"]`` and
+        is skipped entirely -- so the banked hybrid-preference essay
+        ("Hybrid - 2 days in office, Melbourne CBD"), which shares zero
+        words with "Yes" or "No" and can never be honestly typed into this
+        widget, lands in the plan UNVALIDATED and ``form_llm`` is never
+        even consulted. This is the exact ``form_fill_failed`` ending this
+        fix chain exists to close, on the actual production posting named
+        in both ``LOCK-B-TRANSMIT-2026-08-19T1918Z.md`` and
+        ``LOCK-B-TRANSMIT-2026-08-19T2100Z.md``."""
+        from app.services.answer_bank import AnswerBankMatch
+        from app.services.apply_executor import build_form_fill_plan
+
+        label = (
+            "Although we understand flexibility, we have decided to be an "
+            "office-first organisation. Are you able to commit to at "
+            "least 3 days in office per week?"
+        )
+
+        def _bank(field: dict) -> AnswerBankMatch | None:
+            if field["name"] != "question_commit1":
+                return None
+            return AnswerBankMatch(
+                item_id="itm_hybrid",
+                answer="Hybrid - 2 days in office, Melbourne CBD",
+                confidence=0.9,
+                method="concept",
+                question_as_seen=label,
+                banked_question=(
+                    "What is your preferred working arrangement (remote, "
+                    "hybrid or onsite)?"
+                ),
+                sensitivity="factual",
+                provenance="onboarding",
+            )
+
+        def _llm(field: dict) -> str:
+            assert field["name"] == "question_commit1", (
+                "the LLM must be asked about the SAME field the bank "
+                "could not honestly answer, never a different one"
+            )
+            return "Yes"
+
+        plan = build_form_fill_plan(
+            _GREENHOUSE_DISCOVERY_COMMIT_COMBOBOX_HTML,
+            channel="greenhouse",
+            profile=PROFILE,
+            answer_bank=_bank,
+            form_llm=_llm,
+        )
+        values = {field["name"]: field["value"] for field in plan["fields"]}
+        assert values["question_commit1"] == "Yes", (
+            "a preamble-prefixed yes/no question (auxiliary mid-string, "
+            "not at the label's own start) must still be recognised as "
+            "yes/no-phrased so an unmappable bank essay is discarded in "
+            "favour of form_llm's restated answer -- expected the LLM's "
+            f"'Yes', got {values['question_commit1']!r} "
+            "(REVIEWER-yesno-combobox-2.md)"
+        )
 
 
 # ---------------------------------------------------------------------------

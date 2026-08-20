@@ -788,6 +788,38 @@ def _derived_answer(field: dict[str, Any], profile: dict[str, Any]) -> Any:
     return None
 
 
+#: A question phrased in the classic English yes/no shape -- an auxiliary
+#: verb ("Are", "Do", "Can", "Will", "Have", ...) immediately followed by its
+#: subject ("you", "this", "it", ...). REVIEWER-yesno-combobox.md finding 1/2:
+#: this is deliberately narrow. A React-portal combobox whose parsed
+#: ``options`` come out empty is NOT always a Yes/No widget -- "Please
+#: describe your right to work in Australia" parses empty for the same
+#: structural reason "Are you open to working in a Hybrid model?" does, but
+#: its real widget options are citizenship/visa buckets, not Yes/No. Only the
+#: question's own wording tells the two apart.
+#:
+#: REVIEWER-yesno-combobox-2.md: anchored only at the label's own start
+#: (``^\s*``), this never matched the real, live Discovery wording, which
+#: opens with an explanatory preamble sentence before its own yes/no clause
+#: ("Although we understand flexibility, we have decided to be an
+#: office-first organisation. Are you able to commit to at least 3 days in
+#: office per week?"). A sentence boundary -- start of string, or `.`/`?`/`!`
+#: /newline followed by whitespace -- is a legitimate place for a NEW
+#: question to begin, so the auxiliary is matched there too, not only at
+#: the label's own start.
+_YES_NO_QUESTION_HEAD = re.compile(
+    r"(?:^|[.?!\n]\s*)\s*(am|are|is|was|were|do|does|did|can|could|will|"
+    r"would|have|has|had|should|must|shall)\s+(you|i|we|they|he|she|it|this|"
+    r"that|there)\b",
+    re.IGNORECASE,
+)
+
+
+def _is_yes_no_phrased(question: str) -> bool:
+    """Whether ``question`` reads as a yes/no question, not any other shape."""
+    return bool(_YES_NO_QUESTION_HEAD.search(str(question or "")))
+
+
 def build_form_fill_plan(
     html: str,
     *,
@@ -854,6 +886,45 @@ def build_form_fill_plan(
             # profile already supplies (their email, their phone) is theirs by
             # a shorter route, and a banked row must never talk over it.
             match = answer_bank(field)
+            if match is not None and str(field.get("kind") or "text") in {
+                "checkbox", "radio", "select", "combobox"
+            }:
+                # RCA-greenhouse-yesno-combobox-2026-08-19.md: a Greenhouse
+                # job-boards combobox's own parsed ``options`` come out EMPTY
+                # (the popup is a React portal the static-HTML parser never
+                # sees), but the field is still, in substance, a bounded
+                # choice — treat it as Yes/No for this mapping check only, so
+                # an essay that shares no words with either ("Hybrid - 2 days
+                # in office, Melbourne CBD") is never mistaken for one that
+                # does. If the banked answer cannot be honestly mapped onto
+                # the widget's own options via the same yes/no-head / prefix
+                # / token-dominance rules radio and checkbox already use,
+                # discard the match here rather than stuffing the essay
+                # verbatim into ``value`` — the widget will silently refuse
+                # to commit it, and the live form ends in
+                # ``form_fill_failed``. Discarding lets ``form_llm`` below
+                # restate the same stored fact in the widget's own
+                # vocabulary instead.
+                #
+                # REVIEWER-yesno-combobox.md finding 1/2: the synthetic
+                # Yes/No substitution is honest ONLY when the employer's own
+                # wording asks a yes/no question -- "Please describe your
+                # right to work in Australia" parses with the same empty
+                # ``options`` for the same structural reason, but its real
+                # widget options are citizenship/visa buckets. When the
+                # question is not yes/no-phrased there is nothing to
+                # honestly validate the bank's fact against, so the mapping
+                # check is skipped entirely rather than discarding a fact
+                # that legitimately maps onto the real (unparsed) widget.
+                mapping_options = list(field.get("options") or [])
+                if not mapping_options and _is_yes_no_phrased(
+                    question_text_for_field(field)
+                ):
+                    mapping_options = ["Yes", "No"]
+                if mapping_options and _match_choice_option(
+                    str(match.answer), mapping_options
+                ) is None:
+                    match = None
             if match is not None:
                 answer = match.answer
         if answer is None and form_llm is not None:
@@ -1881,11 +1952,13 @@ def _fill_value(page: Any, field: dict[str, Any], value: Any, documents: dict[st
             count = min(options.count(), 50)
             answer_tokens = {t for t in re.findall(r"[a-z0-9]+", text_value.lower()) if len(t) > 1}
             best_idx, best_score, second_score = -1, 0, 0
+            live_option_labels: list[str] = []
             for idx in range(count):
-                option_text = str(options.nth(idx).inner_text() or "").lower()
+                raw_option_text = str(options.nth(idx).inner_text() or "")
+                live_option_labels.append(raw_option_text)
                 option_tokens = {
                     t
-                    for t in re.findall(r"[a-z0-9]+", option_text)
+                    for t in re.findall(r"[a-z0-9]+", raw_option_text.lower())
                     if len(t) > 1
                 }
                 score = len(answer_tokens & option_tokens)
@@ -1896,6 +1969,23 @@ def _fill_value(page: Any, field: dict[str, Any], value: Any, documents: dict[st
             if best_idx >= 0 and best_score >= 2 and best_score > second_score:
                 options.nth(best_idx).click(timeout=_ACTION_TIMEOUT_MS)
                 return True
+            # RCA-greenhouse-yesno-combobox-2026-08-19.md: a Yes/No option's
+            # only content token is "yes"/"no" (length 3) -- the >=2-token
+            # dominance rule above can NEVER be satisfied against a single-
+            # token option, however unambiguous the answer's own wording is
+            # (a banked "Yes, for Sydney, Melbourne and United States" shares
+            # exactly one token, "yes", with the live "Yes" option). Try the
+            # SAME yes/no-head / lone-option / prefix matcher
+            # `_match_choice_option` already uses for radio and checkbox,
+            # against this same live, filter-cleared option list, before
+            # concluding no option matches. The >=2 rule itself is left
+            # untouched for longer, non-binary option lists.
+            if live_option_labels:
+                matched_label = _match_choice_option(text_value, live_option_labels)
+                if matched_label is not None:
+                    matched_idx = live_option_labels.index(matched_label)
+                    options.nth(matched_idx).click(timeout=_ACTION_TIMEOUT_MS)
+                    return True
             if count == 0:
                 # The widget rendered NO options at all — even with the filter
                 # cleared and after the bounded popup wait above. Either the
