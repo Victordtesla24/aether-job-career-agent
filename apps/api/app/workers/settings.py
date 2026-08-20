@@ -13,6 +13,7 @@ from app.workers.apply_sweep import apply_sweep_cron, apply_sweep_user
 from app.workers.board_sweep import board_sweep_cron, board_sweep_user
 from app.workers.digest_cron import notification_digest_cron
 from app.workers.discovery_sweep import discovery_sweep_cron, discovery_sweep_user
+from app.workers.email_alerts_sweep import email_alerts_cron, email_alerts_user
 from app.workers.queue import job_timeout_seconds
 from app.workers.sales_cron import sales_agent_cron
 from app.workers.tasks import (
@@ -92,6 +93,20 @@ def _cron_jobs():
             # scheduler; the Abacus-era `aether-discovery.timer` systemd unit
             # this cron replaces does not exist on this host.
             cron(discovery_sweep_cron, minute={3, 33}),
+            # EMAIL-CENTER -> JOBS automation (RUN-20260818T0223Z, Owner
+            # directive) — inbox job-ad emails (Seek/LinkedIn/etc.) must
+            # automatically become Job cards. The parse pipeline
+            # (EmailAgent._job_alerts -> job_alert_parser -> JobRepository
+            # .create -> routers/jobs.py -> web cards) was already fully
+            # wired; only the manual "Scan Job Alerts" button ever triggered
+            # it. Every 30 min at :18/:48 (the cadence recorded for this unit
+            # in docs/delivery/evidence/RUN-20260818T0223Z/INTERDEP/
+            # 01-remediation-plan.md), clear of every other cron above,
+            # including the every-5-minute watchdogs — see
+            # email_alerts_sweep.py for the full offset accounting. Honest
+            # no-op unless AETHER_EMAIL_ALERTS_CRON_ENABLED is on (code
+            # default ON, same posture as discovery_sweep_cron).
+            cron(email_alerts_cron, minute={18, 48}),
         ]
     except Exception:  # noqa: BLE001 — cron optional; enqueue path is primary
         return []
@@ -142,7 +157,10 @@ async def _on_startup(ctx) -> None:
 
 
 class WorkerSettings:
-    functions = [run_agent_job, _sweep_func(), _apply_sweep_func(), discovery_sweep_user]
+    functions = [
+        run_agent_job, _sweep_func(), _apply_sweep_func(), discovery_sweep_user,
+        email_alerts_user,
+    ]
     cron_jobs = _cron_jobs()
     on_startup = _on_startup
     redis_settings = _redis_settings()
