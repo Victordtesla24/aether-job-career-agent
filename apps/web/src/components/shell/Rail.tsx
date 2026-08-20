@@ -446,7 +446,9 @@ export function Rail({
                     ? // Honest: the run says "running" but has not moved for
                       // longer than any real run takes, so nothing is working.
                       `${stalled} stalled run${stalled === 1 ? "" : "s"} · none running`
-                    : `${pulse.total} agents ready · none running`}
+                    : pulse.ready === 0
+                      ? "All agents paused · none running"
+                      : `${pulse.ready} agents ready · none running`}
           </p>
           <Link
             href="/dashboard/agents"

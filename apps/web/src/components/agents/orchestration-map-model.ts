@@ -253,7 +253,14 @@ export function resolveNodeState(
     return node("stalled", stalledPhrase(age), catalogAt, catalogStatus, "catalog");
   }
   if (catalogStatus === "failed") {
-    return node("failed", null, catalogAt, catalogStatus, "catalog");
+    return node(
+      "failed",
+      null,
+      catalogAt,
+      catalogStatus,
+      "catalog",
+      agent.lastRunError ?? null,
+    );
   }
   return node("idle", null, catalogAt, catalogStatus, "catalog");
 }

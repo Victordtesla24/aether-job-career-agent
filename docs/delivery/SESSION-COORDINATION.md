@@ -1275,7 +1275,14 @@ evidence: `docs/delivery/evidence/RUN-20260818T0223Z/commercial-readiness/ec-adv
 **Deploy:** rebase onto `origin/main`, push `feat/loop-429-resume` then merge to `origin/main` → VPS Delivery. Do not hand-restart prod units. Delete branch after land. No standing PR.
 **Landed on `main`:** `d28842be` (recovery), `b56d0d2c` (Retry-After HTTP tests), then linkage retargets through `2ae2f689`. Remote `feat/loop-429-resume` deleted; no standing PR. Local worktree branch name still `feat/loop-429-resume` tracking `origin/main`.
 **VPS Delivery:** run `32163270651` for `2ae2f689` succeeded (Verify + deploy dev/test/prod + guardian sweep). Follow-on `32165002810` for `54bf3d68` (provenance test-only) also succeeded; served SHA is now `54bf3d68` with LOOP-429 still in tree. Do not hand-restart.
-**Prod verify (×2) against Hostinger `https://aether.srv1356245.hstgr.cloud` (2026-08-18T17:15–17:25Z):** served tree SHA `2ae2f689`; units active, NRestarts=0, ExecMainStartTimestamp 17:15:50 UTC; `/api/health` 200 `{status:ok,version:0.2.0}` twice; journalctl -p err since start empty; no Traceback. Prod bundle contains `orchestration-run-resume` and `Rate limited`. Latest windowed tailor/coverLetter runs **completed** (16:50–16:54Z); historical tailor 429s remain at 15:58Z in the 200-row window. Playwright Agents ×2: 0 console errors, 0 pageerrors, tailor node status `completed`, no in-session Resume (no halt). **Did not re-run the 19-agent owner loop** (would 429 again). Owner **Stop All** is on (catalog `enabled=false` all 22 cards; POST `/agents/tailor/run` → 409 `agent_paused`, no Retry-After, no LLM spend). Map cards still read IDLE; sidebar still says "20 agents ready" from engine pulse — pre-existing honesty, not this claim.
+**Continuation 2026-08-19T16:00Z — independent review FAIL (async 429 drop):** Production `AETHER_ASYNC_GENERATION=true`; tailor 429 is raised inside the worker and the poll path dropped `Retry-After`. Follow-up claims (additive, does not touch apply_form / apply_executor / llm_client apply_form ceiling):
+- `apps/api/app/workers/tasks.py` — `_retry_after_seconds` + persist on LLM `mark_failed`
+- `apps/api/app/repositories/background_jobs.py` — `retryAfterSeconds` column
+- `apps/api/app/routers/agents.py` — `_job_status_payload.retryAfterSeconds`, map `lastRunError`, `GET /agents` `enabled` (rail honesty). Does not touch catalog tip / apply dispatch.
+- `apps/web/src/lib/api/agents.ts` — failed job poll copies seconds as HTTP 503
+- `apps/web/src/lib/api/agentPolicy.ts` — `lastRunError`
+- `apps/web/src/lib/agent-run-health.ts` + `Rail.tsx` — paused agents are not "ready"
+**Does not touch:** apply stack (SESSION LIVE-APPLY-LOCK), `llm_client.py` apply_form ceiling.
 
 ---
 

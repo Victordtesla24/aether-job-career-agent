@@ -94,3 +94,47 @@ describe("resolveRun — polling cap (MON-020)", () => {
     vi.useRealTimers();
   });
 });
+
+describe("resolveRun — LOOP-429 async job failure", () => {
+  const RATE =
+    "The AI provider rate-limited this run. Wait a minute and try again, or pick a lighter model in Agent Settings.";
+
+  it("throws 503 carrying the job's Retry-After seconds, not a headerless 502", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        headers: new Headers({ "Content-Type": "application/json" }),
+        text: async () => "",
+        json: async () => ({
+          job_id: "bg-429",
+          status: "failed",
+          error: RATE,
+          retryAfterSeconds: 812,
+        }),
+      })),
+    );
+    const pending = resolveRun(
+      { job_id: "bg-429", status: "enqueued" },
+      { token: "t", baseUrl: "https://api.test" },
+    );
+    const settled = pending.then(
+      (v) => ({ ok: true as const, v }),
+      (e) => ({ ok: false as const, e }),
+    );
+    await vi.advanceTimersByTimeAsync(4_000);
+    const result = await settled;
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.e).toBeInstanceOf(ApiError);
+      const err = result.e as ApiError;
+      expect(err.status).toBe(503);
+      expect(err.retryAfterSeconds).toBe(812);
+      expect(err.message).toBe(RATE);
+    }
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+});

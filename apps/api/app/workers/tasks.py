@@ -51,6 +51,35 @@ class _TransientError(Exception):
     retry can never run against an already-refunded reservation."""
 
 
+def _retry_after_seconds(exc: BaseException) -> int | None:
+    """Seconds the poll client should wait, or ``None`` when waiting cannot help.
+
+    Production Career Search is async: ``POST /agents/*/run`` returns 202 and the
+    HTTP 503 with ``Retry-After`` is raised *inside the job*. The browser never
+    sees those headers. Lift them off the ``HTTPException`` (or the LLM
+    exception it wrapped) so ``BackgroundJob.retryAfterSeconds`` can carry them
+    on the poll payload.
+    """
+    from fastapi import HTTPException
+
+    from app.services.llm_client import llm_retry_after_http_headers
+
+    def _parse(raw: object) -> int | None:
+        if raw is None:
+            return None
+        try:
+            n = int(str(raw).strip())
+        except (TypeError, ValueError):
+            return None
+        return n if n >= 0 else None
+
+    if isinstance(exc, HTTPException):
+        parsed = _parse((exc.headers or {}).get("Retry-After"))
+        if parsed is not None:
+            return parsed
+    return _parse(llm_retry_after_http_headers(exc).get("Retry-After"))
+
+
 def _honest_message(exc: BaseException) -> str:
     """An honest, secret-free failure string. Never fixture content.
 
@@ -233,7 +262,11 @@ async def run_agent_job(ctx: Any, job_id: str) -> None:
             raise
         except Exception as exc:  # noqa: BLE001 — terminal, honest, refunded
             _pipeline_job_ctx.reset(token)
-            if repo.mark_failed(job_id, _honest_message(exc)):
+            if repo.mark_failed(
+                job_id,
+                _honest_message(exc),
+                retry_after_seconds=_retry_after_seconds(exc),
+            ):
                 repo.refund_pipeline_outstanding(job_id)
             _fail_run_plan(plan_id, exc)
             logger.error(
@@ -307,7 +340,11 @@ async def run_agent_job(ctx: Any, job_id: str) -> None:
             return
         except Exception as exc:  # noqa: BLE001 — terminal, honest, refunded
             _pipeline_job_ctx.reset(token)
-            if repo.mark_failed(job_id, _honest_message(exc)):
+            if repo.mark_failed(
+                job_id,
+                _honest_message(exc),
+                retry_after_seconds=_retry_after_seconds(exc),
+            ):
                 repo.refund_pipeline_outstanding(job_id)
             logger.error(
                 "pipeline job %s failed: %s: %s", job_id, type(exc).__name__, exc
@@ -449,7 +486,11 @@ async def run_agent_job(ctx: Any, job_id: str) -> None:
     except Exception as exc:  # noqa: BLE001
         # First-terminal-wins: only the winner refunds (atomic + idempotent claim),
         # so a watchdog that already failed+refunded this job is not double-counted.
-        if repo.mark_failed(job_id, _honest_message(exc)):
+        if repo.mark_failed(
+            job_id,
+            _honest_message(exc),
+            retry_after_seconds=_retry_after_seconds(exc),
+        ):
             repo.refund_single_reservation(job_id)
         logger.error("job %s failed: %s: %s", job_id, type(exc).__name__, exc)
         return

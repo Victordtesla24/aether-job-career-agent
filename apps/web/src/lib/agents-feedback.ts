@@ -65,7 +65,7 @@ export function isProviderRateLimitText(text: string | null | undefined): boolea
 export function workflowAutoRetryWaitMs(notice: Notice): number | null {
   if (notice.kind !== "error") return null;
   if (!isProviderRateLimitText(notice.text)) return null;
-  if (notice.retryAfterSeconds === undefined) return 60_000;
+  if (notice.retryAfterSeconds === undefined) return null;
   if (notice.retryAfterSeconds > WORKFLOW_AUTO_RETRY_CAP_SECONDS) return null;
   return notice.retryAfterSeconds * 1000;
 }
@@ -551,6 +551,12 @@ export function runErrorNotice(err: unknown, context: string): Notice {
     if (detail) {
       return { kind: "error", text: `${context} paused — ${detail}`, ...retryAfter };
     }
+    const raw =
+      err instanceof Error && err.message.trim() ? err.message.trim() : "";
+    if (isProviderRateLimitText(raw)) {
+      // Async poll path: the job error is a plain sentence, not FastAPI JSON.
+      return { kind: "error", text: raw, ...retryAfter };
+    }
     return {
       kind: "error",
       text: `${context} paused — the AI model is busy or its time budget was exceeded. Wait a minute and press the button again; your data is safe.`,
@@ -583,6 +589,7 @@ export function runErrorNotice(err: unknown, context: string): Notice {
       ...(upgradeUrl
         ? { href: upgradeUrl, hrefLabel: isSpendCap ? "review plan →" : "upgrade plan →" }
         : {}),
+      ...retryAfter,
     };
   }
   if (status === 422) {

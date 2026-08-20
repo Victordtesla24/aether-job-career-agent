@@ -379,6 +379,28 @@ describe("agentPulse — the sidebar must not call a dead agent active", () => {
     ];
     expect(agentPulse(summaries)).toMatchObject({ running: 1, stalled: 0 });
   });
+
+  it("LOOP-429: Stop All does not count paused agents as ready", () => {
+    const pulse = agentPulse([
+      {
+        name: "tailor",
+        status: "idle",
+        last_run: null,
+        approval_gated: false,
+        enabled: false,
+      },
+      {
+        name: "scout",
+        status: "idle",
+        last_run: null,
+        approval_gated: false,
+        enabled: false,
+      },
+    ]);
+    expect(pulse.ready).toBe(0);
+    expect(pulse.total).toBe(2);
+    expect(pulse.running).toBe(0);
+  });
 });
 
 // ---------------------------------------------------------------------------

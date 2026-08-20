@@ -111,6 +111,7 @@ export const OrchestrationMapAgentSchema = z.object({
   lastRunPolicyTier: z.string().nullish(),
   lastRunAt: z.string().nullish(),
   lastRunStatus: z.string().nullish(),
+  lastRunError: z.string().nullish(),
   trend: OrchestrationTrendSchema.nullish(),
   // Optional so a payload (or fixture) predating ORCH-ADV-014 still parses.
   // The live map always sends them; the popover treats absence as "—".

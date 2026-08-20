@@ -1503,10 +1503,28 @@ export default function OrchestrationMap({
   });
   const [batch, setBatch] = useState<BatchState | null>(null);
   const batchLock = useRef(false);
+  const cancelledRef = useRef(false);
+  const retryWaitRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const retryWaitResolveRef = useRef<((v: "waited" | "cancelled") => void) | null>(
+    null,
+  );
   // Read at dispatch time, so a batch keeps using a live trigger even though
   // the page re-renders (and hands a new closure) on every `busy` transition.
   const triggerRef = useRef(onRunAgent);
   triggerRef.current = onRunAgent;
+
+  useEffect(() => {
+    cancelledRef.current = false;
+    return () => {
+      cancelledRef.current = true;
+      if (retryWaitRef.current !== null) {
+        clearTimeout(retryWaitRef.current);
+        retryWaitRef.current = null;
+      }
+      retryWaitResolveRef.current?.("cancelled");
+      retryWaitResolveRef.current = null;
+    };
+  }, []);
 
   const clearSelection = useCallback(() => setSelection({ mapKey: "", keys: [] }), []);
 
@@ -1538,10 +1556,11 @@ export default function OrchestrationMap({
    * quota or spend-cap wall is exactly such a refusal, and pressing on would
    * only collect N identical rejections while the first one is the answer.
    *
-   * LOOP-429: a short provider rate-limit (`Retry-After` ≤ 90 s, or missing
-   * header defaulting to one minute) retries THAT step once after waiting.
-   * A long RT-005 cooldown does not auto-wait; Resume continues from the
-   * halted index so earlier successes are not re-run (and re-billed).
+   * LOOP-429: a short provider rate-limit (`Retry-After` ≤ 90 s) retries THAT
+   * step once after waiting. A missing header does not invent a wait — Resume
+   * is the subscriber's call. A long RT-005 cooldown does not auto-wait.
+   * Leaving the page during a wait aborts it so a second billed run cannot
+   * fire after unmount.
    */
   const runPlan = useCallback(
     async (
@@ -1583,10 +1602,17 @@ export default function OrchestrationMap({
             if (waitMs !== null && !retried) {
               retried = true;
               if (waitMs > 0) {
-                await new Promise<void>((resolve) => {
-                  setTimeout(resolve, waitMs);
+                const waited = await new Promise<"waited" | "cancelled">((resolve) => {
+                  retryWaitResolveRef.current = resolve;
+                  retryWaitRef.current = setTimeout(() => {
+                    retryWaitRef.current = null;
+                    retryWaitResolveRef.current = null;
+                    resolve("waited");
+                  }, waitMs);
                 });
+                if (waited === "cancelled" || cancelledRef.current) return;
               }
+              if (cancelledRef.current) return;
               continue;
             }
             break;
@@ -1983,7 +2009,10 @@ export default function OrchestrationMap({
               mapName={model.name}
               onDismiss={() => setBatch(null)}
               onResume={
-                mapBatch.finished && mapBatch.halted && mapBatch.haltedIndex !== null
+                mapBatch.finished &&
+                mapBatch.halted &&
+                mapBatch.haltedIndex !== null &&
+                isProviderRateLimitText(mapBatch.halted.text)
                   ? () => {
                       void runPlan(
                         model.key,

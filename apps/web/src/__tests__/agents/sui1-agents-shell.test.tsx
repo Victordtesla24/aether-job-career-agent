@@ -691,6 +691,20 @@ describe("S-UI-1 — lastRunStatus is consulted as ground truth (U-AX-V4, bindin
     expect(nodeBadge(node).tone).toBe("warn");
   });
 
+  it("LOOP-429: an unwindowed catalog failure still reads Rate limited when the error text is on the map agent", () => {
+    const agent = {
+      ...agentWithLastRun("tailor", "tailor", "failed", isoAt(NOW - 3 * 60 * 60_000)),
+      lastRunError:
+        "The AI provider rate-limited this run. Wait a minute and try again, or pick a lighter model in Agent Settings.",
+    };
+    const node = resolveNodeState(agent, [], NOW);
+    expect(node.state).toBe("failed");
+    expect(node.source).toBe("catalog");
+    expect(node.lastRunError).toMatch(/rate-limited/i);
+    expect(nodeBadge(node).label).toBe("Rate limited");
+    expect(nodeBadge(node).tone).toBe("warn");
+  });
+
   it("renders that failed status on the node itself instead of a neutral 'Idle'", () => {
     const agent = agentWithLastRun("tailor", "tailor", "failed", isoAt(NOW - 3 * 60 * 60_000));
     render(<OrchestrationMap data={mapWith(agent)} runs={[]} now={NOW} />);

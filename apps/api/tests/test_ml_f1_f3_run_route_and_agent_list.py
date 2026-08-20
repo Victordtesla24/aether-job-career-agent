@@ -251,11 +251,18 @@ def test_every_row_keeps_the_agent_summary_shape(client, auth_headers):
     a newly added row with a missing key would break the sidebar, the topbar
     search index and the Orchestration view at once."""
     for row in _list_agents(client, auth_headers):
-        assert set(row) == {"name", "status", "last_run", "approval_gated"}, row
+        assert set(row) == {
+            "name",
+            "status",
+            "last_run",
+            "approval_gated",
+            "enabled",
+        }, row
         assert isinstance(row["name"], str) and row["name"]
         assert isinstance(row["status"], str) and row["status"]
         assert row["last_run"] is None or isinstance(row["last_run"], str)
         assert isinstance(row["approval_gated"], bool)
+        assert isinstance(row["enabled"], bool)
 
 
 def test_the_agent_count_no_longer_contradicts_the_catalog(client, auth_headers):

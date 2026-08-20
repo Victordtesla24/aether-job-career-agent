@@ -2,12 +2,16 @@
 import { z } from "zod";
 
 import { ApiError, apiRequest, type RequestOptions } from "./client";
+import { isProviderRateLimitText } from "../agents-feedback";
 
 export const AgentSummarySchema = z.object({
   name: z.string(),
   status: z.string(),
   last_run: z.string().nullish(),
   approval_gated: z.boolean(),
+  // LOOP-429 residual: Stop All must not leave the rail saying "N agents ready".
+  // Optional so a payload predating the field still parses (treat as enabled).
+  enabled: z.boolean().optional(),
 });
 
 export type AgentSummary = z.infer<typeof AgentSummarySchema>;
@@ -64,6 +68,7 @@ interface BackgroundJobStatus {
   agentKey?: string | null;
   result?: Record<string, unknown> | null;
   error?: string | null;
+  retryAfterSeconds?: number | null;
   createdAt?: string | null;
   startedAt?: string | null;
   finishedAt?: string | null;
@@ -122,9 +127,17 @@ export async function resolveRun<T>(body: T, options: RequestOptions = {}): Prom
       return (job.result ?? {}) as T;
     }
     if (job.status === "failed") {
+      const message = job.error?.trim() || "Generation failed. Please try again.";
+      const retryAfter =
+        typeof job.retryAfterSeconds === "number" &&
+        Number.isFinite(job.retryAfterSeconds) &&
+        job.retryAfterSeconds >= 0
+          ? job.retryAfterSeconds
+          : undefined;
       throw new ApiError(
-        job.error?.trim() || "Generation failed. Please try again.",
-        502,
+        message,
+        retryAfter !== undefined || isProviderRateLimitText(message) ? 503 : 502,
+        retryAfter,
       );
     }
     if (Date.now() >= deadline) {

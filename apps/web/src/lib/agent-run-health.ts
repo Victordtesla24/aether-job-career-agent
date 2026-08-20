@@ -347,6 +347,8 @@ export interface AgentPulse {
   running: number;
   stalled: number;
   total: number;
+  /** Agents the user has not paused. Stop All makes this 0 — never "N ready". */
+  ready: number;
 }
 
 /**
@@ -360,7 +362,9 @@ export interface AgentPulse {
 export function agentPulse(agents: AgentSummary[], now: number = Date.now()): AgentPulse {
   let running = 0;
   let stalled = 0;
+  let ready = 0;
   for (const agent of agents) {
+    if (agent.enabled !== false) ready += 1;
     if (agent.status !== "running" && agent.status !== "queued") continue;
     const age = ageMs(agent.last_run, now);
     const limit = agent.status === "queued" ? QUEUED_STALE_MS : RUNNING_STALE_MS;
@@ -369,5 +373,5 @@ export function agentPulse(agents: AgentSummary[], now: number = Date.now()): Ag
     if (age === null || age >= limit) stalled += 1;
     else running += 1;
   }
-  return { running, stalled, total: agents.length };
+  return { running, stalled, total: agents.length, ready };
 }

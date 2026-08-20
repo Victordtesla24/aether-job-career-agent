@@ -45,7 +45,10 @@ import {
 import type { AgentRun } from "../../lib/api/agents";
 import type { OrchestrationMapData, OrchestrationMapEntry } from "../../lib/api/agentPolicy";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 
 const NOW = Date.parse("2026-08-14T09:00:00Z");
 
@@ -473,6 +476,68 @@ describe("ORCH-RUN — an API refusal is quoted, not paraphrased", () => {
     await waitFor(() =>
       expect(calls).toEqual(["scout", "fitScorer", "fitScorer", "matcher", "tailor"]),
     );
+  });
+
+  it("LOOP-429: a rate-limit without Retry-After does not auto-retry (production async drop)", async () => {
+    const RATE =
+      "The AI provider rate-limited this run. Wait a minute and try again, or pick a lighter model in Agent Settings.";
+    const calls: string[] = [];
+    const fn = vi.fn(async (backend: string) => {
+      calls.push(backend);
+      if (backend === "tailor") {
+        return { kind: "error" as const, text: RATE };
+      }
+      return { kind: "success" as const, text: `${backend} finished.` };
+    });
+    renderMap({ onRunAgent: fn });
+
+    fireEvent.click(screen.getByTestId("orchestration-run-workflow-application-pipeline"));
+
+    await waitFor(() => expect(calls).toEqual(["scout", "fitScorer", "matcher", "tailor"]));
+    expect(calls.filter((c) => c === "tailor")).toHaveLength(1);
+    await waitFor(() => {
+      expect(screen.getByTestId("orchestration-run-resume-application-pipeline")).toBeTruthy();
+    });
+  });
+
+  it("LOOP-429: unmounting during a Retry-After wait does not fire a second dispatch", async () => {
+    vi.useFakeTimers();
+    try {
+      const RATE =
+        "The AI provider rate-limited this run. Wait a minute and try again, or pick a lighter model in Agent Settings.";
+      const calls: string[] = [];
+      const fn = vi.fn(async (backend: string) => {
+        calls.push(backend);
+        if (backend === "tailor") {
+          return { kind: "error" as const, text: RATE, retryAfterSeconds: 60 };
+        }
+        return { kind: "success" as const, text: `${backend} finished.` };
+      });
+      const { unmount } = renderMap({ onRunAgent: fn });
+      fireEvent.click(screen.getByTestId("orchestration-run-workflow-application-pipeline"));
+      await vi.advanceTimersByTimeAsync(20);
+      expect(calls.filter((c) => c === "tailor")).toHaveLength(1);
+      unmount();
+      await vi.advanceTimersByTimeAsync(70_000);
+      expect(calls.filter((c) => c === "tailor")).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("LOOP-429: a quota halt does not offer Resume (waiting cannot lift a quota wall)", async () => {
+    const { fn, calls } = triggerStub({ fitScorer: { kind: "error", text: QUOTA } });
+    renderMap({ onRunAgent: fn });
+
+    fireEvent.click(screen.getByTestId("orchestration-run-workflow-application-pipeline"));
+
+    await waitFor(() => expect(calls).toEqual(["scout", "fitScorer"]));
+    await waitFor(() => {
+      expect(
+        screen.getByTestId("orchestration-run-progress-application-pipeline").textContent ?? "",
+      ).toMatch(/stopped/i);
+    });
+    expect(screen.queryByTestId("orchestration-run-resume-application-pipeline")).toBeNull();
   });
 
   it("keeps a single node's result to the node the user actually ran", async () => {

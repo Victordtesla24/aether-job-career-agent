@@ -144,7 +144,8 @@ _ALWAYS_SINGLETON_AGENTS = ("scout",)
 _COLS = (
     '"id","userId","agentKey","singletonKey","runId","params","status",'
     '"arqJobId","result",'
-    '"error","attempts","quotaReserved","quotaReservedAt","quotaRefundedAt",'
+    '"error","retryAfterSeconds","attempts","quotaReserved","quotaReservedAt",'
+    '"quotaRefundedAt",'
     '"quotaReservedCount","quotaRefundedCount",'
     '"startedAt","finishedAt","createdAt","updatedAt"'
 )
@@ -180,6 +181,7 @@ def _ensure_table() -> None:
                     "arqJobId"        text,
                     "result"          jsonb,
                     "error"           text,
+                    "retryAfterSeconds" integer,
                     "attempts"        integer     NOT NULL DEFAULT 0,
                     "quotaReserved"   boolean     NOT NULL DEFAULT false,
                     "quotaReservedAt" timestamptz,
@@ -202,6 +204,12 @@ def _ensure_table() -> None:
             cur.execute(
                 'ALTER TABLE "BackgroundJob" '
                 'ADD COLUMN IF NOT EXISTS "quotaRefundedCount" integer NOT NULL DEFAULT 0'
+            )
+            # LOOP-429: provider 429 Retry-After must survive the async job
+            # poll — the browser never sees the worker's HTTP 503 headers.
+            cur.execute(
+                'ALTER TABLE "BackgroundJob" '
+                'ADD COLUMN IF NOT EXISTS "retryAfterSeconds" integer'
             )
             cur.execute(
                 'CREATE INDEX IF NOT EXISTS "BackgroundJob_userId_createdAt_idx" '
@@ -570,21 +578,42 @@ class BackgroundJobRepository:
             conn.commit()
         return won
 
-    def mark_failed(self, job_id: str, error: str, *, refunded: bool = False) -> bool:
+    def mark_failed(
+        self,
+        job_id: str,
+        error: str,
+        *,
+        refunded: bool = False,
+        retry_after_seconds: int | None = None,
+    ) -> bool:
         """Atomic first-terminal-wins transition to failed. Guarded on the CURRENT
         status (reviewer BLOCKING-2). Honest error string only, NEVER fixture
         content; ``result`` stays null. Returns True iff THIS call transitioned
-        the job (the caller then performs the associated refund exactly once)."""
+        the job (the caller then performs the associated refund exactly once).
+
+        ``retry_after_seconds`` is the provider ``Retry-After`` the HTTP 503
+        carried — persisted so the poll client can wait without inventing 60s.
+        Timeouts and queue-unavailable failures leave it NULL.
+        """
+        retry_val: int | None = None
+        if retry_after_seconds is not None:
+            try:
+                parsed = int(retry_after_seconds)
+            except (TypeError, ValueError):
+                parsed = -1
+            if parsed >= 0:
+                retry_val = parsed
         _ensure_table()
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
                     "UPDATE \"BackgroundJob\" SET \"status\"='failed', "
-                    '"error"=%s, "finishedAt"=now(), "updatedAt"=now(), '
+                    '"error"=%s, "retryAfterSeconds"=%s, "finishedAt"=now(), '
+                    '"updatedAt"=now(), '
                     '"quotaRefundedAt"=CASE WHEN %s THEN now() ELSE "quotaRefundedAt" END '
                     "WHERE \"id\"=%s AND \"status\" IN ('enqueued','processing') "
                     'RETURNING "id"',
-                    (str(error)[:1000], refunded, job_id),
+                    (str(error)[:1000], retry_val, refunded, job_id),
                 )
                 won = cur.fetchone() is not None
             conn.commit()

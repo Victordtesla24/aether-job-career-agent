@@ -2221,6 +2221,26 @@ def _agent_paused_by_user(user_id: str, backend_name: str) -> bool:
         return False
     disabled = {key for key, enabled in rows if enabled is False}
     return all(key in disabled for key in ui_keys)
+
+
+def _backend_enabled_from_config(
+    backend_name: str, cfg: dict[str, dict[str, Any]]
+) -> bool:
+    """Whether every UI card for ``backend_name`` is still enabled.
+
+    Same semantics as :func:`_agent_paused_by_user` (paused only when EVERY
+    card sharing the backend is disabled) but reads a pre-fetched
+    :func:`_config_map` so ``GET /agents`` does not hit AgentConfig once per
+    row. An absent config row means enabled.
+    """
+    ui_keys = _ALL_UI_KEYS_FOR_BACKEND.get(backend_name)
+    if not ui_keys:
+        return True
+    return not all(
+        cfg.get(key, {}).get("enabled", True) is False for key in ui_keys
+    )
+
+
 #: backend agent name -> its catalog ``recommended`` model. ``AgentConfig.model``
 #: is SEEDED with this recommended value (agents.py ~1624), so a stored value
 #: EQUAL to it is a phantom default, NOT a deliberate user choice — it must be
@@ -3218,6 +3238,7 @@ def _job_status_payload(job: dict[str, Any]) -> dict[str, Any]:
         "agentKey": job.get("agentKey"),
         "result": job.get("result"),
         "error": job.get("error"),
+        "retryAfterSeconds": job.get("retryAfterSeconds"),
         "createdAt": _iso(job.get("createdAt")),
         "startedAt": _iso(job.get("startedAt")),
         "finishedAt": _iso(job.get("finishedAt")),
@@ -3257,6 +3278,7 @@ def list_agents(current_user: CurrentUser) -> list[dict[str, Any]]:
     only "idle" and "failed" carry special handling, both preserved here.
     """
     recent = AgentRunRepository().recent_runs_by_agent(current_user["id"])
+    cfg = _config_map(current_user["id"])
     agents = []
     for name in AGENT_NAMES:
         runs = recent.get(name)
@@ -3277,6 +3299,7 @@ def list_agents(current_user: CurrentUser) -> list[dict[str, Any]]:
                 "status": status_value,
                 "last_run": run["createdAt"].isoformat() if run else None,
                 "approval_gated": name in _APPROVAL_GATED,
+                "enabled": _backend_enabled_from_config(name, cfg),
             }
         )
     return agents
@@ -5005,6 +5028,7 @@ def orchestration_map(current_user: CurrentUser) -> dict[str, Any]:
             "lastRunPolicyTier": (last or {}).get("policyTier"),
             "lastRunAt": (last or {}).get("createdAt"),
             "lastRunStatus": (last or {}).get("status"),
+            "lastRunError": (last or {}).get("error"),
             "trend": _agent_trend(backend or "", recent_runs.get(backend or "")),
             "teamRole": str(team.get("role") or "").strip(),
             "dependsOn": list(team.get("dependsOn") or ()),

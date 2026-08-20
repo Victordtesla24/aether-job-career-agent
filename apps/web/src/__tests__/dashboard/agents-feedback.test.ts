@@ -359,6 +359,29 @@ describe("runErrorNotice", () => {
     expect(n.text).toMatch(/rate-limited/i);
   });
 
+  it("LOOP-429: a polled job failure (plain 503 body, no JSON wrapper) keeps the rate-limit sentence and Retry-After", () => {
+    const err = new ApiError(
+      "The AI provider rate-limited this run. Wait a minute and try again, or pick a lighter model in Agent Settings.",
+      503,
+      812,
+    );
+    const n = runErrorNotice(err, "tailor");
+    expect(n.retryAfterSeconds).toBe(812);
+    expect(n.text).toMatch(/rate-limited/i);
+    expect(n.text).not.toMatch(/wait a minute and press the button again/i);
+  });
+
+  it("LOOP-429: copies Retry-After on HTTP 429 without treating quota as a provider rate-limit", () => {
+    const err = new ApiError(
+      "You've reached your plan's run quota this period.",
+      429,
+      3600,
+    );
+    const n = runErrorNotice(err, "tailor");
+    expect(n.retryAfterSeconds).toBe(3600);
+    expect(workflowAutoRetryWaitMs(n)).toBeNull();
+  });
+
   it("falls back to run-Scout-first guidance with a Jobs link when no 422 detail is extractable", () => {
     const n = runErrorNotice({ status: 422 }, "Tailor");
     expect(n.text).toContain("run Scout to discover jobs");
@@ -487,8 +510,10 @@ describe("LOOP-429 workflowAutoRetryWaitMs", () => {
     expect(workflowAutoRetryWaitMs({ kind: "error", text: RATE, retryAfterSeconds: 0 })).toBe(0);
   });
 
-  it("defaults a rate-limit without Retry-After to one minute", () => {
-    expect(workflowAutoRetryWaitMs({ kind: "error", text: RATE })).toBe(60_000);
+  it("does not invent a one-minute wait when Retry-After was never sent", () => {
+    // Production async jobs drop the HTTP 503; a missing header used to
+    // become 60s and auto-retry a 15-minute cooldown.
+    expect(workflowAutoRetryWaitMs({ kind: "error", text: RATE })).toBeNull();
   });
 
   it("does not auto-retry a quota wall", () => {
