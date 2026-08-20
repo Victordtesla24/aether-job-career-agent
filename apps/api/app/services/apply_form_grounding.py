@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any, Callable
+from typing import Any, Callable, Sequence
 
 from app.services.answer_bank import (
     SENSITIVITY_SENSITIVE,
@@ -26,6 +26,11 @@ from app.services.answer_bank import (
 from app.services.llm_client import LLMUnavailableError, QuotaExhaustedError
 
 logger = logging.getLogger(__name__)
+
+#: Bound on the Evidence Corpus text folded into one evidence pack — mirrors
+#: the tailoring corpus's own budget (``evidence_corpus._DEFAULT_MAX_CHARS``)
+#: so a large corpus cannot blow the apply-form prompt's token budget.
+_MAX_CORPUS_EVIDENCE_CHARS = 4000
 
 APPLY_FORM_PROMPT = "apply_form"
 
@@ -41,12 +46,45 @@ APPLY_FORM_SYSTEM = (
 _SKIP_KINDS = frozenset({"file", "hidden"})
 
 
+def _corpus_evidence_block(items: Sequence[dict[str, Any]]) -> str:
+    """Evidence Corpus claims as citable text: reuses the corpus's own
+    claim + epistemic-tag rendering (``evidence_corpus.corpus_items_to_evidence_text``)
+    rather than duplicating it, then appends each item's own source URL —
+    the tailoring corpus deliberately omits URLs (they would license junk
+    tokens into the fabrication guard), but a form-fill citation needs the
+    exact URL, never an invented one. Bounded and ranked strongest-first so a
+    large corpus cannot blow the prompt budget.
+    """
+    from app.services.evidence_corpus import (
+        corpus_items_to_evidence_text,
+        rank_corpus_items,
+    )
+
+    blocks: list[str] = []
+    used = 0
+    for item in rank_corpus_items(list(items)):
+        block = corpus_items_to_evidence_text([item])
+        if not block:
+            continue
+        source_url = str(item.get("sourceUrl") or "").strip()
+        if source_url:
+            block = f"{block} · source: {source_url}"
+        cost = len(block) + (2 if blocks else 0)
+        if used + cost > _MAX_CORPUS_EVIDENCE_CHARS:
+            continue
+        blocks.append(block)
+        used += cost
+    return "\n\n".join(blocks)
+
+
 def build_evidence_pack(
     profile: dict[str, Any],
     *,
     stories: str = "",
     answer_bank_items: list[dict[str, Any]] | None = None,
     cover_letter: str = "",
+    corpus_items: list[dict[str, Any]] | None = None,
+    career_data: str = "",
 ) -> str:
     """Plain-text evidence the model is allowed to read. Nothing invented."""
     parts: list[str] = ["PROFILE"]
@@ -78,6 +116,14 @@ def build_evidence_pack(
             text = str(value or "").strip()
             if text:
                 parts.append(f"screening {key}: {text}")
+    if career_data.strip():
+        parts.append("CAREER DATA")
+        parts.append(career_data.strip()[:4000])
+    if corpus_items:
+        corpus_text = _corpus_evidence_block(corpus_items)
+        if corpus_text:
+            parts.append("EVIDENCE CORPUS")
+            parts.append(corpus_text)
     if cover_letter.strip():
         parts.append("COVER LETTER")
         parts.append(cover_letter.strip()[:4000])
@@ -179,6 +225,8 @@ def build_form_llm_resolver(
     """A ``field -> answer | None`` callable for :func:`build_form_fill_plan`."""
     stories = ""
     items: list[dict[str, Any]] = []
+    corpus_items: list[dict[str, Any]] = []
+    career_data = ""
     try:
         from app.agents.tailor_agent import build_story_evidence
 
@@ -191,12 +239,26 @@ def build_form_llm_resolver(
         items = AnswerBankRepository().list_for_user(user_id)
     except Exception as exc:  # noqa: BLE001
         logger.info("apply-form-grounding: answer bank unread (%s)", type(exc).__name__)
+    try:
+        from app.repositories.evidence_corpus import EvidenceCorpusRepository
+
+        corpus_items = EvidenceCorpusRepository().list_by_user(user_id)
+    except Exception as exc:  # noqa: BLE001 — an un-ingested corpus is not a failure
+        logger.info("apply-form-grounding: evidence corpus unread (%s)", type(exc).__name__)
+    try:
+        from app.services.career_data import build_career_corpus
+
+        career_data = build_career_corpus(user_id)
+    except Exception as exc:  # noqa: BLE001 — un-ingested career data is not a failure
+        logger.info("apply-form-grounding: career data unread (%s)", type(exc).__name__)
     cover = str((profile or {}).get("coverLetter") or "")
     evidence = build_evidence_pack(
         profile,
         stories=stories,
         answer_bank_items=items,
         cover_letter=cover,
+        corpus_items=corpus_items,
+        career_data=career_data,
     )
     if company:
         evidence = f"Employer: {company}\n{evidence}"

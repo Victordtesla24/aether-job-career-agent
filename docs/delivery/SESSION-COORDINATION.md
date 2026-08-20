@@ -1507,3 +1507,40 @@ Do not commit `prompt.md` / `AGENTS.md` / prod screenshots. Lock B still 0/3.
 
 **Deploy window:** VPS Delivery after land on `origin/main`. No hand-restart of units that would ship foreign apply WIP. Delete `feat/interview-center-lock` after land (R8). No standing PR.
 
+---
+
+## SESSION SUB-LEARN — 2026-08-20T0823Z — learn-on-transmit + corpus in apply_form
+
+**By:** Cursor orchestrator on isolated worktree `/root/dev/aether-wt-sub-learn` branch `feat/sub-learn-on-transmit` from `origin/main` (`dfe1b2a3`).
+**Mandate:** Submission Agent learns after `transmittedAt`; never re-asks a similar banked question; never asks the user when corpus/career_data states the answer with high certainty. Orchestrator does not author production fix code and does not VERIFIED-CLOSE. Author ≠ reviewer ≠ verifier. `qa-adversary` closes Locks A/B/C.
+
+**Files claimed (canonical seams only — no second bank, no embeddings):**
+- `apps/api/app/services/apply_form_grounding.py` (`build_evidence_pack`, `build_form_llm_resolver`)
+- `apps/api/app/services/apply_executor.py` (learn-on-transmit after receipt; fill-plan order; `record_answer_bank_usage` sibling that grows the bank)
+- `apps/api/app/services/answer_bank.py` (match/classes only if a helper is required)
+- `apps/api/app/repositories/answer_bank.py`
+- `apps/api/app/services/evidence_corpus.py`, `apps/api/app/services/career_data.py` (read + pack; no LinkedIn scrape)
+- tests: `apps/api/tests/test_apply_form_grounding.py`, `test_u5d3_answer_bank_*.py`, `test_setup1_answer_bank_agent_wiring.py`, new `test_sub_learn_on_transmit.py` if needed
+- evidence: `uat/reports/evidence/submission-learn/2026-08-20T0821Z/`
+- this coordination note (claim only)
+
+**Does not swallow:** uncommitted Dev-tree hunks on `feat/submission-live-apply`. Interview Center claimed files. Seek. CAPTCHA bypass.
+
+**Deploy window:** VPS Delivery after land on `origin/main`. No hand-restart. No standing PR. Delete `feat/sub-learn-on-transmit` after land (R8).
+
+**Continuation 2026-08-20T1143Z — Wave A reviewer PASS, landing on origin/main:**
+Independent `reviewer` PASS on corpus + career_data in `build_evidence_pack` /
+`build_form_llm_resolver` (`uat/reports/evidence/submission-learn/2026-08-20T0821Z/WAVE-A-REVIEW.md`).
+Fail-before 4 red / pass-after 15 green independently reproduced. Integrity 0.
+Locks A/B/C remain open — Wave B (learn-on-transmit after Gmail receipt) is
+not in this slice. Next: commit canonical Wave A files from this worktree,
+push `HEAD:main`, wait for VPS Delivery. No hand-restart. Do not swallow
+Dev-tree `feat/submission-live-apply` dirty hunks (`apply_executor.py`,
+`llm_client.py`, combobox tests, `AGENTS.md`).
+
+**Wave B claimed now:** test-author then fixer (distinct) in this same
+worktree. Canonical: sibling of `record_answer_bank_usage` that upserts
+submitted answers into `AnswerBankItem` only after `_record_site_transmission`
+on the live Gmail-receipt path. Replay / fixture / `transmittedAt IS NULL`
+must not grow the bank.
+
