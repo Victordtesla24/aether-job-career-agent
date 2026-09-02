@@ -48,9 +48,11 @@ jobs:
   # disabled verification).
   api-tests:
     name: API — full pytest suite (self-hosted, isolated schema)
-    # Dedicated CI runner (aether-ci-2, user-space, label hostinger-vps-ci) so
-    # full suites never occupy the root deploy runner's single slot. Deploy
-    # jobs stay exclusively on [self-hosted, hostinger-vps].
+    # Dedicated CI runner (aether-ci-2, user aetheragent, label hostinger-vps-ci,
+    # re-registered 2026-09-03) so full suites never occupy the root deploy
+    # runner's single slot. Deploy jobs stay exclusively on [self-hosted, hostinger-vps].
+    # DATABASE_URL_TEST points at the dedicated aether-ci-postgres (127.0.0.1:5436,
+    # db aether_ci) whose aether_test template mirrors the prod schema structure.
     runs-on: [self-hosted, hostinger-vps-ci]
     timeout-minutes: 90
     steps:

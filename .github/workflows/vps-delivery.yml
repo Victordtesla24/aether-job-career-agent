@@ -1,6 +1,8 @@
 # Aether continuous delivery on the Hostinger VPS self-hosted runner.
 #
-# A push to main flows: verify -> dev -> test -> production.
+# A push to main flows: verify -> production. (The persistent dev/test
+# environments were retired 2026-09-03; CI runs the full suite against an
+# isolated CI database instead.)
 # Production deploys automatically and is designed not to fail:
 #   * every gate runs BEFORE production is touched
 #   * the current production commit is recorded, then the deploy is smoke-tested
@@ -64,39 +66,9 @@ jobs:
       - name: Build
         run: pnpm build
 
-  deploy-dev:
-    name: Deploy dev
-    needs: verify
-    runs-on: [self-hosted, hostinger-vps]
-    timeout-minutes: 30
-    env:
-      GIT_CONFIG_COUNT: "1"
-      GIT_CONFIG_KEY_0: safe.directory
-      GIT_CONFIG_VALUE_0: "*"
-    steps:
-      - name: Deploy and smoke-test dev
-        run: |
-          set -euo pipefail
-          bash /opt/aether-guardian/deploy_env.sh dev ${{ github.sha }}
-
-  deploy-test:
-    name: Deploy test
-    needs: deploy-dev
-    runs-on: [self-hosted, hostinger-vps]
-    timeout-minutes: 30
-    env:
-      GIT_CONFIG_COUNT: "1"
-      GIT_CONFIG_KEY_0: safe.directory
-      GIT_CONFIG_VALUE_0: "*"
-    steps:
-      - name: Deploy and smoke-test test
-        run: |
-          set -euo pipefail
-          bash /opt/aether-guardian/deploy_env.sh test ${{ github.sha }}
-
   deploy-prod:
     name: Deploy production (auto, with rollback)
-    needs: deploy-test
+    needs: verify
     runs-on: [self-hosted, hostinger-vps]
     timeout-minutes: 40
     environment: production

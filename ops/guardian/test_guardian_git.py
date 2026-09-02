@@ -168,14 +168,19 @@ def test_delete_and_rename_do_not_break_archive(tmp: Path) -> None:
     (repo / ".env").write_text("SECRET=stays-put\n")   # protected, must survive
 
     state = tmp / "state"
-    orig_state, orig_envs = guardian.STATE, guardian.ENVS["dev"]
+    # The persistent dev/test environments were retired (2026-09-03), so the
+    # test registers its own throwaway env: templated on prod, unprotected,
+    # rooted in the temp repo. It is removed again on the way out.
+    env = "scratch"
+    orig_state = guardian.STATE
     guardian.STATE = state
-    guardian.ENVS["dev"] = dict(orig_envs, root=str(repo), repo=str(repo), protected=False)
+    guardian.ENVS[env] = dict(guardian.ENVS["prod"], root=str(repo), repo=str(repo), protected=False)
     try:
-        g = guardian.Guardian("dev", apply=True)
+        g = guardian.Guardian(env, apply=True)
         g.git()
     finally:
-        guardian.STATE, guardian.ENVS["dev"] = orig_state, orig_envs
+        guardian.STATE = orig_state
+        guardian.ENVS.pop(env, None)
 
     assert not g.escalations, f"unexpected escalations: {json.dumps(g.escalations)}"
     stashed = [a for a in g.actions if a["action"] == "archived and stashed dirty worktree"]
@@ -190,7 +195,7 @@ def test_delete_and_rename_do_not_break_archive(tmp: Path) -> None:
     assert (repo / "moved.md").exists(), "stash did not undo the rename"
 
     # The archive holds the paths that existed on disk, and only those.
-    archives = sorted(state.glob("dirty-dev-*.tgz"))
+    archives = sorted(state.glob(f"dirty-{env}-*.tgz"))
     assert len(archives) == 1, archives
     with tarfile.open(archives[0]) as tf:
         names = set(tf.getnames())

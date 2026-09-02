@@ -33,12 +33,9 @@ ENVS = {
     "prod": dict(root="/root/prod", repo="/root/prod/app", units=["aether-prod-api","aether-prod-web","aether-prod-worker"],
                  url="https://aether.srv1356245.hstgr.cloud", api="http://127.0.0.1:8000",
                  pg="aether-prod-postgres", redis="aether-prod-redis", protected=True),
-    "test": dict(root="/root/test", repo="/root/test/app", units=["aether-test-api","aether-test-web"],
-                 url="https://aether-test.srv1356245.hstgr.cloud", api="http://127.0.0.1:8300",
-                 pg="aether-test-postgres", redis="aether-test-redis", protected=False),
-    "dev":  dict(root="/root/dev", repo="/root/dev/aether-job-career-agent", units=["aether-dev-api","aether-dev-web"],
-                 url="https://aether-dev.srv1356245.hstgr.cloud", api="http://127.0.0.1:8100",
-                 pg="aether-staging-postgres", redis="aether-staging-redis", protected=False),
+    # The persistent "test" and "dev" (staging) environments were retired on
+    # 2026-09-03. Pre-production verification is the CI suite against the
+    # isolated aether-ci-postgres database.
     # The ci "environment" is the GitHub Actions runner's own _work tree. The
     # runner cannot take the guardian's lock, so this flag makes the guardian
     # check for a live runner job before touching anything here.
