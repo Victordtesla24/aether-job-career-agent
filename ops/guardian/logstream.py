@@ -38,19 +38,11 @@ STREAMS = {
     "prod-api":    "/var/log/aether-prod/api.log",
     "prod-web":    "/var/log/aether-prod/web.log",
     "prod-worker": "/var/log/aether-prod/worker.log",
-    "dev-api":     "/var/log/aether-dev/api.log",
-    "dev-web":     "/var/log/aether-dev/web.log",
-    "test-api":    "/var/log/aether-test/api.log",
-    "test-web":    "/var/log/aether-test/web.log",
     "guardian-prod": "/var/log/aether-guardian/prod.log",
-    "guardian-dev":  "/var/log/aether-guardian/dev.log",
-    "guardian-test": "/var/log/aether-guardian/test.log",
     "guardian-ci":   "/var/log/aether-guardian/ci.log",
 }
 JOURNAL_UNITS = {
     "journal-prod": ["aether-prod-api", "aether-prod-web", "aether-prod-worker"],
-    "journal-dev":  ["aether-dev-api", "aether-dev-web"],
-    "journal-test": ["aether-test-api", "aether-test-web"],
     "journal-ci":   ["actions.runner.Victordtesla24-aether-job-career-agent.hostinger-vps-srv1356245"],
 }
 INBOX = Path("/var/lib/aether-orchestrator")
@@ -92,7 +84,7 @@ class H(BaseHTTPRequestHandler):
                    "manifest": "/manifest (json) | /briefing (markdown) — READ FIRST",
                    "usage": {"tail": "/logs/<stream>?tail=200",
                              "follow": "/logs/<stream>/follow  (SSE)",
-                             "guardian": "/guardian/<prod|dev|test|ci>"},
+                             "guardian": "/guardian/<prod|ci>"},
                    "note": "full unfiltered runtime console output; no truncation of content"}
             return self._send(200, json.dumps(idx, indent=2).encode(), "application/json")
 

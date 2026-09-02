@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
-# Deploy an environment from origin/main, smoke-test it, and (for production)
-# roll back automatically if the smoke test fails.
+# Deploy production from a verified ref, smoke-test it, and roll back
+# automatically if the smoke test fails.
 #
-#   deploy_env.sh <dev|test|prod> [--rollback-on-failure]
+#   deploy_env.sh prod [--rollback-on-failure] [<sha>]
+#
+# The persistent dev/test environments were retired on 2026-09-03; the full
+# test suite runs in CI against an isolated CI database instead.
 set -euo pipefail
 
-ENV="${1:?usage: deploy_env.sh <dev|test|prod> [--rollback-on-failure]}"
+ENV="${1:?usage: deploy_env.sh prod [--rollback-on-failure] [<sha>]}"
 ROLLBACK=""
 PINNED_REF="origin/main"
 for arg in "${@:2}"; do
@@ -17,14 +20,24 @@ for arg in "${@:2}"; do
 done
 
 case "$ENV" in
-  dev)  REPO=/root/dev/aether-job-career-agent; EXPORTS=/root/dev/.agent/staging/env.export.sh
-        UNITS="aether-dev-api aether-dev-web";   API=8100; WEB=3100 ;;
-  test) REPO=/root/test/app;                    EXPORTS=/root/test/env.export.sh
-        UNITS="aether-test-api aether-test-web"; API=8300; WEB=3300 ;;
   prod) REPO=/root/prod/app;                    EXPORTS=/root/prod/env.export.sh
         UNITS="aether-prod-api aether-prod-web aether-prod-worker"; API=8000; WEB=3200 ;;
-  *) echo "unknown environment '$ENV'" >&2; exit 2 ;;
+  *) echo "unknown environment '$ENV' (only 'prod' exists since 2026-09-03)" >&2; exit 2 ;;
 esac
+
+if [ ! -e "$REPO/.git" ]; then
+  echo "[$ENV] checkout missing: $REPO" >&2
+  exit 1
+fi
+
+# The self-hosted runner is not the directory owner. Git 2.35+ refuses
+# "dubious ownership" (exit 128) unless safe.directory is set. Do not write
+# git config — export it for this process AND children (pnpm/turbo spawn
+# their own git).
+export GIT_CONFIG_COUNT=1
+export GIT_CONFIG_KEY_0=safe.directory
+export GIT_CONFIG_VALUE_0="$REPO"
+git() { command git -c "safe.directory=$REPO" "$@"; }
 
 GUARD=/root/dev/aether-job-career-agent/scripts/integrity/runtime_env_guard.sh
 
@@ -44,6 +57,10 @@ fi
 
 cd "$REPO"
 
+# Self-hosted runner checkout ownership differs from the unit runtime user;
+# mark this environment's tree safe for this process only (no global git config).
+git config --local --add safe.directory "$REPO" >/dev/null 2>&1 || true
+
 PREV=$(git rev-parse HEAD)
 echo "[$ENV] current commit: $PREV ; deploying ref: $PINNED_REF"
 
@@ -59,6 +76,9 @@ smoke() {
 build_and_restart() {
   git fetch --all --prune -q
   git reset --hard -q "${1:-origin/main}"
+  # Untracked source files survive reset --hard and are typechecked by
+  # `next build`. Ignored paths (.env, .venv, node_modules, .next) stay.
+  git clean -fd -e .env
   echo "[$ENV] deploying $(git rev-parse --short HEAD): $(git log -1 --format=%s | cut -c1-60)"
   # .env is environment-local and untracked; it must survive every deploy.
   test -f .env || { echo "[$ENV] .env missing — refusing to deploy"; exit 1; }
