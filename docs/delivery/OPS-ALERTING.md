@@ -1,9 +1,20 @@
 # OPS-ALERTING — operator email alerts on prod unit failure (D-ALERT)
 
-**Status:** code-complete, **not installed/enabled**. Every file this ticket
-adds lives under `scripts/` and `deploy/` in the repo; nothing is symlinked
-into `/etc/systemd/system` and no `systemctl enable` has been run. Installing
-is a separate, explicit deploy-window action — see §3.
+**Status:** code-complete. Every file this ticket adds lives under `scripts/`
+and `deploy/` in the repo; installing is a separate, explicit deploy-window
+action — see §3.
+
+**Status update 2026-10-14 (D-ALERT-2):** this wiring was installed on the
+Abacus VM that served production until the 2026-08-17 migration and was never
+removed from it. On 2026-10-13 that VM's `aether-web.service` began crash-looping
+(`next start`: no production build in `.next`), and because the alert was one
+email per failed start with no limit it sent 215 emails in four hours,
+exhausting the shared Resend quota so that the application's own welcome email
+was rejected (`daily_quota_exceeded`). The script is now throttled (§6) and the
+three crash-looping units stop after five starts in five minutes (§1). The
+Hostinger VPS production units (`aether-prod-*`) do not use this wiring; they
+are supervised by the environment guardian, which reports to the orchestrator
+inbox.
 
 ## 1. What this is
 
@@ -33,7 +44,9 @@ new service, no new credential, no new dependency.
    unit's own full instance name).
 3. That instantiates `aether-alert@.service`, which runs
    `scripts/ops_alert.sh aether-api.service`.
-4. The script reads `AETHER_EMAIL_API_KEY` / `AETHER_EMAIL_FROM` out of the
+4. The script first applies the throttle (§6: one email per unit per hour, at
+   most 10 per UTC day across all units) and stops here when it suppresses.
+   Otherwise it reads `AETHER_EMAIL_API_KEY` / `AETHER_EMAIL_FROM` out of the
    repo-root `.env` (single-key `grep`, never a wholesale `source` — same
    extraction idiom as `scripts/run-tests.sh` / `scripts/env-audit.sh`),
    tails the last 40 lines of that unit's log file
@@ -84,7 +97,13 @@ for unit in aether-api aether-worker aether-web aether-discovery aether-email-ag
     "/etc/systemd/system/${unit}.service.d/10-onfailure.conf"
 done
 
-# 3. Pick up the new/changed unit files.
+# 3. State directory for the throttle (§6). Optional: without it the script falls
+#    back to a private directory under /tmp, which is lost at reboot.
+sudo install -d -o ubuntu -g ubuntu -m 0750 /var/lib/aether-alert
+
+# 4. Pick up the new/changed unit files. aether-api, aether-web and aether-worker
+#    are copied, not symlinked, so re-copy them after a change to deploy/*.service
+#    (their StartLimit*/RestartSec settings only apply after a daemon-reload).
 sudo systemctl daemon-reload
 ```
 
@@ -132,6 +151,10 @@ sudo systemctl start aether-alert@test.service
   this is expected for the synthetic `test` instance and is exactly the
   fallback a genuinely new/renamed unit with no log file yet would also see.
 
+A second test-fire for the same instance inside an hour is suppressed by the
+throttle (§6): wait, delete `/var/lib/aether-alert/unit-<name>.state`, or run the
+script by hand with `AETHER_ALERT_MIN_INTERVAL_SECS=0`.
+
 To see the **log-excerpt** branch instead of the fallback note, fire it with
 a real watched unit's name, e.g.:
 
@@ -152,9 +175,12 @@ require `aether-api.service` to actually be down.
   slow endpoint, elevated 5xx rate under a still-`active (running)` unit,
   etc. None of those move the systemd unit into `failed` state, so none of
   them fire this alert.
-- **One email per failure event**, not a digest and not deduplicated — a
-  unit that flaps (fails, `Restart=on-failure` restarts it, fails again)
-  sends one email per failure, not one per outage.
+- **Throttled, not a digest.** Since D-ALERT-2 (§6) a flapping unit sends one
+  email per hour (with a count of what was suppressed) instead of one per failure.
+  The daily cap of 10 is shared by all units, so during a wide outage a later,
+  different failure can be suppressed until 00:00 UTC. Throttle state is local
+  to the host, and the quota it protects is shared with the application's own
+  mail, which this script cannot see.
 - **Depends on the same Resend config the app's password-reset email uses**
   — if that's ever unset or the provider is down, both this alert path and
   end-user password-reset email silently degrade together. `ops_alert.sh`
@@ -168,3 +194,42 @@ require `aether-api.service` to actually be down.
   dependency this ticket deliberately avoided ("works TODAY with existing
   Resend config; no external service needed"). Tracked as a future §8-style
   operator decision, not part of this delivery.
+
+## 6. Throttle, daily cap and state (D-ALERT-2)
+
+Every call of `scripts/ops_alert.sh` is subject to two limits before any email
+is built, so that a crash loop cannot spend the shared Resend quota:
+
+| Limit | Default | Setting (environment of the script) |
+|---|---|---|
+| Per unit: minimum time between emails for the same unit | 3600 s | `AETHER_ALERT_MIN_INTERVAL_SECS` |
+| Global: emails per UTC day across all units | 10 | `AETHER_ALERT_DAILY_CAP` |
+| Retry after a failed send (not counted against the cap) | 600 s | `AETHER_ALERT_RETRY_AFTER_FAILURE_SECS` |
+| State directory | `/var/lib/aether-alert`, else `${TMPDIR:-/tmp}/aether-alert-<uid>` | `AETHER_ALERT_STATE_DIR` |
+
+- A suppressed call writes one line to stderr (visible with
+  `journalctl -u 'aether-alert@*'`) and exits 0; it only increments the unit's
+  counter. The next email for that unit begins its log excerpt with a
+  `[throttle]` line: *N further alert(s) for this unit were suppressed since the
+  last email (first at …, last at …)*. The email that uses up the daily cap says
+  so.
+- State is two small text files per host: `unit-<unit>.state`
+  (`next_allowed`, `suppressed`, `first_suppressed`, `last_suppressed`) and
+  `day-<YYYY-MM-DD>.count`. A `flock` on `lock` in the same directory serialises
+  concurrent calls. Corrupt or unreadable values are treated as empty, invalid
+  settings fall back to the defaults, and old state files are pruned.
+- If no state directory can be used at all the alert is sent unthrottled with a
+  warning on stderr: losing the alert would be worse than a duplicate.
+- The script still always exits 0 (an `EXIT` trap guarantees it), so a throttle
+  bug can never turn the alert unit itself into a failing unit.
+- `apps/api/tests/test_ops_alert_throttle.py` runs the real script against a fake
+  `curl` and a controlled clock (`AETHER_ALERT_NOW`, tests only) and fails against
+  the previous unthrottled version.
+
+The crash-looping units `aether-api`, `aether-web` and `aether-worker` now carry
+`RestartSec=10`, `StartLimitIntervalSec=300` and `StartLimitBurst=5`: five failed
+starts within five minutes leave the unit `failed`, `OnFailure=` fires once, and
+systemd stops restarting it until `systemctl reset-failed <unit>` and a start. A
+host without a supervisor therefore needs an operator (or a supervisor) to bring
+the unit back after a long outage; that trade is deliberate, because an endless
+restart loop is what produced the 2026-10-13 flood.

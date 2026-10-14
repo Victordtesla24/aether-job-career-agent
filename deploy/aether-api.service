@@ -20,6 +20,10 @@
 Description=Aether API Server (FastAPI/Uvicorn)
 After=network-online.target
 Wants=network-online.target
+# A crash loop must end: five starts within five minutes leave the unit in 'failed' (OnFailure= fires once) instead of
+# restarting forever. StartLimit* belongs in [Unit]; scripts/ops_alert.sh additionally throttles the alert email.
+StartLimitIntervalSec=300
+StartLimitBurst=5
 
 [Service]
 Type=simple
@@ -27,7 +31,7 @@ User=ubuntu
 WorkingDirectory=/home/ubuntu/github_repos/aether-job-career-agent
 ExecStart=/home/ubuntu/github_repos/aether-job-career-agent/start-api.sh
 Restart=on-failure
-RestartSec=5
+RestartSec=10
 
 [Install]
 WantedBy=multi-user.target
