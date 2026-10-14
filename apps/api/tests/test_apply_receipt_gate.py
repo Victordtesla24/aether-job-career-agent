@@ -23,7 +23,6 @@ from app.services.apply_receipt_inbox import (
 )
 from app.services.llm_client import QuotaExhaustedError
 
-
 SIMPLE_FORM = """
 <form class="ashby-application-form">
   <label>Name <input name="_systemfield_name" required></label>

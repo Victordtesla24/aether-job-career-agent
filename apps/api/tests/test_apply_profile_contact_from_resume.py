@@ -216,6 +216,20 @@ def test_hear_about_source_uses_other_when_the_user_did_not_record_one() -> None
     ) == "LinkedIn application"
 
 
+def test_hear_about_source_is_not_invented_for_a_free_text_field() -> None:
+    """A text box has no 'Other' option to choose: writing the word anyway is an invented answer (it also
+    pre-empted the user's own banked answer, test_sub008_answer_bank_seed_classes)."""
+    field = {
+        "name": "question_88001",
+        "label": "How did you hear about us?",
+        "kind": "text",
+        "required": True,
+        "options": [],
+    }
+    assert _answer_for(field, _RESUME_PROFILE) is None
+    assert _answer_for(field, {**_RESUME_PROFILE, "hearAbout": "A colleague"}) == "A colleague"
+
+
 def test_previously_employed_is_not_invented() -> None:
     field = {
         "name": "xero-emp",

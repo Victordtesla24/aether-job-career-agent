@@ -195,7 +195,8 @@ def default_questions_to_ask(*, thread_text: str, job_text: str) -> list[str]:
         )
     if _STAKEHOLDER.search(hay):
         qs.append(
-            "Who are the senior stakeholders on this piece of work, and how is governance run day to day?"
+            "Who are the senior stakeholders on this piece of work, "
+            "and how is governance run day to day?"
         )
     qs.append(
         "Is there anything in my background you would like me to expand on?"

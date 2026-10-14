@@ -499,7 +499,11 @@ def _lever_options(node: Any, primary: Any) -> list[str]:
         if str(control.get("type") or "").lower() not in {"radio", "checkbox"}:
             continue
         label_el = control.find_parent("label")
-        alt = label_el.find(class_="application-answer-alternative") if label_el is not None else None
+        alt = (
+            label_el.find(class_="application-answer-alternative")
+            if label_el is not None
+            else None
+        )
         text = _text(alt) if alt is not None else ""
         if not text:
             text = str(control.get("value") or "")
@@ -562,7 +566,10 @@ def _parse_lever(soup: Any) -> list[dict[str, Any]]:
         required = (
             (label_el is not None and label_el.find("span", class_="required") is not None)
             or any(control.has_attr("required") for control in controls)
-            or any(str(control.get("aria-required") or "").lower() == "true" for control in controls)
+            or any(
+                str(control.get("aria-required") or "").lower() == "true"
+                for control in controls
+            )
             or (field_el is not None and "required-field" in _classes(field_el))
         )
         fields.append(
@@ -761,7 +768,10 @@ def _derived_answer(field: dict[str, Any], profile: dict[str, Any]) -> Any:
 
     * A "why this role" statement reuses the cover letter written for THIS job.
     * A "located in {city}" yes/no is compared to the résumé location string.
-    * A "where did you hear" source uses a stored value, otherwise ``Other``.
+    * A "where did you hear" source uses a stored value, otherwise the form's own
+      ``Other`` option when it offers one. A free-text source question with nothing
+      stored stays unanswered (the user's answer bank is consulted next): writing
+      "Other" into a box is an invented answer.
     Pronouns, visa status, salary, and prior-employer questions stay unanswered.
     """
     label = str(field.get("label") or "")
@@ -784,7 +794,7 @@ def _derived_answer(field: dict[str, Any], profile: dict[str, Any]) -> Any:
         for option in field.get("options") or []:
             if str(option).strip().lower() == "other":
                 return str(option).strip()
-        return "Other"
+        return None
     return None
 
 
@@ -3724,6 +3734,7 @@ def playwright_form_submitter(
     company: str | None = None,
     rebuild_plan: bool = False,
     form_llm: Callable[[dict[str, Any]], Any] | None = None,
+    verify_commit: bool | None = None,
 ) -> dict[str, Any]:
     """Fill and submit the application in a REAL headless Chromium.
 
@@ -3739,6 +3750,15 @@ def playwright_form_submitter(
     reproduces the pre-R2 behaviour for that (rare, additive) safety net: no
     stored answer means an honest refusal, exactly like every other unanswered
     required field.
+
+    ``verify_commit`` (CLI-SUB-005) decides whether every fill is read back and the
+    unverifiable-surface backstop and submission guard run before the click. ``None``
+    (the default, and what production always uses) means: whenever an ``apply_url`` is
+    given, whatever its scheme. A test of the wait/CTA machinery against a synthetic SPA
+    fixture, which is not an employer ATS page, passes ``False`` explicitly. The
+    scheme of the URL no longer decides it: a ``data:`` URL is also how the CLI-SUB-005
+    tests exercise the verification itself, and inferring "no verification" from it
+    silently disabled the safeguards those tests pin.
 
     ``user_id``/``company`` (U5d-4) are needed only if the employer's ATS
     demands an emailed verification code after the submit click: the code is
@@ -3837,16 +3857,15 @@ def playwright_form_submitter(
                             "finish it yourself."
                         ),
                     )
-                # CLI-SUB-005: live HTTP(S) mode verifies every fill's
+                # CLI-SUB-005: live mode (any apply_url) verifies every fill's
                 # committed DOM state (read-back + one retry) and runs the
-                # unverifiable-surface backstop. A data: URL is a local SPA
-                # fixture used to exercise wait/CTA/submit — it is not an
-                # employer ATS page, so the conservative census does not
-                # apply. Replay (no URL) keeps raw fills: a captured page
-                # is JS-dead and no employer can receive anything from it.
-                verify_commit = bool(apply_url) and str(apply_url).startswith(
-                    ("http://", "https://")
-                )
+                # unverifiable-surface backstop and the submission guard.
+                # Replay (no URL) keeps raw fills: a captured page is JS-dead
+                # and no employer can receive anything from it. A test of the
+                # wait/CTA machinery with a synthetic SPA fixture opts out
+                # explicitly with verify_commit=False.
+                if verify_commit is None:
+                    verify_commit = bool(apply_url)
                 filled, unfilled, blocked_required = _run_fill_plan(
                     page, plan["fields"], documents, verify=verify_commit
                 )

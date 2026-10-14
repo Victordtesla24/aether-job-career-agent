@@ -1,5 +1,6 @@
 # Dev/test dependencies. Includes runtime deps so CI installs everything.
 -r requirements.txt
+-r requirements-lint.txt
 pytest>=8.0
-ruff>=0.5
-mypy>=1.10
+# Splits the suite into shards for the parallel CI jobs (--splits N --group K); inert without those flags.
+pytest-split>=0.10

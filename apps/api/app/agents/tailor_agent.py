@@ -781,7 +781,7 @@ class TailoringAgent:
         self._resumes.create(
             user_id,
             dict(base.get("sections") or {}),
-            base.get("formatHash"),
+            base["formatHash"],
             label=(
                 f"Unchanged for {job['title']} @ {job['company']} — "
                 "your résumé is already a strong match, no edits were needed"

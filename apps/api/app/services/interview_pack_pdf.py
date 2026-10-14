@@ -9,10 +9,10 @@ stay the existing format-preserving / business-letter exporters.
 """
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Any, Iterable
 import logging
 import unicodedata
+from pathlib import Path
+from typing import Any, Iterable
 
 import fitz
 

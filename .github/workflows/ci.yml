@@ -1,10 +1,23 @@
 name: CI
 
+# GitHub-hosted runners only: nothing here runs on the VPS, no secret is needed, and pull requests from forks are safe.
+#   web        lint, type-check and unit tests of the Next.js app
+#   api-lint   ruff + mypy of the API, tool versions pinned in apps/api/requirements-lint.txt
+#   api-tests  the full pytest suite against a throw-away Postgres service container, split into parallel shards
+# Delivery to the VPS is the separate "VPS Delivery" workflow (push to main only).
+
 on:
   push:
     branches: [main, "phase-*/*"]
   pull_request:
   workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
   web:
@@ -25,8 +38,8 @@ jobs:
       - run: pnpm --dir apps/web type-check
       - run: pnpm --dir apps/web test
 
-  api:
-    name: API — lint, types (+ DB tests when secret set)
+  api-lint:
+    name: API — lint and types
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -36,72 +49,69 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install ruff mypy
+          cache: pip
+          cache-dependency-path: apps/api/requirements-lint.txt
+      - run: pip install -r requirements-lint.txt
       - run: ruff check app/ tests/
       - run: mypy app/ --ignore-missing-imports
 
-  # Full backend suite. Runs on the self-hosted VPS runner because the test
-  # database is the VPS-local Postgres (the old hosted reai.io test DB resolves
-  # to a private VPC address and is unreachable from GitHub-hosted runners —
-  # proven 2026-08-18, see docs/delivery/evidence/RUN-20260818T0223Z). Uses an
-  # isolated per-CI schema (aether_test_ci) via the repo's own provisioning
-  # script, and refuses loudly when the secret is unset (constraint R7 — no
-  # disabled verification).
   api-tests:
-    name: API — full pytest suite (self-hosted, isolated schema)
-    # Dedicated CI runner (aether-ci-2, user aetheragent, label hostinger-vps-ci,
-    # re-registered 2026-09-03) so full suites never occupy the root deploy
-    # runner's single slot. Deploy jobs stay exclusively on [self-hosted, hostinger-vps].
-    # DATABASE_URL_TEST points at the dedicated aether-ci-postgres (127.0.0.1:5436,
-    # db aether_ci) whose aether_test template mirrors the prod schema structure.
-    runs-on: [self-hosted, hostinger-vps-ci]
-    timeout-minutes: 90
+    name: API — pytest shard ${{ matrix.shard }} of 4
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: aether
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d aether"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      # The destructive fixtures only run against an isolated aether_test schema (scripts/run-tests.sh enforces it).
+      DATABASE_URL_TEST: postgresql://postgres:postgres@127.0.0.1:5432/aether?schema=aether_test
+      PGPASSWORD: postgres
+      SENTENCE_TRANSFORMERS_HOME: /tmp/aether_models
     steps:
       - uses: actions/checkout@v4
-      - name: Full backend suite against aether_test_ci
-        env:
-          DATABASE_URL_TEST: ${{ secrets.DATABASE_URL_TEST }}
-          # TEST-ONLY Fernet key for the credential vault (ADR-PC-3); production
-          # sets its own key in the server .env.
-          AETHER_CREDENTIAL_KEY: ${{ secrets.AETHER_CREDENTIAL_KEY_TEST }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: apps/api/requirements*.txt
+      - name: Install dependencies (CPU-only torch first, so pip never pulls the CUDA build)
+        working-directory: apps/api
         run: |
-          set -euo pipefail
-          if [ -z "$DATABASE_URL_TEST" ]; then
-            echo "::error::DATABASE_URL_TEST is not set — refusing to report success for a suite that did not run"
-            exit 1
-          fi
-          # Shared-host memory guard: never start a full suite into an OOM
-          # (runner was OOM-killed 2026-08-18 when suites stacked). Fail loudly
-          # on timeout — never proceed into low memory.
-          ok=""
-          for i in $(seq 1 40); do
-            avail=$(free -m | awk '/^Mem:/{print $7}')
-            if [ "$avail" -ge 2500 ]; then ok=1; break; fi
-            echo "waiting for memory headroom (${avail}MB available)"; sleep 30
-          done
-          if [ -z "$ok" ]; then
-            echo "::error::memory headroom never reached 2500MB — refusing to start the suite into an OOM"
-            exit 1
-          fi
-          # Reuse the host's fully-provisioned API venv instead of building a
-          # fresh one: pip unpacking the torch/ML wheels is itself a multi-GB
-          # memory event and was OOM-killed on this host (2026-08-18 14:43Z).
-          # Tradeoff (recorded): CI depends on the dev venv being current; a
-          # missing new dependency fails the suite loudly, which is visible.
-          export PATH="/root/dev/aether-job-career-agent/apps/api/.venv/bin:$PATH"
-          python3 -c "import pytest" || { echo "::error::host venv lacks pytest"; exit 1; }
-          bash scripts/test-schema.sh provision ci
-          trap 'bash scripts/test-schema.sh drop ci || true' EXIT
-          # Run in 3 alphabetical slices: a single full-suite process peaks
-          # ~2.9GB and was OOM-killed on this host (2026-08-18 14:49Z); slices
-          # peak lower and give natural checkpoints.
-          cd apps/api && ls tests/test_*.py | sort > /tmp/ci-files.txt && cd ../..
-          total=$(wc -l < /tmp/ci-files.txt); third=$(( (total + 2) / 3 ))
-          split -l "$third" /tmp/ci-files.txt /tmp/ci-slice-
-          rc=0
-          for f in /tmp/ci-slice-*; do
-            AETHER_TEST_SCHEMA=aether_test_ci flock /tmp/aether-pytest-ci.lock \
-              bash scripts/run-tests.sh $(tr '\n' ' ' < "$f") -q || rc=1
-          done
-          rm -f /tmp/ci-files.txt /tmp/ci-slice-*
-          exit $rc
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install -r requirements-dev.txt
+      - name: Cache the sentence-transformers model
+        uses: actions/cache@v4
+        with:
+          path: /tmp/aether_models
+          key: sentence-transformers-all-MiniLM-L6-v2-v1
+      - name: Download the embedding model (the ATS engine loads it with local_files_only)
+        working-directory: apps/api
+        run: python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2', cache_folder='/tmp/aether_models')"
+      - name: Cache the Playwright browser
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('apps/api/requirements.txt') }}
+      - name: Install Chromium for the apply-executor tests
+        working-directory: apps/api
+        run: python -m playwright install --with-deps chromium
+      - name: Install poppler (pdftoppm rasterises PDFs in the layout-preservation tests)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq poppler-utils
+      - name: Create the test schema (structure of the production database, no data)
+        run: psql -h 127.0.0.1 -U postgres -d aether -v ON_ERROR_STOP=1 -q -f apps/api/tests/schema/aether_structure.sql
+      - name: Run this shard of the suite
+        run: bash scripts/run-tests.sh -q -p no:cacheprovider --splits 4 --group ${{ matrix.shard }} --durations=15

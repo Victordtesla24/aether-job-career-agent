@@ -113,7 +113,7 @@ def _session_from_application(app: dict[str, Any]) -> dict[str, Any]:
     from app.services.interview_prep_briefing import FORMAT_LABELS
 
     itype = app.get("interviewType")
-    when = app.get("scheduledAt")
+    when: Any = app.get("scheduledAt")
     scheduled = (
         when.isoformat()
         if hasattr(when, "isoformat")

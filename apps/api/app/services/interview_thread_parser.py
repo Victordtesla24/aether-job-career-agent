@@ -381,9 +381,9 @@ def _resolve_when(text: str, stamp: datetime) -> datetime | None:
                 break
     if day is None:
         return None
-    hour, minute = clock if clock else (None, None)
-    if hour is None:
+    if clock is None:
         return None
+    hour, minute = clock
     return datetime(day.year, day.month, day.day, hour, minute, tzinfo=MELBOURNE)
 
 

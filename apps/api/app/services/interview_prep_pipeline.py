@@ -174,7 +174,7 @@ def _fingerprint(user_id: str, job_id: str) -> str:
             rows = rows_to_dicts(cur)
     if not rows:
         return f"{job_id}:none"
-    when = rows[0].get("scheduledAt")
+    when: Any = rows[0].get("scheduledAt")
     stamp = when.isoformat() if hasattr(when, "isoformat") else str(when or "")
     return f"{job_id}:{stamp}:{rows[0].get('type') or ''}"
 

@@ -4,9 +4,9 @@ from __future__ import annotations
 from email.utils import formatdate
 
 from app.services.apply_receipt_inbox import (
+    ReceiptMailboxUnavailable,
     is_application_receipt,
     poll_application_receipt,
-    ReceiptMailboxUnavailable,
 )
 from app.services.gmail_service import GmailAuthError, GmailNotConnectedError
 

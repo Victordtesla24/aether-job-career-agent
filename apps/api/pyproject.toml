@@ -20,8 +20,9 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
   "pytest>=8.0",
-  "ruff>=0.5",
-  "mypy>=1.10",
+  "pytest-split>=0.10",
+  "ruff==0.16.5",
+  "mypy==2.3.1",
 ]
 
 [tool.pytest.ini_options]

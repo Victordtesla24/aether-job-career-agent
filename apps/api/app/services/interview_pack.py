@@ -135,7 +135,8 @@ def extract_pack_file(user_id: str, job_id: str, name: str) -> tuple[bytes, str]
         if match is None:
             return None
         data = zf.read(match)
-    ctype = "application/pdf" if safe.endswith(".pdf") or match.endswith(".pdf") else "text/markdown; charset=utf-8"
+    is_pdf = safe.endswith(".pdf") or match.endswith(".pdf")
+    ctype = "application/pdf" if is_pdf else "text/markdown; charset=utf-8"
     if match.endswith(".docx"):
         ctype = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     return data, ctype
@@ -359,11 +360,10 @@ def pack_payload(user_id: str, job_id: str | None) -> dict[str, Any] | None:
     if not row:
         return None
     manifest = row.get("manifest") or {}
+    updated: Any = row.get("updatedAt")
     return {
         "jobId": row["jobId"],
-        "assembledAt": row.get("updatedAt").isoformat()
-        if hasattr(row.get("updatedAt"), "isoformat")
-        else row.get("updatedAt"),
+        "assembledAt": updated.isoformat() if hasattr(updated, "isoformat") else updated,
         "folder": manifest.get("folder"),
         "files": manifest.get("files") or [],
         "gaps": manifest.get("gaps") or [],
@@ -423,6 +423,7 @@ def _employer_resume(
             "for a different job in this folder.",
         )
     from fastapi import HTTPException
+
     from app.routers.resumes import _render_resume
 
     try:
@@ -443,7 +444,7 @@ def _employer_resume(
 
 
 def _run_tailor(user_id: str, job_id: str, parent_id: str) -> dict[str, Any] | None:
-    from app.agents.tailor_agent import TailorAgent
+    from app.agents.tailor_agent import TailoringAgent
     from app.repositories.resume import ResumeRepository
     from app.services.resume_grounding import MissingResumeError
 
@@ -453,7 +454,7 @@ def _run_tailor(user_id: str, job_id: str, parent_id: str) -> dict[str, Any] | N
         parent_run_id=parent_id,
     )
     try:
-        TailorAgent().run(user_id, job_id)
+        TailoringAgent().run(user_id, job_id)
         runs.finish(child["id"], "completed", output={"jobId": job_id}, cost_usd=0.0)
         return ResumeRepository().get_tailored_for_job(user_id, job_id)
     except (LookupError, MissingResumeError) as exc:
@@ -483,6 +484,7 @@ def _employer_cover(
             "agent, then assemble the pack again.",
         )
     from fastapi import HTTPException
+
     from app.routers.cover_letters import export_cover_letter_pdf
 
     try:

@@ -475,10 +475,11 @@ class InterviewPrepAgent:
                 f"export):\n{career or '(none ingested)'}"
             )
             offer = getattr(ctx, "offer", None)
-            if offer is not None and getattr(offer, "unanswered_questions", ()):
+            unanswered = getattr(offer, "unanswered_questions", None) if offer is not None else None
+            if unanswered:
                 extra.append(
                     "UNANSWERED QUESTIONS IN THE TRAIL:\n"
-                    + "\n".join(f"- {q}" for q in offer.unanswered_questions)
+                    + "\n".join(f"- {q}" for q in unanswered)
                 )
         return "\n\n".join(
             [
@@ -659,7 +660,8 @@ class InterviewPrepAgent:
                 extra.append("## Further guidelines")
                 extra.extend(f"- {g}" for g in added_g)
             if extra:
-                out["documentMarkdown"] = (md.rstrip() + "\n\n" + "\n".join(extra) + "\n") if md else "\n".join(extra) + "\n"
+                extra_text = "\n".join(extra) + "\n"
+                out["documentMarkdown"] = (md.rstrip() + "\n\n" + extra_text) if md else extra_text
         return out
 
     # -- honest messaging ----------------------------------------------------

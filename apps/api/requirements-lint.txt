@@ -1,0 +1,4 @@
+# Lint and type-check tools, pinned exactly so a new release can never turn a green main red.
+# Bump deliberately, in the same commit that fixes whatever the new version reports.
+ruff==0.16.5
+mypy==2.3.1

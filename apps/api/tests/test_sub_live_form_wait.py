@@ -139,6 +139,9 @@ def _email_plan() -> dict[str, Any]:
 
 
 def _submit(html: str, tmp_path: Any, application_id: str) -> dict[str, Any]:
+    # These fixtures are minimal SPA shells that exercise waiting for the form and clicking the Apply
+    # CTA; they are not employer ATS pages, so the fill read-back / unverifiable-surface census
+    # (pinned by test_cli_sub005_fill_commit) is switched off for them explicitly.
     return playwright_form_submitter(
         application_id=application_id,
         channel="ashby",
@@ -149,6 +152,7 @@ def _submit(html: str, tmp_path: Any, application_id: str) -> dict[str, Any]:
         cover_letter_text="Dear Hiring Manager,",
         evidence_dir=str(tmp_path),
         profile={"email": "sarkar.vikram@gmail.com"},
+        verify_commit=False,
     )
 
 
